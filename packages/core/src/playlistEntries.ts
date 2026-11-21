@@ -177,32 +177,35 @@ export const planPlaylistSongs = <S extends YtSong>(
   };
 };
 
-/** The fixed and newly added songs a playlist's Add Songs search has checked. */
+/**
+ * The fixed and newly added songs a playlist's Add Songs search has checked,
+ * and those whose add or undo is still being written.
+ */
 export interface PlaylistAddVisit {
   readonly alreadyIn: ReadonlySet<string>;
   readonly added: ReadonlySet<string>;
+  readonly pending: ReadonlySet<string>;
 }
 
 /** Starts an Add Songs search: only entries already here at opening are inert. */
 export const playlistAddVisit = (existing: readonly PlaylistSong[]): PlaylistAddVisit => ({
   alreadyIn: new Set(existing.map(playlistSongKey)),
   added: new Set(),
+  pending: new Set(),
 });
 
-/** Locks a song as pre-existing when a concurrent edit added it during this search. */
-export const holdPlaylistAddVisitSong = (
-  visit: PlaylistAddVisit,
-  song: PlaylistSong,
-): PlaylistAddVisit => {
-  const key = playlistSongKey(song);
-  const alreadyIn = new Set(visit.alreadyIn);
-  alreadyIn.add(key);
-  const added = new Set(visit.added);
-  added.delete(key);
-  return { alreadyIn, added };
+const withKey = (set: ReadonlySet<string>, key: string): Set<string> => new Set(set).add(key);
+const withoutKey = (set: ReadonlySet<string>, key: string): Set<string> => {
+  const next = new Set(set);
+  next.delete(key);
+  return next;
 };
 
-/** Whether a song tap adds, undoes this visit's add, or leaves an older entry alone. */
+/**
+ * Whether a song tap adds, undoes this visit's add, or does nothing: an older
+ * entry stays, and a song whose add or undo is still being written waits for
+ * it. An add or undo marks the song pending until `settlePlaylistAddVisit`.
+ */
 export const stepPlaylistAddVisit = (
   visit: PlaylistAddVisit,
   song: PlaylistSong,
@@ -213,14 +216,45 @@ export const stepPlaylistAddVisit = (
 } => {
   const key = playlistSongKey(song);
   if (visit.alreadyIn.has(key)) return { visit, action: "none", checked: true };
+  if (visit.pending.has(key)) return { visit, action: "none", checked: visit.added.has(key) };
+  const pending = withKey(visit.pending, key);
   if (visit.added.has(key)) {
-    const added = new Set(visit.added);
-    added.delete(key);
-    return { visit: { ...visit, added }, action: "remove", checked: false };
+    return {
+      visit: { ...visit, added: withoutKey(visit.added, key), pending },
+      action: "remove",
+      checked: false,
+    };
   }
-  const added = new Set(visit.added);
-  added.add(key);
-  return { visit: { ...visit, added }, action: "add", checked: true };
+  return {
+    visit: { ...visit, added: withKey(visit.added, key), pending },
+    action: "add",
+    checked: true,
+  };
+};
+
+/**
+ * [visit] (as it is now, other songs' taps kept) once [song]'s write has
+ * settled: "done" keeps the tap, "failed" takes it back, and "held" (an add
+ * that found the song already there, from another member) locks it as an
+ * older entry.
+ */
+export const settlePlaylistAddVisit = (
+  visit: PlaylistAddVisit,
+  song: PlaylistSong,
+  outcome: "done" | "failed" | "held",
+): PlaylistAddVisit => {
+  const key = playlistSongKey(song);
+  const pending = withoutKey(visit.pending, key);
+  if (outcome === "held") {
+    return {
+      alreadyIn: withKey(visit.alreadyIn, key),
+      added: withoutKey(visit.added, key),
+      pending,
+    };
+  }
+  if (outcome === "done" || !visit.pending.has(key)) return { ...visit, pending };
+  const added = visit.added.has(key) ? withoutKey(visit.added, key) : withKey(visit.added, key);
+  return { ...visit, added, pending };
 };
 
 /** What a playlist's Play, Shuffle or a tap plays, and where it starts (undefined: the top, or shuffled). */

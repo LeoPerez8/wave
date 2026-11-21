@@ -1635,7 +1635,7 @@ export {
 export type { PagePlayback, PlayableSongs } from "./pagePlayback.ts";
 export {
   playlistAddVisit,
-  holdPlaylistAddVisitSong,
+  settlePlaylistAddVisit,
   stepPlaylistAddVisit,
   planPlaylistSongs,
   playlistEntryLinks,
