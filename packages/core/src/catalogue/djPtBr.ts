@@ -2,7 +2,8 @@ import type { djEn } from "./djEn.ts";
 
 export const djPtBr: typeof djEn = {
   title: "DJ",
-  cardDetail: "Escolha os artistas que iniciam sua fila",
+  cardDetail: "Uma fila feita dos artistas que você escolher",
+  cardAction: "Escolher artistas",
   done: "Concluído",
   close: "Fechar",
   starting: "Iniciando sua fila",

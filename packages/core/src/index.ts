@@ -3148,6 +3148,7 @@ export {
   storedDjRemembered,
 } from "./djRemembered.ts";
 export type { DjRemembered } from "./djRemembered.ts";
+export { DJ_CARD_ARTISTS, djCardArtists } from "./djCard.ts";
 export {
   DJ_FILTERS,
   DJ_MOOD_FILTERS,
