@@ -2127,11 +2127,17 @@ export {
   GENRE_MIX_COUNT,
   commonStyle,
   genreFamily,
+  genreMixDjCandidates,
   genreMixSeeds,
   genreStyle,
   songStyle,
 } from "./genreMixes.ts";
-export type { GenreFamily, GenreMixLibrary, GenreStyle } from "./genreMixes.ts";
+export type {
+  GenreFamily,
+  GenreMixDjCandidate,
+  GenreMixLibrary,
+  GenreStyle,
+} from "./genreMixes.ts";
 export {
   GENRE_AFFINITY_THRESHOLD,
   artistProfilesKnown,

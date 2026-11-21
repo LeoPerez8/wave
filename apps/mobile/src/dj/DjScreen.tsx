@@ -12,6 +12,7 @@ import {
   djSelectable,
   djSelected,
   djTileArtist,
+  genreMixDjCandidates,
   type DjAlbum,
   type DjAlbumTile,
   type DjArtistTile,
@@ -20,6 +21,7 @@ import {
   type DjState,
   type DjTile,
   type DjTileKey,
+  type GenreMixDjCandidate,
   identityKey,
 } from "@wave/core";
 import { IconArrowLeft, IconSearch, IconX } from "@tabler/icons-react-native";
@@ -91,19 +93,23 @@ const similarOf = (name: string) =>
     now: Date.now,
   });
 
-/** What DJ's grid ranks its artists by, as Core's `djGrid` takes it. */
-const gridSources = (library: MixIndexes) => ({
-  artists: library.artists,
-  taste: latestTasteProfile(),
-  played: library.topArtists,
-  graph: recommendationSnapshot.peek().graph,
-  genreLibrary: {
+/** Genre mixes' families over [library] (`genreMixDjCandidates`): worked out once per Library snapshot. */
+const familiesOf = (library: MixIndexes): readonly GenreMixDjCandidate[] =>
+  genreMixDjCandidates({
     artists: library.artists,
     songs: library.songs,
     plays: library.plays,
     graph: recommendationSnapshot.peek().graph,
     profileOf: magicProfileOf(library),
-  },
+  });
+
+/** What DJ's grid ranks its artists by, as Core's `djGrid` takes it, with [library]'s [families]. */
+const gridSources = (library: MixIndexes, families: readonly GenreMixDjCandidate[]) => ({
+  artists: library.artists,
+  taste: latestTasteProfile(),
+  played: library.topArtists,
+  graph: recommendationSnapshot.peek().graph,
+  genreCandidates: families,
 });
 
 /**
@@ -114,10 +120,13 @@ const gridSources = (library: MixIndexes) => ({
  * YT Music pages of the grid's artists list (the grid as it is without
  * albums, which holds every artist the one with albums shows).
  */
-const albumsOver = (library: MixIndexes): Promise<DjAlbum[]> => {
+const albumsOver = (
+  library: MixIndexes,
+  families: readonly GenreMixDjCandidate[],
+): Promise<DjAlbum[]> => {
   const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
   const artists = new Set(
-    djGrid(gridSources(library)).flatMap((tile) =>
+    djGrid(gridSources(library, families)).flatMap((tile) =>
       tile.kind === "genre" ? tile.opens.map(djTileArtist) : [djTileArtist(tile)],
     ),
   );
@@ -188,23 +197,34 @@ const useDjGrid = () => {
       current = false;
     };
   }, [waiting]);
-  const [albums, setAlbums] = useState<readonly DjAlbum[] | null>(null);
+  // The Library snapshot's families and albums, read once per snapshot outside render.
+  const [read, setRead] = useState<{
+    readonly library: MixIndexes;
+    readonly families: readonly GenreMixDjCandidate[];
+    readonly albums: readonly DjAlbum[];
+  } | null>(null);
   useEffect(() => {
     if (library === null || library === "failed") return;
     let current = true;
-    void albumsOver(library).then((read) => {
-      if (current) setAlbums(read);
+    const families = familiesOf(library);
+    void albumsOver(library, families).then((albums) => {
+      if (current) setRead({ library, families, albums });
     });
     return () => {
       current = false;
     };
   }, [library]);
+  const ready = read !== null && read.library === library ? read : null;
   const opening = useMemo((): DjOpeningGrid | null => {
     if (library === null) return null;
     if (library === "failed") return { kind: "nothing" };
-    if (albums === null) return null;
-    return djOpeningGrid({ ...gridSources(library), albums, artistMixes });
-  }, [library, albums, artistMixes]);
+    if (ready === null) return null;
+    return djOpeningGrid({
+      ...gridSources(ready.library, ready.families),
+      albums: ready.albums,
+      artistMixes,
+    });
+  }, [library, ready, artistMixes]);
   const libraryArtists = library === null || library === "failed" ? NO_ARTISTS : library.artists;
   if (state === null && opening !== null && opening.kind !== "skeleton") {
     // The tiles the last DJ was started from are selected, and in the grid
@@ -213,9 +233,8 @@ const useDjGrid = () => {
       grid: opening.kind === "tiles" ? opening.tiles : [],
       remembered: djRemembered.get().tiles,
       artists: libraryArtists,
-      albums: albums ?? [],
-      genreLibrary:
-        library === null || library === "failed" ? null : gridSources(library).genreLibrary,
+      albums: ready?.albums ?? [],
+      genreCandidates: ready?.families ?? null,
       taste: latestTasteProfile(),
     });
     if (reopened.tiles.length > 0) setState(reopened);

@@ -14,6 +14,8 @@ import {
   djGrid,
   djOpened,
   djReduce,
+  djReopened,
+  genreMixDjCandidates,
   djSelected,
   startDjQueue,
   DEFAULT_DJ_SETTINGS,
@@ -252,6 +254,34 @@ describe("DJ's grid", () => {
       graph: graphOf({ Portishead: ["Tricky"] }),
     });
     assert.deepEqual(names(tiles), ["Tricky", "Portishead"]);
+  });
+  test("takes family candidates worked out once in place of the Library inputs", () => {
+    const artists = [{ id: 1, name: "Rock Artist" }];
+    const songs = Array.from({ length: 5 }, (_, index) => ({
+      id: index + 1,
+      title: `Rock ${index}`,
+      artist: "Rock Artist",
+      artistIds: [1],
+      durationMs: 180_000,
+      addedAt: 0,
+      genre: "Rock",
+    }));
+    const genreCandidates = genreMixDjCandidates({ artists, songs });
+    const taste = { ...tasteOf({}), genres: new Map([["rock", 1]]) };
+    const family = djGrid({ artists, taste, graph: null, genreCandidates }).find(
+      (tile) => tile.kind === "genre",
+    );
+    assert.equal(family?.name, "Rock");
+    const reopened = djReopened({
+      grid: [],
+      remembered: [djGenreTile("Rock")!],
+      artists,
+      genreCandidates,
+    });
+    assert.deepEqual(
+      djSeedTiles(reopened).map((tile) => (tile.kind === "genre" ? tile.artists : [])),
+      [artists],
+    );
   });
 });
 

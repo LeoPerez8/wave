@@ -16,6 +16,7 @@ import {
   genreFamily,
   genreFamilyOfArtist,
   genreMixDjCandidates,
+  type GenreMixDjCandidate,
   type GenreMixLibrary,
 } from "./genreMixes.ts";
 import type { DiscoverSeedArtist } from "./discoverMixes.ts";
@@ -196,6 +197,11 @@ export interface DjGridSources {
   readonly albums?: readonly DjAlbum[];
   /** Library inputs for Genre mixes' families and seed artists. */
   readonly genreLibrary?: GenreMixLibrary | null;
+  /**
+   * Genre mixes' families over [genreLibrary] (`genreMixDjCandidates`),
+   * worked out once per Library snapshot; used in its place when given.
+   */
+  readonly genreCandidates?: readonly GenreMixDjCandidate[] | null;
 }
 
 /** How many tiles DJ's grid opens with. */
@@ -211,10 +217,13 @@ export const djGenreTiles = (
     taste,
     albums = [],
     genreLibrary,
-  }: Pick<DjGridSources, "artists" | "taste" | "albums" | "genreLibrary">,
+    genreCandidates,
+  }: Pick<DjGridSources, "artists" | "taste" | "albums" | "genreLibrary" | "genreCandidates">,
   { includeUnscored = false }: { readonly includeUnscored?: boolean } = {},
 ): DjGenreTile[] => {
-  if (genreLibrary == null) return [];
+  const candidates =
+    genreCandidates ?? (genreLibrary == null ? null : genreMixDjCandidates(genreLibrary));
+  if (candidates === null) return [];
   const library = new Map<string, DjArtistTile>();
   for (const artist of artists) {
     const tile = djArtistTile(artist.name, artist.id);
@@ -231,7 +240,7 @@ export const djGenreTiles = (
     const tile = djArtistTile(name);
     return tile === null ? null : (library.get(tile.key) ?? tile);
   };
-  return genreMixDjCandidates(genreLibrary)
+  return candidates
     .flatMap(({ seed, artists: members }) => {
       const family = genreFamily(seed.genre ?? seed.name);
       const score = taste?.genres.get(family?.key ?? "") ?? 0;
@@ -290,6 +299,7 @@ export const djGrid = ({
   graph,
   albums = [],
   genreLibrary,
+  genreCandidates,
 }: DjGridSources): DjTile[] => {
   const library = new Map<string, DjArtistTile>();
   for (const artist of artists) {
@@ -323,6 +333,7 @@ export const djGrid = ({
     taste,
     albums,
     genreLibrary: genreLibrary ?? null,
+    genreCandidates: genreCandidates ?? null,
   }).slice(0, DJ_GENRE_TILES);
   let nextGenre = 0;
   /** Shows [artist], then the album of theirs while the grid has room for it. */

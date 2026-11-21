@@ -15,7 +15,7 @@ import {
   type DjTile,
   type DjTileKey,
 } from "./dj.ts";
-import type { GenreMixLibrary } from "./genreMixes.ts";
+import type { GenreMixDjCandidate, GenreMixLibrary } from "./genreMixes.ts";
 import { DEFAULT_DJ_SETTINGS, parseDjSettings, type DjSettings } from "./djSettings.ts";
 import { isRecord, readStoredRecord } from "./storedJson.ts";
 import type { TasteProfile } from "./tasteProfile.ts";
@@ -119,6 +119,7 @@ export const djReopened = ({
   artists = [],
   albums = [],
   genreLibrary,
+  genreCandidates,
   taste = null,
 }: {
   readonly grid: readonly DjTile[];
@@ -127,6 +128,8 @@ export const djReopened = ({
   readonly albums?: readonly DjAlbum[];
   /** Current Genre mixes inputs, used to restore only families that still have seed artists. */
   readonly genreLibrary?: GenreMixLibrary | null;
+  /** Genre mixes' families worked out once (`genreMixDjCandidates`), used in place of [genreLibrary]. */
+  readonly genreCandidates?: readonly GenreMixDjCandidate[] | null;
   readonly taste?: TasteProfile | null;
 }): DjState => {
   const fresh = new Set(grid.map((tile) => tile.key));
@@ -141,7 +144,13 @@ export const djReopened = ({
   }
   const genres = new Map(
     djGenreTiles(
-      { artists, albums, taste, genreLibrary: genreLibrary ?? null },
+      {
+        artists,
+        albums,
+        taste,
+        genreLibrary: genreLibrary ?? null,
+        genreCandidates: genreCandidates ?? null,
+      },
       { includeUnscored: true },
     ).map((tile) => [tile.key, tile]),
   );
