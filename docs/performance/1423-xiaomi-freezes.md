@@ -22,6 +22,71 @@ The focused runner's Search first-tap sample changed from 1,559 ms response and 
 
 The emulator cannot confirm the owner's day-long Xiaomi acceptance check. Home, Search and Settings still have blocks over 50 ms, and the fixture's album count drifted above the requested 1,500. The full set of route budgets also remains unmet.
 
+## Render cost
+
+I measured React render cost with a profiler build (`EXPO_PUBLIC_WAVE_PERF_PROFILER=1`), which logs every commit over 16 ms with the component that rendered. The runs were one idle `push-settings` and one idle `tab-switch` (three rounds of Playlists, Home and Library) on the same emulator and seed.
+
+Before the fixes, update commits over 16 ms added up to:
+
+| Component                      | Commits | Total ms | Largest ms |
+| ------------------------------ | ------: | -------: | ---------: |
+| Tabs (includes the rows below) |     243 |   35,869 |        384 |
+| Home tab                       |      90 |    9,475 |        284 |
+| Home: Discover                 |      76 |    5,270 |        216 |
+| Now Playing (closed)           |      47 |    2,117 |        122 |
+| Home: Recently added           |      42 |    1,554 |         78 |
+| Home: In your orbit            |      21 |      907 |         74 |
+| Library tab                    |      12 |      740 |         94 |
+
+Home rendered again on every push, pop and tab switch, even while another tab was showing. Each time it gave its sections a new selection object and a new `home` object. `HomeSection` wasn't memoized, so every section rendered again. Discover also got a new Magic Queue row each time, and In your orbit got new tiles. Now Playing rendered again while closed, because each native playback report brought a new `item` object for the same song.
+
+The fixes:
+
+- Home's selection and `home` keep their identity until something in them changes.
+- `HomeSection` is memoized.
+- The Magic Queue section and the In your orbit tiles are kept until their inputs change.
+- A playback report of the same song keeps the previous `item`.
+
+Tests cover each identity, and a performance guard keeps `HomeSection` memoized.
+
+After the fixes, on the same runs:
+
+| Component            | Commits | Total ms | Largest ms |
+| -------------------- | ------: | -------: | ---------: |
+| Tabs                 |      98 |    7,011 |        432 |
+| Home tab             |      59 |    3,538 |        273 |
+| Home: Discover       |      42 |    1,699 |        100 |
+| Now Playing (closed) |      14 |      511 |         68 |
+| Home: In your orbit  |       8 |      514 |        140 |
+| Home: Recently added |       6 |      267 |         66 |
+
+| Step                     | Before: response / first frame    | After: response / first frame         |
+| ------------------------ | --------------------------------- | ------------------------------------- |
+| Settings push            | 523 / 64 ms, one 492 ms long task | 289 / 57 ms, largest long task 264 ms |
+| Settings pop             | 413 / 66 ms                       | 146 / 27 ms                           |
+| Tab switch, median of 9  | 689 ms                            | 297 ms                                |
+| Tab switch, slowest of 9 | 1,610 ms (to Library)             | 620 ms (first visit to Playlists)     |
+| Switch to Home, 3 rounds | 740, 1,057, 904 ms                | 297, 341, 324 ms                      |
+
+The after build also includes the merge of `feat/1409-dj-playlists-home`, which adds Home sections such as DJ.
+
+What's left:
+
+- Home still updates 59 times over these runs, with Discover at 42 commits and up to 100 ms each. The cause of these remaining Home renders isn't traced yet.
+- The first switch to Playlists now takes 620 ms with five long tasks, against 212 ms before. That is the first mount of the merged Playlists screen.
+- Mount commits are larger after the merge: Tabs up to 1,098 ms and Home up to 828 ms on a cold launch, against 601 and 440 ms. The added Home sections are a likely cause, but this run doesn't separate them.
+- The Tab bar still commits on every switch.
+
+With a scan running (200 touched files, then a cold launch) on the after build:
+
+| Step             | Before the fixes, scan active       | After, scan active                           |
+| ---------------- | ----------------------------------- | -------------------------------------------- |
+| Settings push    | 1,039 / 212 ms                      | 260 / 80 ms                                  |
+| Settings pop     | 467 / 155 ms                        | 294 / 45 ms                                  |
+| Search first tap | 518 / 144 ms, no scan logged nearby | 719 / 196 ms, six long tasks, largest 288 ms |
+
+Search's first tap is still over budget while a scan runs.
+
 ## Tickets to file under #1409
 
 - **Yield while replaying large Library reads.** Mapping results for 3,000 songs or albums still holds JS for hundreds of milliseconds to 2.8 s. Cause: row mapping in synchronous replay passes. Where: `packages/client/src/db/offThreadReads.ts` and large list readers such as `packages/client/src/db/tracks.ts`.
@@ -30,6 +95,11 @@ The emulator cannot confirm the owner's day-long Xiaomi acceptance check. Home, 
 - **Trace startup blocks before first content.** Startup was attributed a 6.0 to 6.2 s hold, but the current line gives no subtask detail. Cause: unresolved from this run. Where: startup registrations in `apps/mobile/src/lib/startupWork.ts` and their callers in `apps/mobile/src/`.
 - **Diagnose followed-artists route on device.** This run did not reach the route, so its reported freeze has no reproduced cause here. Cause: unconfirmed. Where: followed-artists screen and its data reads under `apps/mobile/src/`.
 
+- **Trace Home's remaining renders on navigation.** Home still renders 59 times over three tab-switch rounds and a Settings push and pop, with Discover at up to 100 ms per commit. Cause: unidentified; the section props are now stable, so it is in Home's own hooks (focus, sight or store reads). Where: `apps/mobile/src/app/(tabs)/index.tsx` and `apps/mobile/src/home/HomeSection.tsx`.
+- **Lighten the first Playlists mount.** The first switch to Playlists takes 620 ms with five long tasks. Cause: the Playlists screen mounting its content in one commit. Where: `apps/mobile/src/app/(tabs)/playlists/index.tsx`.
+- **Lighten Home's cold mount.** A cold launch's Tabs mount commit reaches 1.1 s, with Home at 828 ms. Cause: every Home section mounting in the first commits. Where: `apps/mobile/src/home/HomeSections.tsx` and the first-frame staging in `apps/mobile/src/app/(tabs)/index.tsx`.
+- **Keep the Tab bar out of tab switches.** The Tab bar commits on every switch. Cause: its props or store reads change with the route. Where: `apps/mobile/src/chrome/TabBar.tsx`.
+
 ## Runs and checks
 
 - `docs/performance/results/1423-focused-before.jsonl`: generic Android 15 emulator, 3,000-song seed; Settings push 311 ms response / 92 ms first frame, pop 198 ms / 39 ms; Search first tap 1,559 ms / 439 ms.
@@ -37,3 +107,5 @@ The emulator cannot confirm the owner's day-long Xiaomi acceptance check. Home, 
 - Full `@wave/core` suite: 6,213 passed.
 - `@wave/mobile` typecheck: passed.
 - Release perf APK: built successfully for x86_64.
+- `docs/performance/results/1423-render-before.jsonl` and `1423-render-after.jsonl`: profiler builds, idle Settings push and pop and three tab-switch rounds, before and after the render fixes.
+- `docs/performance/results/1423-scan-after.jsonl`: the after build with a scan of 200 touched files running; Settings push and pop and Search first tap.
