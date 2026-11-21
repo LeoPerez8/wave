@@ -44,6 +44,7 @@ const home = async (over: Partial<HomeFollowDeps> = {}) => {
     pages: {
       album: notAsked,
       catalog: notAsked,
+      searchArtists: notAsked,
     },
     fetch: notAsked as unknown as typeof fetch,
     pause: "0 millis",
@@ -136,7 +137,7 @@ test("a release card opens the Library's album, or its YT Music album while that
     album: { title: "Voyage", artists: ["ABBA"], year: null, artworkUrl: null, songs: [] },
   };
   const { db, service } = await home({
-    pages: { catalog: notAsked, album: async () => album },
+    pages: { catalog: notAsked, album: async () => album, searchArtists: notAsked },
   });
   saveFollow(db, { name: "ABBA" }, "releases", Date.now());
   const owned = addTrack(db, { title: "Waterloo", album: "Waterloo", artist: "ABBA" });
