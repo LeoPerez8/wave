@@ -4,7 +4,6 @@
  * decides which entries show (`itemActions`) and what they say (`collaborativeMenu.ts`); this
  * asks first, sends each request through the sync service (`@/sync/collaborations`), keeps what
  * it answers in the Library store, and shows a plain message when it is refused or offline.
- * Only shown while Settings › Developer has Collaborative playlists on.
  */
 import type { CollaborativePlaylist } from "@wave/client/db/collaborations";
 import {
@@ -75,7 +74,7 @@ const NO_COLLABORATIONS: readonly CollaborativePlaylist[] = [];
 
 /**
  * The account's collaborative playlists on this device, by local playlist id, kept current as
- * playlists change; none while [enabled] is false (the switch off).
+ * playlists change; none while [enabled] is false (a menu that doesn't need them).
  */
 export const useCollaborations = (enabled: boolean): ReadonlyMap<number, CollaborativePlaylist> => {
   const rows = useLibraryQuery(enabled ? listCollaborations : null, NO_COLLABORATIONS);

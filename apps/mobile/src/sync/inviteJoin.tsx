@@ -19,7 +19,6 @@ import { confirmAction, showMessage } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { dismissAllOverlays, presentOverlay } from "@/overlay/overlay";
 import { showToast } from "@/overlay/toast";
-import { collaborativePlaylistsOn } from "@/settings/collaborativePlaylists";
 import { signInWaveAccount, waveSyncUrl } from "@/settings/waveAccount";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -131,7 +130,6 @@ export const openInviteLink = (text: string): boolean => {
   if (token === null) return false;
   dismissAllOverlays();
   void openInvite(token, {
-    switchOn: collaborativePlaylistsOn,
     session: () => WaveAccount.session(),
     language: () => currentLocalisation().language,
     askSignIn: (prompt) =>

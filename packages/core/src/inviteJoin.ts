@@ -36,26 +36,11 @@ export const inviteToken = (text: string, syncUrl: string): string | null => {
 };
 
 /**
- * What opening an invite does first: with the Developer switch off, a message to update Wave
- * (nothing is asked of the service); signed out, a prompt to sign in, after which the invite opens
+ * What opening an invite does first: signed out, a prompt to sign in, after which the invite opens
  * again; signed in, the service is asked what the link names.
  */
-export const inviteOpening = ({
-  switchOn,
-  signedIn,
-}: {
-  readonly switchOn: boolean;
-  readonly signedIn: boolean;
-}): "update" | "signIn" | "lookUp" => {
-  if (!switchOn) return "update";
-  return signedIn ? "lookUp" : "signIn";
-};
-
-/** The message for an invite while the switch is off. */
-export const inviteUpdateNotice = (language: AppLanguage = "en"): InviteNotice => {
-  const text = catalogueOf(language).inviteJoin;
-  return { title: text.updateTitle, message: text.updateMessage };
-};
+export const inviteOpening = ({ signedIn }: { readonly signedIn: boolean }): "signIn" | "lookUp" =>
+  signedIn ? "lookUp" : "signIn";
 
 const refusalNotice = (
   result: Exclude<CollaborationResult<unknown>, { type: "done" }>,

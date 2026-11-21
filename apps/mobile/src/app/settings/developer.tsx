@@ -4,11 +4,6 @@ import { Text, View } from "react-native";
 
 import { EntryRow } from "@/catalog/EntryRow";
 import { Hairline } from "@/catalog/Hairline";
-import { SettingsSwitch } from "@/components/SettingsSwitch";
-import {
-  setCollaborativePlaylists,
-  useCollaborativePlaylists,
-} from "@/settings/collaborativePlaylists";
 import { exportAppLog, saveAppLog } from "@/log/appLog";
 import { WaveAppLog } from "@/native/waveAppLog";
 import { showToast } from "@/overlay/toast";
@@ -41,29 +36,8 @@ const stallJsThread = (): void => {
   }, 0);
 };
 
-/** Collaborative playlists, off until they ship: on, the next sync brings them. */
-function CollaborativePlaylistsSwitch() {
-  const on = useCollaborativePlaylists();
-  return (
-    <View>
-      <Hairline />
-      <SettingsSwitch
-        label="Collaborative playlists"
-        value={on}
-        onValueChange={setCollaborativePlaylists}
-      />
-      <Hairline />
-      <Text className="mt-2 font-sans text-footnote text-secondary">
-        For testing. Syncs the playlists this Wave account shares with other accounts, at the next
-        sync. Off, they stay as the last sync left them.
-      </Text>
-    </View>
-  );
-}
-
 /**
- * Settings › Developer: logs, the collaborative playlists' switch, the Design preview and, in
- * a debug build, the log's triggers.
+ * Settings › Developer: logs, the Design preview and, in a debug build, the log's triggers.
  */
 export default function DeveloperSettingsScreen() {
   useScreenContent(true);
@@ -78,7 +52,6 @@ export default function DeveloperSettingsScreen() {
           no passwords or sign-ins.
         </Text>
       </View>
-      <CollaborativePlaylistsSwitch />
       <View>
         <Hairline />
         <EntryRow label="Design preview" onPress={() => router.push("/design-preview")} />

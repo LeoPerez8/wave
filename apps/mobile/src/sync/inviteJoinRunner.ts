@@ -10,7 +10,6 @@ import {
   inviteOpening,
   inviteSignInNotice,
   inviteSignInPrompt,
-  inviteUpdateNotice,
   type AppLanguage,
   type Collaboration,
   type CollaborationResult,
@@ -29,8 +28,6 @@ export type InviteSignIn =
   | { readonly type: "failed"; readonly reason: WaveSignInFailure };
 
 export interface InviteRunnerPorts {
-  /** Settings › Developer's Collaborative playlists switch. */
-  readonly switchOn: () => boolean;
   readonly session: () => Promise<WaveSession>;
   readonly language: () => AppLanguage;
   /** Shows the sign-in prompt; true when Sign In with Google is chosen. */
@@ -49,11 +46,7 @@ export interface InviteRunnerPorts {
 export const openInvite = async (token: string, ports: InviteRunnerPorts): Promise<void> => {
   const language = ports.language();
   const session = await ports.session().catch((): WaveSession => ({ status: "signedOut" }));
-  const step = inviteOpening({
-    switchOn: ports.switchOn(),
-    signedIn: session.status === "signedIn",
-  });
-  if (step === "update") return ports.notify(inviteUpdateNotice(language));
+  const step = inviteOpening({ signedIn: session.status === "signedIn" });
   if (step === "signIn" || session.status !== "signedIn") {
     if (!(await ports.askSignIn(inviteSignInPrompt(language)))) return;
     const signedIn = await ports.signIn();

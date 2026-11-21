@@ -1099,7 +1099,6 @@ export {
   inviteSignInNotice,
   inviteSignInPrompt,
   inviteToken,
-  inviteUpdateNotice,
 } from "./inviteJoin.ts";
 export type {
   InviteJoinOutcome,

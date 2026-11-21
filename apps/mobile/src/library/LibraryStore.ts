@@ -1288,7 +1288,7 @@ export class LibraryStore extends Context.Service<
     readonly leaveAccount: Effect.Effect<void, LibraryStoreError>;
     /**
      * Syncs the collaborative playlist [playlistId] alone, for its page in sight
-     * (`syncCollaborativePlaylist`): nothing for an ordinary playlist or with the switch off.
+     * (`syncCollaborativePlaylist`): nothing for an ordinary playlist.
      */
     readonly syncCollaborativePlaylist: (
       input: Omit<SyncCycleInput, "db" | "splits" | "historyChanged">,

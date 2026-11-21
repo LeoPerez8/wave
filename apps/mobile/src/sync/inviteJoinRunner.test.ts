@@ -27,7 +27,7 @@ const JOINED: CollaborationResult<Collaboration> = {
   value: { playlistId: "list", members: [] },
 };
 
-/** A phone with the switch on and Ana signed in, who taps Join; [over] changes any of it. */
+/** A phone with Ana signed in, who taps Join; [over] changes any of it. */
 const phone = (over: Partial<InviteRunnerPorts> = {}) => {
   const seen = {
     notices: [] as InviteNotice[],
@@ -38,7 +38,6 @@ const phone = (over: Partial<InviteRunnerPorts> = {}) => {
     signInPrompts: 0,
   };
   const ports: InviteRunnerPorts = {
-    switchOn: () => true,
     session: async () => ANA,
     language: () => "en",
     askSignIn: async () => {
@@ -84,20 +83,6 @@ test("Cancel joins nothing and says nothing", async () => {
   assert.deepEqual(seen.joins, []);
   assert.deepEqual(seen.joined, []);
   assert.deepEqual(seen.notices, []);
-});
-
-test("with the switch off, it asks to update Wave and asks the service nothing", async () => {
-  const { ports, seen } = phone({ switchOn: () => false });
-  await openInvite(TOKEN, ports);
-  assert.deepEqual(seen.notices, [
-    {
-      title: "Update Wave to join",
-      message:
-        "This version of Wave can't open invite links yet. Update it, then tap the link again.",
-    },
-  ]);
-  assert.deepEqual(seen.lookUps, []);
-  assert.deepEqual(seen.joins, []);
 });
 
 test("signed out, it asks to sign in, then opens the invite again", async () => {
