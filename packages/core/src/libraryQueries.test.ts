@@ -476,3 +476,74 @@ describe("Library first-read feedback", () => {
     assert.equal(queries.state("albums"), "ready");
   });
 });
+
+describe("kept queries (#1352)", () => {
+  test("a kept query reads before any screen shows it; opening it reads nothing", () => {
+    const { queries, answer, readsOf } = setup();
+    queries.keep("albums", SONGS);
+    assert.equal(readsOf("albums"), 1);
+    answer("albums", "A");
+    const before = queries.stats().reads;
+    queries.attach("albums", SONGS, { visible: true, onChange: () => {} });
+    assert.deepEqual(queries.current("albums"), { value: "A" });
+    assert.equal(queries.stats().reads, before);
+    assert.equal(readsOf("albums"), 0);
+  });
+
+  test("an edit re-reads a kept query nobody shows, at once: the next open shows it", () => {
+    const { queries, answer, readsOf } = setup();
+    queries.keep("playlist:7", { playlists: [7] });
+    answer("playlist:7", "old");
+    queries.change({ kind: "playlists", ids: [7] });
+    assert.equal(readsOf("playlist:7"), 1);
+    answer("playlist:7", "new");
+    queries.attach("playlist:7", { playlists: [7] }, { visible: true, onChange: () => {} });
+    assert.deepEqual(queries.current("playlist:7"), { value: "new" });
+  });
+
+  test("scan batches and plays re-read a kept query nobody shows at most every keptThrottleMs", () => {
+    const { queries, answer, readsOf, advance } = setup({ throttleMs: 1000, keptThrottleMs: 5000 });
+    queries.keep("albums", SONGS);
+    answer("albums", "A");
+    queries.change({ kind: "tracks", burst: true });
+    advance(1000);
+    assert.equal(readsOf("albums"), 0);
+    advance(4000);
+    assert.equal(readsOf("albums"), 1);
+    answer("albums", "B");
+    assert.deepEqual(queries.current("albums"), { value: "B" });
+  });
+
+  test("a kept query a screen in sight shows follows bursts at the screen's pace", () => {
+    const { queries, answer, readsOf, advance } = setup({ throttleMs: 1000, keptThrottleMs: 5000 });
+    queries.keep("albums", SONGS);
+    answer("albums", "A");
+    queries.attach("albums", SONGS, { visible: true, onChange: () => {} });
+    queries.change({ kind: "tracks", burst: true });
+    advance(1000);
+    assert.equal(readsOf("albums"), 1);
+  });
+
+  test("a kept query outlasts retention, and once released is retained as any other", () => {
+    const { queries, answer, advance } = setup({ retainMs: 1000, maxRetained: 0 });
+    const release = queries.keep("albums", SONGS);
+    answer("albums", "A");
+    const screen = queries.attach("albums", SONGS, { visible: true, onChange: () => {} });
+    screen.detach();
+    advance(5000);
+    assert.deepEqual(queries.current("albums"), { value: "A" });
+    assert.equal(queries.stats().kept, 1);
+    release();
+    assert.equal(queries.current("albums"), undefined);
+    assert.equal(queries.stats().kept, 0);
+  });
+
+  test("a change doesn't drop a kept query nobody shows", () => {
+    const { queries, answer } = setup();
+    queries.keep("albums", SONGS);
+    answer("albums", "A");
+    queries.change({ kind: "tracks" });
+    assert.deepEqual(queries.current("albums"), { value: "A" });
+    assert.equal(queries.stats().evicted, 0);
+  });
+});
