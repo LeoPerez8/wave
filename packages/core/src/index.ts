@@ -78,6 +78,7 @@ export {
   EMPTY_QUEUE,
   REAL_SHUFFLE,
   RESTART_THRESHOLD_MS,
+  SHUFFLE_KINDS,
   currentEntry,
   nextRepeatMode,
   parseQueueState,
@@ -86,11 +87,13 @@ export {
   playReplacesQueue,
   reduceQueue,
   reshuffledUpNext,
+  shuffleReads,
   shuffledTrackIds,
   shufflesQueue,
   upNext,
   upNextMove,
   withPendingMoves,
+  writeShuffleKind,
 } from "./queue.ts";
 export type {
   PendingMove,
@@ -2786,6 +2789,9 @@ export {
   readPlaylistSongSorts,
   sortPlaylistSongs,
   storedPlaylistSongSort,
+  PLAYLIST_SONG_SORTS,
+  playlistReorders,
+  playlistSongSortLabelFor,
 } from "./playlistSongSort.ts";
 export type { PlaylistSongSort, PlaylistSortableSong } from "./playlistSongSort.ts";
 
@@ -2851,6 +2857,7 @@ export type {
 } from "./typedReleaseDate.ts";
 export {
   FIRST_RUN_TOUR_CARDS,
+  desktopBringYourMusic,
   firstRunCardAtLaunch,
   nextFirstRunStep,
   signInInvitationAtLaunch,

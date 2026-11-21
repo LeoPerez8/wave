@@ -13,6 +13,7 @@ import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { libraryLayer } from "../database.ts";
 import { browseLibrary } from "./browse.ts";
+import { togglePlaylistSort } from "./browseSort.ts";
 import { createPlaylists, type PlaylistImageCodec } from "./playlists.ts";
 
 /** Photos as text: `IMG 800x600` is an 800 by 600 photo; anything else isn't an image. */
@@ -171,6 +172,23 @@ test("Move Up and Move Down move a song one place among the songs its page shows
     playlists.move(id, parasite!, "up");
     playlists.move(id, pink!, "down");
     assert.deepEqual(pageTitles(db, id), ["Parasite", "Road", "Pink Moon"]);
+  });
+});
+
+test("a sorted playlist can't be rearranged: its own order stays as it was", async () => {
+  await setUp(async ({ db, playlists }) => {
+    const [road, pink, parasite] = songs(db, "Road", "Pink Moon", "Parasite");
+    const { playlistId: id } = storePlaylist(
+      db,
+      "Evening",
+      [road!, pink!, parasite!].map((trackId) => ({ source: "library", trackId })),
+      0,
+    );
+    togglePlaylistSort(db, id, "title");
+    playlists.move(id, parasite!, "up");
+    assert.deepEqual(pageTitles(db, id), ["Parasite", "Pink Moon", "Road"]);
+    togglePlaylistSort(db, id, "custom");
+    assert.deepEqual(pageTitles(db, id), ["Road", "Pink Moon", "Parasite"]);
   });
 });
 

@@ -132,6 +132,9 @@ export const ptBR: Catalogue = {
     titleColumn: "Título",
     artistColumn: "Artista",
     albumColumn: "Álbum",
+    /** The column of a playlist's own order and of an artist's Popular ranks. */
+    orderColumn: "#",
+    releaseDateColumn: "Data de lançamento",
     previous: "Página anterior",
     next: "Próxima página",
     page: (first: number, last: number, total: number) => `${first}–${last} de ${total}`,

@@ -11,7 +11,13 @@ import type {
   QueueRow,
 } from "./playerView.ts";
 import type { WindowSettings } from "./windowSettings.ts";
-import type { DatedRelease, LanguageChoice, SongSortKey, ThemeEdit } from "@wave/core";
+import type {
+  DatedRelease,
+  LanguageChoice,
+  PlaylistSongSort,
+  SongSortKey,
+  ThemeEdit,
+} from "@wave/core";
 
 import type { LanguageView } from "./language.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
@@ -59,9 +65,9 @@ import {
   type FollowsBridge,
   type FollowsContract,
 } from "./follows.ts";
-import type { StatsPeriod, StatsRanking } from "@wave/core";
+import type { RecapPeriod, StatsPeriod, StatsRanking } from "@wave/core";
 import type { UpNextPlace } from "@wave/core";
-import type { ArtistStatsPage, StatsOverview, StatsRow } from "./stats.ts";
+import type { ArtistStatsPage, DesktopRecap, StatsOverview, StatsRow } from "./stats.ts";
 import type {
   ActionSurface,
   SongMenu,
@@ -229,6 +235,7 @@ export interface BridgeContract
   readonly "account.signOutEverywhere": { readonly args: readonly []; readonly result: void };
   readonly "account.deleteAccount": { readonly args: readonly []; readonly result: void };
   readonly "account.answerInvitation": { readonly args: readonly []; readonly result: void };
+  readonly "account.answerBringYourMusic": { readonly args: readonly []; readonly result: void };
 
   readonly "settings.appearance": { readonly args: readonly []; readonly result: Appearance };
   readonly "settings.language": { readonly args: readonly []; readonly result: LanguageView };
@@ -383,7 +390,11 @@ export interface BridgeContract
   };
   readonly "library.counts": { readonly args: readonly []; readonly result: LibraryCounts };
   readonly "library.sortBy": {
-    readonly args: readonly [kind: BrowseKind, key: SongSortKey];
+    readonly args: readonly [
+      kind: BrowseKind,
+      key: SongSortKey | PlaylistSongSort["key"],
+      playlistId?: number,
+    ];
     readonly result: void;
   };
   readonly "library.scanStatus": { readonly args: readonly []; readonly result: ScanStatus };
@@ -526,6 +537,33 @@ export interface BridgeContract
     ];
     readonly result: string | null;
   };
+  /** Every period with a Recap now, newest first. */
+  readonly "stats.recaps": { readonly args: readonly []; readonly result: Page<RecapPeriod> };
+  /**
+   * Opens the Recap [id] (Core's `recapId`): Home stops announcing it. Null when the period has
+   * no Recap. Its music follows `stats.recapStory` until `stats.recapClosed`.
+   */
+  readonly "stats.recap": {
+    readonly args: readonly [id: string];
+    readonly result: DesktopRecap | null;
+  };
+  /** Story [index] of the open Recap shows: with nothing playing as it opened, its song plays. */
+  readonly "stats.recapStory": { readonly args: readonly [index: number]; readonly result: void };
+  /** The Recap closed: the queue comes back as it was. */
+  readonly "stats.recapClosed": { readonly args: readonly []; readonly result: void };
+  /**
+   * Saves a rendered card's PNG (base64, at most 1080 by 1920) through the system's save
+   * dialog, which opens at [fileName]. False when the dialog was cancelled.
+   */
+  readonly "cards.saveImage": {
+    readonly args: readonly [fileName: string, pngBase64: string];
+    readonly result: boolean;
+  };
+  /** Puts a rendered card's PNG (base64, at most 1080 by 1920) on the clipboard. */
+  readonly "cards.copyImage": {
+    readonly args: readonly [pngBase64: string];
+    readonly result: void;
+  };
 }
 
 export type BridgeCall = keyof BridgeContract;
@@ -637,6 +675,7 @@ export const BRIDGE_CALLS = [
   "account.signOutEverywhere",
   "account.deleteAccount",
   "account.answerInvitation",
+  "account.answerBringYourMusic",
   "collections.actions",
   "collections.run",
   "collections.selectionActions",
@@ -670,6 +709,12 @@ export const BRIDGE_CALLS = [
   "stats.ranking",
   "stats.play",
   "stats.open",
+  "stats.recaps",
+  "stats.recap",
+  "stats.recapStory",
+  "stats.recapClosed",
+  "cards.saveImage",
+  "cards.copyImage",
   ...HISTORY_CALLS,
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
@@ -707,6 +752,15 @@ export interface WaveBridge {
       key: string,
       full: boolean,
     ) => Promise<string | null>;
+    readonly recaps: () => Promise<Page<RecapPeriod>>;
+    readonly recap: (id: string) => Promise<DesktopRecap | null>;
+    readonly recapStory: (index: number) => Promise<void>;
+    readonly recapClosed: () => Promise<void>;
+  };
+  /** A rendered card's image (`renderer/src/cardImage.ts` draws it). */
+  readonly cards: {
+    readonly saveImage: (fileName: string, pngBase64: string) => Promise<boolean>;
+    readonly copyImage: (pngBase64: string) => Promise<void>;
   };
   readonly system: { readonly mediaBackend: () => Promise<"native" | "chromium"> };
   readonly home: {
@@ -772,7 +826,16 @@ export interface WaveBridge {
     readonly exclude: () => Promise<void>;
     readonly removeRoot: (path: string) => Promise<void>;
     readonly include: (path: string) => Promise<void>;
-    readonly sortBy: (kind: BrowseKind, key: SongSortKey) => Promise<void>;
+    /**
+     * A click on a table's [key] header: starts that sort or reverses it. A playlist's page
+     * ([kind] `playlist`, with its [playlistId]) keeps its own sort; the other tables share one
+     * per kind.
+     */
+    readonly sortBy: (
+      kind: BrowseKind,
+      key: SongSortKey | PlaylistSongSort["key"],
+      playlistId?: number,
+    ) => Promise<void>;
   };
   readonly songs: {
     /** Where each song's download is and whether its file failed to play; 200 songs at most. */
@@ -882,6 +945,8 @@ export interface WaveBridge {
     /** Delete Account, once confirmed: resolves when it ended, however it did. */
     readonly deleteAccount: () => Promise<void>;
     readonly answerInvitation: () => Promise<void>;
+    /** Continue, Not Now or Escape on Bring your music: it never shows again on this computer. */
+    readonly answerBringYourMusic: () => Promise<void>;
   };
   /** Playlists' edits, images, Graveyard and M3U import. */
   readonly collections: {
@@ -958,7 +1023,10 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     exclude: () => invoke("library.exclude"),
     removeRoot: (path) => invoke("library.removeRoot", path),
     include: (path) => invoke("library.include", path),
-    sortBy: (kind, key) => invoke("library.sortBy", kind, key),
+    sortBy: (kind, key, playlistId) =>
+      playlistId === undefined
+        ? invoke("library.sortBy", kind, key)
+        : invoke("library.sortBy", kind, key, playlistId),
   },
   songs: {
     states: (ids) => invoke("songs.states", ids),
@@ -1040,6 +1108,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     signOutEverywhere: () => invoke("account.signOutEverywhere"),
     deleteAccount: () => invoke("account.deleteAccount"),
     answerInvitation: () => invoke("account.answerInvitation"),
+    answerBringYourMusic: () => invoke("account.answerBringYourMusic"),
   },
   collections: {
     actions: (target, options) => invoke("collections.actions", target, options),
@@ -1082,6 +1151,14 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     ranking: (ranking, period) => invoke("stats.ranking", ranking, period),
     play: (period, key, full) => invoke("stats.play", period, key, full),
     open: (ranking, period, key, full) => invoke("stats.open", ranking, period, key, full),
+    recaps: () => invoke("stats.recaps"),
+    recap: (id) => invoke("stats.recap", id),
+    recapStory: (index) => invoke("stats.recapStory", index),
+    recapClosed: () => invoke("stats.recapClosed"),
+  },
+  cards: {
+    saveImage: (fileName, pngBase64) => invoke("cards.saveImage", fileName, pngBase64),
+    copyImage: (pngBase64) => invoke("cards.copyImage", pngBase64),
   },
   history: historyBridge(invoke),
 });

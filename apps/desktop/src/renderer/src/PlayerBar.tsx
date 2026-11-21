@@ -11,6 +11,7 @@ import {
 
 import type { PlaybackCommand, PlayerView } from "../../shared/playerView.ts";
 import { Icon } from "./Icon.tsx";
+import type { shuffleMenuEvents } from "./ShuffleKinds.tsx";
 import type { PanelTab } from "./SidePanel.tsx";
 import { SleepTimer } from "./SleepTimer.tsx";
 import { useSongDrop, type DraggedSongs } from "./songDrag.ts";
@@ -144,6 +145,7 @@ export function PlayerBar({
   onPanel,
   onNowPlaying,
   onMenu,
+  shuffleMenu,
   links,
   onSongDrop,
 }: {
@@ -154,6 +156,8 @@ export function PlayerBar({
   readonly onNowPlaying: () => void;
   /** Opens the song playing's menu under [element]. */
   readonly onMenu: (element: HTMLElement) => void;
+  /** What opens the kinds of shuffle from the shuffle button (`shuffleMenuEvents`). */
+  readonly shuffleMenu: ReturnType<typeof shuffleMenuEvents>;
   /** Where a streamed song's artist and album names lead. */
   readonly links: YtCreditLinks;
   /** Songs dragged from a list onto the Queue button, for the end of the queue. */
@@ -186,6 +190,7 @@ export function PlayerBar({
     pressed?: boolean,
     disabled = song === null,
     badge?: string,
+    /** More of the button's props: the shuffle button's menu, the Queue button's drop. */
     extra?: { readonly className?: string } & HTMLAttributes<HTMLButtonElement>,
   ) => (
     <button
@@ -257,6 +262,9 @@ export function PlayerBar({
               labels.shuffle,
               () => command({ type: "setShuffle", on: !view?.shuffle }),
               view?.shuffle,
+              undefined,
+              undefined,
+              shuffleMenu,
             )}
             {button("previous", labels.previous, () => command({ type: "previous" }))}
             {button(playing ? "pause" : "play", playing ? labels.pause : labels.play, () =>

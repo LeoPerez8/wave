@@ -591,6 +591,13 @@ export type ShuffleKind = Shuffle["kind"];
 export const readShuffleKind = (stored: string | null): ShuffleKind =>
   stored === "smart" || stored === "even" ? stored : "real";
 
+/** The kinds of shuffle, in the order every menu and setting lists them. */
+export const SHUFFLE_KINDS: readonly ShuffleKind[] = ["real", "smart", "even"];
+
+/** What [kind] is saved as, for `readShuffleKind` to read: nothing for Real Shuffle. */
+export const writeShuffleKind = (kind: ShuffleKind): string | null =>
+  kind === "real" ? null : kind;
+
 /**
  * Whether [command] shuffles [state]'s queue, and so uses the kind of shuffle
  * `reduceQueue` is given: the app reads play counts for Smart Shuffle, and
@@ -667,6 +674,22 @@ export const shuffledTrackIds = (state: QueueState, command: QueueCommand): stri
   const from = command.type === "setShuffle" || command.type === "reshuffle" ? state.index : 0;
   return [...new Set(state.entries.slice(Math.max(0, from)).map((entry) => entry.trackId))];
 };
+
+/**
+ * What the app reads before [command] runs on [state] with [kind] chosen: nothing for Real
+ * Shuffle or a command that doesn't shuffle, else the songs (`shuffledTrackIds`) whose counted
+ * plays Smart Shuffle orders by, or whose artists, genres and albums Even Shuffle does.
+ */
+export const shuffleReads = (
+  kind: ShuffleKind,
+  state: QueueState,
+  command: QueueCommand,
+):
+  | { readonly kind: "real" }
+  | { readonly kind: "smart" | "even"; readonly trackIds: readonly string[] } =>
+  kind === "real" || !shufflesQueue(state, command)
+    ? { kind: "real" }
+    : { kind, trackIds: shuffledTrackIds(state, command) };
 
 /** [entries] in the order [shuffle] gives them, after [previous] (the song before them, if any). */
 const shuffleEntries = (

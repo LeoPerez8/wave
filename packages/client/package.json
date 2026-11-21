@@ -20,6 +20,7 @@
     "./playlistRecommendationTracks": "./src/playlistRecommendationTracks.ts",
     "./playbackSession": "./src/playbackSession.ts",
     "./queueGains": "./src/queueGains.ts",
+    "./queueShuffle": "./src/queueShuffle.ts",
     "./songMeasurements": "./src/songMeasurements.ts",
     "./externalStore": "./src/externalStore.ts",
     "./playCheckpoints": "./src/playCheckpoints.ts",

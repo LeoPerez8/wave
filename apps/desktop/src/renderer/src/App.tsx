@@ -4,8 +4,10 @@ import {
   checkedTableRow,
   listDuration,
   readThemeChoice,
+  recapId,
   tableSelectionOf,
   themeFor,
+  type RecapPeriod,
   type SearchOnline,
   type TableSelection,
   type UpNextPlace,
@@ -23,7 +25,7 @@ import type { AccountView } from "../../shared/account.ts";
 import type { YtAccountPanel } from "../../shared/ytAccount.ts";
 import { SpotifyAccountSettings } from "./SpotifyAccountSettings.tsx";
 import { PlaylistMissingSongs } from "./SpotifyImport.tsx";
-import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
+import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { CollectionTarget } from "../../shared/collectionActions.ts";
 import type { ScanStatus } from "../../shared/library.ts";
 import { PlayerBar, usePlayback } from "./PlayerBar.tsx";
@@ -36,6 +38,7 @@ import { FolderSettings } from "./FolderSettings.tsx";
 import { SearchOnlineSetting } from "./SearchOnlineSetting.tsx";
 import { SearchPage } from "./SearchPage.tsx";
 import { AccountSettings, SignInInvitation } from "./AccountSettings.tsx";
+import { BringYourMusic, type MusicSource } from "./BringYourMusic.tsx";
 import { YtAccountSettings } from "./YtAccountSettings.tsx";
 import { PlaybackSettings } from "./PlaybackSettings.tsx";
 import { WindowSettings } from "./WindowSettings.tsx";
@@ -67,6 +70,7 @@ import {
 import { useSongDrop, type DraggedSongs } from "./songDrag.ts";
 import { songActionToast } from "./songActionToast.ts";
 import { itemMenuEvents, type MenuPoint } from "./Menu.tsx";
+import { shuffleMenuEvents } from "./ShuffleKinds.tsx";
 import { usePlaylistEdits } from "./Playlists.tsx";
 import { Graveyard } from "./Graveyard.tsx";
 import { applyLanguage, labels, text, useLanguage, tagTitle, artistName } from "./text.ts";
@@ -79,7 +83,8 @@ import { geniusAccess } from "./useSongGenius.ts";
 import { Home } from "./Home.tsx";
 import { HomeSettings } from "./HomeEditor.tsx";
 import { Stats } from "./Stats.tsx";
-import type { StatsRoute } from "../../shared/stats.ts";
+import { RecapViewer } from "./RecapViewer.tsx";
+import type { DesktopRecap, StatsRoute } from "../../shared/stats.ts";
 import { ListeningHistory } from "./ListeningHistory.tsx";
 import type { HistoryRoute } from "../../shared/history.ts";
 import { isYtRoute, YtPage, type YtRoute } from "./YtPages.tsx";
@@ -155,6 +160,8 @@ export function App() {
   const [position, setPosition] = useState(0);
   const route = history[position]!;
   const [hero, setHero] = useState<BrowseRow>();
+  /** The order the page's table shows: a playlist offers Move Up and Move Down only in Custom. */
+  const [shownSort, setShownSort] = useState<BrowsePage["sort"]>();
   const [scan, setScan] = useState<ScanStatus>();
   const [account, setAccount] = useState<AccountView>();
   const [ytAccount, setYtAccount] = useState<YtAccountPanel>();
@@ -208,6 +215,8 @@ export function App() {
   /** One collection checked through its menu's Select keeps its own bar. */
   const collectionSelection =
     pickedSongs === undefined && pickCheckboxes(picks) ? onlyCollection(picks) : undefined;
+  /** The sources Bring your music started an import from; the marks last for this launch. */
+  const [bringing, setBringing] = useState<ReadonlySet<MusicSource>>(new Set());
   const playlistEdits = usePlaylistEdits({
     go: (next) => go(next),
     deleted: (id) => {
@@ -216,6 +225,7 @@ export function App() {
     },
     failed: (message) => setError(message),
     changed: playback.refresh,
+    importStarted: (source) => setBringing((previous) => new Set(previous).add(source)),
   });
   const search = useRef<HTMLInputElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -251,6 +261,33 @@ export function App() {
     setNowPlaying(false);
     setSetting("accounts");
     if (route.kind !== "settings") go({ kind: "settings" });
+  };
+  const turnOnYtMusic = () => {
+    setYtMusic(true);
+    void window.wave.settings.setYtMusic(true).catch(() => {
+      setYtMusic(false);
+      failed();
+    });
+  };
+  /**
+   * From YT Music on Bring your music. The desktop has no YT Music playlist picker yet: what
+   * exists is YouTube's sign-in and the account's playlists in Settings › Accounts, so this
+   * opens them, signing in first when signed out. Nothing here starts an import, so the source
+   * never reads as importing. The picker, once there is one, replaces this body and says its
+   * import started with `setBringing`, as From Spotify does through `importStarted`.
+   */
+  const importFromYtMusic = () => {
+    setSetting("accounts");
+    if (route.kind !== "settings") go({ kind: "settings" });
+    // Read now: the polled view is still empty right after Turn On YT Music.
+    void window.wave.ytAccount
+      .view()
+      .then(({ account }) =>
+        account?.kind === "signedOut" && account.action !== "signingIn"
+          ? window.wave.ytAccount.signIn()
+          : undefined,
+      )
+      .catch(failed);
   };
   const back = useCallback(() => {
     setSelecting(undefined);
@@ -377,6 +414,24 @@ export function App() {
   const noticeSeen = useRef<number | null | undefined>(undefined);
   const notice = downloads?.notice;
   const { notify } = actions;
+  /** The Recap whose stories fill the window, and how many were opened (Home and Stats read again). */
+  const [recap, setRecap] = useState<DesktopRecap>();
+  const [recapsOpened, setRecapsOpened] = useState(0);
+  const openRecap = (period: RecapPeriod) => {
+    void window.wave.stats
+      .recap(recapId(period))
+      .then((opened) => {
+        if (opened === null) notify(text.recap.unavailable);
+        else setRecap(opened);
+      })
+      .catch(failed);
+  };
+  const closeRecap = () => {
+    setRecap(undefined);
+    setRecapsOpened((count) => count + 1);
+    // The queue comes back as it was before the Recap's music, and the player bar shows it.
+    playback.run(window.wave.stats.recapClosed());
+  };
   useEffect(() => {
     if (downloads === undefined) return;
     const seen = noticeSeen.current;
@@ -422,6 +477,8 @@ export function App() {
             x: event.clientX,
             y: event.clientY,
           });
+  /** A shuffle control's menu of kinds: the player bar's and a hero's Shuffle. */
+  const shuffleMenu = shuffleMenuEvents(actions.openItems, playback.run);
   /** The song playing's menu, from the player bar. */
   const playingMenu = (element: HTMLElement) => {
     const song = playback.view?.current;
@@ -904,7 +961,7 @@ export function App() {
                   <Icon name="play" size={16} />
                   {labels.play}
                 </button>
-                <button onClick={() => playList(true)}>
+                <button onClick={() => playList(true)} {...shuffleMenu}>
                   <Icon name="shuffle" size={16} />
                   {labels.shuffle}
                 </button>
@@ -996,6 +1053,17 @@ export function App() {
           </p>
         )}
         {account?.invitation && <SignInInvitation onError={failed} />}
+        {account?.bringYourMusic && (
+          <BringYourMusic
+            ytMusic={ytMusic}
+            importing={bringing}
+            onImport={(source) =>
+              source === "spotify" ? playlistEdits.importFromSpotify() : importFromYtMusic()
+            }
+            onTurnOnYtMusic={turnOnYtMusic}
+            onError={failed}
+          />
+        )}
         {collectionSelection ? (
           <CollectionSelectionBar
             key={`${collectionSelection.kind}:${collectionSelection.id}`}
@@ -1226,6 +1294,8 @@ export function App() {
             run={playback.run}
             go={go}
             onStats={() => go(defaultStats)}
+            onRecap={openRecap}
+            recapsOpened={recapsOpened}
             onError={failed}
             notify={notify}
             selectionFor={selectionFor}
@@ -1252,6 +1322,8 @@ export function App() {
             go={go}
             onError={failed}
             notify={notify}
+            onRecap={openRecap}
+            recapsOpened={recapsOpened}
             onMenu={(row, at) => {
               if (row.unavailable || row.outside) return;
               if (row.videoId === undefined) {
@@ -1303,6 +1375,7 @@ export function App() {
                 scope={scope}
                 revision={revision}
                 onHero={setHero}
+                onSort={setShownSort}
                 onOpen={open}
                 onError={failed}
                 selection={collectionKind ? picks?.[collectionKind] : table.selection}
@@ -1343,7 +1416,10 @@ export function App() {
                           scope,
                           row,
                           at,
-                          scope.kind === "playlist" && scope.id !== undefined
+                          // Move Up and Move Down only where the playlist shows its own order.
+                          scope.kind === "playlist" &&
+                            scope.id !== undefined &&
+                            shownSort?.key === "custom"
                             ? playlistEdits.moveItems(scope.id, row.id)
                             : [],
                         );
@@ -1395,6 +1471,7 @@ export function App() {
         onPanel={panel.toggle}
         onNowPlaying={() => setNowPlaying(true)}
         onMenu={playingMenu}
+        shuffleMenu={shuffleMenu}
         links={ytLinks}
         onSongDrop={(songs) => dropSongs(songs, { queue: undefined })}
       />
@@ -1411,6 +1488,7 @@ export function App() {
       {actions.overlays}
       {playlistEdits.overlays}
       {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}
+      {recap && <RecapViewer recap={recap} onClose={closeRecap} notify={notify} />}
     </main>
   );
 }

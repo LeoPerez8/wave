@@ -12,12 +12,14 @@ import {
   readCrossfade,
   readDontPlayExplicit,
   readNormalizeVolume,
+  readShuffleKind,
   readStreamBuffer,
   snapCrossfade,
   STREAM_BUFFER_DEFAULT,
   writeContinueQueue,
   writeDontPlayExplicit,
   writeNormalizeVolume,
+  writeShuffleKind,
   type StreamBufferMinutes,
 } from "@wave/core";
 import type { LibraryDatabase } from "@wave/client/db/database";
@@ -31,6 +33,7 @@ export const PLAYBACK_SETTING_KEYS = {
   crossfadeSeconds: "settings.crossfadeSeconds",
   normalizeVolume: "settings.normalizeVolume",
   bufferMinutes: "settings.streamBufferMinutes",
+  shuffleKind: "settings.shuffleKind",
   dontPlayExplicit: DONT_PLAY_EXPLICIT_SETTING,
   continueQueue: "settings.continueQueue",
 } as const;
@@ -59,6 +62,7 @@ export const readPlaybackSettings = (db: LibraryDatabase): PlaybackSettings => (
   crossfadeSeconds: readCrossfade(stored(db, PLAYBACK_SETTING_KEYS.crossfadeSeconds)),
   normalizeVolume: readNormalizeVolume(stored(db, PLAYBACK_SETTING_KEYS.normalizeVolume)),
   bufferMinutes: readStreamBuffer(stored(db, PLAYBACK_SETTING_KEYS.bufferMinutes)),
+  shuffleKind: readShuffleKind(stored(db, PLAYBACK_SETTING_KEYS.shuffleKind)),
   dontPlayExplicit: readDontPlayExplicit(stored(db, PLAYBACK_SETTING_KEYS.dontPlayExplicit)),
   continueQueue: readContinueQueue(stored(db, PLAYBACK_SETTING_KEYS.continueQueue)),
 });
@@ -80,6 +84,7 @@ export const savePlaybackSettings = (
     crossfadeSeconds: snapCrossfade(change.crossfadeSeconds ?? before.crossfadeSeconds),
     normalizeVolume: change.normalizeVolume ?? before.normalizeVolume,
     bufferMinutes: readStreamBuffer(String(change.bufferMinutes ?? before.bufferMinutes)),
+    shuffleKind: change.shuffleKind ?? before.shuffleKind,
     dontPlayExplicit: change.dontPlayExplicit ?? before.dontPlayExplicit,
     continueQueue: change.continueQueue ?? before.continueQueue,
   };
@@ -87,6 +92,7 @@ export const savePlaybackSettings = (
     ["crossfadeSeconds", String(after.crossfadeSeconds)],
     ["normalizeVolume", writeNormalizeVolume(after.normalizeVolume)],
     ["bufferMinutes", writeBuffer(after.bufferMinutes)],
+    ["shuffleKind", writeShuffleKind(after.shuffleKind)],
     ["dontPlayExplicit", writeDontPlayExplicit(after.dontPlayExplicit)],
     ["continueQueue", writeContinueQueue(after.continueQueue)],
   ];
