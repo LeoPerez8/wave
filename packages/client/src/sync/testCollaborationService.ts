@@ -51,7 +51,12 @@ export interface TestCollaborationWorld {
 
 const TABLES = ["playlists", "playlistEntries"] as const;
 
-export const testCollaborationWorld = (): TestCollaborationWorld => {
+export const testCollaborationWorld = (
+  options: {
+    /** How many rows each pull page holds, for every account (`testSyncService`). */
+    readonly pageSize?: number;
+  } = {},
+): TestCollaborationWorld => {
   const accounts = new Map<string, TestAccount>();
   const collaborations = new Map<string, CollaborationRecord>();
   /** `account:playlist` → why it ended. */
@@ -134,6 +139,7 @@ export const testCollaborationWorld = (): TestCollaborationWorld => {
     const held = accounts.get(id);
     if (held !== undefined) return held;
     const service = testSyncService({
+      ...(options.pageSize === undefined ? {} : { pageSize: options.pageSize }),
       pullExtras: () => ({
         collaborations: [...collaborations.keys()]
           .filter((playlistId) => isMember(id, playlistId))

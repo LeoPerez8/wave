@@ -15,6 +15,7 @@ import {
   refusalEndsMembership,
   type CollaborationResult,
   type PullMembership,
+  type SyncPullPage,
   type SyncPushAnswer,
   type SyncTables,
 } from "@wave/core";
@@ -210,10 +211,18 @@ const keepMembership = (input: SyncCycleInput, seen: Seen, membership: PullMembe
   seen.playlists ||= applyMembership(input.db, membership);
 };
 
+/** Whether [page] holds rows placed by their song's recording key (`selectAccountTrackIds`). */
+const namesSongs = (page: SyncPullPage): boolean =>
+  page.playlistEntries.length > 0 ||
+  page.favorites.length > 0 ||
+  page.plays.length > 0 ||
+  page.dislikes.length > 0;
+
 /** Pulls every page changed after the cursor kept, applying each; true when any row came. */
 const pullAll = async (input: SyncCycleInput, seen: Seen): Promise<boolean> => {
   const { db } = input;
-  const trackIds = selectAccountTrackIds(db);
+  // Read once a page brings rows that name songs, so a pull that brings none reads no Tracks.
+  let trackIds: ReadonlyMap<string, number> | null = null;
   let pulledAny = false;
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const since = encodeURIComponent(selectSyncCursor(db) ?? "0");
@@ -224,7 +233,8 @@ const pullAll = async (input: SyncCycleInput, seen: Seen): Promise<boolean> => {
     // Before the page's rows, so a collaborative playlist's entries find their songs by their fields.
     const membership = input.collaboration === undefined ? null : readPullMembership(body);
     if (membership !== null) keepMembership(input, seen, membership);
-    const changes = applyPulledPage(db, page, trackIds, input.now());
+    if (namesSongs(page)) trackIds ??= selectAccountTrackIds(db);
+    const changes = applyPulledPage(db, page, trackIds ?? new Map(), input.now());
     take(seen, changes);
     if (changes.plays) input.historyChanged?.();
     for (const { key, value } of changes.preferences) input.preferences.apply(key, value);
@@ -425,13 +435,7 @@ const pullMemberPlaylist = async (
     if (typeof step === "string") return step;
     await freeTurn(input);
     const page = step.value;
-    const applied = applyPlaylistPage(
-      input.db,
-      syncId,
-      page,
-      selectAccountTrackIds(input.db),
-      input.now(),
-    );
+    const applied = applyPlaylistPage(input.db, syncId, page, input.now());
     if (applied.deleted) {
       // The owner deleted it: what the member had stays theirs.
       makePrivateCopy(input.db, syncId);

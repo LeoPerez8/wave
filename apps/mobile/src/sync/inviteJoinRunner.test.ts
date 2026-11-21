@@ -10,7 +10,13 @@ import type {
   WaveSession,
 } from "@wave/core";
 
-import { openInvite, type InviteRunnerPorts, type InviteSignIn } from "./inviteJoinRunner.ts";
+import {
+  openInvite,
+  openWhenJoined,
+  type InviteRunnerPorts,
+  type InviteSignIn,
+  type JoinedOpenPorts,
+} from "./inviteJoinRunner.ts";
 
 const TOKEN = "t".repeat(43);
 const ANA: WaveSession = {
@@ -139,4 +145,69 @@ test("a refused Join says why and leaves no joined playlist", async () => {
   await openInvite(TOKEN, ports);
   assert.equal(seen.notices[0]?.title, "This invite is no longer valid");
   assert.deepEqual(seen.joined, []);
+});
+
+/** Ports for `openWhenJoined`: the device has the playlist once [has] holds an id. */
+const joinedPorts = (has: { id: number | null }) => {
+  const seen = { opened: [] as number[], listening: 0, timers: 0 };
+  let changed: (() => void) | null = null;
+  let timeUp: (() => void) | null = null;
+  const ports: JoinedOpenPorts = {
+    find: async () => has.id,
+    onPlaylistsEdited: (listener) => {
+      changed = listener;
+      seen.listening += 1;
+      return () => {
+        seen.listening -= 1;
+      };
+    },
+    open: (id) => seen.opened.push(id),
+    after: (_ms, done) => {
+      timeUp = done;
+      seen.timers += 1;
+      return () => {
+        seen.timers -= 1;
+      };
+    },
+  };
+  return { ports, seen, edit: () => changed?.(), timeUp: () => timeUp?.() };
+};
+
+/** Lets the promises already resolved run their callbacks. */
+const settled = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+test("after Join, a playlist the device already has opens at once", async () => {
+  const { ports, seen } = joinedPorts({ id: 7 });
+  openWhenJoined(ports, 60_000);
+  await settled();
+  assert.deepEqual(seen.opened, [7]);
+  assert.equal(seen.listening, 0);
+  assert.equal(seen.timers, 0);
+});
+
+test("after Join, the playlist opens when a change brings it, and only once", async () => {
+  const has: { id: number | null } = { id: null };
+  const { ports, seen, edit } = joinedPorts(has);
+  openWhenJoined(ports, 60_000);
+  await settled();
+  assert.deepEqual(seen.opened, []);
+  has.id = 4;
+  edit();
+  edit();
+  await settled();
+  assert.deepEqual(seen.opened, [4]);
+  assert.equal(seen.listening, 0);
+});
+
+test("after Join, nothing opens once the wait is over", async () => {
+  const has: { id: number | null } = { id: null };
+  const { ports, seen, edit, timeUp } = joinedPorts(has);
+  openWhenJoined(ports, 60_000);
+  await settled();
+  timeUp();
+  has.id = 4;
+  edit();
+  await settled();
+  assert.deepEqual(seen.opened, []);
+  assert.equal(seen.listening, 0);
 });

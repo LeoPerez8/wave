@@ -23,7 +23,7 @@ import { signInWaveAccount, waveSyncUrl } from "@/settings/waveAccount";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { collaborations } from "./collaborations";
-import { openInvite } from "./inviteJoinRunner";
+import { openInvite, openWhenJoined } from "./inviteJoinRunner";
 import { syncNow } from "./startSync";
 
 /** How long after Join the playlist is opened when a sync brings it. */
@@ -91,33 +91,26 @@ function JoinCard({ view, finish }: { view: InviteJoinView; finish: (join: boole
 }
 
 /**
- * After Join: a sync brings the playlist into the Library, and it opens when it arrives within
- * a minute. The toast says it joined meanwhile.
+ * After Join: the playlist opens at once when the device already has it, else when a sync
+ * brings it within a minute (`openWhenJoined`). The toast says it joined meanwhile.
  */
 const joined = (playlistId: string, view: InviteJoinView): void => {
   void showToast(currentLocalisation().strings.inviteJoin.joined(view.playlistName));
-  let done = false;
-  const look = (): void => {
-    if (done) return;
-    void appRuntime
-      // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-      .runPromise(LibraryStore.use((store) => store.joinedPlaylistId(playlistId)))
-      .then(
-        (id) => {
-          if (id === null || done) return;
-          stop();
-          openPlaylist(id);
-        },
-        () => {},
-      );
-  };
-  const unsubscribe = onPlaylistsEdited(look);
-  const timer = setTimeout(() => stop(), OPEN_WITHIN_MS);
-  const stop = (): void => {
-    done = true;
-    unsubscribe();
-    clearTimeout(timer);
-  };
+  openWhenJoined(
+    {
+      find: () =>
+        appRuntime
+          // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+          .runPromise(LibraryStore.use((store) => store.joinedPlaylistId(playlistId))),
+      onPlaylistsEdited,
+      open: (id) => openPlaylist(id),
+      after: (ms, done) => {
+        const timer = setTimeout(done, ms);
+        return () => clearTimeout(timer);
+      },
+    },
+    OPEN_WITHIN_MS,
+  );
   syncNow();
 };
 

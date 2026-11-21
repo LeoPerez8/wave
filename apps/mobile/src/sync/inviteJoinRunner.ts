@@ -75,3 +75,43 @@ const showInvite = async (
   if (outcome.kind === "notice") return ports.notify(outcome.notice);
   ports.joined(outcome.playlistId, view);
 };
+
+export interface JoinedOpenPorts {
+  /** The joined playlist's id here, or null while the device doesn't have it. */
+  readonly find: () => Promise<number | null>;
+  /** Calls [changed] after each change to the playlists; returns how to stop. */
+  readonly onPlaylistsEdited: (changed: () => void) => () => void;
+  readonly open: (playlistId: number) => void;
+  /** Calls [done] after [ms]; returns how to cancel it. */
+  readonly after: (ms: number, done: () => void) => () => void;
+}
+
+/**
+ * After Join: opens the joined playlist as soon as the device has it, at once when it already
+ * does, else on the playlists change that brings it, waiting at most [withinMs]. Returns how to
+ * stop waiting.
+ */
+export const openWhenJoined = (ports: JoinedOpenPorts, withinMs: number): (() => void) => {
+  let done = false;
+  const look = (): void => {
+    if (done) return;
+    ports.find().then(
+      (id) => {
+        if (id === null || done) return;
+        stop();
+        ports.open(id);
+      },
+      () => {},
+    );
+  };
+  const unsubscribe = ports.onPlaylistsEdited(look);
+  const cancel = ports.after(withinMs, () => stop());
+  const stop = (): void => {
+    if (done) return;
+    done = true;
+    unsubscribe();
+    cancel();
+  };
+  look();
+  return stop;
+};
