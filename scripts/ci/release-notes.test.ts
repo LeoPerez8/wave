@@ -41,7 +41,10 @@ describe("releaseBody", () => {
   it("counts a body from before the sections as the phone's notes", () => {
     const body = releaseBody("Wave 1.2.0 for Android.\r\n", "desktop", DESKTOP);
     assert.match(body, /# Android\n[\s\S]*Wave 1\.2\.0 for Android\.[\s\S]*# Desktop\n/);
-    assert.equal(releaseBody("Wave 1.2.0 for Android.", "android", PHONE), releaseBody("", "android", PHONE));
+    assert.equal(
+      releaseBody("Wave 1.2.0 for Android.", "android", PHONE),
+      releaseBody("", "android", PHONE),
+    );
   });
 
   it("reads GitHub's copy of a body it wrote as the same body", () => {
