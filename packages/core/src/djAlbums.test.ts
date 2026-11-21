@@ -334,7 +334,7 @@ describe("an album in the DJ seed", () => {
     const drawn = radiosOf(session, 4);
     const selectedIds = tiles
       .filter((tile): tile is DjArtistTile => tile.kind === "artist")
-      .map((tile) => tile.key);
+      .map((tile): string => tile.key);
     assert.deepEqual(
       drawn[0]!.filter((id) => selectedIds.includes(id)),
       selectedIds,
