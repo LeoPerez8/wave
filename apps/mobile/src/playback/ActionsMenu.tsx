@@ -437,7 +437,11 @@ export function ItemMenuCard({
       // A Library entry's heading counts the songs it acts on, which its row doesn't show.
       alwaysHeading={target.kind === "section"}
       cards={cards}
-      entries={[...entries, ...extraEntries]}
+      entries={[
+        ...entries.filter((entry) => entry.action !== "select"),
+        ...extraEntries,
+        ...entries.filter((entry) => entry.action === "select"),
+      ]}
     />
   );
 }

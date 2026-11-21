@@ -5,6 +5,8 @@ import { IconMusic, IconSettings } from "@tabler/icons-react-native";
 import { homeItems, type RecapPeriod } from "@wave/core";
 import { Link } from "expo-router";
 import { useEffect, useState } from "react";
+import { useCallback } from "react";
+import { useFocusEffect } from "expo-router";
 import { router } from "@/lib/timingRouter";
 import { Pressable, Text, View, useWindowDimensions } from "react-native";
 
@@ -19,6 +21,7 @@ import { useHomeScreenContent } from "@/home/homeContent";
 import { afterHomeFrame, homeItemEstimate, homeOpeningState } from "@/home/homeOpening";
 import { startSavingHomeSnapshot } from "@/home/homeSnapshot";
 import { useHomeWorkSight } from "@/home/useHomeWorkSight";
+import { useHomeSelection } from "@/selection/useHomeSelection";
 import { useRenderCount } from "@/perf/perf";
 import { useRecapToAnnounce } from "@/stats/hooks";
 import { RecapCard } from "@/stats/StatsViews";
@@ -92,6 +95,9 @@ export default function HomeScreen() {
 function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
   const { strings } = useLocalisation();
   const home = useHomeScreenContent();
+  const selection = useHomeSelection();
+  const endSelection = selection.end;
+  useFocusEffect(useCallback(() => () => endSelection(), [endSelection]));
   const { empty, nothingPlayed, ready } = homeOpeningState(home);
   useScreenContent(ready);
   const arrangement = useHomeArrangement();
@@ -112,7 +118,7 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
           {/* Discover's Artist mixes grow from YouTube Music's chart while the Library is empty. */}
           {homeItems(arrangement, { nothingPlayed, empty }).map((item) =>
             typeof item === "string" ? null : (
-              <HomeSection key={item.section} id={item.section} home={home} />
+              <HomeSection key={item.section} id={item.section} home={home} selection={selection} />
             ),
           )}
         </>
@@ -133,7 +139,12 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
                     {strings.home.playHint}
                   </HomeLine>
                 ) : (
-                  <HomeSection key={item.section} id={item.section} home={home} />
+                  <HomeSection
+                    key={item.section}
+                    id={item.section}
+                    home={home}
+                    selection={selection}
+                  />
                 ),
               )}
             </StagedSections>

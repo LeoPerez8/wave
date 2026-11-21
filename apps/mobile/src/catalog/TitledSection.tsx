@@ -11,6 +11,7 @@ export function TitledSection({
   title,
   action,
   control,
+  selecting = false,
   status,
   first = false,
   children,
@@ -19,6 +20,8 @@ export function TitledSection({
   action?: { label: string; onPress: () => void };
   /** A control of its own in the action's place (Discover's settings icon), when it has no action. */
   control?: ReactNode;
+  /** Home hides section controls while its items are being selected. */
+  selecting?: boolean;
   /**
    * A quiet line after the title for what the section is doing ("Updating…"
    * while mixes rebuild), read out as it changes; absent for none.
@@ -43,9 +46,9 @@ export function TitledSection({
             </Text>
           )}
         </View>
-        {action !== undefined ? (
+        {action !== undefined && !selecting ? (
           <TextButton label={action.label} onPress={action.onPress} />
-        ) : (
+        ) : selecting ? null : (
           control
         )}
       </View>
