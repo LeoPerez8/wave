@@ -67,6 +67,7 @@ import {
   useMagicBatchEmptySeed,
   useMagicBatchFailed,
   useMagicBatchLoading,
+  useMagicQueueFootnote,
   useMagicQueueLabel,
 } from "@/playback/MagicQueue";
 import { queueState } from "@/playback/Queue";
@@ -435,7 +436,8 @@ const barOffset = (history: number): number => (history === 0 ? 0 : SECTION_HEAD
  *
  * While a Magic Queue picks its next batch, skeleton rows stand where it will
  * land: in place of "Nothing up next.", or under the songs already in Up
- * Next, which stay put (docs/spec.md, Skeletons).
+ * Next, which stay put (docs/spec.md, Skeletons). Once its songs are in, a
+ * footnote under the last one says more arrive as it learns (#1376).
  *
  * [ground] is the sheet's ground, and [paneTop] where the Queue view sits on
  * the sheet: the sticky bar draws its slice of the ground.
@@ -467,6 +469,7 @@ export function UpNextList({
   const batchLoading = useMagicBatchLoading();
   const batchFailed = useMagicBatchFailed();
   const emptySeed = useMagicBatchEmptySeed();
+  const footnote = useMagicQueueFootnote();
 
   const rows = useMemo(
     (): QueueRow[] => [
@@ -648,10 +651,16 @@ export function UpNextList({
     />
   ) : null;
 
+  const footnoteLine = footnote ? (
+    <Text className="font-sans text-footnote text-secondary" style={{ paddingTop: CELL * 2 }}>
+      {strings.playbackText.moreSongsArriveAsTheMagicQueueLearns}
+    </Text>
+  ) : null;
+
   const footer = batchLoading ? (
     <UpNextSkeletons />
   ) : entries.length > 0 ? (
-    failure
+    (failure ?? footnoteLine)
   ) : (
     <View style={{ paddingTop: CELL * 2 }}>
       {failure ?? (
