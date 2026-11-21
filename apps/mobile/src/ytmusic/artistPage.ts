@@ -27,7 +27,9 @@ import {
   fetchArtist,
   readArtist,
   readSaved,
-  saveYtArtistAnswer, useSavedYtArtist } from "./artistSection";
+  saveYtArtistAnswer,
+  useSavedYtArtist,
+} from "./artistSection";
 import { YtMusicError } from "./YtMusic";
 import { useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
 

@@ -236,8 +236,8 @@ export const useYtListPage = (screen: YtListScreen, id: string) => {
       : known !== undefined
         ? known
         : connected
-        ? LOADING
-        : { status: "quiet", reason: "offline" };
+          ? LOADING
+          : { status: "quiet", reason: "offline" };
   return { load, retry };
 };
 
