@@ -2709,6 +2709,8 @@ export {
   type SampleTouchEvent,
 } from "./touchSample.ts";
 export type { LongPressFill, SampleMenuEntry } from "./touchSample.ts";
+export { RELATED_PAGE_ROWS, relatedPages, relatedRowsThatFit } from "./relatedPages.ts";
+export type { RelatedPages } from "./relatedPages.ts";
 export {
   createRelatedSearches,
   createRelatedSongsSession,

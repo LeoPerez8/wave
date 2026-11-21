@@ -219,6 +219,8 @@ export const playbackTextEn = {
     `These lyrics are already in ${value0}.`,
   selectUpToValueLines: (value0: string | number) => `Select up to ${value0} lines`,
   valueOfValue: (value0: string | number, value1: string | number) => `${value0} of ${value1}`,
+  pageValueOfValue: (value0: string | number, value1: string | number) =>
+    `Page ${value0} of ${value1}`,
   removeValueFromFavorites: (value0: string | number) => `Remove ${value0} from Favorites`,
   favoriteValue: (value0: string | number) => `Favorite ${value0}`,
   removeValueFromUpNext: (value0: string | number) => `Remove ${value0} from Up Next`,

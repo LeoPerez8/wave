@@ -220,6 +220,8 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   theseLyricsAreAlreadyInValue: (value0: string | number) => `Esta letra já está em ${value0}.`,
   selectUpToValueLines: (value0: string | number) => `Selecione até ${value0} versos`,
   valueOfValue: (value0: string | number, value1: string | number) => `${value0} de ${value1}`,
+  pageValueOfValue: (value0: string | number, value1: string | number) =>
+    `Página ${value0} de ${value1}`,
   removeValueFromFavorites: (value0: string | number) => `Remover ${value0} das Favoritas`,
   favoriteValue: (value0: string | number) => `Favoritar ${value0}`,
   removeValueFromUpNext: (value0: string | number) => `Remover ${value0} de A Seguir`,
