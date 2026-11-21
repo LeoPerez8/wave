@@ -1473,6 +1473,22 @@ const m0062 = `CREATE TABLE dislikes (
 --> statement-breakpoint
 CREATE INDEX dislikes_disliked_at_idx ON dislikes (disliked_at);`;
 
+// Dislikes sync with the Wave account (#1286): each gets Core's SyncRow stamp, made
+// here when it was disliked, waiting to go up. A removed one stays as a tombstone.
+const m0063 = `ALTER TABLE dislikes ADD COLUMN changed_at integer DEFAULT 0 NOT NULL;
+--> statement-breakpoint
+UPDATE dislikes SET changed_at = disliked_at;
+--> statement-breakpoint
+ALTER TABLE dislikes ADD COLUMN phone_id text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+UPDATE dislikes SET phone_id = (SELECT phone_id FROM phone);
+--> statement-breakpoint
+ALTER TABLE dislikes ADD COLUMN deleted integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+ALTER TABLE dislikes ADD COLUMN pushed integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+CREATE INDEX dislikes_pushed_idx ON dislikes (pushed);`;
+
 export default {
   journal: {
     entries: [
@@ -1564,6 +1580,7 @@ export default {
         breakpoints: true,
       },
       { idx: 62, when: 1_797_163_200_000, tag: "0062_dislikes", breakpoints: true },
+      { idx: 63, when: 1_797_249_600_000, tag: "0063_dislike_sync", breakpoints: true },
     ],
   },
   migrations: {
@@ -1630,5 +1647,6 @@ export default {
     m0060,
     m0061,
     m0062,
+    m0063,
   },
 };

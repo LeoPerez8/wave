@@ -88,6 +88,7 @@ const changedAnything = (pulled: SyncedChanges): boolean =>
   pulled.plays ||
   pulled.follows ||
   pulled.dismissedSuggestions ||
+  pulled.dislikes ||
   pulled.preferences.length > 0;
 
 export const createDesktopSync = (deps: DesktopSyncDeps): DesktopSync => {

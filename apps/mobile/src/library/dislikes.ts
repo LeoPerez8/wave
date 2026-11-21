@@ -10,7 +10,8 @@ import { appRuntime } from "./runtime";
  * The disliked songs (docs/spec.md, Dislike), by Core's `dislikeKey`, held in
  * memory so every menu shows a dislike the moment it's set and every picker
  * (the Magic Queue, the mixes, Discover's row) filters by the same set. The
- * store keeps them (`dislikes`), so they survive a restart. Core's
+ * store keeps them (`dislikes`), so they survive a restart, and they sync
+ * with the Wave account (`startSync`). Core's
  * `dislikes.ts` decides what a dislike changes; `dislikeSongs.ts` runs it.
  */
 interface DislikesState {
@@ -51,6 +52,31 @@ const readDislikes = (): Promise<void> => {
 /** Reads the dislikes once; resolves when they're read, or the read failed. */
 export const loadDislikes = (): Promise<void> =>
   dislikes.get().loaded ? Promise.resolve() : readDislikes();
+
+/**
+ * Reads the dislikes again after the Wave account changed them (a pull).
+ * Nothing to do before the first read, which reads them as they are by then.
+ */
+export const reloadDislikes = (): Promise<void> => {
+  if (!dislikes.get().loaded) return Promise.resolve();
+  // A read on its way may have read before the pull: it reads again.
+  dislikes.update((state) => ({ ...state, edits: state.edits + 1 }));
+  return readDislikes();
+};
+
+const savedListeners = new Set<() => void>();
+
+/** Calls [listener] whenever a dislike set or removed here has been saved (sync follows it); returns how to stop. */
+export const onDislikesSaved = (listener: () => void): (() => void) => {
+  savedListeners.add(listener);
+  return () => {
+    savedListeners.delete(listener);
+  };
+};
+
+const saved = (): void => {
+  for (const listener of savedListeners) listener();
+};
 
 /** The disliked songs as this phone knows them now, unfollowed; none before they're read. */
 export const dislikedSongsNow = (): DislikedSongs => dislikes.get().keys;
@@ -103,7 +129,7 @@ const write = (
     appRuntime
       // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
       .runPromise(LibraryStore.use(run))
-      .catch(readDislikes)
+      .then(saved, readDislikes)
   );
 };
 

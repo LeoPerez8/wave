@@ -405,6 +405,7 @@ export interface Pulled {
   readonly hiddenReleases: readonly PulledRow[];
   readonly notifiedShows: readonly PulledRow[];
   readonly dismissedSuggestions: readonly PulledRow[];
+  readonly dislikes: readonly PulledRow[];
   readonly cursor: string;
   readonly more: boolean;
 }

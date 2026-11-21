@@ -1897,7 +1897,8 @@ const make = Effect.gen(function* () {
 
     setDislikes: (songs) => writeAttempt("keep dislikes", () => setDislikes(db, songs, Date.now())),
 
-    removeDislikes: (keys) => writeAttempt("forget dislikes", () => removeDislikes(db, keys)),
+    removeDislikes: (keys) =>
+      writeAttempt("forget dislikes", () => removeDislikes(db, keys, Date.now())),
 
     listDislikes: attempt("read dislikes", () => selectDislikes(db)),
 

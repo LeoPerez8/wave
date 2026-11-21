@@ -162,6 +162,7 @@ describe("readPullPage", () => {
       dismissedSuggestions: [
         { id: "massive attack", changedAt: 18, phoneId: "b", deleted: false, dismissedAt: 18 },
       ],
+      dislikes: [{ id: "yt:4D7u5KF7SP8", changedAt: 19, phoneId: "b", deleted: true }],
       cursor: "42",
       more: true,
     };
@@ -315,6 +316,63 @@ describe("pushBatches", () => {
 
     assert.ok(batch !== undefined);
     assert.deepEqual(JSON.parse(pushBody(batch)), { dismissedSuggestions });
+  });
+
+  test("reads dislikes of Library and YT Music songs, and their removals", () => {
+    const disliked = {
+      id: KEY,
+      changedAt: 40,
+      phoneId: "b",
+      deleted: false,
+      title: "Something",
+      artists: '["The Beatles"]',
+      durationMs: 182_000,
+      dislikedAt: 40,
+    };
+    const streamed = { ...disliked, id: "yt:4D7u5KF7SP8", durationMs: null };
+    const body = {
+      dislikes: [
+        disliked,
+        streamed,
+        { id: "yt:removed", changedAt: 41, phoneId: "b", deleted: true },
+        { ...disliked, id: "yt:unreadable", artists: ["The Beatles"] },
+      ],
+      cursor: "41",
+      more: false,
+    };
+
+    assert.deepEqual(readPullPage(JSON.stringify(body)), {
+      ...EMPTY_SYNC_TABLES,
+      dislikes: [
+        disliked,
+        streamed,
+        { id: "yt:removed", changedAt: 41, phoneId: "b", deleted: true },
+      ],
+      cursor: "41",
+      more: false,
+    });
+  });
+
+  test("a dislike and its removal go up in a push body, after the rows of older tables", () => {
+    const dislikes = [
+      {
+        id: KEY,
+        changedAt: 5,
+        phoneId: "a",
+        deleted: false as const,
+        title: "Something",
+        artists: '["The Beatles"]',
+        durationMs: 182_000,
+        dislikedAt: 5,
+      },
+      { id: "yt:4D7u5KF7SP8", changedAt: 6, phoneId: "a", deleted: true as const },
+    ];
+    const favorites = [{ id: KEY, changedAt: 4, phoneId: "a", deleted: true as const }];
+    const [batch] = pushBatches({ ...EMPTY_SYNC_TABLES, favorites, dislikes });
+
+    assert.ok(batch !== undefined);
+    assert.deepEqual(Object.keys(JSON.parse(pushBody(batch))), ["favorites", "dislikes"]);
+    assert.deepEqual(JSON.parse(pushBody(batch)), { favorites, dislikes });
   });
 
   test("the limit counts bytes, not characters", () => {
