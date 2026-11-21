@@ -36,26 +36,45 @@ const stamps = (db: Awaited<ReturnType<typeof library>>) =>
     )
     .map(({ key, changed_at }) => `${key}@${changed_at}`);
 
-test("both switches are on in a Library with nothing stored", async () => {
+test("the switches are on in a Library with nothing stored", async () => {
   const db = await library();
-  assert.deepEqual(readLyricsAndTags(db), { fixSongsOnline: true, downloadArtistPhotos: true });
+  assert.deepEqual(readLyricsAndTags(db), {
+    fixSongsOnline: true,
+    downloadArtistPhotos: true,
+    geniusInsights: true,
+  });
   assert.equal(lookupsEnabled(db), true);
   assert.equal(artistPhotosEnabled(db), true);
 });
 
 test("a change is kept under the phone's keys in its format and stamped for sync", async () => {
   const db = await library();
-  const after = saveLyricsAndTags(db, { fixSongsOnline: false }, 1_000);
-  assert.deepEqual(after, { fixSongsOnline: false, downloadArtistPhotos: true });
-  assert.deepEqual(stored(db), { "settings.findLyricsAndGenre": "off" });
-  assert.deepEqual(stamps(db), ["settings.findLyricsAndGenre@1000"]);
+  const after = saveLyricsAndTags(db, { fixSongsOnline: false, geniusInsights: false }, 1_000);
+  assert.deepEqual(after, {
+    fixSongsOnline: false,
+    downloadArtistPhotos: true,
+    geniusInsights: false,
+  });
+  assert.deepEqual(stored(db), {
+    "settings.findLyricsAndGenre": "off",
+    "settings.geniusInsights": "off",
+  });
+  assert.deepEqual(stamps(db), [
+    "settings.findLyricsAndGenre@1000",
+    "settings.geniusInsights@1000",
+  ]);
   assert.equal(lookupsEnabled(db), false);
 
-  saveLyricsAndTags(db, { fixSongsOnline: true, downloadArtistPhotos: false }, 2_000);
+  saveLyricsAndTags(
+    db,
+    { fixSongsOnline: true, downloadArtistPhotos: false, geniusInsights: true },
+    2_000,
+  );
   assert.deepEqual(stored(db), { "settings.downloadArtistPhotos": "off" });
   assert.deepEqual(stamps(db), [
     "settings.downloadArtistPhotos@2000",
     "settings.findLyricsAndGenre@2000",
+    "settings.geniusInsights@2000",
   ]);
   assert.equal(artistPhotosEnabled(db), false);
 });
