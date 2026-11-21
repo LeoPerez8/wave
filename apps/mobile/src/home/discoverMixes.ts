@@ -607,6 +607,18 @@ export const useDiscoverMixes = (
   active = true,
   drawn = active,
 ): DiscoverMixesSection => {
+  const shown = useMixesSection(id, empty, active);
+  // The start of what Home shows is fetched ahead on Wi-Fi.
+  useEffect(() => noteMixesShown(id, shown, drawn), [id, shown, drawn]);
+  return shown;
+};
+
+/** What the mix section [id] shows (`useDiscoverMixes`), read without fetching anything ahead. */
+const useMixesSection = (
+  id: MixSectionId,
+  empty: boolean,
+  active: boolean,
+): DiscoverMixesSection => {
   const { saved, nothingToBuildFrom, building, failed } = SECTIONS[id];
   const enabled = useYtMusicEnabled();
   const mixes = saved.useValue();
@@ -614,7 +626,7 @@ export const useDiscoverMixes = (
   const nothing = nothingToBuildFrom.useValue();
   const rebuilding = useSyncExternalStore(building.subscribe, building.get);
   const buildFailed = useSyncExternalStore(failed.subscribe, failed.get);
-  const shown = useMemo(
+  return useMemo(
     () =>
       discoverMixesSection(mixes, {
         ytMusic: enabled && active,
@@ -626,10 +638,16 @@ export const useDiscoverMixes = (
       }),
     [id, mixes, enabled, active, nothing, blend, rebuilding, buildFailed, empty],
   );
-  // The start of what Home shows is fetched ahead on Wi-Fi.
-  useEffect(() => noteMixesShown(id, shown, drawn), [id, shown, drawn]);
-  return shown;
 };
+
+/**
+ * The Artist mixes as DJ reads them for its grid (Core's `djOpeningGrid`):
+ * what their row would show, or nothing while the arrangement doesn't build
+ * them (their row removed, and no empty Library's Magic Queue row to feed).
+ * It starts no build and leaves what Home fetches ahead as it is.
+ */
+export const useBuiltArtistMixes = (): DiscoverMixesSection =>
+  useMixesSection("artist-mixes", false, buildableRows().includes("artist-mixes"));
 
 /**
  * The mix [id] as last built (an artist or a genre mix), blended by its

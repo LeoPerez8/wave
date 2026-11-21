@@ -9,6 +9,8 @@ export const djEn = {
   starting: "Starting your queue",
   /** An artist tile's name for screen readers: its kind, then the artist. */
   artistTile: (name: string) => `Artist, ${name}`,
+  /** The placeholder tiles' name for screen readers while the chart's artists are on their way. */
+  loadingArtists: "Loading artists",
   nothingToPick: "Nothing to pick from yet. Play some music and come back.",
   noSongsFound: "No songs found for these artists.",
   /** The button beside Done, and the title of the screen it opens. */
