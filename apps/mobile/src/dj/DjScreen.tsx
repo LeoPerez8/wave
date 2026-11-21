@@ -147,7 +147,7 @@ const albumsOver = (library: MixIndexes): Promise<DjAlbum[]> => {
  * until then [opening] says what stands in their place (null while the
  * Library part is read). The tiles the last DJ was started from are selected
  * in it, and are in it whether or not it would show them (Core's
- * `djReopened`). The first tiles stay for the whole opening. A tile
+ * `djReopened`), a remembered album as the albums read here know it. The first tiles stay for the whole opening. A tile
  * selected for the first time, whichever source it came from, opens its
  * similar artists from the last artist graph; a row that isn't full reads the
  * artist's page once (Core's `djPagesNeeded`), and whatever comes of it
@@ -198,6 +198,7 @@ const useDjGrid = () => {
       grid: opening.kind === "tiles" ? opening.tiles : [],
       remembered: djRemembered.get().tiles,
       artists: libraryArtists,
+      albums: albums ?? [],
     });
     if (reopened.tiles.length > 0) setState(reopened);
   }

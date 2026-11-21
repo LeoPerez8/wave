@@ -5,8 +5,10 @@
  */
 import {
   DJ_MAX_SELECTED,
+  djAlbumTile,
   djArtistTile,
   djOpened,
+  type DjAlbum,
   type DjState,
   type DjTile,
   type DjTileKey,
@@ -24,11 +26,20 @@ export interface DjRemembered {
   readonly settings: DjSettings;
 }
 
-/** [tile] as it's kept: its kind and what that kind needs to be drawn again. */
-const storedTile = (tile: DjTile): Readonly<Record<string, unknown>> => ({
-  kind: tile.kind,
-  name: tile.name,
-});
+/**
+ * [tile] as it's kept: its kind and what that kind needs to be drawn again.
+ * An album keeps its album artist, its YT Music page and its cover too.
+ */
+const storedTile = (tile: DjTile): Readonly<Record<string, unknown>> =>
+  tile.kind === "album"
+    ? {
+        kind: tile.kind,
+        name: tile.name,
+        artist: tile.artist,
+        browseId: tile.browseId,
+        cover: tile.cover,
+      }
+    : { kind: tile.kind, name: tile.name };
 
 const sameSettings = (a: DjSettings, b: DjSettings): boolean =>
   a.variety === b.variety &&
@@ -46,6 +57,16 @@ export const storedDjRemembered = ({ tiles, settings }: DjRemembered): string | 
 const TILE_READERS: { readonly [K in DjTile["kind"]]: (kept: StoredTile) => DjTile | null } = {
   // The Library's artist is found again as DJ reopens (`djReopened`): an id kept here could go stale.
   artist: ({ name }) => (typeof name === "string" ? djArtistTile(name) : null),
+  // The Library's album is found again too: only what YT Music knows it by is kept.
+  album: ({ name, artist, browseId, cover }) =>
+    typeof name === "string" && typeof artist === "string"
+      ? djAlbumTile({
+          title: name,
+          artist,
+          browseId: typeof browseId === "string" ? browseId : null,
+          cover: typeof cover === "string" ? cover : null,
+        })
+      : null,
 };
 
 type StoredTile = Readonly<Record<string, unknown>>;
@@ -80,7 +101,8 @@ export const readDjRemembered = (stored: string | null): DjRemembered => {
  * in the order they were selected. A remembered tile the fresh grid wouldn't
  * show is in it anyway, ahead of the grid's own tiles, so the selection is
  * the first thing seen; it shows the Library's artist when [artists] (the
- * Library's) has them. A tile remembered twice is selected once, and no more
+ * Library's) has them, and an album as [albums] (the ones the grid may show)
+ * know it, the first of two alike. A tile remembered twice is selected once, and no more
  * are selected than a DJ seed holds. Nothing remembered is the grid as it
  * opens (`djOpened`).
  */
@@ -88,15 +110,21 @@ export const djReopened = ({
   grid,
   remembered,
   artists = [],
+  albums = [],
 }: {
   readonly grid: readonly DjTile[];
   readonly remembered: readonly DjTile[];
   readonly artists?: readonly { readonly id: number; readonly name: string }[];
+  readonly albums?: readonly DjAlbum[];
 }): DjState => {
   const fresh = new Set(grid.map((tile) => tile.key));
   const library = new Map<DjTileKey, DjTile>();
   for (const artist of artists) {
     const tile = djArtistTile(artist.name, artist.id);
+    if (tile !== null && !library.has(tile.key)) library.set(tile.key, tile);
+  }
+  for (const album of albums) {
+    const tile = djAlbumTile(album);
     if (tile !== null && !library.has(tile.key)) library.set(tile.key, tile);
   }
   const selected = new Map<DjTileKey, DjTile>();

@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   DEFAULT_DJ_SETTINGS,
+  djAlbumTile,
   djArtistTile,
   djCanStart,
   djOpened,
@@ -10,11 +11,18 @@ import {
   djSeedTiles,
   readDjRemembered,
   storedDjRemembered,
+  type DjAlbum,
   type DjSettings,
 } from "./index.ts";
 
 const tile = (name: string, libraryId: number | null = null) => {
   const made = djArtistTile(name, libraryId);
+  assert.ok(made);
+  return made;
+};
+
+const albumTile = (album: DjAlbum) => {
+  const made = djAlbumTile(album);
   assert.ok(made);
   return made;
 };
@@ -83,6 +91,73 @@ describe("what DJ remembers on the phone", () => {
       readDjRemembered(stored).tiles.map((kept) => kept.name),
       names.slice(0, 30),
     );
+  });
+});
+
+describe("a remembered album", () => {
+  const untrue: DjAlbum = {
+    title: "Untrue",
+    artist: "Burial",
+    libraryId: 4,
+    browseId: "MPREb_untrue",
+    cover: "https://covers.example/untrue.jpg",
+  };
+
+  test("reads back with its title, album artist, page and cover, beside the artists", () => {
+    const tiles = [tile("Four Tet"), albumTile(untrue)];
+    const read = readDjRemembered(storedDjRemembered({ tiles, settings: chosen }));
+    // The Library's album is found again as DJ reopens, so its id isn't kept.
+    assert.deepEqual(read.tiles, [tile("Four Tet"), { ...albumTile(untrue), libraryId: null }]);
+    assert.deepEqual(read.settings, chosen);
+  });
+
+  test("with no title or album artist it is left out and the rest stand", () => {
+    const stored = JSON.stringify({
+      version: 1,
+      tiles: [
+        { kind: "album", name: "Untrue" },
+        { kind: "album", name: "", artist: "Burial" },
+        { kind: "album", name: "Kindred", artist: "Burial", browseId: 7, cover: null },
+      ],
+      settings: chosen,
+    });
+    assert.deepEqual(readDjRemembered(stored).tiles, [
+      albumTile({ title: "Kindred", artist: "Burial" }),
+    ]);
+  });
+
+  test("is selected in the fresh grid that shows it, as the grid shows it", () => {
+    const grid = [tile("Burial", 1), albumTile(untrue), tile("Four Tet", 2)];
+    const remembered = readDjRemembered(
+      storedDjRemembered({ tiles: [albumTile(untrue)], settings: chosen }),
+    ).tiles;
+    const state = djReopened({ grid, remembered });
+    assert.deepEqual(state.tiles, grid);
+    assert.deepEqual(djSeedTiles(state), [albumTile(untrue)]);
+  });
+
+  test("outside the fresh grid it is in it anyway, as the Library's album when it's known", () => {
+    const grid = [tile("Four Tet", 2)];
+    const remembered = readDjRemembered(
+      storedDjRemembered({
+        tiles: [albumTile(untrue), albumTile({ title: "Kindred", artist: "Burial" })],
+        settings: chosen,
+      }),
+    ).tiles;
+    const state = djReopened({ grid, remembered, albums: [untrue] });
+    assert.deepEqual(state.tiles, [
+      albumTile(untrue),
+      albumTile({ title: "Kindred", artist: "Burial" }),
+      ...grid,
+    ]);
+    assert.deepEqual(djSeedTiles(state), state.tiles.slice(0, 2));
+  });
+
+  test("is not taken for the artist of the same name", () => {
+    const self = albumTile({ title: "Burial", artist: "Burial" });
+    const state = djReopened({ grid: [tile("Burial", 1)], remembered: [self] });
+    assert.deepEqual(state.tiles, [self, tile("Burial", 1)]);
+    assert.deepEqual(djSeedTiles(state), [self]);
   });
 });
 
