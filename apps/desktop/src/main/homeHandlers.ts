@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import { readHome } from "./library/home.ts";
 import { DesktopLibrary } from "./library/library.ts";
 import { Playback } from "./playback/playback.ts";
+import { recapToAnnounceNow } from "./library/recaps.ts";
 import { syncedPreference } from "./sync/desktopSync.ts";
 
 const view = Effect.gen(function* () {
@@ -12,6 +13,7 @@ const view = Effect.gen(function* () {
   const home = readHome(db, syncedPreference(db, HOME_ARRANGEMENT_SETTING));
   return {
     ...home,
+    recap: recapToAnnounceNow(db),
     items: home.items.map((section) => ({
       ...section,
       rows: {
