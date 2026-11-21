@@ -12,7 +12,9 @@ import {
   rankEntityPlays,
   releaseTitle,
   sortKey,
+  type CreditedPlayTotals,
   type KeptTotalsPlan,
+  type SongPlayTotals,
   type StatsWindow,
   type YtAlbumSong,
 } from "@wave/core";
@@ -658,4 +660,88 @@ export const keptPlayedTotals = (
     albums: rankEntityPlays(albums, Infinity),
     artists: rankEntityPlays(artists, Infinity),
   };
+};
+
+/**
+ * Each song's counted plays over [window], in no order, as `songPlayTotals`
+ * sums them: a Library song's (streamed plays that are its own included), a
+ * streamed song's the Library hasn't. Null while the kept totals owe anything.
+ */
+export const keptSongPlayTotals = (
+  db: LibraryDatabase,
+  window: StatsWindow,
+): SongPlayTotals[] | null => {
+  if (!keptTotalsSettled(db)) return null;
+  const totals = creditedTotals(db, "song", keptTotalsPlan(window));
+  const tracks = totals.flatMap((total) =>
+    total.entity.startsWith("t:") ? [Number(total.entity.slice(2))] : [],
+  );
+  const titles = new Map(
+    tracks.length === 0
+      ? []
+      : db
+          .all<{ id: number; titleSort: string }>(
+            sql`SELECT id, title_sort AS "titleSort" FROM tracks
+            WHERE id IN (SELECT value FROM json_each(${JSON.stringify(tracks)}))`,
+          )
+          .map((row) => [row.id, row.titleSort]),
+  );
+  const online = onlineEntities<unknown>(db, "song", totals);
+  return totals.flatMap((total): SongPlayTotals[] => {
+    const sums = {
+      countedPlays: total.countedPlays,
+      listenedMs: total.listenedMs,
+      latestPlayAt: total.latestPlayAt,
+    };
+    if (total.entity.startsWith("t:")) {
+      const id = Number(total.entity.slice(2));
+      const titleSort = titles.get(id);
+      return titleSort === undefined
+        ? []
+        : [{ song: { kind: "library", id }, sortKey: titleSort, ...sums }];
+    }
+    const videoId = total.entity.slice(3);
+    return [{ song: { kind: "yt", videoId }, sortKey: online.get(total.entity)?.sortKey ?? "", ...sums }];
+  });
+};
+
+/**
+ * Stats' rows of counted plays over [window] per album and credited artist,
+ * in no order, as `creditedPlayTotals` sums them. Null while the kept totals
+ * owe anything.
+ */
+export const keptCreditedPlayTotals = (
+  db: LibraryDatabase,
+  window: StatsWindow,
+): CreditedPlayTotals[] | null => {
+  if (!keptTotalsSettled(db)) return null;
+  const totals = creditedTotals(db, "credit", keptTotalsPlan(window));
+  if (totals.length === 0) return [];
+  return db
+    .all<Omit<CreditedPlayTotals, "primary"> & { primary: number }>(
+      sql`WITH totals AS (
+        SELECT json_extract(value, '$[0]') AS entity, json_extract(value, '$[1]') AS plays,
+          json_extract(value, '$[2]') AS listened, json_extract(value, '$[3]') AS latest
+        FROM json_each(${JSON.stringify(
+          totals.map((total) => [
+            total.entity,
+            total.countedPlays,
+            total.listenedMs,
+            total.latestPlayAt,
+          ]),
+        )})
+      ), rows AS (
+        SELECT totals.*, CAST(substr(entity, 1, instr(entity, ':') - 1) AS integer) AS album_id,
+          substr(entity, instr(entity, ':') + 1) AS rest
+        FROM totals
+      )
+      SELECT albums.id AS "albumId", albums.title_sort AS "albumSort",
+        artists.id AS "artistId", artists.sort AS "artistSort",
+        CAST(substr(rows.rest, instr(rows.rest, ':') + 1) AS integer) AS "primary",
+        rows.plays AS "countedPlays", rows.listened AS "listenedMs", rows.latest AS "latestPlayAt"
+      FROM rows
+      JOIN albums ON albums.id = rows.album_id
+      JOIN artists ON artists.id = CAST(substr(rows.rest, 1, instr(rows.rest, ':') - 1) AS integer)`,
+    )
+    .map((row) => ({ ...row, primary: row.primary === 1 }));
 };

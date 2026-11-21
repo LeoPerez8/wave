@@ -11,7 +11,13 @@ import { sql } from "drizzle-orm";
 
 import { saveImportedPlays } from "./blackPlayer.ts";
 import { creditSplits, relinkCredits } from "./credits.ts";
-import { keptPlayedTotals, keptTotalsSettled, settleKeptTotals } from "./keptPlayTotals.ts";
+import {
+  keptCreditedPlayTotals,
+  keptPlayedTotals,
+  keptSongPlayTotals,
+  keptTotalsSettled,
+  settleKeptTotals,
+} from "./keptPlayTotals.ts";
 import { recordPlay, updatePlay } from "./playHistory.ts";
 import {
   playedEntityTotals,
@@ -19,6 +25,7 @@ import {
   type PlayedEntityTotal,
   type PlayedEntityTotals,
 } from "./playedEntities.ts";
+import { summedCreditedPlayTotals, summedSongPlayTotals } from "./stats.ts";
 import { identifyImportedPlays } from "./sync.ts";
 import { applyPulledPage, selectAccountTrackIds, selectUnpushed } from "./syncRows.ts";
 import { deleteTracksById } from "./tracks.ts";
@@ -84,15 +91,29 @@ const comparable = (totals: PlayedEntityTotals) => {
   return { albums: totals.albums.map(named), artists: totals.artists.map(named) };
 };
 
-/** Kept totals equal today's sum over the history for each window, albums and artists. */
+/** Rows in no order, as one order: those reads promise none. */
+const unordered = <A>(rows: readonly A[] | null) =>
+  rows === null ? null : rows.map((row) => JSON.stringify(row)).sort();
+
+/**
+ * Kept totals equal today's sum over the history for each window: albums
+ * and artists, songs, and Stats' credit rows.
+ */
 const assertSameTotals = (db: TestDatabase) => {
   for (const window of WINDOWS) {
+    const label = JSON.stringify(window);
     const kept = keptPlayedTotals(db, window, true);
-    assert.notEqual(kept, null, `kept totals settled for ${JSON.stringify(window)}`);
+    assert.notEqual(kept, null, `kept totals settled for ${label}`);
+    assert.deepEqual(comparable(kept!), comparable(summedPlayedTotals(db, window, true)), label);
     assert.deepEqual(
-      comparable(kept!),
-      comparable(summedPlayedTotals(db, window, true)),
-      JSON.stringify(window),
+      unordered(keptSongPlayTotals(db, window)),
+      unordered(summedSongPlayTotals(db, window)),
+      `songs ${label}`,
+    );
+    assert.deepEqual(
+      unordered(keptCreditedPlayTotals(db, window)),
+      unordered(summedCreditedPlayTotals(db, window)),
+      `credits ${label}`,
     );
   }
 };

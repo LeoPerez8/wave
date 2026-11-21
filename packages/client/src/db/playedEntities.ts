@@ -30,10 +30,10 @@ import type { LibraryDatabase } from "./database.ts";
 import {
   artistFirstPlays,
   artistPlays,
-  creditedPlayTotals,
   songGenres,
   songPlayTotals,
   streamedTrack,
+  summedCreditedPlayTotals,
   type ArtistPlays,
 } from "./stats.ts";
 import { streamedSongsOf } from "./streamedSongs.ts";
@@ -162,7 +162,7 @@ export const summedPlayedTotals = (
   window: StatsWindow,
   withAlbums: boolean,
 ): PlayedEntityTotals => {
-  const credits = creditedPlayTotals(db, window);
+  const credits = summedCreditedPlayTotals(db, window);
   const streams = streamedListeningTotals(db, window).filter((entry) => entry.countedPlays > 0);
   const songs = streamedSongsOf(
     db,
