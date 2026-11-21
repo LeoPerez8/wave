@@ -135,6 +135,14 @@ export interface PlaylistContract {
     readonly args: readonly [playlistId: number, large: boolean];
     readonly result: string | null;
   };
+  /**
+   * A drag on a playlist's page in its own order: [target]'s songs, together, go before row
+   * [before] (a row's ID), or to the end when it is null.
+   */
+  readonly "playlists.place": {
+    readonly args: readonly [playlistId: number, target: SongTarget, before: number | null];
+    readonly result: void;
+  };
 }
 
 export const PLAYLIST_CALLS = [
@@ -157,6 +165,7 @@ export const PLAYLIST_CALLS = [
   "playlists.cancelImage",
   "playlists.removeImage",
   "playlists.image",
+  "playlists.place",
 ] as const satisfies readonly (keyof PlaylistContract)[];
 
 type Call<C extends keyof PlaylistContract> = (
@@ -184,6 +193,7 @@ export interface PlaylistBridge {
   readonly cancelImage: Call<"playlists.cancelImage">;
   readonly removeImage: Call<"playlists.removeImage">;
   readonly image: Call<"playlists.image">;
+  readonly place: Call<"playlists.place">;
 }
 
 export const playlistBridge = (invoke: Invoke): PlaylistBridge => ({
@@ -208,4 +218,5 @@ export const playlistBridge = (invoke: Invoke): PlaylistBridge => ({
   cancelImage: () => invoke("playlists.cancelImage"),
   removeImage: (playlistId) => invoke("playlists.removeImage", playlistId),
   image: (playlistId, large) => invoke("playlists.image", playlistId, large),
+  place: (playlistId, target, before) => invoke("playlists.place", playlistId, target, before),
 });

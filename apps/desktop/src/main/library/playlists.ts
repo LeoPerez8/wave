@@ -15,6 +15,7 @@ import {
   deletePlaylist,
   forgetGraveyardItems,
   movePlaylistItem,
+  movePlaylistItems,
   removePlaylistItems,
   renamePlaylist,
   replacePlaylistSongs,
@@ -60,6 +61,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { Page } from "../../shared/bridge.ts";
+import type { SongTarget } from "../../shared/songActions.ts";
 import type {
   GraveyardRow,
   ImageEdit,
@@ -72,7 +74,7 @@ import type {
 } from "../../shared/playlists.ts";
 import { Playback } from "../playback/playback.ts";
 import { browseSongs } from "./browse.ts";
-import { targetPlaylistEntries } from "./songActions.ts";
+import { targetEntries, targetPlaylistEntries } from "./songActions.ts";
 import { collectionSongs } from "./collectionActions.ts";
 
 /** Reads and cuts photos for a playlist's image (Electron's `nativeImage` in the app). */
@@ -259,6 +261,38 @@ export const createPlaylists = (options: PlaylistOptions) => {
       );
       const index = others.findIndex((entry) => entry.itemId === neighbour.itemId);
       movePlaylistItem(db, playlistId, moved, direction === "up" ? index : index + 1, now());
+      changed();
+    },
+    /**
+     * A drag on the playlist's page: [target]'s songs, together and in the playlist's order,
+     * go before row [before] (a Library song ID or a negated streamed entry ID), or after the
+     * last entry when it is null. A drop on one of the dragged rows lands before the next row.
+     */
+    place: (playlistId: number, target: SongTarget, before: number | null): void => {
+      if (!playlistReorders(playlistSongSort(db, playlistId))) return;
+      if (target.scope.kind !== "playlist" || target.scope.id !== playlistId) return;
+      const named = new Set(
+        targetEntries(db, target).map((song) => ("trackId" in song ? song.trackId : -song.itemId)),
+      );
+      const entries = selectPlaylistEntries(db, playlistId);
+      const keyOf = (entry: (typeof entries)[number]) =>
+        entry.source === "library"
+          ? entry.track.id
+          : entry.source === "unavailable"
+            ? undefined
+            : -entry.itemId;
+      const moved = entries.flatMap((entry) => {
+        const key = keyOf(entry);
+        return key !== undefined && named.has(key) ? [entry.itemId] : [];
+      });
+      if (moved.length === 0) return;
+      const taken = new Set(moved);
+      const anchor = entries.findIndex((entry) => keyOf(entry) === before);
+      const next =
+        before === null || anchor === -1
+          ? undefined
+          : entries.slice(anchor).find((entry) => !taken.has(entry.itemId));
+      movePlaylistItems(db, playlistId, moved, next?.itemId ?? null, now());
       changed();
     },
     graveyard: (playlistId: number, offset: number, limit: number): Page<GraveyardRow> => {

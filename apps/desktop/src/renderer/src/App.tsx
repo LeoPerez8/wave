@@ -1392,6 +1392,15 @@ export function App() {
                 revision={revision}
                 onHero={setHero}
                 onSort={setShownSort}
+                // A playlist's rows drag to a new place only where it shows its own order.
+                onPlace={
+                  !picks &&
+                  scope.kind === "playlist" &&
+                  scope.id !== undefined &&
+                  shownSort?.key === "custom"
+                    ? (target, before) => playlistEdits.place(scope.id!, target, before)
+                    : undefined
+                }
                 onOpen={open}
                 onError={failed}
                 selection={collectionKind ? picks?.[collectionKind] : table.selection}

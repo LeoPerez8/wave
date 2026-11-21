@@ -14,7 +14,15 @@ import {
   type SongSort,
   type SongSortKey,
 } from "@wave/core";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import {
   MAX_ROW_IDS_PAGE,
   type BrowsePage,
@@ -30,6 +38,7 @@ import { useTableSelection, type TableSelectionProps } from "./useTableSelection
 import { TableSortHeader } from "./TableSortHeader.tsx";
 import { rowDrag } from "./SongActions.tsx";
 import { songDragProps } from "./songDrag.ts";
+import type { SongTarget } from "../../shared/songActions.ts";
 import "./tables.css";
 
 const SIZE = 100;
@@ -146,6 +155,7 @@ export function VirtualTable({
   onSelection,
   selectAll,
   preview,
+  onPlace,
 }: TableSelectionProps & {
   readonly scope: BrowseScope;
   readonly revision: number;
@@ -157,6 +167,11 @@ export function VirtualTable({
   /** The order the table shows, each time it reads one: a playlist rearranges only in Custom. */
   readonly onSort?: (sort: BrowsePage["sort"]) => void;
   readonly selectAll?: Parameters<typeof useTableSelection>[0]["selectAll"];
+  /**
+   * A playlist in its own order: its rows drag to a new place, and Alt+Up and Alt+Down move
+   * the focused one. [target] goes before row ID [before], or to the end when it is null.
+   */
+  readonly onPlace?: ((target: SongTarget, before: number | null) => void) | undefined;
   /** A bounded ranking uses these rows with the same table, focus and menus. */
   readonly preview?: {
     readonly id: string;
@@ -178,6 +193,13 @@ export function VirtualTable({
   const [sort, setSort] = useState<SongSort | PlaylistSongSort>();
   const [changingSort, setChangingSort] = useState(false);
   const sortVersion = useRef(0);
+  // A drag of this table's own rows to a new place: what it carries, where it started, and the
+  // gap between rows it would land in.
+  const [placing, setPlacing] = useState<{ readonly target: SongTarget; readonly from: number }>();
+  const [dropAt, setDropAt] = useState<number>();
+  /** The dragged row's page, kept while the drag scrolls far from it. */
+  const heldPage = useRef<number>(undefined);
+  const edge = useRef<{ speed: number; timer: number | undefined }>({ speed: 0, timer: undefined });
   const start = Math.max(0, Math.floor(top / HEIGHT) - 5);
   const end = Math.min(total, start + Math.ceil(height / HEIGHT) + 10);
   const firstPage = Math.floor(start / SIZE);
@@ -237,7 +259,8 @@ export function VirtualTable({
         if (!current) return;
         for (const [index, page] of results) cache.current.set(index, page);
         for (const index of cache.current.keys())
-          if (Math.abs(index - firstPage) > 3) cache.current.delete(index);
+          if (Math.abs(index - firstPage) > 3 && index !== heldPage.current)
+            cache.current.delete(index);
         setPages(new Map(cache.current));
         setTotal(results[0]![1].total);
         setReady(true);
@@ -323,6 +346,78 @@ export function VirtualTable({
       element.scrollTop = (next + 1) * HEIGHT - element.clientHeight;
     setTop(element.scrollTop);
   };
+  const stopEdgeScroll = () => {
+    window.clearInterval(edge.current.timer);
+    edge.current = { speed: 0, timer: undefined };
+  };
+  useEffect(() => stopEdgeScroll, []);
+  /** Scrolls while a drag is held near the list's top or bottom, faster nearer the edge. */
+  const edgeScroll = (y: number, height: number) => {
+    const zone = HEIGHT * 1.5;
+    const speed =
+      y < zone ? -Math.ceil((zone - y) / 4) : y > height - zone ? Math.ceil((y - height + zone) / 4) : 0;
+    edge.current.speed = speed;
+    if (speed === 0) return stopEdgeScroll();
+    if (edge.current.timer !== undefined) return;
+    edge.current.timer = window.setInterval(() => {
+      const element = viewport.current;
+      if (element === null || edge.current.speed === 0) return stopEdgeScroll();
+      element.scrollTop += edge.current.speed;
+      setTop(element.scrollTop);
+    }, 16);
+  };
+  const endPlacing = () => {
+    heldPage.current = undefined;
+    setPlacing(undefined);
+    setDropAt(undefined);
+    stopEdgeScroll();
+  };
+  /** Sends [target] before the row at [at] (the end past the last); false when it can't. */
+  const placeAt = async (target: SongTarget, at: number): Promise<boolean> => {
+    if (onPlace === undefined) return false;
+    try {
+      const before =
+        at >= total
+          ? null
+          : (get(at)?.id ?? (await window.wave.library.rowIds(scope, at, 1)).items[0]);
+      if (before === undefined) return false;
+      onPlace(target, before);
+      return true;
+    } catch {
+      onError();
+      return false;
+    }
+  };
+  const placeDrag = {
+    onDragOver: (event: DragEvent) => {
+      if (placing === undefined) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      const element = viewport.current!;
+      const rect = element.getBoundingClientRect();
+      const y = event.clientY - rect.top;
+      setDropAt(Math.max(0, Math.min(total, Math.round((y + element.scrollTop) / HEIGHT))));
+      edgeScroll(y, rect.height);
+    },
+    onDragLeave: (event: DragEvent) => {
+      const into = event.relatedTarget;
+      if (into instanceof Node && event.currentTarget.contains(into)) return;
+      setDropAt(undefined);
+      stopEdgeScroll();
+    },
+    onDrop: (event: DragEvent) => {
+      if (placing === undefined) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const { target, from } = placing;
+      const at = dropAt;
+      endPlacing();
+      // A row dropped next to itself stays where it is.
+      const alone = "ids" in target && target.ids.length === 1;
+      if (at === undefined || (alone && (at === from || at === from + 1))) return;
+      void placeAt(target, at);
+    },
+  };
   const jump = async (letter: string) => {
     const version = sortVersion.current;
     try {
@@ -385,6 +480,25 @@ export function VirtualTable({
   };
   const key = (event: KeyboardEvent) => {
     if (event.target !== event.currentTarget) return;
+    if (
+      onPlace !== undefined &&
+      event.altKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      !event.metaKey &&
+      (event.key === "ArrowUp" || event.key === "ArrowDown")
+    ) {
+      // Alt+Up and Alt+Down move the focused row, as in the Queue.
+      event.preventDefault();
+      const up = event.key === "ArrowUp";
+      const row = get(active);
+      if (row === undefined || (up ? active === 0 : active >= total - 1)) return;
+      const from = active;
+      void placeAt({ scope, ids: [row.id] }, up ? from - 1 : from + 2).then(
+        (placed) => placed && move(up ? from - 1 : from + 1),
+      );
+      return;
+    }
     const page = Math.max(1, Math.floor(height / HEIGHT));
     const moves: Partial<Record<string, number>> = {
       rowDown: active + 1,
@@ -415,6 +529,27 @@ export function VirtualTable({
       event.preventDefault();
       menu(active);
     }
+  };
+  /** A row's drag: onto a playlist or the Queue, and to a new place in a playlist's own order. */
+  const rowDragProps = (row: BrowseRow, index: number) => {
+    const drag = songDragProps(() => rowDrag({ selection }, scope, row));
+    if (onPlace === undefined) return drag;
+    return {
+      ...drag,
+      onDragStart: (event: DragEvent) => {
+        drag.onDragStart(event);
+        if (event.defaultPrevented) return;
+        const what = rowDrag({ selection }, scope, row);
+        if (what.kind !== "songs") return;
+        event.dataTransfer.effectAllowed = "copyMove";
+        heldPage.current = Math.floor(index / SIZE);
+        setPlacing({ target: what.target, from: index });
+      },
+      onDragEnd: () => {
+        drag.onDragEnd();
+        endPlacing();
+      },
+    };
   };
   const contextMenu = (event: MouseEvent) => {
     event.preventDefault();
@@ -488,9 +623,17 @@ export function VirtualTable({
         className="table-viewport"
         role="rowgroup"
         onScroll={(event) => setTop(event.currentTarget.scrollTop)}
+        {...(onPlace ? placeDrag : {})}
       >
         <div className="table-space" style={{ height: total * HEIGHT }}>
-          {Array.from({ length: Math.max(0, end - start) }, (_, i) => start + i).map((index) => {
+          {placing && dropAt !== undefined && (
+            <div className="table-drop-line" aria-hidden="true" style={{ top: dropAt * HEIGHT }} />
+          )}
+          {[
+            ...Array.from({ length: Math.max(0, end - start) }, (_, i) => start + i),
+            // The dragged row stays while the list scrolls away from it, or its drag would end.
+            ...(placing && (placing.from < start || placing.from >= end) ? [placing.from] : []),
+          ].map((index) => {
             const row = get(index);
             const mark = row && songList ? rowMark(row, states) : undefined;
             return (
@@ -507,11 +650,11 @@ export function VirtualTable({
                       : checkedTableRow(selection, row.id)
                   }
                   aria-disabled={row.unavailable}
-                  className={`table-row table-columns ${active === index ? "active-row" : ""} ${mark ? markClass(mark) : ""}`}
+                  className={`table-row table-columns ${active === index ? "active-row" : ""} ${mark ? markClass(mark) : ""} ${placing?.from === index ? "dragging" : ""}`}
                   style={{ top: index * HEIGHT }}
                   // A song row drags onto a playlist or the Queue; a ranking's rows only with selection.
                   {...(songList && (preview === undefined || onSelection !== undefined)
-                    ? songDragProps(() => rowDrag({ selection }, scope, row))
+                    ? rowDragProps(row, index)
                     : {})}
                   onMouseDown={(event) => {
                     if (onSelection && event.shiftKey) event.preventDefault();
