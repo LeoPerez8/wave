@@ -168,6 +168,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.account.answerInvitation",
       "wave.collections.actions",
       "wave.collections.run",
+      "wave.collections.selectionActions",
+      "wave.collections.runSelection",
       "wave.playlists.checkName",
       "wave.playlists.newName",
       "wave.playlists.create",

@@ -42,12 +42,17 @@ import { runSongAction, songMenu } from "./library/songActions.ts";
 import {
   collectionMenu,
   runCollectionAction,
+  runSelectionAction,
+  selectionMenu,
   validCollectionTarget,
+  validSelectionTarget,
 } from "./library/collectionActions.ts";
 import {
   COLLECTION_RUN_ACTIONS,
+  SELECTION_RUN_ACTIONS,
   type CollectionActionOptions,
   type CollectionRunAction,
+  type SelectionRunAction,
 } from "../shared/collectionActions.ts";
 import type { Appearance, DesktopVersionHistory } from "../shared/bridge.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
@@ -729,6 +734,52 @@ const createHandlers = (
             );
           })
         : refuse("collections.run", "invalid collection, action or playlist"),
+    "collections.selectionActions": ([target]) =>
+      validSelectionTarget(target, validTarget)
+        ? Effect.gen(function* () {
+            return selectionMenu(yield* Database, target, (yield* YtMusic).enabled());
+          })
+        : refuse("collections.selectionActions", "invalid selection"),
+    "collections.runSelection": ([target, action, playlistId]) =>
+      validSelectionTarget(target, validTarget) &&
+      SELECTION_RUN_ACTIONS.includes(action as SelectionRunAction) &&
+      (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined)
+        ? Effect.gen(function* () {
+            const db = yield* Database;
+            const playback = yield* Playback;
+            const downloads = yield* Downloads;
+            const yt = yield* YtMusic;
+            const library = yield* DesktopLibrary;
+            return yield* Effect.tryPromise(() =>
+              runSelectionAction(
+                {
+                  db,
+                  playback,
+                  downloads,
+                  yt,
+                  unavailable: library.unavailable,
+                  download: downloads.missing,
+                  downloadStreamed: (song) =>
+                    runStreamedAction(
+                      {
+                        db,
+                        ytMusic: yt.enabled,
+                        downloads,
+                        queue: async (type, id) =>
+                          playback.command({ type, trackIds: [ytTrackId(id)] }),
+                        changed: playback.refresh,
+                      },
+                      song,
+                      "download",
+                    ),
+                },
+                target,
+                action as SelectionRunAction,
+                playlistId as number | undefined,
+              ),
+            );
+          })
+        : refuse("collections.runSelection", "invalid selection, action or playlist"),
     "songs.actions": ([target, surface]) =>
       validTarget(target) && (surface === "menu" || surface === "selection")
         ? Effect.gen(function* () {
