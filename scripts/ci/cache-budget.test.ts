@@ -250,9 +250,18 @@ describe("the workflows' caches", () => {
       .filter(({ step }) => /uses: \.\/\.github\/actions\/pnpm-store\b/.test(step))
       .filter(({ step }) => /\n\s*save: /.test(step))
       .map(({ file, step }) => `${file}: ${/\n\s*save: (.*)/.exec(step)![1]}`);
-    assert.deepEqual(savers, [
-      "workflows/ci.yml: true",
-      "workflows/desktop.yml: ${{ runner.os == 'Windows' }}",
-    ]);
+    assert.deepEqual(savers, ["workflows/ci.yml: true", "workflows/desktop.yml: true"]);
+  });
+
+  // A call whose save is false restores the store, so one after the install would restore it again.
+  it("save the desktop's pnpm store on Windows alone, with no second restore on Linux", () => {
+    const [saver, ...others] = steps.filter(
+      ({ file, step }) =>
+        file === "workflows/desktop.yml" &&
+        /uses: \.\/\.github\/actions\/pnpm-store\b/.test(step) &&
+        /\n\s*save: /.test(step),
+    );
+    assert.equal(others.length, 0);
+    assert.match(saver!.step, /\n\s*if: runner\.os == 'Windows'\n/);
   });
 });
