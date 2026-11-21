@@ -11,7 +11,7 @@ import { browseRows, browseSongs } from "./browse.ts";
 const page = <T>(items: readonly T[]) => ({ items, offset: 0, total: items.length });
 
 /** A bounded Home read: the same 12-album shelves and 10-song previews as the phone. */
-export const readHome = (db: LibraryDatabase, stored: string | null): HomeView => {
+export const readHome = (db: LibraryDatabase, stored: string | null): Omit<HomeView, "recap"> => {
   const arrangement = parseHomeArrangement(stored);
   // The Library's shelves. Discover and the followed artists' sections fill their own places.
   const home = homeSections(db);

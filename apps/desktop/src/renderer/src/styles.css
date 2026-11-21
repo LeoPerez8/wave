@@ -1074,8 +1074,10 @@ button.destructive {
   background: var(--color-surface);
   box-shadow: 0 8px 28px #0003;
 }
-.menu [role="menuitem"] {
+.menu [role="menuitem"],
+.menu [role="menuitemradio"] {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 6px 10px;
@@ -1085,7 +1087,12 @@ button.destructive {
 .menu [role="menuitem"].destructive {
   color: var(--color-destructive);
 }
-.menu [role="menuitem"]:focus {
+.menu-line {
+  font-size: 12px;
+  opacity: 0.7;
+}
+.menu [role="menuitem"]:focus,
+.menu [role="menuitemradio"]:focus {
   outline: none;
   color: var(--color-on-accent);
   background: var(--color-accent);
@@ -1488,6 +1495,7 @@ kbd {
   gap: 12px;
 }
 .search-tile {
+  position: relative;
   display: grid;
   gap: 2px;
   padding: 8px;
@@ -1495,6 +1503,15 @@ kbd {
   color: inherit;
   text-align: left;
   min-width: 0;
+}
+.search-tile.selected {
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-background));
+}
+.search-tile > .row-check {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  background-color: var(--color-background);
 }
 .search-tile > :first-child {
   display: block;

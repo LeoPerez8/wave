@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { homePlays } from "./db/playHistory.ts";
 import { playEvents } from "./db/schema.ts";
+import { loadPlayback } from "./db/playback.ts";
 import { addTrack, openTestDatabase, libraryRow } from "./db/testDatabase.ts";
+import { savedQueueState } from "@wave/core";
 import {
   createPlaybackSession,
   type AudioPort,
@@ -481,6 +483,97 @@ test("Undo to a song that won't load goes back to the old queue, stopped", async
   assert.equal(undone.status.state, "idle");
   assert.equal(undone.canUndo, false);
   assert.ok(changes > before, "the change is told");
+});
+
+test("a Recap's music plays in place of the queue, counts no play, and gives the queue back paused where it was", async (t) => {
+  const db = await openTestDatabase();
+  const a = addTrack(db, { title: "First" });
+  const b = addTrack(db, { title: "Second" });
+  const top = addTrack(db, { title: "Top Song" });
+  let now = 1000;
+  const session = await createPlaybackSession({
+    db,
+    audio: device(),
+    source: "desktop",
+    now: () => now,
+  });
+  t.after(() => session.close());
+  await session.dispatch({
+    type: "play",
+    trackIds: [String(a), String(b)],
+    startIndex: 1,
+    context: { kind: "album", id: "1" },
+  });
+  await session.seek(12000);
+  await session.pause();
+  const playsBefore = db.select().from(playEvents).all().length;
+
+  const loan = await session.borrow();
+  await loan.play(String(top));
+  assert.deepEqual(
+    session.snapshot().queue.entries.map((entry) => entry.trackId),
+    [String(top)],
+  );
+  assert.equal(session.snapshot().status.state, "playing");
+  assert.equal(session.snapshot().canUndo, false, "a Recap's music offers no Undo");
+  now += 60000;
+  await session.flush();
+  // Quitting mid-Recap must find the owner's queue, not the Recap's song.
+  assert.deepEqual(
+    savedQueueState(loadPlayback(db)!.parts)?.entries.map((entry) => entry.trackId),
+    [String(a), String(b)],
+  );
+  assert.equal(loadPlayback(db)!.positionMs, 12000);
+
+  await loan.giveBack();
+  const { queue, status } = session.snapshot();
+  assert.deepEqual(
+    queue.entries.map((entry) => entry.trackId),
+    [String(a), String(b)],
+  );
+  assert.equal(queue.index, 1);
+  assert.equal(status.state, "paused");
+  assert.equal(status.positionMs, 12000);
+  assert.equal(db.select().from(playEvents).all().length, playsBefore, "no play was recorded");
+  assert.equal(
+    homePlays(db)
+      .mostPlayed.map(libraryRow)
+      .some((row) => row.id === top),
+    false,
+  );
+});
+
+test("a queue played during a Recap stays when the Recap closes", async (t) => {
+  const db = await openTestDatabase();
+  const a = addTrack(db, { title: "First" });
+  const top = addTrack(db, { title: "Top Song" });
+  const session = await createPlaybackSession({ db, audio: device(), source: "desktop" });
+  t.after(() => session.close());
+  const loan = await session.borrow();
+  await loan.play(String(top));
+  await session.dispatch({
+    type: "play",
+    trackIds: [String(a)],
+    context: { kind: "songs", id: null },
+  });
+  await loan.giveBack();
+  assert.deepEqual(
+    session.snapshot().queue.entries.map((entry) => entry.trackId),
+    [String(a)],
+  );
+  assert.equal(session.snapshot().status.state, "playing");
+});
+
+test("a Recap opened over an empty queue leaves it empty and silent when it closes", async (t) => {
+  const db = await openTestDatabase();
+  const top = addTrack(db, { title: "Top Song" });
+  const session = await createPlaybackSession({ db, audio: device(), source: "desktop" });
+  t.after(() => session.close());
+  const loan = await session.borrow();
+  await loan.play(String(top));
+  await loan.giveBack();
+  assert.equal(session.snapshot().queue.entries.length, 0);
+  assert.notEqual(session.snapshot().status.state, "playing");
 });
 
 test("a file outside the Library plays from its path between Library songs and records no play", async (t) => {

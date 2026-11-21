@@ -45,6 +45,8 @@ export type PlaybackCommand =
   | { readonly type: "next" }
   | { readonly type: "previous" }
   | { readonly type: "setShuffle"; readonly on: boolean }
+  /** Shuffles Up Next again by the kind now chosen, turning shuffle on. */
+  | { readonly type: "reshuffle" }
   | { readonly type: "setRepeat"; readonly mode: RepeatMode }
   | { readonly type: "jumpTo" | "remove"; readonly key: string }
   | { readonly type: "playNext" | "addToQueue"; readonly trackIds: readonly string[] }
