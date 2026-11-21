@@ -36,9 +36,17 @@ const SLOTS = [
   { size: CELL * 13, right: 0, top: CELL * 9 },
   { size: CELL * 12, right: -CELL / 2, top: CELL * 3 },
   { size: CELL * 11.5, right: -CELL * 7, top: CELL * 7.5 },
-  { size: CELL * 11, right: CELL * 9, top: CELL * 6.5 },
+  // High enough to clear the "Pick artists" row at the panel's bottom.
+  { size: CELL * 11, right: CELL * 9, top: CELL * 3.5 },
 ] as const;
 const ORDER = [3, 1, 0, 2] as const;
+
+/**
+ * How far the lowest face (the first artist's, the largest) reaches in from
+ * the panel's right edge, ring included: the "Pick artists" row keeps clear of it.
+ */
+const actionSpan = (faces: number): number =>
+  faces === 0 ? 0 : SLOTS[0].right + SLOTS[0].size + RING;
 
 /** How far the faces reach in from the panel's right edge, ring included: the text keeps clear of it. */
 const fanSpan = (faces: number): number =>
@@ -127,6 +135,7 @@ export function DjCard() {
     [library],
   );
   const textInset = Math.max(0, fanSpan(faces.length) - PADDING);
+  const actionInset = Math.max(0, actionSpan(faces.length) - PADDING);
   return (
     <TextButton
       label={strings.dj.title}
@@ -166,7 +175,10 @@ export function DjCard() {
           {strings.dj.cardDetail}
         </Text>
       </View>
-      <View className="flex-row items-center" style={{ gap: CELL * 0.75 }}>
+      <View
+        className="flex-row items-center"
+        style={{ gap: CELL * 0.75, marginRight: actionInset }}
+      >
         <IconPlus size={18} color={accent} strokeWidth={2} />
         <Text className="font-sans text-subheadline font-medium text-accent">
           {strings.dj.cardAction}

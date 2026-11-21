@@ -58,14 +58,13 @@ export function DjTilePicture({
       {selected && (
         <View
           pointerEvents="none"
-          className="absolute"
+          className="absolute border-accent"
           style={{
             top: 0,
             right: 0,
             bottom: 0,
             left: 0,
             borderWidth: RING,
-            borderColor: accent,
             borderRadius: round ? size / 2 : DJ_TILE_RADIUS + RING_INSET,
           }}
         />
@@ -112,7 +111,7 @@ function SelectionMark({
   onPress: () => void;
 }) {
   const { strings } = useLocalisation();
-  const [foreground, background] = useThemeColor(["foreground", "background"]);
+  const foreground = useThemeColor("foreground");
   return (
     <Press
       accessibilityRole="button"
@@ -141,15 +140,14 @@ function SelectionMark({
       )}
       <View
         pointerEvents="none"
-        className="absolute items-center justify-center rounded-full bg-separator"
+        className="absolute items-center justify-center rounded-full border-background bg-separator"
         style={{
           top: -BADGE_OVERLAP,
           right: -BADGE_OVERLAP,
           width: BADGE,
           height: BADGE,
-          borderWidth: 2,
           // Ringed in the screen's ground, so it reads apart from the mark.
-          borderColor: background,
+          borderWidth: 2,
         }}
       >
         <IconX size={CELL * 1.5} color={foreground} strokeWidth={2.5} />
@@ -178,7 +176,6 @@ export function DjSelectionRow({
   onRemove: (key: DjTileKey) => void;
 }) {
   const { strings } = useLocalisation();
-  const tertiary = useThemeColor("tertiary");
   return (
     <View style={{ marginHorizontal: -grid.margin }}>
       <View style={{ paddingHorizontal: grid.margin }}>
@@ -211,13 +208,13 @@ export function DjSelectionRow({
         <View
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
+          className="border-tertiary"
           style={{
             width: MARK,
             height: MARK,
             borderRadius: MARK / 2,
             borderWidth: 1.5,
             borderStyle: "dashed",
-            borderColor: tertiary,
           }}
         />
         {tiles.length === 0 && (
