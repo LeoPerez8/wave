@@ -296,7 +296,10 @@ const placedAfter = (
  * [state] once [tile], just selected, opened its row: the closest artist
  * graph neighbours the grid doesn't show yet, up to `DJ_OPENED_TILES`, right
  * after it. With fewer, the row holds the places left for the artist's page
- * (`djPagesNeeded`). A tile that opened a row before opens nothing more.
+ * (`djPagesNeeded`). An album opens its album artist's tile first when the
+ * grid lacks it, then that artist's similar artists, `DJ_OPENED_TILES` in
+ * all; one whose album artist isn't an artist ("Various Artists") opens
+ * nothing. A tile that opened a row before opens nothing more.
  */
 const withRowOpened = (
   state: DjState,
@@ -305,17 +308,18 @@ const withRowOpened = (
   library: DjLibraryArtists,
 ): DjState => {
   if (state.rows.some((row) => row.of === tile.key)) return state;
-  const close = graph === null ? [] : artistNeighbours(graph, tile.name);
+  const artist = djTileArtist(tile);
+  const close = graph === null ? [] : artistNeighbours(graph, artist);
   const opened = tilesToOpen(
     state,
-    close.map((neighbour) => neighbour.name),
+    [...(tile.kind === "album" ? [artist] : []), ...close.map((neighbour) => neighbour.name)],
     DJ_OPENED_TILES,
     library,
   );
   const row: DjRow = {
     of: tile.key,
     after: opened[opened.length - 1]?.key ?? tile.key,
-    waiting: DJ_OPENED_TILES - opened.length,
+    waiting: djArtistTile(artist) === null ? 0 : DJ_OPENED_TILES - opened.length,
   };
   return {
     ...state,
@@ -376,7 +380,10 @@ export const djReduce = (state: DjState, action: DjAction): DjState => {
   );
 };
 
-/** The tiles whose YT Music page DJ reads now: those whose row still holds places for it. */
+/**
+ * The tiles whose row still holds places for a YT Music page, which DJ reads
+ * now: the page of the tile's artist (`djTileArtist`), an album's album artist.
+ */
 export const djPagesNeeded = (state: DjState): DjTile[] =>
   state.rows.flatMap((row) =>
     row.waiting > 0 ? (state.tiles.find((tile) => tile.key === row.of) ?? []) : [],

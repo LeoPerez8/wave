@@ -4,10 +4,20 @@ import { describe, test } from "node:test";
 import {
   artistGraph,
   DJ_GRID_TILES,
+  DJ_MAX_SELECTED,
   djAlbumTile,
   djArtistTile,
+  djCells,
   djGrid,
+  djOpened,
+  djPagesNeeded,
+  djReduce,
+  djSelectable,
+  djSelected,
+  djTileArtist,
   magicArtistKey,
+  type ArtistGraph,
+  type DjState,
   type DjTile,
   type TasteProfile,
 } from "./index.ts";
@@ -126,5 +136,94 @@ describe("albums in DJ's grid", () => {
     });
     assert.equal(tiles.length, DJ_GRID_TILES);
     assert.equal(tiles.filter((tile) => tile.kind === "album").length, 12);
+  });
+});
+
+/** [state]'s grid as it's drawn: each tile as `shown` tells it, and "…" for a placeholder. */
+const drawn = (state: DjState): string[] =>
+  djCells(state).map((cell) => (cell.kind === "tile" ? shown([cell.tile])[0]! : "…"));
+
+describe("selecting an album in DJ", () => {
+  const dummy = djAlbumTile({ title: "Dummy", artist: "Portishead" })!;
+  const graph = graphOf({ Portishead: ["Tricky", "Massive Attack", "Morcheeba", "Lamb"] });
+  const tap = (state: DjState, key: DjTile["key"], known: ArtistGraph | null = graph): DjState =>
+    djReduce(state, { type: "toggle", key, graph: known });
+
+  test("opens its album artist first, then that artist's similar artists, 3 tiles in all", () => {
+    const state = tap(djOpened([dummy, djArtistTile("Air")!]), dummy.key);
+    assert.deepEqual(drawn(state), [
+      "[Dummy / Portishead]",
+      "Portishead",
+      "Tricky",
+      "Massive Attack",
+      "Air",
+    ]);
+    assert.equal(djSelected(state, dummy.key), true);
+    assert.deepEqual(djPagesNeeded(state), []);
+  });
+
+  test("opens 3 similar artists when the grid already shows its album artist", () => {
+    const state = tap(djOpened([djArtistTile("Portishead")!, dummy]), dummy.key);
+    assert.deepEqual(drawn(state), [
+      "Portishead",
+      "[Dummy / Portishead]",
+      "Tricky",
+      "Massive Attack",
+      "Morcheeba",
+    ]);
+  });
+
+  test("shows the Library's artist on the album artist's tile", () => {
+    const state = djReduce(djOpened([dummy]), {
+      type: "toggle",
+      key: dummy.key,
+      graph: null,
+      library: [{ id: 4, name: "Portishead" }],
+    });
+    assert.deepEqual(state.tiles[1], djArtistTile("Portishead", 4));
+  });
+
+  test("with fewer than 3, waits for its album artist's page, which fills the row", () => {
+    const waiting = tap(djOpened([dummy]), dummy.key, graphOf({ Portishead: ["Tricky"] }));
+    assert.deepEqual(drawn(waiting), ["[Dummy / Portishead]", "Portishead", "Tricky", "…"]);
+    assert.deepEqual(djPagesNeeded(waiting).map(djTileArtist), ["Portishead"]);
+    const filled = djReduce(waiting, {
+      type: "similar",
+      key: dummy.key,
+      artists: [{ name: "Tricky" }, { name: "Lamb" }, { name: "Morcheeba" }],
+    });
+    assert.deepEqual(drawn(filled), ["[Dummy / Portishead]", "Portishead", "Tricky", "Lamb"]);
+    assert.deepEqual(djPagesNeeded(filled), []);
+  });
+
+  test("an album by nobody in particular opens nothing and waits for no page", () => {
+    const hits = djAlbumTile({ title: "Trip Hop Hits", artist: "Various Artists" })!;
+    const state = tap(djOpened([hits]), hits.key);
+    assert.deepEqual(drawn(state), ["[Trip Hop Hits / Various Artists]"]);
+    assert.equal(djSelected(state, hits.key), true);
+  });
+
+  test("unselecting it keeps the tiles it opened", () => {
+    const state = tap(tap(djOpened([dummy]), dummy.key), dummy.key);
+    assert.equal(djSelected(state, dummy.key), false);
+    assert.deepEqual(drawn(state), ["[Dummy / Portishead]", "Portishead", "Tricky", "Massive Attack"]);
+  });
+
+  test("the same album never joins the grid twice", () => {
+    const state = djOpened([dummy, djAlbumTile({ title: "dummy (Remastered)", artist: "PORTISHEAD" })!]);
+    assert.deepEqual(drawn(state), ["[Dummy / Portishead]"]);
+  });
+
+  test("albums count toward the 30 tiles a seed holds", () => {
+    const albums = Array.from(
+      { length: DJ_MAX_SELECTED },
+      (_, at) => djAlbumTile({ title: `Record ${at}`, artist: "Various Artists" })!,
+    );
+    const air = djArtistTile("Air")!;
+    let state = djOpened([...albums, air]);
+    for (const album of albums) state = tap(state, album.key, null);
+    assert.equal(state.selected.length, DJ_MAX_SELECTED);
+    assert.equal(djSelectable(state, air.key), false);
+    assert.equal(djSelected(tap(state, air.key, null), air.key), false);
   });
 });
