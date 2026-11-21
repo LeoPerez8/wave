@@ -16,6 +16,7 @@ import {
   goToSuggestionsPillShown,
   goToSuggestionsScroll,
   moveItem,
+  playlistAddSongsPath,
   playlistSuggestionsPlace,
   type PlaylistPlace,
   type CollaborationMember,
@@ -53,13 +54,13 @@ import { useLocalisation } from "@/localisation/localisation";
 import { ROW, useDraggedRow, useRowDrag, type DragRows } from "@/catalog/rowDrag";
 import { useChromeInset } from "@/chrome/chrome";
 import { useListScrollable } from "@/motion/heldTouch";
+import { useCurrentPath } from "@/library/routes";
 import { playPlaylist } from "@/playback/actions";
 import { openTrackActions, openUnsearchedActions, type MenuOptions } from "@/playback/ActionsMenu";
 import type { ActionItems, TrackItem } from "@/playback/actionTargets";
 import { runTrackSwipe } from "@/playback/rowSwipe";
 import { useListSelection } from "@/selection/useListSelection";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
-import { useCurrentPath } from "@/library/routes";
 import { SongList, type SongListSelection } from "@/songs/SongList";
 import { librarySongEntry, type SongListEntry } from "@/songs/songListSources";
 import type { SongRowActions } from "@/songs/SongRow";
@@ -169,14 +170,14 @@ function Grip({ shown, color }: { shown: boolean; color: string }) {
 }
 
 /** The playlist's first song-list item: a route into the song-only add search. */
-function AddSongsTile({ playlistId }: { playlistId: number }) {
+function AddSongsTile({ playlistId, from }: { playlistId: number; from: string }) {
   const { strings } = useLocalisation();
   const background = useThemeColor("background");
   return (
     <Press
       accessibilityRole="button"
       accessibilityLabel={strings.playlists.addSongs}
-      onPress={() => router.push(`/library/playlist/${playlistId}/add`)}
+      onPress={() => router.push(playlistAddSongsPath(from, playlistId))}
     >
       <View className="flex-row items-center" style={{ height: ROW, gap: CELL * 1.5 }}>
         <View
@@ -236,6 +237,8 @@ type Props = {
   customOrder?: boolean;
   showReleaseYear?: boolean;
   playlistId: number;
+  /** This page belongs to an owner-editable ordinary or collaborative playlist. */
+  canAddSongs: boolean;
   /** In playlist order; undefined until they are read (only the header shows). */
   items: readonly PlaylistEntryRow[] | undefined;
   /** The playlist's head (mosaic, title, Play / Shuffle). */
@@ -286,6 +289,7 @@ export const playPlaylistEntries = (
  */
 export function PlaylistItems({
   playlistId,
+  canAddSongs,
   items,
   header,
   empty,
@@ -669,8 +673,8 @@ export function PlaylistItems({
           ListHeaderComponent={
             <CompactTitleHead onLayout={(event) => setLead(event.nativeEvent.layout.height)}>
               <FindHead find={find} header={header} />
-              {playlistId > 0 && !path.includes("/favorites/") && found === null && !selecting && (
-                <AddSongsTile playlistId={playlistId} />
+              {canAddSongs && found === null && !selecting && (
+                <AddSongsTile playlistId={playlistId} from={path} />
               )}
             </CompactTitleHead>
           }

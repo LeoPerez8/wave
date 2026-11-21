@@ -205,8 +205,8 @@ export default function AddPlaylistSongsScreen() {
           value={text}
           onChange={setText}
           autoFocus
-          placeholder={strings.playbackText.songsAlbumsArtistsGenres}
-          accessibilityLabel={strings.playbackText.searchYourLibrary}
+          placeholder={strings.playbackText.searchSongs}
+          accessibilityLabel={strings.playbackText.searchSongs}
         />
       </View>
       {query.trim() === "" ? (
