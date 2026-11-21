@@ -20,7 +20,7 @@ import {
   type YtAlbumSong,
 } from "@wave/core";
 import { router } from "@/lib/timingRouter";
-import { useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { memo, useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { AccessibilityInfo, Text, View, useWindowDimensions } from "react-native";
 import { IconRefresh } from "@tabler/icons-react-native";
 
@@ -330,6 +330,66 @@ const seedTiles = (seeds: readonly MagicQueueSeed<PlayableSongRow>[], size: numb
 type RowTile = { readonly key: string; readonly tile: ReactNode };
 
 /**
+ * A page of the Magic Queue row in its grid, [width] wide: the pool's
+ * [seeds], or the mixes' [songs] (an empty pool), or placeholder tiles while
+ * [skeleton]. With [onRefresh] (one page, nothing to swipe), a pull past its
+ * start refreshes it. Memoized: a swipe changes the dots and the page in
+ * sight, not the pages' songs, so their tiles aren't drawn again (#1380).
+ */
+const MagicQueuePage = memo(function MagicQueuePage({
+  seeds,
+  songs,
+  skeleton,
+  size,
+  width,
+  onRefresh,
+}: {
+  seeds?: readonly MagicQueueSeed<PlayableSongRow>[] | undefined;
+  songs?: readonly YtAlbumSong[] | undefined;
+  skeleton: boolean;
+  size: number;
+  width: number;
+  onRefresh?: (() => void) | undefined;
+}) {
+  const { strings } = useLocalisation();
+  const { fontScale } = useWindowDimensions();
+  if (skeleton)
+    return (
+      <SkeletonGroup label={strings.discover.findingSongs}>
+        <MagicQueueGrid width={width}>
+          {Array.from({ length: MAGIC_QUEUE_PICKS }, (_, place) => (
+            <SongCardSkeleton key={place} size={size} fontScale={fontScale} />
+          ))}
+        </MagicQueueGrid>
+      </SkeletonGroup>
+    );
+  const tiles: readonly RowTile[] =
+    seeds !== undefined
+      ? seedTiles(seeds, size)
+      : (songs ?? []).map((song) => ({
+          key: song.videoId,
+          tile: <StreamedTile song={song} size={size} />,
+        }));
+  const drawn = (
+    <MagicQueueGrid width={width}>
+      {tiles.map(({ key, tile }, place) => (
+        // oxlint-disable-next-line react/no-array-index-key -- a place crossfades between its previous and next song
+        <Crossfade key={place} swapKey={key}>
+          {tile}
+        </Crossfade>
+      ))}
+    </MagicQueueGrid>
+  );
+  return onRefresh === undefined ? (
+    drawn
+  ) : (
+    <PullRefreshRow onRefresh={onRefresh} enabled>
+      {drawn}
+    </PullRefreshRow>
+  );
+});
+
+/**
  * Discover's Magic Queue row, labelled Magic Queue: a carousel of up to three
  * pages swiped sideways (Core's `magicQueuePages`), each up to nine songs in
  * an adaptive grid, all drawn by one rule, so no page has a name. A tap on a
@@ -358,59 +418,28 @@ function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   const { size } = magicQueueGrid(available, fontScale);
   const { shown } = section;
   const skeleton = shown.kind === "skeleton";
-  const pages: readonly (readonly RowTile[])[] =
-    shown.kind === "pages"
-      ? shown.pages.map((page) => seedTiles(page, size))
-      : shown.kind === "mixes"
-        ? [
-            shown.songs.map((song) => ({
-              key: song.videoId,
-              tile: <StreamedTile song={song} size={size} />,
-            })),
-          ]
-        : skeleton
-          ? [[]]
-          : [];
-  if (pages.length === 0) return null;
-  const index = magicQueueCarouselPage(pages.length, kept);
-  const paged = pages.length > 1;
+  const count =
+    shown.kind === "pages" ? shown.pages.length : shown.kind === "mixes" || skeleton ? 1 : 0;
+  if (count === 0) return null;
+  const index = magicQueueCarouselPage(count, kept);
+  const paged = count > 1;
   const show = (next: number) => {
-    if (next < 0 || next >= pages.length) return;
+    if (next < 0 || next >= count) return;
     setKept(next);
-    AccessibilityInfo.announceForAccessibility(
-      magicQueueCarouselPageLabel(next, pages.length, strings),
-    );
+    AccessibilityInfo.announceForAccessibility(magicQueueCarouselPageLabel(next, count, strings));
   };
   const refresh = () => section.refresh(index);
-  const tiles = (songs: readonly RowTile[]) => (
-    <MagicQueueGrid width={available}>
-      {songs.map(({ key, tile }, place) => (
-        // oxlint-disable-next-line react/no-array-index-key -- a place crossfades between its previous and next song
-        <Crossfade key={place} swapKey={key}>
-          {tile}
-        </Crossfade>
-      ))}
-    </MagicQueueGrid>
+  // The page's songs keep their arrays across a swipe, so its memoized grid isn't drawn again.
+  const page = (place: number, onRefresh?: () => void) => (
+    <MagicQueuePage
+      seeds={shown.kind === "pages" ? shown.pages[place] : undefined}
+      songs={shown.kind === "mixes" ? shown.songs : undefined}
+      skeleton={skeleton}
+      size={size}
+      width={available}
+      onRefresh={onRefresh}
+    />
   );
-  const page = (songs: readonly RowTile[]): ReactNode => {
-    if (skeleton)
-      return (
-        <SkeletonGroup label={strings.discover.findingSongs}>
-          <MagicQueueGrid width={available}>
-            {Array.from({ length: MAGIC_QUEUE_PICKS }, (_, place) => (
-              <SongCardSkeleton key={place} size={size} fontScale={fontScale} />
-            ))}
-          </MagicQueueGrid>
-        </SkeletonGroup>
-      );
-    return paged ? (
-      tiles(songs)
-    ) : (
-      <PullRefreshRow onRefresh={refresh} enabled>
-        {tiles(songs)}
-      </PullRefreshRow>
-    );
-  };
   return (
     <DiscoverRow
       label={strings.discover.rows["magic-queue"]}
@@ -431,9 +460,9 @@ function MagicQueueRow({ section }: { section: MagicQueueSection }) {
           )}
           {paged && (
             <CarouselPageDots
-              count={pages.length}
+              count={count}
               index={index}
-              label={magicQueueCarouselPageLabel(index, pages.length, strings)}
+              label={magicQueueCarouselPageLabel(index, count, strings)}
               onIndex={show}
             />
           )}
@@ -443,13 +472,16 @@ function MagicQueueRow({ section }: { section: MagicQueueSection }) {
       <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
         {paged ? (
           <MagicQueueCarousel
-            pages={pages.map((songs, place) => ({ key: `page-${place}`, content: page(songs) }))}
+            pages={Array.from({ length: count }, (_, place) => ({
+              key: `page-${place}`,
+              content: page(place),
+            }))}
             index={index}
             onIndex={show}
             width={available}
           />
         ) : (
-          page(pages[0]!)
+          page(0, skeleton ? undefined : refresh)
         )}
       </View>
     </DiscoverRow>
