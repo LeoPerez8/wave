@@ -89,12 +89,12 @@ const SAYS_NOTHING = (row: "OLD" | "NEW") => `${row}.end_reason NOT IN ('complet
 
 /**
  * What moves the taste revision: a write to what the taste pages and the songs page read
- * (songs, their credits, artists, albums, genres, plays, stars). Playback's own saves (the
+ * (songs, their credits, artists, albums, genres, plays, stars, dislikes). Playback's own saves (the
  * position, the queue, an unfinished play's progress) and sync's pushed flags don't, so a
  * derivation that walks pages on free turns isn't restarted by music playing.
  */
 const TASTE_WRITES: readonly string[] = [
-  ...["tracks", "track_artists", "genres"].flatMap((table) =>
+  ...["tracks", "track_artists", "genres", "dislikes"].flatMap((table) =>
     ["INSERT", "UPDATE", "DELETE"].map((write) => `${write} ON ${table}`),
   ),
   "INSERT ON artists",

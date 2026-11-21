@@ -381,3 +381,33 @@ test("rebuilding the profile gives streamed songs the scores the live updates ga
       artist,
     );
 });
+
+test("a dislike counts against its song's artists, a song never played too, until it's removed", async () => {
+  const db = await openTestDatabase();
+  const store = await loadLibraryStore(root, db);
+  const day = 24 * 60 * 60 * 1000;
+  const local = addTrack(db, { title: "Local", artist: "Radiohead" });
+  const never = ytTrackId("v-never-played");
+  const listed = (key: string, artists: readonly string[]) => ({
+    key,
+    title: key,
+    artists,
+    durationMs: null,
+  });
+  Effect.runSync(
+    store.setDislikes([listed(String(local), ["Radiohead"]), listed(never, ["Muse", "Guest"])]),
+  );
+  const dislikedAt = Effect.runSync(store.listDislikes)[0]!.dislikedAt;
+  const derive = (now: number) =>
+    Effect.runPromise(deriveTaste(store, Effect.void, now, undefined, undefined, streamedSong));
+  const fresh = await derive(dislikedAt);
+  for (const artist of ["Radiohead", "Muse", "Guest"])
+    assert.equal(fresh.artists.get(magicArtistKey(artist)), -3, artist);
+  assert.equal(fresh.songs.size, 0);
+  const later = await derive(dislikedAt + 30 * day);
+  assert.equal(later.artists.get(magicArtistKey("Muse")), -1.5);
+  Effect.runSync(store.removeDislikes([never]));
+  const removed = await derive(dislikedAt);
+  assert.equal(removed.artists.get(magicArtistKey("Muse")), undefined);
+  assert.equal(removed.artists.get(magicArtistKey("Radiohead")), -3);
+});

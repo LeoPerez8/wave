@@ -78,6 +78,44 @@ export const onUnstarred = (listener: (trackIds: readonly string[]) => void): ((
   };
 };
 
+/** A song just disliked: its dislike's key (a queue track id) and its artists as listed. */
+export interface DislikedChange {
+  readonly key: string;
+  readonly artists: readonly string[];
+}
+
+const dislikedListeners = new Set<(songs: readonly DislikedChange[]) => void>();
+
+/** Tells what follows dislikes (the taste profile) that the owner disliked [songs]. */
+export const publishDisliked = (songs: readonly DislikedChange[]): void => {
+  if (songs.length === 0) return;
+  for (const listener of dislikedListeners) listener(songs);
+};
+
+/** Calls [listener] with the songs each dislike marked (`publishDisliked`); returns how to stop. */
+export const onDisliked = (listener: (songs: readonly DislikedChange[]) => void): (() => void) => {
+  dislikedListeners.add(listener);
+  return () => {
+    dislikedListeners.delete(listener);
+  };
+};
+
+const undislikedListeners = new Set<(keys: readonly string[]) => void>();
+
+/** Tells what follows dislikes (the taste profile) that the dislikes kept under [keys] are gone. */
+export const publishUndisliked = (keys: readonly string[]): void => {
+  if (keys.length === 0) return;
+  for (const listener of undislikedListeners) listener(keys);
+};
+
+/** Calls [listener] with the keys each removal of dislikes forgot (`publishUndisliked`); returns how to stop. */
+export const onUndisliked = (listener: (keys: readonly string[]) => void): (() => void) => {
+  undislikedListeners.add(listener);
+  return () => {
+    undislikedListeners.delete(listener);
+  };
+};
+
 const starListeners = new Set<(trackIds: readonly number[]) => void>();
 
 /**

@@ -283,6 +283,11 @@ test("the taste revision moves only for what the taste reads", async () => {
         ),
       "a star": () => Effect.runSync(store.setFavorites([track], true)),
       "an unstar": () => Effect.runSync(store.setFavorites([track], false)),
+      "a dislike": () =>
+        Effect.runSync(
+          store.setDislikes([{ key: String(track), title: "t", artists: ["a"], durationMs: null }]),
+        ),
+      "a dislike removed": () => Effect.runSync(store.removeDislikes([String(track)])),
       "a song's file": () => fixture.db.run(sql`UPDATE tracks SET path = NULL WHERE id = ${track}`),
       "a song's credits": () =>
         fixture.db.run(sql`DELETE FROM track_artists WHERE track_id = ${track}`),

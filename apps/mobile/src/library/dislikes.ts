@@ -3,6 +3,7 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@wave/client/externalStore";
 
+import { publishDisliked, publishUndisliked } from "./libraryChanges";
 import { LibraryStore } from "./LibraryStore";
 import { appRuntime } from "./runtime";
 
@@ -138,13 +139,17 @@ const write = (
  * them. Only the dislikes: what else a dislike changes (the favorite, the
  * toast) is `dislikeSongs`'s, which is what menus and buttons call.
  */
-export const keepDislikes = (songs: readonly Omit<DislikedSong, "dislikedAt">[]): Promise<void> =>
-  write(
+export const keepDislikes = (songs: readonly Omit<DislikedSong, "dislikedAt">[]): Promise<void> => {
+  // Before the write, as a star is: the taste profile learns it at once.
+  publishDisliked(songs);
+  return write(
     songs.map((song) => song.key),
     true,
     (store) => store.setDislikes(songs),
   );
+};
 
 /** Forgets the dislikes kept under [keys]: the set loses them at once, then the store. */
 export const forgetDislikes = (keys: readonly string[]): Promise<void> =>
-  write(keys, false, (store) => store.removeDislikes(keys));
+  // After the write: the taste profile derived again must not read them back.
+  write(keys, false, (store) => store.removeDislikes(keys)).then(() => publishUndisliked(keys));
