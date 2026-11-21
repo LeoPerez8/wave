@@ -373,8 +373,7 @@ export const createLibraryQueries = <V>(options: {
 
   /** When bursts may next re-read [entry]. */
   const burstReadAt = (entry: Entry<V>): number => {
-    const throttled =
-      entry.readAt + (inSight(entry) ? limits.throttleMs : limits.keptThrottleMs);
+    const throttled = entry.readAt + (inSight(entry) ? limits.throttleMs : limits.keptThrottleMs);
     if (entry.traits.burstPace === undefined || entry.result === undefined) return throttled;
     return Math.max(throttled, entry.settledAt + entry.traits.burstPace(entry.result.value));
   };

@@ -27,7 +27,12 @@ const song = (
   genre: fields.genre ?? null,
 });
 
-const album = (id: number, albumArtistIds: readonly number[], year: number | null, title: string) => ({
+const album = (
+  id: number,
+  albumArtistIds: readonly number[],
+  year: number | null,
+  title: string,
+) => ({
   id,
   albumArtistId: albumArtistIds[0]!,
   albumArtistIds,
@@ -42,13 +47,24 @@ const artist = (id: number) => ({ id, albumCount: 99, trackCount: 99 });
 const library = {
   songs: [
     song(101, { title: "a song", albumId: 10, artistIds: [1], disc: 1, track: 2, genre: "Pop" }),
-    song(102, { title: "b song", albumId: 10, artistIds: [1, 2], disc: 1, track: 1, genre: "Rock" }),
+    song(102, {
+      title: "b song",
+      albumId: 10,
+      artistIds: [1, 2],
+      disc: 1,
+      track: 1,
+      genre: "Rock",
+    }),
     song(103, { title: "c song", albumId: 10, artistIds: [1], disc: 2, track: 1, genre: "Rock" }),
     song(201, { title: "d song", albumId: 20, artistIds: [2], genre: "Pop" }),
     song(301, { title: "e song", albumId: 30, artistIds: [1] }),
     song(302, { title: "f song", albumId: 30, artistIds: [4] }),
   ],
-  albums: [album(10, [1], 2001, "ten"), album(20, [2], 1999, "twenty"), album(30, [3], 2010, "thirty")],
+  albums: [
+    album(10, [1], 2001, "ten"),
+    album(20, [2], 1999, "twenty"),
+    album(30, [3], 2010, "thirty"),
+  ],
   artists: [artist(1), artist(2), artist(3), artist(4)],
   genres: [
     { name: "Pop", sort: "pop" },
@@ -117,5 +133,11 @@ describe("Library pages drawn from the rows in memory (#1352)", () => {
     const details = createLibraryDetails(library);
     assert.equal(details.album(99), undefined);
     assert.equal(details.artist(99), undefined);
+  });
+
+  test("asking for a page again answers the same page: a screen following it draws nothing new", () => {
+    const details = createLibraryDetails(library);
+    assert.equal(details.album(10), details.album(10));
+    assert.equal(details.artist(1), details.artist(1));
   });
 });

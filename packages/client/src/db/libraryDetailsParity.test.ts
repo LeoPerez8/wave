@@ -18,15 +18,69 @@ let db: TestDatabase;
 
 before(async () => {
   db = await openTestDatabase();
-  addTrack(db, { title: "Airbag", album: "OK Computer", artist: "Radiohead", trackNumber: 1, year: 1997, genre: "Rock" });
-  addTrack(db, { title: "Paranoid Android", album: "OK Computer", artist: "Radiohead", trackNumber: 2, year: 1997, genre: "Alternative" });
-  addTrack(db, { title: "Lucky", album: "OK Computer", artist: "Radiohead", trackNumber: 11, year: 1997, genre: "Alternative" });
+  addTrack(db, {
+    title: "Airbag",
+    album: "OK Computer",
+    artist: "Radiohead",
+    trackNumber: 1,
+    year: 1997,
+    genre: "Rock",
+  });
+  addTrack(db, {
+    title: "Paranoid Android",
+    album: "OK Computer",
+    artist: "Radiohead",
+    trackNumber: 2,
+    year: 1997,
+    genre: "Alternative",
+  });
+  addTrack(db, {
+    title: "Lucky",
+    album: "OK Computer",
+    artist: "Radiohead",
+    trackNumber: 11,
+    year: 1997,
+    genre: "Alternative",
+  });
   addTrack(db, { title: "Everything", album: "Kid A", artist: "Radiohead", year: 2000 });
-  addTrack(db, { title: "Say So", album: "Hot Pink", artist: "Doja Cat", year: 2019, genre: "Pop" });
-  addTrack(db, { title: "Boss Bitch", album: "Birds of Prey", artist: "Doja Cat", albumArtist: "Various Artists", year: 2020, genre: "Pop" });
-  addTrack(db, { title: "34+35 Remix", album: "Positions", artist: "Ariana Grande, Doja Cat", albumArtist: "Ariana Grande", year: 2021, genre: "Pop" });
-  addTrack(db, { title: "Positions", album: "Positions", artist: "Ariana Grande", albumArtist: "Ariana Grande", year: 2020, genre: "Rock" });
-  addTrack(db, { title: "Watch", album: "Watch the Throne", artist: "JAY-Z", albumArtist: "JAY-Z & Kanye West", year: 2011 });
+  addTrack(db, {
+    title: "Say So",
+    album: "Hot Pink",
+    artist: "Doja Cat",
+    year: 2019,
+    genre: "Pop",
+  });
+  addTrack(db, {
+    title: "Boss Bitch",
+    album: "Birds of Prey",
+    artist: "Doja Cat",
+    albumArtist: "Various Artists",
+    year: 2020,
+    genre: "Pop",
+  });
+  addTrack(db, {
+    title: "34+35 Remix",
+    album: "Positions",
+    artist: "Ariana Grande, Doja Cat",
+    albumArtist: "Ariana Grande",
+    year: 2021,
+    genre: "Pop",
+  });
+  addTrack(db, {
+    title: "Positions",
+    album: "Positions",
+    artist: "Ariana Grande",
+    albumArtist: "Ariana Grande",
+    year: 2020,
+    genre: "Rock",
+  });
+  addTrack(db, {
+    title: "Watch",
+    album: "Watch the Throne",
+    artist: "JAY-Z",
+    albumArtist: "JAY-Z & Kanye West",
+    year: 2011,
+  });
   // Split the credits into their artists, as a scan does.
   relinkCredits(db, creditSplits());
 });

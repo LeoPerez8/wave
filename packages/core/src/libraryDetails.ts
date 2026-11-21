@@ -84,7 +84,7 @@ const push = <K, V>(map: Map<K, V[]>, key: K, value: V): void => {
 
 /**
  * Pages over [rows]. Its lookups are indexed once, on first use, in one pass
- * over the rows; a page is then the work of its own rows.
+ * over the rows; a page is then the work of its own rows, done once.
  */
 export const createLibraryDetails = <
   S extends DetailSong,
@@ -153,39 +153,54 @@ export const createLibraryDetails = <
     return best;
   };
 
+  const albumPages = new Map<number, AlbumPage<S, A> | undefined>();
+  const artistPages = new Map<number, ArtistPage<S, A, R> | undefined>();
+
+  const albumPage = (id: number): AlbumPage<S, A> | undefined => {
+    const { albums, albumSongs, genreSort } = indexed();
+    const album = albums.get(id);
+    if (album === undefined) return undefined;
+    const songs = albumSongs.get(id) ?? [];
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+    const tracks = [...songs].sort(compareAlbumTracks);
+    return { album, genre: albumGenre(songs, genreSort), tracks };
+  };
+
+  const artistPage = (id: number): ArtistPage<S, A, R> | undefined => {
+    const { albums, artists, albumSongs, creditedSongs, creditedAlbums, position } = indexed();
+    const row = artists.get(id);
+    if (row === undefined) return undefined;
+    const ownAlbums = creditedAlbums.get(id) ?? [];
+    // Theirs: credited on the song, or on its album (a song shows once).
+    const theirs = new Set<S>(creditedSongs.get(id));
+    for (const album of ownAlbums)
+      for (const song of albumSongs.get(album.id) ?? []) theirs.add(song);
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+    const songs = [...theirs].sort((a, b) => (position.get(a) ?? 0) - (position.get(b) ?? 0));
+    // Albums filed or credited under them, and those their credited songs are on.
+    const onAlbums = new Set<A>(ownAlbums);
+    for (const song of creditedSongs.get(id) ?? []) {
+      const album = albums.get(song.albumId);
+      if (album !== undefined) onAlbums.add(album);
+    }
+    const split = artistAlbums(id, [...onAlbums]);
+    return {
+      artist: { ...row, albumCount: split.albums.length, trackCount: songs.length },
+      albums: split.albums,
+      appearsOn: split.appearsOn,
+      songs,
+    };
+  };
+
+  // Each page is worked out once: asked again, it is the same page.
   return {
     album: (id) => {
-      const { albums, albumSongs, genreSort } = indexed();
-      const album = albums.get(id);
-      if (album === undefined) return undefined;
-      const songs = albumSongs.get(id) ?? [];
-      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
-      const tracks = [...songs].sort(compareAlbumTracks);
-      return { album, genre: albumGenre(songs, genreSort), tracks };
+      if (!albumPages.has(id)) albumPages.set(id, albumPage(id));
+      return albumPages.get(id);
     },
     artist: (id) => {
-      const { albums, artists, albumSongs, creditedSongs, creditedAlbums, position } = indexed();
-      const row = artists.get(id);
-      if (row === undefined) return undefined;
-      const ownAlbums = creditedAlbums.get(id) ?? [];
-      // Theirs: credited on the song, or on its album (a song shows once).
-      const theirs = new Set<S>(creditedSongs.get(id));
-      for (const album of ownAlbums) for (const song of albumSongs.get(album.id) ?? []) theirs.add(song);
-      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
-      const songs = [...theirs].sort((a, b) => (position.get(a) ?? 0) - (position.get(b) ?? 0));
-      // Albums filed or credited under them, and those their credited songs are on.
-      const onAlbums = new Set<A>(ownAlbums);
-      for (const song of creditedSongs.get(id) ?? []) {
-        const album = albums.get(song.albumId);
-        if (album !== undefined) onAlbums.add(album);
-      }
-      const split = artistAlbums(id, [...onAlbums]);
-      return {
-        artist: { ...row, albumCount: split.albums.length, trackCount: songs.length },
-        albums: split.albums,
-        appearsOn: split.appearsOn,
-        songs,
-      };
+      if (!artistPages.has(id)) artistPages.set(id, artistPage(id));
+      return artistPages.get(id);
     },
   };
 };

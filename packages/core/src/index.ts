@@ -123,6 +123,8 @@ export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
 export { alphabetIndex, artistAlbums, indexLetter } from "./browse.ts";
 export type { ArtistAlbum, IndexEntry } from "./browse.ts";
 export { createLibraryDetails } from "./libraryDetails.ts";
+export { createRecentKeeps } from "./recentKeeps.ts";
+export type { RecentKeeps } from "./recentKeeps.ts";
 export type {
   AlbumPage,
   ArtistPage,
