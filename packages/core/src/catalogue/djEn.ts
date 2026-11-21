@@ -2,7 +2,9 @@
 export const djEn = {
   title: "DJ",
   /** The line under the title on Discover's DJ card. */
-  cardDetail: "Pick the artists your queue starts from",
+  cardDetail: "A queue made from the artists you pick",
+  /** The action at the bottom of Discover's DJ card. */
+  cardAction: "Pick artists",
   /** The pill that starts the queue: "Play", then "Play · 3" with 3 tiles selected. */
   play: "Play",
   playCount: (count: number) => `Play · ${count}`,
