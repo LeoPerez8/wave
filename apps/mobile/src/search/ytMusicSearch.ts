@@ -213,9 +213,7 @@ export const useYtMusicSection = (
  * connectivity, answer retention and stale-query rules without asking its
  * artist, album, video or community-playlist endpoints.
  */
-export const useYtMusicSongsSection = (
-  query: string,
-): YtSection<NativeYtSong> => {
+export const useYtMusicSongsSection = (query: string): YtSection<NativeYtSong> => {
   const on = useYtMusicEnabled();
   const isOnline = useSyncExternalStore(subscribeConnectivity, online);
   const enabled = on && isOnline;
