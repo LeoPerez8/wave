@@ -77,6 +77,8 @@ export type ScreenPages = {
   /** A drag down on Related's header started, and ended (dp down, dp/s). */
   readonly relatedDragBegan: () => void;
   readonly relatedDragEnded: (translationY: number, velocityY: number) => void;
+  readonly relatedOpenDragBegan: () => void;
+  readonly relatedOpenDragEnded: (translationY: number, velocityY: number) => void;
 };
 
 /**
@@ -211,6 +213,21 @@ export const useScreenPages = (): ScreenPages => {
     [send, movePanel, height, still],
   );
 
+  const relatedOpenDragBegan = useCallback(() => setRelatedMoving(true), []);
+  const relatedOpenDragEnded = useCallback(
+    (translationY: number, velocityY: number) => {
+      const settled = settleSheet({
+        from: "closed",
+        offset: height - Math.max(0, -translationY),
+        velocity: -velocityY,
+        height,
+      });
+      if (settled === "open") send({ type: "show", screen: "related" });
+      else movePanel(false, 0, !still);
+    },
+    [height, send, movePanel, still],
+  );
+
   return useMemo(
     () => ({
       screen: screens.screen,
@@ -227,6 +244,8 @@ export const useScreenPages = (): ScreenPages => {
       swipeEnded,
       relatedDragBegan,
       relatedDragEnded,
+      relatedOpenDragBegan,
+      relatedOpenDragEnded,
     }),
     [
       screens.screen,
@@ -243,6 +262,8 @@ export const useScreenPages = (): ScreenPages => {
       swipeEnded,
       relatedDragBegan,
       relatedDragEnded,
+      relatedOpenDragBegan,
+      relatedOpenDragEnded,
     ],
   );
 };
@@ -270,20 +291,24 @@ export function ScreenPage({
   screen,
   pages,
   swipes = true,
+  relatedSwipe = false,
   children,
 }: {
   screen: NowPlayingPage;
   pages: ScreenPages;
   /** Whether a drag here turns the page (not with nothing playing). */
   swipes?: boolean;
+  relatedSwipe?: boolean;
   children: ReactNode;
 }) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const still = useReducedMotion();
   // A long-pressed finger slides onto its menu's entries; it doesn't turn the page.
   const draggable = useListScrollable();
-  const { position, swipeBegan, swipeEnded } = pages;
+  const { position, swipeBegan, swipeEnded, related, relatedOpenDragBegan, relatedOpenDragEnded } =
+    pages;
   const start = useSharedValue(0);
+  const dragKind = useSharedValue(0);
   const player = screen === "player";
   const pan = usePanGesture({
     enabled: swipes && draggable,
@@ -291,27 +316,47 @@ export function ScreenPage({
     hitSlop: handleSwipeSlop(player ? 0 : HANDLES),
     // Only a drag toward the other page claims the touch.
     activeOffsetX: player ? [-SWIPE_SLOP, 1_000_000] : [-1_000_000, SWIPE_SLOP],
-    failOffsetY: [-SWIPE_SLOP * 2, SWIPE_SLOP * 2],
-    onActivate: () => {
+    activeOffsetY: relatedSwipe ? [-SWIPE_SLOP, 1_000_000] : undefined,
+    failOffsetY: relatedSwipe ? undefined : [-SWIPE_SLOP * 2, SWIPE_SLOP * 2],
+    onActivate: (event) => {
       "worklet";
+      dragKind.set(
+        relatedSwipe &&
+          Math.abs(event.translationY) > Math.abs(event.translationX) &&
+          event.translationY < 0
+          ? 1
+          : 0,
+      );
       start.set(position.get());
-      scheduleOnRN(swipeBegan);
+      if (dragKind.get() === 1) scheduleOnRN(relatedOpenDragBegan);
+      else scheduleOnRN(swipeBegan);
     },
     onUpdate: (event) => {
       "worklet";
-      if (still || width <= 0) return;
-      position.set(Math.min(1, Math.max(0, start.get() - event.translationX / width)));
+      if (dragKind.get() === 1) {
+        if (!still && height > 0)
+          related.set(Math.min(1, Math.max(0, -event.translationY / height)));
+      } else if (!still && width > 0)
+        position.set(Math.min(1, Math.max(0, start.get() - event.translationX / width)));
     },
     onDeactivate: (event) => {
       "worklet";
       // A touch taken away settles back where it started.
       const released = !event.canceled;
-      scheduleOnRN(
-        swipeEnded,
-        screen,
-        released ? event.translationX : 0,
-        released ? event.velocityX : 0,
-      );
+      if (dragKind.get() === 1) {
+        scheduleOnRN(
+          relatedOpenDragEnded,
+          released ? event.translationY : 0,
+          released ? event.velocityY : 0,
+        );
+      } else {
+        scheduleOnRN(
+          swipeEnded,
+          screen,
+          released ? event.translationX : 0,
+          released ? event.velocityX : 0,
+        );
+      }
     },
   });
   const style = useAnimatedStyle(() => ({

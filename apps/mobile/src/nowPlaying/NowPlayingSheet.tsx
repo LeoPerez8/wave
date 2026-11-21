@@ -6,6 +6,7 @@ import {
   NOW_PLAYING_TRANSPORT_SLOTS,
   isUnsearchedTrackId,
   nowPlayingPageSwipesEnabled,
+  nowPlayingRelatedSwipeEnabled,
   nowPlayingSlotShow,
   nowPlayingSongMenuShow,
   type NowPlayingSlotSong,
@@ -445,7 +446,20 @@ export function NowPlayingSheet() {
             </ScreenPage>
           )}
           {/* The player's page: a swipe to the left anywhere but the scrubber brings the Queue. */}
-          <ScreenPage screen="player" pages={pages} swipes={pageSwipesEnabled && item !== null}>
+          <ScreenPage
+            screen="player"
+            pages={pages}
+            swipes={pageSwipesEnabled && item !== null}
+            relatedSwipe={
+              item !== null &&
+              nowPlayingRelatedSwipeEnabled({
+                screen,
+                editing,
+                ytMusic,
+                lyrics: view === "lyrics",
+              })
+            }
+          >
             <View className="flex-1" {...dimmed}>
               {item === null ? (
                 <DismissArea style={{ flex: 1 }}>

@@ -62,6 +62,14 @@ export const NOW_PLAYING_OPENS_ON: NowPlayingScreens = { screen: "player", editi
 export const nowPlayingPageSwipesEnabled = (screens: NowPlayingScreens): boolean =>
   !screens.editing && screens.screen !== "related";
 
+/** Whether an upward drag can open Related from this part of Now Playing. */
+export const nowPlayingRelatedSwipeEnabled = (input: {
+  readonly screen: NowPlayingScreen;
+  readonly editing: boolean;
+  readonly ytMusic: boolean;
+  readonly lyrics: boolean;
+}): boolean => input.screen === "player" && !input.editing && input.ytMusic && !input.lyrics;
+
 const show = (screen: NowPlayingScreen, editing = false): NowPlayingScreensStep => ({
   screens: { screen, editing },
   close: false,

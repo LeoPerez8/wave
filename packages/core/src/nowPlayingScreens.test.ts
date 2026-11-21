@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   NOW_PLAYING_OPENS_ON,
+  nowPlayingRelatedSwipeEnabled,
   nowPlayingPageSwipesEnabled,
   stepNowPlayingScreens,
   type NowPlayingScreens,
@@ -208,5 +209,64 @@ describe("nowPlayingPageSwipesEnabled", () => {
     assert.equal(nowPlayingPageSwipesEnabled(queue), true);
     assert.equal(nowPlayingPageSwipesEnabled(related), false);
     assert.equal(nowPlayingPageSwipesEnabled(editing), false);
+  });
+});
+
+describe("nowPlayingRelatedSwipeEnabled", () => {
+  test("an upward drag opens Related from the player, except edit mode or lyrics", () => {
+    assert.equal(
+      nowPlayingRelatedSwipeEnabled({
+        screen: "player",
+        editing: false,
+        ytMusic: true,
+        lyrics: false,
+      }),
+      true,
+    );
+    assert.equal(
+      nowPlayingRelatedSwipeEnabled({
+        screen: "player",
+        editing: false,
+        ytMusic: true,
+        lyrics: true,
+      }),
+      false,
+    );
+    assert.equal(
+      nowPlayingRelatedSwipeEnabled({
+        screen: "player",
+        editing: true,
+        ytMusic: true,
+        lyrics: false,
+      }),
+      false,
+    );
+    assert.equal(
+      nowPlayingRelatedSwipeEnabled({
+        screen: "player",
+        editing: false,
+        ytMusic: false,
+        lyrics: false,
+      }),
+      false,
+    );
+    assert.equal(
+      nowPlayingRelatedSwipeEnabled({
+        screen: "queue",
+        editing: false,
+        ytMusic: true,
+        lyrics: false,
+      }),
+      false,
+    );
+    assert.equal(
+      nowPlayingRelatedSwipeEnabled({
+        screen: "related",
+        editing: false,
+        ytMusic: true,
+        lyrics: false,
+      }),
+      false,
+    );
   });
 });

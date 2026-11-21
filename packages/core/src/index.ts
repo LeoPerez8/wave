@@ -865,6 +865,7 @@ export {
   NOW_PLAYING_OPENS_ON,
   nowPlayingPageSwipesEnabled,
   stepNowPlayingScreens,
+  nowPlayingRelatedSwipeEnabled,
 } from "./nowPlayingScreens.ts";
 export {
   nowPlayingEditHintDue,
