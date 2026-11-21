@@ -2919,6 +2919,7 @@ export {
   nowPlayingSlotChoiceHolder,
   nowPlayingSlotChoices,
   nowPlayingSlotShow,
+  nowPlayingSlotRunsSongMenu,
   nowPlayingSongMenuShow,
   readNowPlayingButtons,
   readNowPlayingSlotRoute,

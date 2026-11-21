@@ -14,12 +14,14 @@ import {
   nowPlayingSlotChoices,
   nowPlayingSlotChoiceHolder,
   nowPlayingSlotRoute,
+  nowPlayingSlotRunsSongMenu,
   nowPlayingSlotShow,
   nowPlayingSongMenuShow,
   readNowPlayingButtons,
   readNowPlayingSlotRoute,
   storedNowPlayingButtons,
 } from "./index.ts";
+import type { NowPlayingAction } from "./index.ts";
 
 const DEFAULT = ["lyrics", "addToPlaylist", "download", "shuffle", "repeat", null, null] as const;
 
@@ -78,17 +80,28 @@ describe("the saved Now Playing slots", () => {
       '["shuffle","repeat","share","sleepTimer"]',
       '["shuffle","repeat","share","sleepTimer","lyrics","queue"]',
       '["shuffle","repeat","share","sleepTimer","lyrics","queue","download",null]',
-      // An action a newer Wave added.
-      '["shuffle","repeat","karaoke","sleepTimer",null,null,null]',
       '["shuffle",1,"share","sleepTimer",null,null,null]',
       '["shuffle","shuffle","share","sleepTimer",null,null,null]',
       '["shuffle","repeat","share","sleepTimer",null,null,"shuffle"]',
-      // Related and Song menu were never actions of the seven slots.
-      '["related","repeat","share","sleepTimer",null,null,null]',
-      '["songMenu","repeat","share","sleepTimer",null,null,null]',
     ]) {
       assert.deepEqual(readNowPlayingButtons(stored), DEFAULT, stored);
     }
+  });
+
+  test("a slot holding an action this Wave doesn't know (a newer Wave's) reads as empty, the others as saved", () => {
+    assert.deepEqual(
+      readNowPlayingButtons('["shuffle","repeat","karaoke","sleepTimer",null,null,"lyrics"]'),
+      ["shuffle", "repeat", null, "sleepTimer", null, null, "lyrics"],
+    );
+    assert.deepEqual(
+      readNowPlayingButtons('["karaoke","repeat","encore","sleepTimer",null,"karaoke",null]'),
+      [null, "repeat", null, "sleepTimer", null, null, null],
+    );
+    // Related and Song menu were never actions of the seven slots.
+    assert.deepEqual(
+      readNowPlayingButtons('["related","repeat","songMenu","sleepTimer",null,null,null]'),
+      [null, "repeat", null, "sleepTimer", null, null, null],
+    );
   });
 });
 
@@ -187,19 +200,57 @@ describe("the choices a Now Playing slot offers", () => {
       "repeat",
       "share",
       "dislike",
+      "magicQueue",
+      "goToArtist",
+      "goToAlbum",
     ];
     assert.deepEqual(nowPlayingSlotChoices(), choices);
     assert.deepEqual(NOW_PLAYING_ACTIONS, choices);
   });
 
-  test("Dislike is offered, and the default slots don't hold it", () => {
-    assert.equal(nowPlayingSlotChoices().includes("dislike"), true);
-    assert.equal(readNowPlayingButtons(null).includes("dislike"), false);
+  test("Dislike, Magic Queue, Go to Artist and Go to Album are offered, and the default slots hold none of them", () => {
+    for (const action of ["dislike", "magicQueue", "goToArtist", "goToAlbum"] as const) {
+      assert.equal(nowPlayingSlotChoices().includes(action), true, action);
+      assert.equal(readNowPlayingButtons(null).includes(action), false, action);
+    }
   });
 
   test("slots holding Dislike come back as saved", () => {
     const slots = ["lyrics", "dislike", "download", "shuffle", "repeat", null, "queue"] as const;
     assert.deepEqual(readNowPlayingButtons(storedNowPlayingButtons(slots)), slots);
+  });
+
+  test("slots holding Magic Queue, Go to Artist and Go to Album come back as saved", () => {
+    const slots = [
+      "lyrics",
+      "goToArtist",
+      "goToAlbum",
+      null,
+      "repeat",
+      "magicQueue",
+      null,
+    ] as const;
+    const stored = storedNowPlayingButtons(slots);
+    assert.equal(stored, '["lyrics","goToArtist","goToAlbum",null,"repeat","magicQueue",null]');
+    assert.deepEqual(readNowPlayingButtons(stored), slots);
+  });
+
+  test("picking one another slot holds swaps the two, as any action does", () => {
+    assert.deepEqual(
+      editNowPlayingButtons(["lyrics", "goToAlbum", null, null, null, "magicQueue", null], {
+        slot: 1,
+        action: "magicQueue",
+      }),
+      ["lyrics", "magicQueue", null, null, null, "goToAlbum", null],
+    );
+    assert.equal(
+      nowPlayingSlotChoiceHolder(
+        ["lyrics", null, null, null, null, null, "goToArtist"],
+        0,
+        "goToArtist",
+      ),
+      "next",
+    );
   });
 });
 
@@ -408,23 +459,55 @@ describe("setting the Now Playing slots", () => {
 });
 
 describe("how a Now Playing slot shows", () => {
-  test("with a song on, every action's button shows", () => {
+  const SONG_MENU = ["magicQueue", "goToArtist", "goToAlbum"] as const;
+
+  test("with a song on, every action's button shows, the song menu's three while its card offers them", () => {
     for (const action of NOW_PLAYING_ACTIONS)
-      assert.equal(nowPlayingSlotShow(action, "song"), "on");
+      assert.equal(nowPlayingSlotShow(action, "song", ["addToPlaylist", ...SONG_MENU]), "on");
   });
 
-  test("with nothing playing, the slots that need a song, Queue's included, stay empty and the others show", () => {
+  test("Magic Queue, Go to Artist and Go to Album show off when the playing song's card doesn't offer them", () => {
+    // A song with no album, say, or YT Music off for a streamed song's Magic Queue.
+    for (const action of SONG_MENU) {
+      assert.equal(nowPlayingSlotShow(action, "song", []), "off", action);
+      assert.equal(
+        nowPlayingSlotShow(
+          action,
+          "song",
+          SONG_MENU.filter((other) => other !== action),
+        ),
+        "off",
+        action,
+      );
+    }
+    assert.equal(nowPlayingSlotShow("goToAlbum", "song"), "off");
+  });
+
+  test("exactly Magic Queue, Go to Artist and Go to Album run an entry of the playing song's card", () => {
+    assert.deepEqual(NOW_PLAYING_ACTIONS.filter(nowPlayingSlotRunsSongMenu), [...SONG_MENU]);
+  });
+
+  test("the other actions show whatever the card offers", () => {
+    for (const action of NOW_PLAYING_ACTIONS.filter(
+      (other) => !SONG_MENU.some((menu) => menu === other),
+    ))
+      assert.equal(nowPlayingSlotShow(action, "song", []), "on", action);
+  });
+
+  test("with nothing playing, the slots that need a song, Queue's and the song menu's included, stay empty and the others show", () => {
     const shown = NOW_PLAYING_ACTIONS.filter(
-      (action) => nowPlayingSlotShow(action, "nothing") !== "hidden",
+      (action) => nowPlayingSlotShow(action, "nothing", SONG_MENU) !== "hidden",
     );
     assert.deepEqual(shown, ["lyrics", "sleepTimer", "shuffle", "repeat"]);
   });
 
-  test("while an unsearched entry's search runs, Dislike shows off and every other button shows", () => {
-    // No song yet to keep a dislike under.
-    assert.equal(nowPlayingSlotShow("dislike", "unsearched"), "off");
-    for (const action of NOW_PLAYING_ACTIONS.filter((other) => other !== "dislike"))
-      assert.equal(nowPlayingSlotShow(action, "unsearched"), "on");
+  test("while an unsearched entry's search runs, Dislike and the song menu's three show off and every other button shows", () => {
+    // No song yet to keep a dislike under, and no card yet to run an entry of.
+    const off: readonly NowPlayingAction[] = ["dislike", ...SONG_MENU];
+    for (const action of off)
+      assert.equal(nowPlayingSlotShow(action, "unsearched", SONG_MENU), "off", action);
+    for (const action of NOW_PLAYING_ACTIONS.filter((other) => !off.includes(other)))
+      assert.equal(nowPlayingSlotShow(action, "unsearched"), "on", action);
   });
 });
 
