@@ -25,7 +25,7 @@ import {
 import { router } from "@/lib/timingRouter";
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { AccessibilityInfo, Text, View, useWindowDimensions } from "react-native";
-import { IconChevronRight, IconDisc, IconRefresh } from "@tabler/icons-react-native";
+import { IconRefresh } from "@tabler/icons-react-native";
 
 import { artworkUri } from "@wave/client/artworkUri";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
@@ -37,15 +37,12 @@ import { SkeletonGroup, SongCardSkeleton } from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
 import { IconButton } from "@/components/IconButton";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
-import { TextButton } from "@/components/TextButton";
-import { openDj } from "@/dj/routes";
 import { openPlaylist, openStatsSeeAll } from "@/library/routes";
 import { songCount } from "@/library/TrackList";
 import type { PlayableSongRow } from "@wave/client";
 import { Crossfade } from "@/motion/Crossfade";
 import { openPlaylistActions, openTrackActions } from "@/playback/ActionsMenu";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
-import { useThemeColor } from "@/theme/useThemeColor";
 import type { Ranked } from "@/stats/Stats";
 import { openDiscoverMix, openYtPlaylist } from "@/ytmusic/routes";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
@@ -59,6 +56,7 @@ import {
 import { openDiscoverMixActions } from "./DiscoverMixActions";
 import { DiscoverMixesSkeleton } from "./DiscoverMixesSkeleton";
 import { DiscoverSettingsButton } from "./DiscoverSettings";
+import { DjCard } from "./DjCard";
 import { discoverRefreshAccessibility, type DiscoverRefresh } from "./discoverRefresh";
 import {
   startMagicQueueFrom,
@@ -181,32 +179,6 @@ function Discover({ home, title }: SectionProps) {
         )}
       </View>
     </TitledSection>
-  );
-}
-
-/**
- * Discover's DJ card: it opens DJ, where the owner picks the artists a Magic
- * Queue starts from. Hidden with YT Music off, as DJ's queue needs it.
- */
-function DjCard() {
-  const { strings } = useLocalisation();
-  const [foreground, secondary] = useThemeColor(["foreground", "secondary"]);
-  return (
-    <TextButton
-      label={strings.dj.title}
-      accessibilityLabel={`${strings.dj.title}, ${strings.dj.cardDetail}`}
-      onPress={openDj}
-      depth={0.015}
-      className="flex-row items-center rounded-2xl bg-fill"
-      style={{ minHeight: CELL * 9, paddingHorizontal: CELL * 2, gap: CELL * 1.5 }}
-    >
-      <IconDisc size={28} color={foreground} strokeWidth={1.5} />
-      <View className="flex-1" style={{ paddingVertical: CELL * 1.5 }}>
-        <Text className="font-sans text-body font-medium text-foreground">{strings.dj.title}</Text>
-        <Text className="font-sans text-footnote text-secondary">{strings.dj.cardDetail}</Text>
-      </View>
-      <IconChevronRight size={20} color={secondary} strokeWidth={1.5} />
-    </TextButton>
   );
 }
 
