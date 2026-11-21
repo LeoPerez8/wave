@@ -995,6 +995,21 @@ export const OWN_PRESS: Record<string, Exception> = {
   "library/YtExportPicker.tsx#ExportRow": {
     reason: "The Export to YT Music picker's checkbox row.",
   },
+  "dj/DjScreen.tsx#DjScreen": {
+    reason:
+      "DJ's bottom bar summary: the Adjust choices' line and the adjustments icon as one target that opens the Adjust sheet.",
+  },
+  "dj/DjSelection.tsx#SelectionMark": {
+    reason:
+      "A mark of DJ's Your selection row: the tile's picture with a remove badge, a tap unselects it.",
+  },
+  "dj/DjAdjust.tsx#DjAdjustScrim": {
+    reason: "The scrim behind DJ's Adjust sheet: a tap anywhere on it closes the sheet.",
+  },
+  "dj/DjAdjust.tsx#OptionGroup": {
+    reason:
+      "One of the Adjust sheet's option groups: each option is a radio with an underline when chosen.",
+  },
   "home/UpcomingShows.tsx#ShowCard": {
     reason:
       "An Upcoming Shows ticket card: the whole card opens the tickets, its long press opens the show's menu.",

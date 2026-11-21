@@ -10,6 +10,7 @@ import {
   djAlbumTile,
   djFamilyRadioAllowed,
   djGenreTile,
+  djNewToYou,
   djRadioSongAllowed,
   djGrid,
   djOpened,
@@ -641,5 +642,37 @@ describe("a Magic Queue with a DJ seed", () => {
     assert.deepEqual(magicSessionSliders(started(), discover), { faithfulness: 3, popularity: 3 });
     const ordinary = startStreamedMagicQueue(rankedSong("v1", "Artist 1").song!, { id: "m1" });
     assert.deepEqual(magicSessionSliders(ordinary.session, discover), discover);
+  });
+});
+
+describe("DJ's grid marks", () => {
+  test("an artist the Library doesn't have is new to you; albums and genres never are", () => {
+    assert.equal(djNewToYou(djArtistTile("Stranger")!), true);
+    assert.equal(djNewToYou(djArtistTile("Known", 7)!), false);
+    assert.equal(djNewToYou(djAlbumTile({ title: "Record", artist: "Stranger" })!), false);
+    assert.equal(djNewToYou(djGenreTile("Rock")!), false);
+  });
+
+  test("the Play pill counts the selection, in both languages", () => {
+    const en = catalogueOf("en").dj;
+    const pt = catalogueOf("pt-BR").dj;
+    assert.deepEqual([en.play, en.playCount(3), en.newToYou], ["Play", "Play · 3", "New to you"]);
+    assert.deepEqual(
+      [pt.play, pt.playCount(3), pt.newToYou],
+      ["Reproduzir", "Reproduzir · 3", "Novo para você"],
+    );
+  });
+
+  test("the selection row has its heading and its empty line, in both languages", () => {
+    const en = catalogueOf("en").dj;
+    const pt = catalogueOf("pt-BR").dj;
+    assert.deepEqual(
+      [en.selection(2), en.selectionEmpty],
+      ["Your selection · 2", "Tap artists to start"],
+    );
+    assert.deepEqual(
+      [pt.selection(2), pt.selectionEmpty],
+      ["Sua seleção · 2", "Toque em artistas para começar"],
+    );
   });
 });
