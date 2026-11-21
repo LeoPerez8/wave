@@ -1,0 +1,109 @@
+/**
+ * What DJ remembers (docs/spec.md, DJ): the last selection and Adjust
+ * choices a queue was started with, kept on the phone under one setting so
+ * DJ reopens with them.
+ */
+import {
+  DJ_MAX_SELECTED,
+  djArtistTile,
+  djOpened,
+  type DjState,
+  type DjTile,
+  type DjTileKey,
+} from "./dj.ts";
+import { DEFAULT_DJ_SETTINGS, parseDjSettings, type DjSettings } from "./djSettings.ts";
+import { isRecord, readStoredRecord } from "./storedJson.ts";
+
+/** Where DJ's last selection and Adjust choices are kept, on this device only (not synced). */
+export const DJ_REMEMBERED_SETTING = "dj.remembered";
+
+/** The DJ a queue was last started with. */
+export interface DjRemembered {
+  /** The selected tiles, in the order they were selected. */
+  readonly tiles: readonly DjTile[];
+  readonly settings: DjSettings;
+}
+
+/** [tile] as it's kept: its kind and what that kind needs to be drawn again. */
+const storedTile = (tile: DjTile): Readonly<Record<string, unknown>> => ({
+  kind: tile.kind,
+  name: tile.name,
+});
+
+const sameSettings = (a: DjSettings, b: DjSettings): boolean =>
+  a.variety === b.variety &&
+  a.discovery === b.discovery &&
+  a.popularity === b.popularity &&
+  a.newReleases === b.newReleases;
+
+/** What to keep for [remembered]: null (nothing) with no selection and the default choices. */
+export const storedDjRemembered = ({ tiles, settings }: DjRemembered): string | null =>
+  tiles.length === 0 && sameSettings(settings, DEFAULT_DJ_SETTINGS)
+    ? null
+    : JSON.stringify({ version: 1, tiles: tiles.map(storedTile), settings });
+
+/** How each kind of tile is read back from what `storedTile` kept; null for one that can't be drawn. */
+const TILE_READERS: { readonly [K in DjTile["kind"]]: (kept: StoredTile) => DjTile | null } = {
+  // The Library's artist is found again as DJ reopens (`djReopened`): an id kept here could go stale.
+  artist: ({ name }) => (typeof name === "string" ? djArtistTile(name) : null),
+};
+
+type StoredTile = Readonly<Record<string, unknown>>;
+
+/** A kept tile, by its kind; null for a kind this Wave doesn't know or a tile it can't draw. */
+const readTile = (kept: unknown): DjTile | null => {
+  if (!isRecord(kept) || typeof kept["kind"] !== "string") return null;
+  if (!Object.hasOwn(TILE_READERS, kept["kind"])) return null;
+  return TILE_READERS[kept["kind"] as DjTile["kind"]](kept);
+};
+
+/**
+ * DJ's last selection and Adjust choices as kept on the phone ([stored],
+ * null for none). Nothing stored, or a value that can't be read, is no
+ * selection and the default choices. A tile that can't be drawn, of a kind
+ * this Wave doesn't know or kept twice is left out, as is any past
+ * `DJ_MAX_SELECTED`; a choice that isn't one reads as its default.
+ */
+export const readDjRemembered = (stored: string | null): DjRemembered => {
+  const { tiles, settings } = readStoredRecord(stored);
+  const read = new Map<DjTileKey, DjTile>();
+  for (const kept of Array.isArray(tiles) ? tiles : []) {
+    if (read.size >= DJ_MAX_SELECTED) break;
+    const tile = readTile(kept);
+    if (tile !== null && !read.has(tile.key)) read.set(tile.key, tile);
+  }
+  return { tiles: [...read.values()], settings: parseDjSettings(settings) };
+};
+
+/**
+ * DJ as it reopens: the fresh [grid] with the [remembered] tiles selected,
+ * in the order they were selected. A remembered tile the fresh grid wouldn't
+ * show is in it anyway, ahead of the grid's own tiles, so the selection is
+ * the first thing seen; it shows the Library's artist when [artists] (the
+ * Library's) has them. A tile remembered twice is selected once, and no more
+ * are selected than a DJ seed holds. Nothing remembered is the grid as it
+ * opens (`djOpened`).
+ */
+export const djReopened = ({
+  grid,
+  remembered,
+  artists = [],
+}: {
+  readonly grid: readonly DjTile[];
+  readonly remembered: readonly DjTile[];
+  readonly artists?: readonly { readonly id: number; readonly name: string }[];
+}): DjState => {
+  const fresh = new Set(grid.map((tile) => tile.key));
+  const library = new Map<DjTileKey, DjTile>();
+  for (const artist of artists) {
+    const tile = djArtistTile(artist.name, artist.id);
+    if (tile !== null && !library.has(tile.key)) library.set(tile.key, tile);
+  }
+  const selected = new Map<DjTileKey, DjTile>();
+  for (const tile of remembered) {
+    if (selected.size >= DJ_MAX_SELECTED) break;
+    if (!selected.has(tile.key)) selected.set(tile.key, library.get(tile.key) ?? tile);
+  }
+  const added = [...selected.values()].filter((tile) => !fresh.has(tile.key));
+  return { ...djOpened([...added, ...grid]), selected: [...selected.keys()] };
+};
