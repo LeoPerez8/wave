@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   SPOTIFY_ACCOUNT_SIGNED_OUT,
   SPOTIFY_SIGN_IN_FAILURE_LINES,
+  readSpotifyWebProfile,
   spotifyAccountView,
   spotifyLibraryFailure,
   stepSpotifyAccount,
@@ -115,4 +116,20 @@ describe("SPOTIFY_SIGN_IN_FAILURE_LINES", () => {
   test("says Spotify changed something the way the From Spotify picker does", () => {
     assert.equal(spotifyLibraryFailure("changed").line, SPOTIFY_SIGN_IN_FAILURE_LINES.changed);
   });
+});
+test("the Spotify Web API profile gives Settings only a display name and photo", () => {
+  assert.deepEqual(
+    readSpotifyWebProfile({
+      id: "ana123",
+      display_name: "Ana",
+      images: [{ url: "https://i.scdn.co/image/ana" }],
+      email: "ana@example.com",
+    }),
+    { name: "Ana", photoUrl: "https://i.scdn.co/image/ana" },
+  );
+  assert.deepEqual(readSpotifyWebProfile({ id: "ana123", display_name: null, images: [] }), {
+    name: "ana123",
+    photoUrl: null,
+  });
+  assert.equal(readSpotifyWebProfile(null), null);
 });

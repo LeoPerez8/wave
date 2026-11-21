@@ -2,7 +2,13 @@
  * Main's side of the bridge for YouTube Music's pages, Discover and the Magic Queue
  * (`YtFeatures`): each call's arguments are checked before use, and songs go back as rows.
  */
-import { discoverMixCaption, isSliderStep, ytTrackId, type YtAlbumSong } from "@wave/core";
+import {
+  discoverMixCaption,
+  isSliderStep,
+  ytTrackId,
+  type YtAlbumSong,
+  type YtArtistAlbum,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import type { BridgeCall, BridgeContract, Page } from "../../shared/bridge.ts";
@@ -32,7 +38,13 @@ type YtFeatureCall =
   | "magicQueue.start"
   | "magicQueue.startStreamed"
   | "magicQueue.view"
-  | "magicQueue.retry";
+  | "magicQueue.retry"
+  | "playlistSuggestions.view"
+  | "playlistSuggestions.add"
+  | "playlistSuggestions.dismiss"
+  | "playlistSuggestions.refresh"
+  | "playlistSuggestions.retry"
+  | "playlistSuggestions.close";
 
 export type YtFeatureHandlers = {
   readonly [C in YtFeatureCall]: (
@@ -45,6 +57,12 @@ export type YtFeatureHandlers = {
 };
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
+
+const playlistIdOf = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+/** A suggestion's key, as the visit makes them. */
+const offerKeyOf = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0 && value.length <= 100;
 
 /** A Library song clicked in Search (docs/spec.md, story 47). */
 export const playSearchSong = (scope: BrowseScope, index: number) =>
@@ -80,8 +98,17 @@ export const createYtFeatureHandlers = (
       : refuse("yt.search", "invalid query"),
   "yt.artist": ([id]) =>
     browseId(id)
-      ? featuresCall(async ({ pages }) => {
+      ? featuresCall(async ({ pages, libraryReleases }) => {
           const { status, page } = await pages.artist(id);
+          const inLibrary =
+            page === null
+              ? new Map<string, number>()
+              : libraryReleases(page.name, [...page.albums, ...page.singles]);
+          const released = (releases: readonly YtArtistAlbum[]) =>
+            releases.map((release) => ({
+              ...release,
+              libraryId: inLibrary.get(release.browseId) ?? null,
+            }));
           return {
             status,
             page:
@@ -91,8 +118,8 @@ export const createYtFeatureHandlers = (
                     name: page.name,
                     artworkUrl: page.artworkUrl ?? null,
                     songs: rows(page.songs),
-                    albums: page.albums,
-                    singles: page.singles,
+                    albums: released(page.albums),
+                    singles: released(page.singles),
                     similar: page.similar ?? [],
                   },
           };
@@ -158,9 +185,9 @@ export const createYtFeatureHandlers = (
       return {
         status,
         mixes: mixes.map((mix) => {
-          // Familiar songs the Library has are its rows; the others stream.
-          const items = mix.songs.flatMap((song) =>
-            song.source === "stream" ? [ytRow(song.song)] : browseSongs(db, [song.track.id]),
+          // Its Library songs among its new ones, as they play (`discover.playMix`).
+          const items = (discover.placed(mix.id) ?? []).flatMap((song) =>
+            song.source === "stream" ? [ytRow(song.song)] : browseSongs(db, [song.track]),
           );
           // Its tile's lead artists and cover, as the phone's (Core's `discoverMixCaption`).
           const { artists, artworkUrl } = discoverMixCaption(mix);
@@ -187,13 +214,14 @@ export const createYtFeatureHandlers = (
           return discover.settings();
         })
       : refuse("discover.setSettings", "invalid settings"),
-  "discover.playMix": ([id, index]) =>
+  "discover.playMix": ([id, index, shuffle]) =>
     typeof id === "string" &&
     id.length <= 200 &&
     typeof index === "number" &&
     Number.isSafeInteger(index) &&
-    index >= 0
-      ? featuresCall(({ playMix }) => playMix(id, index))
+    index >= 0 &&
+    (shuffle === undefined || typeof shuffle === "boolean")
+      ? featuresCall(({ playMix }) => playMix(id, index, shuffle))
       : refuse("discover.playMix", "invalid mix or song"),
   "magicQueue.start": ([target]) =>
     validTarget(target)
@@ -210,4 +238,28 @@ export const createYtFeatureHandlers = (
       : refuse("magicQueue.startStreamed", "invalid song"),
   "magicQueue.view": () => featuresCall(({ magicQueue }) => magicQueue.view()),
   "magicQueue.retry": () => featuresCall(({ magicQueue }) => magicQueue.retry()),
+  "playlistSuggestions.view": ([playlistId, sources]) =>
+    playlistIdOf(playlistId) && typeof sources === "string" && sources.length <= 200
+      ? featuresCall(({ playlistSuggestions }) => playlistSuggestions.view(playlistId, sources))
+      : refuse("playlistSuggestions.view", "invalid playlist"),
+  "playlistSuggestions.add": ([playlistId, key]) =>
+    playlistIdOf(playlistId) && offerKeyOf(key)
+      ? featuresCall(({ playlistSuggestions }) => playlistSuggestions.add(playlistId, key))
+      : refuse("playlistSuggestions.add", "invalid offer"),
+  "playlistSuggestions.dismiss": ([playlistId, key]) =>
+    playlistIdOf(playlistId) && offerKeyOf(key)
+      ? featuresCall(({ playlistSuggestions }) => playlistSuggestions.dismiss(playlistId, key))
+      : refuse("playlistSuggestions.dismiss", "invalid offer"),
+  "playlistSuggestions.refresh": ([playlistId]) =>
+    playlistIdOf(playlistId)
+      ? featuresCall(({ playlistSuggestions }) => playlistSuggestions.refresh(playlistId))
+      : refuse("playlistSuggestions.refresh", "invalid playlist"),
+  "playlistSuggestions.retry": ([playlistId, refill]) =>
+    playlistIdOf(playlistId) && typeof refill === "boolean"
+      ? featuresCall(({ playlistSuggestions }) => playlistSuggestions.retry(playlistId, refill))
+      : refuse("playlistSuggestions.retry", "invalid playlist"),
+  "playlistSuggestions.close": ([playlistId]) =>
+    playlistIdOf(playlistId)
+      ? featuresCall(({ playlistSuggestions }) => playlistSuggestions.close(playlistId))
+      : refuse("playlistSuggestions.close", "invalid playlist"),
 });

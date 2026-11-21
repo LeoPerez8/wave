@@ -1,7 +1,7 @@
 import {
+  PLAYLIST_SONG_SORTS,
+  playlistSongSortLabelFor,
   sortPlaylistSongs,
-  SONG_SORTS,
-  songSortLabelFor,
   type PlaylistSongSort,
   type ReleaseAnswer,
 } from "@wave/core";
@@ -46,20 +46,8 @@ export function PlaylistSongSortButton({ id }: { id: string }) {
   const setting = playlistSongSetting(id);
   const current = usePlaylistSongSort(id);
   const { strings, language } = useLocalisation();
-  const choices: readonly PlaylistSongSort[] = [
-    { key: "custom", descending: false },
-    ...SONG_SORTS,
-    { key: "releaseDate", descending: false },
-    { key: "releaseDate", descending: true },
-  ];
-  const label = (sort: PlaylistSongSort) =>
-    sort.key === "custom"
-      ? strings.playlists.sorts.custom
-      : sort.key === "releaseDate"
-        ? sort.descending
-          ? strings.playlists.releaseNewest
-          : strings.playlists.releaseOldest
-        : songSortLabelFor(language)({ ...sort, key: sort.key });
+  const choices = PLAYLIST_SONG_SORTS;
+  const label = playlistSongSortLabelFor(language);
   return (
     <IconButton
       icon={IconArrowsSort}

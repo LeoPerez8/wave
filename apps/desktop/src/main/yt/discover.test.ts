@@ -204,3 +204,50 @@ test("a mix row Home doesn't show isn't built and reads no radio", async () => {
     [["artist-mixes", "Daft Punk"]],
   );
 });
+
+test("a mix's page lists its Library songs among its new ones, a song downloaded since as its file", async () => {
+  const library = {
+    trackIds: [1, 2, 3, 4, 5],
+    artists: [{ id: 1, name: "Daft Punk", songCount: 5 }],
+    songs: Array.from({ length: 5 }, (_, n) => ({
+      id: n + 1,
+      title: `Local ${n}`,
+      artist: "Daft Punk",
+      artistIds: [1],
+      durationMs: 200_000,
+      addedAt: 0,
+      genre: "Electronic",
+    })),
+  };
+  const downloaded = new Map<string, number>();
+  const { discover } = setup({
+    library: () => library,
+    readSettings: () => ({ level: 1, faithfulness: 1, popularity: 5 }),
+    track: (id) => library.trackIds.includes(id),
+    find: (song) => downloaded.get(song.videoId) ?? null,
+  });
+  const mix = (await discover.mixes()).mixes[0]!;
+  const firstNew = mix.songs.findIndex((song) => song.source === "stream");
+  const familiar = mix.songs.flatMap((song) => (song.source === "library" ? [song.track.id] : []));
+  assert.ok(firstNew >= 0 && familiar.length > 0, "the level blends Library songs in");
+
+  // As last built: the Library songs where Core's blend put them, the new ones streamed.
+  assert.deepEqual(
+    discover.placed(mix.id),
+    mix.songs.map((song) =>
+      song.source === "stream" ? song : { source: "library", track: song.track.id },
+    ),
+  );
+
+  // A new song downloaded since plays its file; a Library song gone from the Library is left out.
+  const song = mix.songs[firstNew]!;
+  assert.equal(song.source, "stream");
+  if (song.source === "stream") downloaded.set(song.song.videoId, 77);
+  library.trackIds = library.trackIds.filter((id) => id !== familiar[0]);
+  const placed = discover.placed(mix.id)!;
+  assert.equal(placed.length, mix.songs.length - 1);
+  assert.ok(placed.some((found) => found.source === "library" && found.track === 77));
+  assert.ok(!placed.some((found) => found.source === "library" && found.track === familiar[0]));
+
+  assert.equal(discover.placed("artist:gone"), undefined);
+});
