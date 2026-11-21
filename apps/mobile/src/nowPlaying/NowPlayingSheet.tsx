@@ -6,6 +6,7 @@ import {
   NOW_PLAYING_TRANSPORT_SLOTS,
   isUnsearchedTrackId,
   nowPlayingPageSwipesEnabled,
+  nowPlayingSlotRunsSongMenu,
   nowPlayingSlotShow,
   nowPlayingSongMenuShow,
   type NowPlayingSlotSong,
@@ -74,6 +75,7 @@ import {
 import { onRelatedOpened } from "./openRelated";
 import { EditSlot, SlotButton, SlotDragPreview, type SlotContext } from "./SlotButtons";
 import { useNowPlayingSlotDrag } from "./slotDrag";
+import { usePlayingSongMenu } from "./songMenuSlots";
 import { EDITING_OPACITY, Transport } from "./Transport";
 import {
   nowPlayingSongLookup,
@@ -326,6 +328,13 @@ export function NowPlayingSheet() {
       ytSong,
     );
   };
+  const buttons = useNowPlayingButtons();
+  // The playing song's card, read while a slot runs one of its entries (Magic Queue, Go to).
+  const slotMenu = usePlayingSongMenu(
+    trackId,
+    ytSong,
+    shown && buttons.some((action) => action !== null && nowPlayingSlotRunsSongMenu(action)),
+  );
   const slotContext: SlotContext = {
     trackId,
     ytSong,
@@ -336,6 +345,7 @@ export function NowPlayingSheet() {
     openQueue,
     share,
     edit: startEditing,
+    runSongMenu: slotMenu.run,
   };
   const slotSong: NowPlayingSlotSong =
     item === null
@@ -343,7 +353,6 @@ export function NowPlayingSheet() {
       : trackId !== null && isUnsearchedTrackId(trackId)
         ? "unsearched"
         : "song";
-  const buttons = useNowPlayingButtons();
   const applySlotMove = useCallback(
     (from: number, to: number) => moveSavedNowPlayingButton(from, to),
     [],
@@ -354,7 +363,8 @@ export function NowPlayingSheet() {
   const slotButton = (slot: number) => {
     const action = buttons[slot] ?? null;
     if (editing) return <EditSlot key={slot} slot={slot} action={action} drag={slotDrag} />;
-    const show = action === null ? "hidden" : nowPlayingSlotShow(action, slotSong);
+    const show =
+      action === null ? "hidden" : nowPlayingSlotShow(action, slotSong, slotMenu.actions);
     if (action === null || show === "hidden") return null;
     return <SlotButton key={slot} action={action} off={show === "off"} context={slotContext} />;
   };

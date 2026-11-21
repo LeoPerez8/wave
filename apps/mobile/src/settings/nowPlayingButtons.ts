@@ -79,6 +79,15 @@ const ACTION_LABELS: Readonly<Record<NowPlayingAction, string>> = {
   get dislike() {
     return currentLocalisation().strings.itemActions.labels.dislike;
   },
+  get magicQueue() {
+    return currentLocalisation().strings.itemActions.labels.magicQueue;
+  },
+  get goToArtist() {
+    return currentLocalisation().strings.itemActions.labels.goToArtist;
+  },
+  get goToAlbum() {
+    return currentLocalisation().strings.itemActions.labels.goToAlbum;
+  },
 };
 
 /** A slot's name for what it holds: its action's, or None. */
