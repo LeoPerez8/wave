@@ -220,6 +220,15 @@ and `tags.writeSong`. Its `downloadsChanged` events trigger journal reads. Souls
 are sealed by main's `seal/unseal` host calls through Electron's keyring; without a keyring they
 stay in memory. Rebuild the JAR with `pnpm --filter @wave/desktop build:jvm` after Kotlin changes.
 
+The Downloads page reads `downloads.rows(offset, limit, failedShown)`: Core's `downloadListRows`
+then `failedDownloadRows`, the failed songs only while shown. `downloads.move` takes a waiting
+song or a group onto another's place (`to`) or one step (`step`), and `downloads.failedReason`
+retries or removes every song that failed for one reason. `downloads.view()` carries the run's
+`panel`, the `summary` line and `pauseNotice`; main follows Core's `ytThrottle` and has the JVM
+pause YouTube's jobs (`downloads.pauseYoutube`). `e2e/downloadsPage.spec.ts` checks the page
+offline with 1,205 queued songs: the groups, a bounded list, a group and a song moved by drag
+and by Move Up, and the failed section. Its screenshots are `downloads-<step>-<platform>.png`.
+
 `e2e/downloads.spec.ts` checks a missing Search song waiting offline and resuming through the real
 JVM, and a live YouTube download with its tags read back and its Library entry visible. The live
 check stops after search on CI; inspect its annotations if YouTube refuses the machine.

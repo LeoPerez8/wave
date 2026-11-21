@@ -11,6 +11,7 @@ import { selectFavoriteTrackIds } from "@wave/client/db/playHistory";
 import {
   albumDownloadOrigin,
   playlistDownloadOrigin,
+  type AppLanguage,
   type Catalogue,
   type SoulseekCandidate,
   type TagWriteReport,
@@ -55,6 +56,8 @@ export class Downloads extends Context.Service<Downloads, DesktopDownloadsShape>
 
 export interface DownloadsLayerOptions {
   readonly catalogue: Catalogue;
+  /** [catalogue]'s language; English by default. */
+  readonly language?: () => AppLanguage;
   readonly platform: string;
   /** Where downloads go before any folder is picked or added. */
   readonly musicFolder: string;
@@ -150,6 +153,7 @@ export const downloadsLayer = (options: DownloadsLayerOptions) =>
         get catalogue() {
           return options.catalogue;
         },
+        ...(options.language === undefined ? {} : { language: options.language }),
         favorites: () => new Set(selectFavoriteTrackIds(db)),
         store: {
           read: (key) => preference(db, key) ?? null,

@@ -2391,6 +2391,24 @@ test("main refuses download calls with bad songs, actions, ids or pages", async 
       await assert.rejects(call("downloads.retry", [7]), /Refused/);
       await assert.rejects(call("downloads.cancel", "abcdefghijk"), /Refused/);
       await assert.rejects(call("downloads.rows", 0, 10_000), /Refused/);
+      await assert.rejects(call("downloads.rows", 0, 10, "yes"), /Refused/);
+      await assert.rejects(
+        call("downloads.move", { kind: "song", from: "../journal", step: 1 }),
+        /Refused/,
+      );
+      await assert.rejects(
+        call("downloads.move", { kind: "group", from: "songs", step: 2 }),
+        /Refused/,
+      );
+      await assert.rejects(call("downloads.move", { kind: "group", from: "songs" }), /Refused/);
+      await assert.rejects(
+        call("downloads.move", { kind: "group", from: "songs", to: "album:7", step: 1 }),
+        /Refused/,
+      );
+      await assert.rejects(call("downloads.failedReason", "Not found online", "delete"), /Refused/);
+      // A move that names nothing waiting is taken and does nothing.
+      await call("downloads.move", { kind: "group", from: "songs", step: 1 });
+      await call("downloads.failedReason", "Not found online", "retry");
       await assert.rejects(call("downloads.setBestQuality", "on"), /Refused/);
     } finally {
       await runtime.dispose();

@@ -152,6 +152,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.downloads.pickFolder",
       "wave.downloads.bestQuality",
       "wave.downloads.setBestQuality",
+      "wave.downloads.move",
+      "wave.downloads.failedReason",
       "wave.account.view",
       "wave.account.signIn",
       "wave.account.cancelSignIn",
