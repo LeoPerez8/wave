@@ -267,6 +267,11 @@ const MIGRATIONS: readonly Migration[] = [
       )`,
     ],
   },
+  {
+    // When Restore or Undo last brought an entry back (Core's `mergePlaylistEntries`).
+    id: "0014_playlist_entry_restores",
+    statements: ["ALTER TABLE playlist_entries ADD COLUMN restored_at INTEGER"],
+  },
 ];
 
 /**

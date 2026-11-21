@@ -58,6 +58,8 @@ interface SyncPlaylistEntryFields {
   readonly ytSong: string | null;
   readonly addedAt: number;
   readonly removedAt?: number | null;
+  /** When Restore or Undo last brought the entry back (Core's `SyncEntryRow`). */
+  readonly restoredAt?: number | null;
 }
 
 /** A star; its id is the song's recording key. */
@@ -192,6 +194,7 @@ export const SYNC_FIELDS: {
     ytSong: "text?",
     removedAt: "int?",
     addedAt: "int",
+    restoredAt: "int?",
   },
   favorites: { addedAt: "int" },
   preferences: { value: "text?" },

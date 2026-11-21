@@ -137,6 +137,7 @@ describe("readPullPage", () => {
           ytSong: null,
           removedAt: null,
           addedAt: 12,
+          restoredAt: null,
         },
       ],
       favorites: [{ id: KEY, changedAt: 13, phoneId: "b", deleted: false, addedAt: 13 }],

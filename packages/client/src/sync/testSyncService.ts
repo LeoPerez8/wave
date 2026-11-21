@@ -8,7 +8,7 @@
 import {
   EMPTY_SYNC_TABLES,
   mergePlays,
-  mergeRows,
+  mergeTableRows,
   SYNC_TABLE_NAMES,
   type SyncPlayRow,
   type SyncTables,
@@ -76,7 +76,8 @@ export const testSyncService = (options: { readonly pageSize?: number } = {}): T
       const merged =
         table === "plays"
           ? mergePlays(current as SyncPlayRow[], incoming as SyncPlayRow[]).added
-          : mergeRows(
+          : mergeTableRows(
+              table,
               current as SyncTables["songs"][number][],
               incoming as SyncTables["songs"][number][],
             ).accepted;
@@ -108,7 +109,10 @@ export const testSyncService = (options: { readonly pageSize?: number } = {}): T
       tables[table] = page
         .filter((entry) => entry.table === table)
         .map((entry) =>
-          "deleted" in entry.row && entry.row.deleted
+          // As the service: a tombstone carries no fields, a Graveyard one keeps them.
+          "deleted" in entry.row &&
+          entry.row.deleted &&
+          !("removedAt" in entry.row && typeof entry.row.removedAt === "number")
             ? {
                 id: entry.row.id,
                 changedAt: entry.row.changedAt,
