@@ -11,6 +11,7 @@ import {
   titleMarkColours,
   titleMarkFontScale,
   titleMarkLayout,
+  titleMarkPlacement,
   type ThemeChoice,
 } from "./index.ts";
 
@@ -97,6 +98,44 @@ describe("titleMarkLayout", () => {
   test("the stroke keeps the logo's proportions", () => {
     const { width, stroke } = titleMarkLayout({ fontSize: 36, lineHeight: 44 });
     assert.ok(Math.abs(stroke / width - LOGO_WAVES.stroke / (2 + LOGO_WAVES.stroke)) < 1e-9);
+  });
+});
+
+describe("titleMarkPlacement", () => {
+  const type = { fontSize: 36, lineHeight: 44 };
+  // Android 14 at font scale 2.0 draws 36sp at 41.49dp, not 72dp, and 44sp at 48.8dp:
+  // capitals 30.18dp tall, on a baseline 38.4dp down the line.
+  const line = { capHeight: 30.18, height: 48.8, baseline: 38.4 };
+
+  test("the waves match the word as the phone drew it, not the font scale", () => {
+    const placement = titleMarkPlacement({ line, fontScale: 2, type });
+    assert.ok(placement !== undefined);
+    assert.ok(Math.abs(placement.height - 30.18) < 1e-9);
+    // The logo is 2.2 units wide and 1.06 tall.
+    assert.ok(Math.abs(placement.width - 62.64) < 0.01);
+    // The baseline is 38.4dp down a 48.8dp line: 10.4dp above its bottom.
+    assert.ok(Math.abs(placement.baseline - 10.4) < 1e-9);
+    // The gap keeps its share of the drawn font size: 8dp at 36dp, so 9.22dp at 41.49dp.
+    assert.ok(Math.abs(placement.gap - 9.22) < 0.01);
+  });
+
+  test("a measured line wins at the standard font scale too", () => {
+    const placement = titleMarkPlacement({ line, fontScale: 1, type });
+    assert.ok(placement !== undefined);
+    assert.ok(Math.abs(placement.height - 30.18) < 1e-9);
+  });
+
+  test("before the line is measured, the standard font scale shows Inter's own size", () => {
+    assert.deepEqual(
+      titleMarkPlacement({ line: undefined, fontScale: 1, type }),
+      titleMarkLayout(type),
+    );
+  });
+
+  test("before the line is measured, any other font scale shows no waves", () => {
+    assert.equal(titleMarkPlacement({ line: undefined, fontScale: 1.3, type }), undefined);
+    assert.equal(titleMarkPlacement({ line: undefined, fontScale: 2, type }), undefined);
+    assert.equal(titleMarkPlacement({ line: undefined, fontScale: 0.85, type }), undefined);
   });
 });
 

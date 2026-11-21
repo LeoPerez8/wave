@@ -1,10 +1,17 @@
-import { TITLE_MARK_TOKENS, titleMarkFontScale, titleMarkLayout } from "@wave/core";
+import {
+  TITLE_MARK_TOKENS,
+  titleMarkFontScale,
+  titleMarkPlacement,
+  type TitleLine,
+  type TitleMarkLayout,
+} from "@wave/core";
 import { useScrollToTop } from "expo-router";
-import { useRef, type ReactElement, type ReactNode } from "react";
+import { useRef, useState, type ReactElement, type ReactNode } from "react";
 import {
   ScrollView,
   type ScrollViewInstance,
   Text,
+  type TextLayoutEvent,
   View,
   type RefreshControlProps,
   useWindowDimensions,
@@ -36,20 +43,21 @@ type Props = {
 /** The large title's type (`--text-large-title` in global.css), in dp at the standard font scale. */
 const LARGE_TITLE = { fontSize: 36, lineHeight: 44 } as const;
 
+/** The large title's classes and tracking, the same with and without the waves. */
+const TITLE_CLASS = "font-sans text-large-title font-light text-foreground";
+const TITLE_STYLE = { letterSpacing: -0.6 } as const;
+
 /** The width a title line's trailing control takes: an `IconButton`'s 48dp target. */
 const ACTION_WIDTH = 48;
 
 /**
  * Wave's two waves before a large title's word, the top one in the primary and
  * the bottom one in the secondary: as tall as the word's capitals, on its
- * baseline, at the font scale the word is drawn at ([fontScale]).
+ * baseline, where [placement] puts them beside the word as drawn.
  */
-function TitleWaves({ fontScale }: { fontScale: number }) {
+function TitleWaves({ placement }: { placement: TitleMarkLayout }) {
   const [top, bottom] = useThemeColor([TITLE_MARK_TOKENS.top, TITLE_MARK_TOKENS.bottom]);
-  const { width, height, gap, baseline } = titleMarkLayout({
-    fontSize: LARGE_TITLE.fontSize * fontScale,
-    lineHeight: LARGE_TITLE.lineHeight * fontScale,
-  });
+  const { width, height, gap, baseline } = placement;
   return (
     <View
       accessibilityElementsHidden
@@ -62,10 +70,53 @@ function TitleWaves({ fontScale }: { fontScale: number }) {
 }
 
 /**
+ * Home's title: Wave's two waves, then the word. The waves take their size
+ * from the word's line as the phone drew it, since Android scales large text
+ * by less than the font scale, and the pair stops growing with the font scale
+ * where it fills the line ([room], in dp). Until the line is measured at a
+ * font scale other than the standard one, the title stays unseen, so the word
+ * never shows alone and then moves aside.
+ */
+function WavesTitle({ title, room }: { title: string; room: number }) {
+  const { fontScale } = useWindowDimensions();
+  const [line, setLine] = useState<TitleLine>();
+  const placement = titleMarkPlacement({ line, fontScale, type: LARGE_TITLE });
+  const onTextLayout = ({ nativeEvent }: TextLayoutEvent) => {
+    const drawn = nativeEvent.lines[0];
+    if (drawn === undefined) return;
+    // The line's ascender is the way from its top down to its baseline.
+    setLine((last) =>
+      last?.capHeight === drawn.capHeight &&
+      last.height === drawn.height &&
+      last.baseline === drawn.ascender
+        ? last
+        : { capHeight: drawn.capHeight, height: drawn.height, baseline: drawn.ascender },
+    );
+  };
+  return (
+    <View className="flex-row items-end" style={{ opacity: placement === undefined ? 0 : 1 }}>
+      {placement === undefined ? null : <TitleWaves placement={placement} />}
+      <Text
+        accessibilityRole="header"
+        className={TITLE_CLASS}
+        style={TITLE_STYLE}
+        maxFontSizeMultiplier={titleMarkFontScale({
+          fontScale,
+          fontSize: LARGE_TITLE.fontSize,
+          room,
+        })}
+        onTextLayout={onTextLayout}
+      >
+        {title}
+      </Text>
+    </View>
+  );
+}
+
+/**
  * A tab screen's quiet large title, with at most one trailing control on its
  * line. Given [titleLongPress], a long press on the title opens the screen's
- * options next to it. With [waves], Wave's two waves lead the title, and the
- * pair stops growing with the font scale where it fills the line.
+ * options next to it. With [waves], Wave's two waves lead the title.
  */
 export function LargeTitle({
   title,
@@ -79,21 +130,6 @@ export function LargeTitle({
   titleLongPress?: TitleLongPress | undefined;
 }) {
   const window = useWindowDimensions();
-  const fontScale = titleMarkFontScale({
-    fontScale: window.fontScale,
-    fontSize: LARGE_TITLE.fontSize,
-    room: window.width - 2 * grid.margin - (action === undefined ? 0 : ACTION_WIDTH),
-  });
-  const text = (
-    <Text
-      accessibilityRole="header"
-      className="font-sans text-large-title font-light text-foreground"
-      style={{ letterSpacing: -0.6 }}
-      {...(waves ? { maxFontSizeMultiplier: fontScale } : {})}
-    >
-      {title}
-    </Text>
-  );
   return (
     <View
       className="flex-row items-end justify-between pb-4"
@@ -101,12 +137,14 @@ export function LargeTitle({
     >
       <TitlePress titleLongPress={titleLongPress}>
         {waves ? (
-          <View className="flex-row items-end">
-            <TitleWaves fontScale={fontScale} />
-            {text}
-          </View>
+          <WavesTitle
+            title={title}
+            room={window.width - 2 * grid.margin - (action === undefined ? 0 : ACTION_WIDTH)}
+          />
         ) : (
-          text
+          <Text accessibilityRole="header" className={TITLE_CLASS} style={TITLE_STYLE}>
+            {title}
+          </Text>
         )}
       </TitlePress>
       {action}
