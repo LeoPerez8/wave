@@ -132,8 +132,9 @@ export default function RootLayout() {
     };
   }, [granted, genreLookups]);
 
+  // Mood lookups send candidate titles and artists to Deezer and ReccoBeats: "Fix songs online".
   useEffect(() => {
-    if (!granted) return;
+    if (!granted || !genreLookups) return;
     let disposed = false;
     let stop: (() => void) | undefined;
     const cancel = afterFirstSettled("djMoodFeatures", () => {
@@ -146,7 +147,7 @@ export default function RootLayout() {
       cancel();
       stop?.();
     };
-  }, [granted]);
+  }, [granted, genreLookups]);
 
   // Library songs' mood features, by their file's ISRC tag, while Fix songs online is on.
   useEffect(() => {

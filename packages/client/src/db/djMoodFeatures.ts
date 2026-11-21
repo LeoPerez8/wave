@@ -17,14 +17,24 @@ export interface DjMoodLookupSong {
   readonly durationMs: number | null;
 }
 
+/** One page of candidate songs due for a mood lookup. */
+export interface DjMoodLookupPage {
+  /** The songs whose stored entry reads, in video-id order. */
+  readonly songs: DjMoodLookupSong[];
+  /** Video ids whose stored entry no longer reads; the worker saves them as misses. */
+  readonly unreadable: string[];
+  /** The page's last video id, read or not, as the next page's cursor; null when it is empty. */
+  readonly last: string | null;
+}
+
 /** Candidate songs with no answer, or an expired miss, in video-id order. */
 export const pendingDjMoodSongs = (
   db: LibraryDatabase,
   after: string,
   now: number,
   limit = DJ_MOOD_PAGE_SIZE,
-): DjMoodLookupSong[] =>
-  db
+): DjMoodLookupPage => {
+  const rows = db
     .select({ videoId: candidateSongs.videoId, song: candidateSongs.song })
     .from(candidateSongs)
     .leftJoin(djMoodFeatures, eq(djMoodFeatures.videoId, candidateSongs.videoId))
@@ -42,20 +52,22 @@ export const pendingDjMoodSongs = (
     )
     .orderBy(asc(candidateSongs.videoId))
     .limit(limit)
-    .all()
-    .flatMap(({ videoId, song }) => {
-      const parsed = readPlaylistYtSong(song);
-      return parsed === null
-        ? []
-        : [
-            {
-              videoId,
-              title: parsed.title,
-              artists: parsed.artists,
-              durationMs: parsed.durationMs,
-            },
-          ];
-    });
+    .all();
+  const songs: DjMoodLookupSong[] = [];
+  const unreadable: string[] = [];
+  for (const { videoId, song } of rows) {
+    const parsed = readPlaylistYtSong(song);
+    if (parsed === null) unreadable.push(videoId);
+    else
+      songs.push({
+        videoId,
+        title: parsed.title,
+        artists: parsed.artists,
+        durationMs: parsed.durationMs,
+      });
+  }
+  return { songs, unreadable, last: rows.at(-1)?.videoId ?? null };
+};
 
 export interface DjMoodFeatureWrite {
   readonly videoId: string;
@@ -64,41 +76,46 @@ export interface DjMoodFeatureWrite {
   readonly checkedAt: number;
 }
 
-/** Saves misses with their check time; a found feature row is kept forever. */
+/**
+ * Saves misses with their check time; a found feature row is kept forever. A song the catalog
+ * pruned since its page was read is skipped, in the same transaction as the writes.
+ */
 export const keepDjMoodFeatures = (
   db: LibraryDatabase,
   writes: readonly DjMoodFeatureWrite[],
 ): void => {
-  for (const write of writes) {
-    const known = db
-      .select({ energy: djMoodFeatures.energy })
-      .from(djMoodFeatures)
-      .where(eq(djMoodFeatures.videoId, write.videoId))
-      .get();
-    if (known?.energy != null) continue;
-    db.insert(djMoodFeatures)
-      .values({
-        videoId: write.videoId,
+  if (writes.length === 0) return;
+  db.transaction((tx) => {
+    const present = new Set<string>();
+    for (const ids of chunks(writes.map(({ videoId }) => videoId)))
+      for (const { videoId } of tx
+        .select({ videoId: candidateSongs.videoId })
+        .from(candidateSongs)
+        .where(inArray(candidateSongs.videoId, ids))
+        .all())
+        present.add(videoId);
+    for (const write of writes) {
+      if (!present.has(write.videoId)) continue;
+      const known = tx
+        .select({ energy: djMoodFeatures.energy })
+        .from(djMoodFeatures)
+        .where(eq(djMoodFeatures.videoId, write.videoId))
+        .get();
+      if (known?.energy != null) continue;
+      const values = {
         isrc: write.isrc,
         energy: write.features?.energy ?? null,
         valence: write.features?.valence ?? null,
         acousticness: write.features?.acousticness ?? null,
         mode: write.features?.mode ?? null,
         checkedAt: write.checkedAt,
-      })
-      .onConflictDoUpdate({
-        target: djMoodFeatures.videoId,
-        set: {
-          isrc: write.isrc,
-          energy: write.features?.energy ?? null,
-          valence: write.features?.valence ?? null,
-          acousticness: write.features?.acousticness ?? null,
-          mode: write.features?.mode ?? null,
-          checkedAt: write.checkedAt,
-        },
-      })
-      .run();
-  }
+      };
+      tx.insert(djMoodFeatures)
+        .values({ videoId: write.videoId, ...values })
+        .onConflictDoUpdate({ target: djMoodFeatures.videoId, set: values })
+        .run();
+    }
+  });
 };
 
 /** Cached feature rows for the requested videos; misses are omitted. */

@@ -21,7 +21,7 @@ describe("DJ mood ranking", () => {
       energy,
       valence,
       acousticness,
-      mode: 1,
+      mode: 1 as const,
     });
     assert.ok(djMoodScore("energetic", features(0.9, 0.5, 0.1), null) > 0);
     assert.ok(djMoodScore("energetic", features(0.1, 0.5, 0.1), null) < 0);
