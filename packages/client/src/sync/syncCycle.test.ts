@@ -1229,7 +1229,10 @@ describe("syncCycle", () => {
         },
       },
     });
-    assert.equal(service.rows().playlists[0]?.name, "Road");
+    assert.deepEqual(
+      service.rows().playlists.map((row) => (row.deleted ? null : row.name)),
+      ["Road"],
+    );
     assert.equal((await a.sync()).pushed, 0);
   });
 
