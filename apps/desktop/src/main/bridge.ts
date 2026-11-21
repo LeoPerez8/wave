@@ -17,8 +17,8 @@ import { Kotlin } from "./kotlin/kotlin.ts";
 import { DesktopLibrary } from "./library/library.ts";
 import { Account } from "./account/accountLayer.ts";
 import type { Page } from "../shared/bridge.ts";
-import { BROWSE_KINDS, type BrowseScope } from "../shared/browse.ts";
-import { browseLetter } from "./library/browse.ts";
+import { BROWSE_KINDS, MAX_ROW_IDS_PAGE, type BrowseScope } from "../shared/browse.ts";
+import { browseLetter, browseRowIds } from "./library/browse.ts";
 import { toggleBrowseSort } from "./library/browseSort.ts";
 import { readArtwork } from "./library/artwork.ts";
 import { appearance, preference, savePreference } from "./preferences.ts";
@@ -27,8 +27,10 @@ import {
   isSpotifyLibrarySource,
   libraryTableSortsFor,
   readSearchOnline,
+  readThemeEdit,
   writeSearchOnline,
   type AppLanguage,
+  ytTrackId,
 } from "@wave/core";
 import {
   MAX_TARGET_IDS,
@@ -52,6 +54,9 @@ import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
 import { Downloads } from "./downloads/downloadsLayer.ts";
 import {
   MISSING_SONGS_ACTIONS,
+  FAILED_REASON_ACTIONS,
+  type DownloadMove,
+  type FailedReasonAction,
   MISSING_SONGS_LISTS,
   type MissingSongsList,
 } from "../shared/downloads.ts";
@@ -77,6 +82,7 @@ import { lyricsAndTagsHandlers } from "./lyricsAndTagsHandlers.ts";
 import { HomeFollow } from "./follows/homeFollow.ts";
 import { homeFollowHandlers } from "./follows/homeFollowHandlers.ts";
 import { streamedHandlers } from "./yt/streamedHandlers.ts";
+import { runStreamedAction } from "./yt/streamedSong.ts";
 import {
   clearRecentSearches,
   listRecentSearchesSync,
@@ -112,15 +118,12 @@ const validTarget = (value: unknown): value is SongTarget => {
   const { scope } = value as SongTarget;
   if (!validScope(scope) || LIST_OF_LISTS.includes(scope.kind)) return false;
   const { ids, all, except } = value as { ids?: unknown; all?: unknown; except?: unknown };
-  if (all === true)
-    return Array.isArray(except) && except.length <= MAX_TARGET_IDS && except.every(songId);
-  return (
-    all === undefined &&
-    Array.isArray(ids) &&
-    ids.length >= 1 &&
-    ids.length <= MAX_TARGET_IDS &&
-    ids.every(songId)
-  );
+  const keys = all === true ? except : ids;
+  if (!(keys instanceof Float64Array) && !(Array.isArray(keys) && keys.length <= MAX_TARGET_IDS))
+    return false;
+  const validId = (id: unknown) =>
+    songId(id) || (scope.kind === "playlist" && typeof id === "number" && songId(-id));
+  return (all === true || (all === undefined && keys.length > 0)) && keys.every(validId);
 };
 
 /** What Search takes: typed text, as long as a query gets. */
@@ -247,20 +250,36 @@ const downloadIds = (value: unknown): readonly string[] | undefined =>
     ? (value as string[])
     : undefined;
 
+/**
+ * A move on the Downloads page: a waiting song (a job id) or a group (its key), onto another's
+ * place or one step up or down.
+ */
+const downloadMove = (value: unknown): DownloadMove | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { kind, from, to, step } = value as Record<string, unknown>;
+  if (kind !== "song" && kind !== "group") return undefined;
+  const named = (name: unknown): name is string =>
+    typeof name === "string" &&
+    (kind === "song" ? DOWNLOAD_ID.test(name) : name.length > 0 && name.length <= 300);
+  if (!named(from)) return undefined;
+  if (step === undefined) return named(to) ? { kind, from, to } : undefined;
+  return to === undefined && (step === -1 || step === 1) ? { kind, from, step } : undefined;
+};
+
 /** At most a queue's worth of Track ids. */
 const trackIds = (value: unknown): readonly number[] | undefined =>
   Array.isArray(value) && value.length > 0 && value.length <= 500 && value.every(songId)
     ? (value as number[])
     : undefined;
 
-const validPage = (offset: unknown, limit: unknown): boolean =>
+const validPage = (offset: unknown, limit: unknown, max = 200): boolean =>
   typeof offset === "number" &&
   Number.isSafeInteger(offset) &&
   offset >= 0 &&
   typeof limit === "number" &&
   Number.isSafeInteger(limit) &&
   limit >= 1 &&
-  limit <= 200;
+  limit <= max;
 
 const pageCall = <T>(
   call: BridgeCall,
@@ -455,11 +474,22 @@ const createHandlers = (
             onAppearance(mode);
           })
         : refuse("settings.setAppearance", "invalid appearance"),
+    "settings.editTheme": ([raw]) => {
+      const edit = readThemeEdit(raw);
+      return edit === null
+        ? refuse("settings.editTheme", "invalid theme edit")
+        : Effect.map(Account, (it) => it.editTheme(edit));
+    },
     "settings.playback": () => playbackCall((p) => p.settings()),
     "settings.setPlayback": ([change]) =>
       validPlaybackSettings(change)
         ? playbackCall((p) => p.setSettings(change))
         : refuse("settings.setPlayback", "invalid playback settings"),
+    "settings.outputs": () => playbackCall((p) => p.outputs()),
+    "settings.setOutput": ([id]) =>
+      id === null || (typeof id === "string" && id !== "" && id.length <= 1_000)
+        ? playbackCall((p) => p.setOutput(id))
+        : refuse("settings.setOutput", "invalid output"),
     "settings.ytMusic": () => ytCall((yt) => yt.enabled()),
     "settings.searchOnline": () =>
       Effect.map(Database, (db) => readSearchOnline(preference(db, SEARCH_ONLINE_SETTING) ?? null)),
@@ -478,10 +508,23 @@ const createHandlers = (
         ? ytCall((yt) => yt.artwork(url))
         : refuse("yt.artwork", "invalid address"),
     "downloads.view": () => downloadsCall((d) => d.view()),
-    "downloads.rows": ([offset, limit]) =>
-      validPage(offset, limit)
-        ? downloadsCall((d) => d.rows(offset as number, limit as number))
+    "downloads.rows": ([offset, limit, failedShown]) =>
+      validPage(offset, limit) && (failedShown === undefined || typeof failedShown === "boolean")
+        ? downloadsCall((d) => d.rows(offset as number, limit as number, failedShown === true))
         : refuse("downloads.rows", "invalid page"),
+    "downloads.move": ([value]) => {
+      const move = downloadMove(value);
+      return move === undefined
+        ? refuse("downloads.move", "invalid move")
+        : downloadsCall((d) => d.move(move));
+    },
+    "downloads.failedReason": ([reason, action]) =>
+      typeof reason === "string" &&
+      reason.length > 0 &&
+      reason.length <= 500 &&
+      FAILED_REASON_ACTIONS.includes(action as FailedReasonAction)
+        ? downloadsCall((d) => d.failedReason(reason, action as FailedReasonAction))
+        : refuse("downloads.failedReason", "invalid reason or action"),
     "downloads.list": ([value]) => {
       const list = missingSongsList(value);
       return list === undefined
@@ -566,6 +609,12 @@ const createHandlers = (
             library.browse(scope, offset, limit),
           )
         : refuse("library.browse", "invalid scope"),
+    "library.rowIds": ([scope, offset, limit]) =>
+      validScope(scope) && validPage(offset, limit, MAX_ROW_IDS_PAGE)
+        ? Effect.gen(function* () {
+            return browseRowIds(yield* Database, scope, offset as number, limit as number);
+          })
+        : refuse("library.rowIds", "invalid scope or page"),
     "library.letter": ([scope, letter]) =>
       validScope(scope) && typeof letter === "string" && /^[a-z0-9]$/i.test(letter)
         ? Effect.gen(function* () {
@@ -669,13 +718,30 @@ const createHandlers = (
             const playback = yield* Playback;
             const downloads = yield* Downloads;
             const playlists = yield* DesktopPlaylists;
+            const yt = yield* YtMusic;
             return yield* Effect.tryPromise({
               try: () =>
                 runSongAction(
                   {
                     db,
                     download: downloads.missing,
-                    queue: (type, trackIds) => playback.command({ type, trackIds: [...trackIds] }),
+                    queue: (type, trackIds, songs) =>
+                      yt.withSongs(songs, () =>
+                        playback.command({ type, trackIds: [...trackIds] }),
+                      ),
+                    runStreamed: (song, action) =>
+                      runStreamedAction(
+                        {
+                          db,
+                          ytMusic: yt.enabled,
+                          downloads,
+                          queue: async (type, id) =>
+                            playback.command({ type, trackIds: [ytTrackId(id)] }),
+                          changed: playback.refresh,
+                        },
+                        song,
+                        action,
+                      ),
                     removeSongs: (trackIds) => library.removeSongs(trackIds),
                     fixSongs: (trackIds) => downloads.fixSongs(trackIds),
                     changed: playback.refresh,
@@ -777,6 +843,18 @@ const createHandlers = (
         ? spotifyImportCall((spotify) => spotify.artwork(source))
         : refuse("spotifyImport.artwork", "invalid playlist");
     },
+    "spotifyShare.playlist": (args) =>
+      args.length === 1 && songId(args[0])
+        ? Effect.gen(function* () {
+            const links = yield* DesktopLinks;
+            const account = yield* SpotifyAccount;
+            const playlistId = args[0] as number;
+            return yield* Effect.tryPromise({
+              try: () => links.shareToSpotify(playlistId, account),
+              catch: () => new Error("Sharing the playlist failed"),
+            });
+          })
+        : refuse("spotifyShare.playlist", "invalid playlist"),
   };
 };
 
