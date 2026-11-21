@@ -1,7 +1,8 @@
 /**
  * Now Playing's bottom row: four slots the owner fills (Settings › Layout ›
  * Now Playing), then Queue, fixed on the right. Related is only offered,
- * and only shows, with YouTube Music on.
+ * and only shows, with YouTube Music on. Dislike is offered and off by
+ * default.
  */
 
 /** What a slot can hold. */
@@ -14,6 +15,7 @@ export type NowPlayingAction =
   | "shuffle"
   | "repeat"
   | "share"
+  | "dislike"
   | "songMenu";
 
 /** A slot: an action, or null for None (no button). */
@@ -46,6 +48,7 @@ export const NOW_PLAYING_ACTIONS: readonly NowPlayingAction[] = [
   "shuffle",
   "repeat",
   "share",
+  "dislike",
   "songMenu",
 ];
 
@@ -139,14 +142,22 @@ const NEEDS_SONG: ReadonlySet<NowPlayingAction> = new Set([
   "addToPlaylist",
   "download",
   "share",
+  "dislike",
   "songMenu",
 ]);
 
 /**
+ * The actions an unsearched entry can't take while its search runs: it has no
+ * menu yet, and no song to keep a dislike under.
+ */
+const NEEDS_SEARCHED_SONG: ReadonlySet<NowPlayingAction> = new Set(["dislike", "songMenu"]);
+
+/**
  * How slot [action]'s button shows with [song] on and YouTube Music on or
  * off ([ytMusic]): hidden, off (it shows disabled and only long-presses to
- * change the slot), or on. Song menu is off while an unsearched entry's
- * search runs, since the song has no menu yet. Related is hidden with
+ * change the slot), or on. Song menu and Dislike are off while an unsearched
+ * entry's search runs, since the song has no menu yet and nothing to be
+ * disliked by. Related is hidden with
  * YouTube Music off, so its slot stays empty.
  */
 export const nowPlayingSlotShow = (
@@ -156,7 +167,7 @@ export const nowPlayingSlotShow = (
 ): "hidden" | "off" | "on" => {
   if (!ytMusic && NEEDS_YT_MUSIC.has(action)) return "hidden";
   if (song === "nothing") return NEEDS_SONG.has(action) ? "hidden" : "on";
-  return song === "unsearched" && action === "songMenu" ? "off" : "on";
+  return song === "unsearched" && NEEDS_SEARCHED_SONG.has(action) ? "off" : "on";
 };
 
 /** The slot pickers' routes, `1` to `4`, left to right. */

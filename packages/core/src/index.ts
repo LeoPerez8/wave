@@ -2433,6 +2433,7 @@ export type {
   SongIdentity,
   SongMarks,
 } from "./dislikes.ts";
+export { dislikeSkipsPlaying } from "./dislikeSkip.ts";
 export { queuedToast } from "./queuedToast.ts";
 export type { FavoriteSource } from "./favoriteToast.ts";
 

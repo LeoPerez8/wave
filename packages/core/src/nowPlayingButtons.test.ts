@@ -84,8 +84,19 @@ describe("the choices a Now Playing slot offers", () => {
       "shuffle",
       "repeat",
       "share",
+      "dislike",
       "songMenu",
     ]);
+  });
+
+  test("Dislike is offered, and the default row doesn't hold it", () => {
+    assert.equal(nowPlayingSlotChoices(false).includes("dislike"), true);
+    assert.equal(readNowPlayingButtons(null).includes("dislike"), false);
+  });
+
+  test("a row holding Dislike comes back as saved", () => {
+    const row = ["lyrics", "dislike", "download", "songMenu"] as const;
+    assert.deepEqual(readNowPlayingButtons(storedNowPlayingButtons(row)), row);
   });
 
   test("with YouTube Music off, Related isn't offered", () => {
@@ -185,9 +196,13 @@ describe("how a Now Playing slot shows", () => {
     assert.equal(nowPlayingSlotShow("lyrics", "nothing", true), "on");
   });
 
-  test("while an unsearched entry's search runs, Song menu shows off and the rest run", () => {
+  test("while an unsearched entry's search runs, Song menu and Dislike show off and the rest run", () => {
     assert.equal(nowPlayingSlotShow("songMenu", "unsearched", true), "off");
-    for (const action of NOW_PLAYING_ACTIONS.filter((other) => other !== "songMenu"))
+    // No song yet to keep a dislike under.
+    assert.equal(nowPlayingSlotShow("dislike", "unsearched", true), "off");
+    for (const action of NOW_PLAYING_ACTIONS.filter(
+      (other) => other !== "songMenu" && other !== "dislike",
+    ))
       assert.equal(nowPlayingSlotShow(action, "unsearched", true), "on");
   });
 
