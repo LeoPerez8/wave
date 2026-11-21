@@ -7,7 +7,13 @@ export const ROW_SLEEVES = { edge: 2, gap: 1 } as const;
  * sleeves, each a bar and its gap ([small] for a row's), or at the top for a
  * plain cover (the Playlists page draws no sleeves).
  */
-export const coverTop = ({ sleeves, small = false }: { sleeves: boolean; small?: boolean }): number => {
+export const coverTop = ({
+  sleeves,
+  small = false,
+}: {
+  sleeves: boolean;
+  small?: boolean;
+}): number => {
   if (!sleeves) return 0;
   const { edge, gap } = small ? ROW_SLEEVES : TILE_SLEEVES;
   return (edge + gap) * 2;
