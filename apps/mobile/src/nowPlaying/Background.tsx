@@ -11,6 +11,8 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 
+import { phoneEffects } from "@/glass/phoneEffects";
+
 /** Long enough to read as a change of mood, not a flash. */
 const CROSSFADE_MS = 700;
 const CROSSFADE_EASING = Easing.inOut(Easing.quad);
@@ -53,14 +55,16 @@ const fadeProgress = (fade: SharedValue<number>): number => {
  * `paletteGradient`). On a track change they crossfade from wherever they are
  * to the new colours, even mid-fade (Core's `crossfadeGround`); out of sight
  * (`animate` off) they change straight away, so the sheet opens on the right
- * colours.
+ * colours. A phone drawing the simple effects (`@/glass/phoneEffects`) always
+ * changes them straight away.
  */
 export function useBackgroundColors(gradient: Gradient, animate: boolean): GroundColors {
   const reduceMotion = useReducedMotion();
   const [ground, setGround] = useState(() => settled(gradient, 0));
   if (ground.target.top !== gradient.top || ground.target.bottom !== gradient.bottom) {
     // Adjusted while rendering, so the new layers commit with the render that brought the colours.
-    const instant = reduceMotion || !animate;
+    // A phone measured weak (#1357) changes colours without the crossfade, as with reduced motion.
+    const instant = reduceMotion || !animate || phoneEffects() === "simple";
     const progress = ground.layers.incoming === null ? 1 : fadeProgress(ground.fade);
     const layers = crossfadeGround(ground.layers, gradient, progress, instant);
     setGround(

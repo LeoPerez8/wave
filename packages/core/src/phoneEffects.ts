@@ -64,7 +64,9 @@ export interface EffectsVerdict {
 /** [tally] judged at [now]; null while it can't be judged yet. */
 export const effectsVerdict = (tally: FrameTally, now: number): EffectsVerdict | null => {
   const effects = judgeFrames(tally);
-  return effects === null ? null : { effects, counted: tally.counted, slow: tally.slow, judgedAt: now };
+  return effects === null
+    ? null
+    : { effects, counted: tally.counted, slow: tally.slow, judgedAt: now };
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -84,9 +86,12 @@ export interface SessionEffects {
 }
 
 export const sessionEffects = (verdict: EffectsVerdict | null, now: number): SessionEffects => {
-  if (verdict === null || verdict.effects === "full") return { effects: "full", measure: true, verdict };
+  if (verdict === null || verdict.effects === "full")
+    return { effects: "full", measure: true, verdict };
   const due = now - verdict.judgedAt >= WEAK_PHONE_RULE.recheckDays * DAY_MS;
-  return due ? { effects: "full", measure: true, verdict } : { effects: "simple", measure: false, verdict };
+  return due
+    ? { effects: "full", measure: true, verdict }
+    : { effects: "simple", measure: false, verdict };
 };
 
 const isCount = (value: unknown): value is number =>

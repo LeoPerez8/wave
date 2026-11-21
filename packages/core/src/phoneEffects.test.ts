@@ -17,12 +17,7 @@ import {
 } from "./index.ts";
 
 /** [count] half-second windows of [frames] frames whose p95 is [p95FrameMs]. */
-const windows = (
-  tally: FrameTally,
-  count: number,
-  p95FrameMs: number,
-  frames = 30,
-): FrameTally => {
+const windows = (tally: FrameTally, count: number, p95FrameMs: number, frames = 30): FrameTally => {
   let next = tally;
   for (let i = 0; i < count; i++) next = tallyFrames(next, { frames, p95FrameMs });
   return next;
@@ -113,7 +108,10 @@ describe("effects verdicts", () => {
     assert.deepEqual(readEffectsVerdict(writeEffectsVerdict(verdict)), verdict);
     assert.equal(readEffectsVerdict(null), null);
     assert.equal(readEffectsVerdict("{"), null);
-    assert.equal(readEffectsVerdict('{"effects":"sparkly","counted":1,"slow":0,"judgedAt":1}'), null);
+    assert.equal(
+      readEffectsVerdict('{"effects":"sparkly","counted":1,"slow":0,"judgedAt":1}'),
+      null,
+    );
   });
 
   test("the app log says once per start which effects this session draws and why", () => {
@@ -156,7 +154,10 @@ describe("glassLayers on a weak phone", () => {
       refraction: 0,
       coalesce: false,
     });
-    assert.deepEqual(glassLayers({ ...DEFAULT_GLASS_SETTINGS, blur: 15 }, "live", "simple").blur, 8);
+    assert.deepEqual(
+      glassLayers({ ...DEFAULT_GLASS_SETTINGS, blur: 15 }, "live", "simple").blur,
+      8,
+    );
   });
 
   test("a probe still peels its layers off the simple glass", () => {

@@ -64,6 +64,7 @@ export const glassLayers = (
   const backdrop = probe !== "off";
   const radius = simple ? Math.ceil(settings.blur / 2) : settings.blur;
   const blur = probe === "record" || probe === "off" ? 0 : radius;
-  const refraction = !simple && (probe === "live" || probe === "coalesced") ? settings.refraction : 0;
+  const refraction =
+    !simple && (probe === "live" || probe === "coalesced") ? settings.refraction : 0;
   return { backdrop, blur, refraction, coalesce: probe === "coalesced" };
 };
