@@ -3,7 +3,9 @@ import {
   NOW_PLAYING_BUTTONS_KEY,
   NOW_PLAYING_PREVIOUS_ROW_KEY,
   NOW_PLAYING_TRANSPORT_SLOTS,
+  nowPlayingSlotChoiceHolder,
   editNowPlayingButtons,
+  moveNowPlayingButton,
   readNowPlayingButtons,
   storedNowPlayingButtons,
   type NowPlayingAction,
@@ -44,6 +46,10 @@ export const savedNowPlayingButtons = nowPlayingButtons.get;
 export const editSavedNowPlayingButtons = (edit: NowPlayingButtonsEdit): void =>
   nowPlayingButtons.set(editNowPlayingButtons(nowPlayingButtons.get(), edit));
 
+/** Moves a button between the seven slots and saves it to the synced preference. */
+export const moveSavedNowPlayingButton = (from: number, to: number): void =>
+  nowPlayingButtons.set(moveNowPlayingButton(nowPlayingButtons.get(), from, to));
+
 /** What each action is called on Settings' rows and pickers. */
 const ACTION_LABELS: Readonly<Record<NowPlayingAction, string>> = {
   get lyrics() {
@@ -73,6 +79,15 @@ const ACTION_LABELS: Readonly<Record<NowPlayingAction, string>> = {
   get dislike() {
     return currentLocalisation().strings.itemActions.labels.dislike;
   },
+  get magicQueue() {
+    return currentLocalisation().strings.itemActions.labels.magicQueue;
+  },
+  get goToArtist() {
+    return currentLocalisation().strings.itemActions.labels.goToArtist;
+  },
+  get goToAlbum() {
+    return currentLocalisation().strings.itemActions.labels.goToAlbum;
+  },
 };
 
 /** A slot's name for what it holds: its action's, or None. */
@@ -89,4 +104,28 @@ export const nowPlayingSlotTitle = (slot: number): string => {
   if (slot === NOW_PLAYING_TRANSPORT_SLOTS.left) return settings.slotLeftOfPrevious;
   if (slot === NOW_PLAYING_TRANSPORT_SLOTS.right) return settings.slotRightOfNext;
   return settings.slot(slot + 1);
+};
+
+/**
+ * The quiet caption under [action] in slot [slot]'s choices, naming where
+ * another slot already holds it ("In the footer", "Beside Next"), or
+ * undefined for the slot's own action, a free one and None (Core's
+ * `nowPlayingSlotChoiceHolder`).
+ */
+export const nowPlayingSlotCaption = (
+  buttons: readonly NowPlayingSlot[],
+  slot: number,
+  action: NowPlayingSlot,
+): string | undefined => {
+  const { settings } = currentLocalisation().strings;
+  switch (nowPlayingSlotChoiceHolder(buttons, slot, action)) {
+    case "footer":
+      return settings.slotInFooter;
+    case "previous":
+      return settings.slotBesidePrevious;
+    case "next":
+      return settings.slotBesideNext;
+    case null:
+      return undefined;
+  }
 };

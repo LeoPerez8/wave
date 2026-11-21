@@ -122,3 +122,53 @@ test("Reset to Default over a row edited before the update holds across a restar
   const restarted = await loadPhone({ [ROW_KEY]: ROW, [KEY]: JSON.stringify(DEFAULT) });
   assert.deepEqual(restarted.buttons.savedNowPlayingButtons(), DEFAULT);
 });
+
+test("a choice another slot holds is captioned with that slot's place; the slot's own and free ones are not", async () => {
+  const { buttons } = await loadPhone();
+  const slots = ["lyrics", null, null, null, null, "shuffle", "repeat"] as const;
+  assert.equal(buttons.nowPlayingSlotCaption(slots, 6, "lyrics"), "In the footer");
+  assert.equal(buttons.nowPlayingSlotCaption(slots, 0, "shuffle"), "Beside Previous");
+  assert.equal(buttons.nowPlayingSlotCaption(slots, 0, "repeat"), "Beside Next");
+  assert.equal(buttons.nowPlayingSlotCaption(slots, 0, "lyrics"), undefined);
+  assert.equal(buttons.nowPlayingSlotCaption(slots, 0, "queue"), undefined);
+  assert.equal(buttons.nowPlayingSlotCaption(slots, 0, null), undefined);
+});
+
+test("slots holding Magic Queue, Go to Artist and Go to Album sync and read back, named as the song menu names them", async () => {
+  const phone = await loadPhone();
+  phone.buttons.editSavedNowPlayingButtons({ slot: 5, action: "magicQueue" });
+  phone.buttons.editSavedNowPlayingButtons({ slot: 6, action: "goToArtist" });
+  phone.buttons.editSavedNowPlayingButtons({ slot: 4, action: "goToAlbum" });
+  const stored = JSON.stringify([
+    "lyrics",
+    "addToPlaylist",
+    "download",
+    "shuffle",
+    "goToAlbum",
+    "magicQueue",
+    "goToArtist",
+  ]);
+  assert.equal(phone.Storage.getItemSync(KEY), stored);
+  assert.deepEqual(phone.changed, [KEY, KEY, KEY]);
+  const restarted = await loadPhone({ [KEY]: stored });
+  assert.deepEqual(restarted.buttons.savedNowPlayingButtons(), JSON.parse(stored));
+  assert.deepEqual(
+    (["magicQueue", "goToArtist", "goToAlbum"] as const).map(restarted.buttons.nowPlayingSlotLabel),
+    ["Magic Queue", "Go to Artist", "Go to Album"],
+  );
+});
+
+test("a slot pulled from a newer Wave, holding an action this one doesn't know, shows empty and the rest as synced", async () => {
+  const other = await loadPhone();
+  const newer = JSON.stringify(["lyrics", "karaoke", null, null, null, "magicQueue", null]);
+  assert.equal(other.settings.applySyncedSetting(KEY, newer), true);
+  assert.deepEqual(other.buttons.savedNowPlayingButtons(), [
+    "lyrics",
+    null,
+    null,
+    null,
+    null,
+    "magicQueue",
+    null,
+  ]);
+});

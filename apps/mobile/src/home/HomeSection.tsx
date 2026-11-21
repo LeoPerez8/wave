@@ -7,18 +7,15 @@ import {
   discoverMixRowsToBuild,
   discoverRowTitle,
   homeSectionTitle,
+  inYourOrbitTileUnavailable,
   MAGIC_QUEUE_PICKS,
   magicQueueCarouselPage,
-  magicQueueCarouselKeptPage,
   magicQueueCarouselPageLabel,
-  magicQueueCarouselPages,
-  magicQueueCarouselPageTitle,
   ytSongArtist,
   ytTrackId,
   type BlendedDiscoverMix,
   type DiscoverMixesSection,
   type HomeSectionId,
-  type MagicQueueCarouselPageId,
   type MagicQueueSeed,
   type YtAlbumSong,
 } from "@wave/core";
@@ -65,15 +62,12 @@ import {
   startStreamedMagicQueueFrom,
   useMagicQueueSection,
   type MagicQueueSection,
-  type MagicQueueShown,
 } from "./magicQueueSection";
 import { useCommunityPlaylists } from "./communityPlaylists";
 import { useFromYourLibrary } from "./fromYourLibrary";
 import { CarouselPageDots, MagicQueueCarousel } from "./MagicQueueCarousel";
-import { useDiscoveries } from "./discoveries";
-import { useMostListenedRecently } from "./mostListenedRecently";
 import { useHomeArrangement } from "./homeArrangement";
-import { useInYourOrbit } from "./inYourOrbit";
+import { tapInYourOrbit, useInYourOrbit } from "./inYourOrbit";
 import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
 import { AlbumShelf, ArtistShelf, MostPlayedRows, SongRows } from "./HomeSections";
@@ -122,10 +116,9 @@ function MostPlayedAlbums({ title }: SectionProps) {
  * settings card all three rows share (`DiscoverSettingsButton`), the DJ card
  * while YT Music is on, then the rows in the owner's order, each under its label. A row with nothing to show isn't drawn: a mix row shows placeholder tiles
  * while its first mixes build and is gone with YT Music off (Core's
- * `discoverMixesSection`), the Magic Queue row is gone while none of its
- * carousel's pages has songs to show (Core's `magicQueueCarouselPages`), and
- * until Most listened recently is first read, so the row opens on its pages
- * as they are; Discoveries, the last page, joins once it's read. The section
+ * `discoverMixesSection`), the Magic Queue row is gone while it has nothing
+ * to show (Core's `magicQueueRow`: before its pages are first read, or with
+ * an empty pool and no chart mix to take songs from). The section
  * is gone when every arranged row is gone and YT Music is off, which hides
  * the DJ card.
  */
@@ -146,19 +139,9 @@ function Discover({ home, title }: SectionProps) {
   const genreMixes = useDiscoverMixes("genre-mixes", empty, builds.includes("genre-mixes"));
   const magicQueueOn = ytMusic && discoverRows.includes("magic-queue");
   const magicQueue = useMagicQueueSection(magicQueueOn, artistMixes);
-  const recent = useMostListenedRecently(magicQueueOn);
-  const discoveries = useDiscoveries(magicQueueOn);
-  const pages =
-    recent === undefined
-      ? []
-      : magicQueueCarouselPages({
-          "most-listened-recently": recent.length,
-          "magic-queue": magicQueueTiles(magicQueue.shown),
-          discoveries: discoveries.length,
-        });
   const rows = discoverRows.filter((id) =>
     id === "magic-queue"
-      ? pages.length > 0
+      ? magicQueue.shown.kind !== "hidden"
       : (id === "artist-mixes" ? artistMixes : genreMixes).kind !== "hidden",
   );
   if (rows.length === 0 && !ytMusic) return null;
@@ -168,13 +151,7 @@ function Discover({ home, title }: SectionProps) {
         {ytMusic && <DjCard />}
         {rows.map((id) =>
           id === "magic-queue" ? (
-            <MagicQueueRow
-              key={id}
-              section={magicQueue}
-              recent={recent ?? []}
-              discoveries={discoveries}
-              pages={pages}
-            />
+            <MagicQueueRow key={id} section={magicQueue} />
           ) : (
             <MixRow key={id} id={id} section={id === "artist-mixes" ? artistMixes : genreMixes} />
           ),
@@ -356,20 +333,13 @@ function DiscoverMixRow({
   );
 }
 
-/** How many tiles the Magic Queue page has to show, placeholders included: none while hidden. */
-const magicQueueTiles = (shown: MagicQueueShown): number =>
-  shown.kind === "hidden"
-    ? 0
-    : shown.kind === "skeleton"
-      ? MAGIC_QUEUE_PICKS
-      : shown.kind === "seeds"
-        ? shown.seeds.length
-        : shown.songs.length;
-
 /** The page the carousel last showed, kept while the app runs: coming back to Home finds it there. */
-let keptPage: MagicQueueCarouselPageId | null = null;
+let keptPage: number | null = null;
 
-/** As tall as the refresh button, so the label line keeps its height from page to page. */
+/**
+ * As tall as the refresh button, so the label line keeps its height; with
+ * its hit slop the button takes a 48dp touch.
+ */
 const CAROUSEL_CONTROLS = CELL * 4;
 
 /** A page's songs as the tiles of its grid, each under the key its place crossfades by. */
@@ -380,63 +350,61 @@ const seedTiles = (seeds: readonly MagicQueueSeed<PlayableSongRow>[], size: numb
       : { key: ytTrackId(seed.song.videoId), tile: <StreamedTile song={seed.song} size={size} /> },
   );
 
+/** A tile of the row, under the key its place crossfades by. */
+type RowTile = { readonly key: string; readonly tile: ReactNode };
+
 /**
- * Discover's Magic Queue row, a carousel of [pages] (Core's
- * `magicQueueCarouselPages`) swiped sideways, each up to nine songs in an
- * adaptive grid, a tap on one starting a Magic Queue from it, its long-press
- * the song's menu. The label names the page in sight and dots beside it show
- * where it sits; TalkBack hears the page's name as it changes and moves
- * between pages by adjusting the dots. The row comes back on the page it was
- * left on. With one page there are no dots and nothing to swipe.
+ * Discover's Magic Queue row, labelled Magic Queue: a carousel of up to three
+ * pages swiped sideways (Core's `magicQueuePages`), each up to nine songs in
+ * an adaptive grid, all drawn by one rule, so no page has a name. A tap on a
+ * song starts a Magic Queue from it, its long-press opens the song's menu.
+ * Dots beside the label show where the page in sight sits; TalkBack hears
+ * the page's place as it changes and moves between pages by adjusting the
+ * dots. The refresh icon beside them draws only the page in sight again,
+ * with a "New songs" toast and Undo. The row comes back on the page it was
+ * left on. With one page there are no dots and nothing to swipe, and a pull
+ * past its start refreshes it too.
  *
- * Most listened recently holds [recent], the songs played most in the last
- * 14 days, and Discoveries holds [discoveries], songs never played. The Magic
- * Queue page holds the Library's songs and the playlists'
- * YT Music entries, or with neither, streamed songs of the Artist mixes, with
- * placeholder tiles while the first mixes build; a new list each app start. Alone,
- * it brings other songs when pulled right past its start, with Undo; after
- * another page that pull is the swipe back, so a refresh button sits by the
- * dots. Each place crossfades its tile when its song changes. Hidden with YT
- * Music off.
+ * With an empty pool the row is one page of the Artist mixes' streamed
+ * songs, with placeholder tiles while the first mixes build. Each place
+ * crossfades its tile when its song changes. Hidden with YT Music off.
  */
-function MagicQueueRow({
-  section,
-  recent,
-  discoveries,
-  pages,
-}: {
-  section: MagicQueueSection;
-  recent: readonly MagicQueueSeed<PlayableSongRow>[];
-  discoveries: readonly MagicQueueSeed<PlayableSongRow>[];
-  pages: readonly MagicQueueCarouselPageId[];
-}) {
+function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   const { strings } = useLocalisation();
   const { width, fontScale } = useWindowDimensions();
   const [available, setAvailable] = useState(width - grid.margin * 2);
   const [kept, setKept] = useState(keptPage);
-  // The first page drawn is remembered as a swiped-to one is: a page that joins before it
-  // then moves the row, and the page in sight stays.
-  const remembered = magicQueueCarouselKeptPage(pages, kept);
-  if (remembered !== kept) setKept(remembered);
   useEffect(() => {
-    if (remembered !== null) keptPage = remembered;
-  }, [remembered]);
+    if (kept !== null) keptPage = kept;
+  }, [kept]);
   const { size } = magicQueueGrid(available, fontScale);
   const { shown } = section;
-  const index = magicQueueCarouselPage(pages, remembered);
-  const current = pages[index];
-  if (current === undefined) return null;
+  const skeleton = shown.kind === "skeleton";
+  const pages: readonly (readonly RowTile[])[] =
+    shown.kind === "pages"
+      ? shown.pages.map((page) => seedTiles(page, size))
+      : shown.kind === "mixes"
+        ? [
+            shown.songs.map((song) => ({
+              key: song.videoId,
+              tile: <StreamedTile song={song} size={size} />,
+            })),
+          ]
+        : skeleton
+          ? [[]]
+          : [];
+  if (pages.length === 0) return null;
+  const index = magicQueueCarouselPage(pages.length, kept);
   const paged = pages.length > 1;
   const show = (next: number) => {
-    const page = pages[next];
-    if (page === undefined) return;
-    keptPage = page;
-    setKept(page);
-    AccessibilityInfo.announceForAccessibility(magicQueueCarouselPageLabel(pages, next, strings));
+    if (next < 0 || next >= pages.length) return;
+    setKept(next);
+    AccessibilityInfo.announceForAccessibility(
+      magicQueueCarouselPageLabel(next, pages.length, strings),
+    );
   };
-  const skeleton = shown.kind === "skeleton";
-  const refreshes = current === "magic-queue" && !skeleton;
-  const tiles = (songs: readonly { key: string; tile: ReactNode }[]) => (
+  const refresh = () => section.refresh(index);
+  const tiles = (songs: readonly RowTile[]) => (
     <MagicQueueGrid width={available}>
       {songs.map(({ key, tile }, place) => (
         // oxlint-disable-next-line react/no-array-index-key -- a place crossfades between its previous and next song
@@ -446,18 +414,7 @@ function MagicQueueRow({
       ))}
     </MagicQueueGrid>
   );
-  const magicQueueSongs =
-    shown.kind === "seeds"
-      ? seedTiles(shown.seeds, size)
-      : shown.kind === "mixes"
-        ? shown.songs.map((song) => ({
-            key: song.videoId,
-            tile: <StreamedTile song={song} size={size} />,
-          }))
-        : [];
-  const page = (id: MagicQueueCarouselPageId): ReactNode => {
-    if (id === "most-listened-recently") return tiles(seedTiles(recent, size));
-    if (id === "discoveries") return tiles(seedTiles(discoveries, size));
+  const page = (songs: readonly RowTile[]): ReactNode => {
     if (skeleton)
       return (
         <SkeletonGroup label={strings.discover.findingSongs}>
@@ -469,55 +426,52 @@ function MagicQueueRow({
         </SkeletonGroup>
       );
     return paged ? (
-      tiles(magicQueueSongs)
+      tiles(songs)
     ) : (
-      <PullRefreshRow onRefresh={section.refresh} enabled>
-        {tiles(magicQueueSongs)}
+      <PullRefreshRow onRefresh={refresh} enabled>
+        {tiles(songs)}
       </PullRefreshRow>
     );
   };
   return (
     <DiscoverRow
-      label={magicQueueCarouselPageTitle(current, strings)}
-      busy={current === "magic-queue" && skeleton}
-      refresh={{ label: strings.discover.otherSongs, run: section.refresh, enabled: refreshes }}
+      label={strings.discover.rows["magic-queue"]}
+      busy={skeleton}
+      refresh={{ label: strings.discover.otherSongs, run: refresh, enabled: !skeleton }}
       trailing={
-        paged ? (
-          <View
-            className="flex-row items-center"
-            style={{ gap: CELL, minHeight: CAROUSEL_CONTROLS }}
-          >
-            {refreshes && (
-              <IconButton
-                icon={IconRefresh}
-                label={strings.discover.otherSongs}
-                size={CAROUSEL_CONTROLS}
-                iconSize={CELL * 2.5}
-                tone="secondary"
-                hitSlop={CELL}
-                onPress={section.refresh}
-              />
-            )}
+        <View className="flex-row items-center" style={{ gap: CELL, minHeight: CAROUSEL_CONTROLS }}>
+          {!skeleton && (
+            <IconButton
+              icon={IconRefresh}
+              label={strings.discover.otherSongs}
+              size={CAROUSEL_CONTROLS}
+              iconSize={CELL * 2.5}
+              tone="secondary"
+              hitSlop={CELL}
+              onPress={refresh}
+            />
+          )}
+          {paged && (
             <CarouselPageDots
               count={pages.length}
               index={index}
-              label={magicQueueCarouselPageLabel(pages, index, strings)}
+              label={magicQueueCarouselPageLabel(index, pages.length, strings)}
               onIndex={show}
             />
-          </View>
-        ) : undefined
+          )}
+        </View>
       }
     >
       <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
         {paged ? (
           <MagicQueueCarousel
-            pages={pages.map((id) => ({ key: id, content: page(id) }))}
+            pages={pages.map((songs, place) => ({ key: `page-${place}`, content: page(songs) }))}
             index={index}
             onIndex={show}
             width={available}
           />
         ) : (
-          page(current)
+          page(pages[0]!)
         )}
       </View>
     </DiscoverRow>
@@ -594,17 +548,76 @@ function MostPlayedArtists({ title }: SectionProps) {
 }
 
 /**
- * In your orbit: the artists played most in the last 14 days, as circles in
- * one row. A tap opens the artist's page, the Library's or the online one by
- * name (`PlayedArtistCard`).
+ * One of In your orbit's songs as a song card: a tap starts a Magic Queue
+ * from it, or with YT Music off plays the grid's Library songs from it
+ * (`tapInYourOrbit`); a streamed song shows unavailable then. A long press
+ * opens its menu.
  */
+function OrbitTile({
+  seed,
+  size,
+  ytMusic,
+  onPress,
+}: {
+  seed: MagicQueueSeed<PlayableSongRow>;
+  size: number;
+  ytMusic: boolean;
+  onPress: () => void;
+}) {
+  const { strings } = useLocalisation();
+  const { title, album } = seed.song;
+  const artist = seed.source === "library" ? seed.song.artist : ytSongArtist(seed.song);
+  return (
+    <SongCard
+      title={title}
+      artist={artist}
+      artworkUri={
+        seed.source === "library"
+          ? artworkUri(seed.song, "medium")
+          : ytMusic
+            ? (seed.song.artworkUrl ?? undefined)
+            : undefined
+      }
+      size={size}
+      label={ytMusic ? strings.discover.startMagicQueue(title, artist, album) : undefined}
+      unavailable={inYourOrbitTileUnavailable(seed, ytMusic)}
+      onPress={onPress}
+      onLongPress={() =>
+        seed.source === "library" ? openTrackActions(seed.song) : openYtSongActions(seed.song)
+      }
+    />
+  );
+}
+
+/** Home's nine most played recent songs as a grid laid out as the Magic Queue's is. */
 function InYourOrbit({ title }: SectionProps) {
-  const artists = useInYourOrbit();
-  if (artists === undefined) return <HomeSectionSkeleton id="in-your-orbit" />;
-  if (artists.length === 0) return null;
+  const songs = useInYourOrbit();
+  const ytMusic = useYtMusicEnabled();
+  const { width, fontScale } = useWindowDimensions();
+  const [available, setAvailable] = useState(width - grid.margin * 2);
+  if (songs === undefined) return <HomeSectionSkeleton id="in-your-orbit" />;
+  if (songs.length === 0) return null;
+  const { size } = magicQueueGrid(available, fontScale);
   return (
     <TitledSection title={title}>
-      <ArtistShelf artists={artists} />
+      <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
+        <MagicQueueGrid width={available}>
+          {songs.map((seed, index) => {
+            const key =
+              seed.source === "library" ? String(seed.song.id) : ytTrackId(seed.song.videoId);
+            return (
+              <Crossfade key={key} swapKey={key}>
+                <OrbitTile
+                  seed={seed}
+                  size={size}
+                  ytMusic={ytMusic}
+                  onPress={() => tapInYourOrbit(songs, index)}
+                />
+              </Crossfade>
+            );
+          })}
+        </MagicQueueGrid>
+      </View>
     </TitledSection>
   );
 }

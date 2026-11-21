@@ -16,7 +16,10 @@ describe("skippedReleases", () => {
     "v0.77.0-ti",
     "v0.71.0",
   ];
-  const published = ["v0.71.0-ti", "v0.72.0-ti", "v0.74.0-ti", "v0.71.0"];
+  // GitHub's releases, each holding the phone's APK.
+  const withApk = (...tags: string[]) =>
+    tags.map((tag) => ({ tagName: tag, assets: [`wave-${tag.slice(1)}.apk`] }));
+  const published = withApk("v0.71.0-ti", "v0.72.0-ti", "v0.74.0-ti", "v0.71.0");
 
   it("lists the channel's tags with no release before the commit's, oldest first", () => {
     assert.deepEqual(skippedReleases({ channel: "ti", tags, own: ["v0.77.0-ti"], published }), [
@@ -28,7 +31,7 @@ describe("skippedReleases", () => {
   });
 
   it("leaves out the commit's own tag, and every tag a release was published on", () => {
-    const all = [...published, "v0.73.0-ti", "v0.75.0-ti", "v0.76.0-ti", "v0.70.0-ti"];
+    const all = [...published, ...withApk("v0.73.0-ti", "v0.75.0-ti", "v0.76.0-ti", "v0.70.0-ti")];
     assert.deepEqual(
       skippedReleases({ channel: "ti", tags, own: ["v0.77.0-ti"], published: all }),
       [],
@@ -38,8 +41,28 @@ describe("skippedReleases", () => {
   it("keeps each channel to its own tags", () => {
     const stable = ["v0.70.0", "v0.71.0", "v0.72.0-ti", "v0.72.0"];
     assert.deepEqual(
-      skippedReleases({ channel: "main", tags: stable, own: ["v0.72.0"], published: ["v0.70.0"] }),
+      skippedReleases({
+        channel: "main",
+        tags: stable,
+        own: ["v0.72.0"],
+        published: withApk("v0.70.0"),
+      }),
       ["v0.71.0"],
+    );
+  });
+
+  it("counts a version whose release holds only the desktop's files as skipped for the phone", () => {
+    const desktopOnly = [
+      ...published,
+      {
+        tagName: "v0.73.0-ti",
+        assets: ["wave-0.73.0-ti-win-x64.exe", "wave-0.73.0-ti-linux-x64.AppImage"],
+      },
+      { tagName: "v0.75.0-ti", assets: ["wave-0.75.0-ti.apk", "wave-0.75.0-ti-win-x64.exe"] },
+    ];
+    assert.deepEqual(
+      skippedReleases({ channel: "ti", tags, own: ["v0.77.0-ti"], published: desktopOnly }),
+      ["v0.70.0-ti", "v0.73.0-ti", "v0.76.0-ti"],
     );
   });
 

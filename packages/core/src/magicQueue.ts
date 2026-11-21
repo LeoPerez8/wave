@@ -760,6 +760,34 @@ export const magicBatchEmpty = (
   session !== null && empty === session.id && wantsMagicBatch(session, state, sleepTimer);
 
 /**
+ * Whether the footnote "More songs arrive as the Magic Queue learns…" sits
+ * under the last song of Up Next (#1376): [state] is [session]'s queue, Up
+ * Next holds songs, and more batches can still come (no End of Queue
+ * [sleepTimer], and no Repeat over a continuation). It gives way to the
+ * loading rows, the failure line and the empty line ([marks]: the ids
+ * `magicBatchLoading`, `magicBatchFailed` and `magicBatchEmpty` read).
+ */
+export const magicQueueFootnote = (
+  session: MagicSession | null,
+  marks: {
+    readonly picking: MagicSession["id"] | null;
+    readonly failed: MagicSession["id"] | null;
+    readonly empty: MagicSession["id"] | null;
+  },
+  state: QueueState,
+  sleepTimer: SleepTimer | null = null,
+): boolean =>
+  session !== null &&
+  isMagicQueue(session, state) &&
+  state.index >= 0 &&
+  state.index < state.entries.length - 1 &&
+  sleepTimer?.type !== "endOfQueue" &&
+  (!session.continuation || state.repeat === "off") &&
+  !magicBatchLoading(session, marks.picking, state, sleepTimer) &&
+  !magicBatchFailed(session, marks.failed, state, sleepTimer) &&
+  !magicBatchEmpty(session, marks.empty, state, sleepTimer);
+
+/**
  * Whether [session] should pick its next batch now: it wants one
  * (`wantsMagicBatch`) and its last pick didn't come back empty ([empty]:
  * the id of the session whose did). After an empty pick, moving through the

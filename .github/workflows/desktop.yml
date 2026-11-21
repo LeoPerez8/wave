@@ -1,0 +1,635 @@
+name: Desktop
+
+# The desktop's half of CI, called by ci.yml once its shared jobs have run: the Desktop matrix
+# (Linux, Windows), the desktop's release gate, Sign the Windows release and the publication of
+# the installers and their update (docs/spec-desktop.md, Build, release and updates). A phone
+# failure never reaches it, and nothing here waits for the phone.
+on:
+  workflow_call:
+    inputs:
+      # The release source (docs/release-provenance.md): the one commit every job here checks out.
+      source_sha:
+        type: string
+        required: true
+      # v<version> when the run publishes a versioned release, else empty.
+      release_tag:
+        type: string
+        required: false
+        default: ""
+      # The -ti release a promotion builds the desktop from (promote.sh), at or below
+      # release_tag. Empty takes the stable tag's own number.
+      promoted_from:
+        type: string
+        required: false
+        default: ""
+      # The shared jobs' evidence, as the caller's toJSON(needs): source, changes, secret-scan,
+      # checks and notes. The desktop's gate admits on it together with this workflow's own jobs.
+      evidence:
+        type: string
+        required: true
+      # The Patch notes job's outputs: the GitHub Release's notes, and the desktop update's.
+      notes:
+        type: string
+        required: false
+        default: ""
+      desktop_notes:
+        type: string
+        required: false
+        default: ""
+
+# Each job asks for what it needs, within what the caller's job grants.
+permissions: {}
+
+env:
+  IS_SAME_REPO_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+
+jobs:
+  # The desktop app's typecheck, unit tests, lint, audio engine (cargo test and its addon), JVM
+  # and Playwright smoke test, on each system it ships for (docs/agents/desktop-checks.md). It
+  # builds no installer of its own and needs no secret; a release run packages the installers
+  # its gate admits. ci.yml calls this workflow only when the desktop changed: a PR's files, or
+  # on main and tags, everything since the desktop's previous release (scripts/ci/changes.ts).
+  desktop:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 22.04: Ubuntu 24.04's AppArmor stops Electron's sandbox from starting.
+          - os: ubuntu-22.04
+            name: Desktop (Linux)
+            report: desktop-linux
+            platform: linux
+          - os: windows-latest
+            name: Desktop (Windows)
+            report: desktop-windows
+            platform: win32
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      actions: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      DESKTOP_RELEASE: ${{ fromJSON(inputs.evidence).checks.result == 'success' && inputs.release_tag != '' && (endsWith(inputs.release_tag, '-ti') || vars.RELEASE_DESKTOP_MAIN == 'on') }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - uses: ./.github/actions/pnpm-store
+
+      - name: Install
+        run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile --filter "@wave/desktop..." --filter "@wave/sync..."
+
+      # Windows' store is this job's: no other job installs there. Linux's is Checks', so on
+      # Linux this call doesn't run (with save off it would restore the store again).
+      - uses: ./.github/actions/pnpm-store
+        if: runner.os == 'Windows'
+        with:
+          save: true
+
+      - name: Typecheck
+        run: scripts/ci/step.sh "Typecheck" pnpm --filter @wave/desktop typecheck
+
+      - name: Test
+        run: scripts/ci/step.sh "Test" pnpm --filter @wave/desktop test
+
+      - name: Lint
+        run: scripts/ci/step.sh "Lint" pnpm --filter @wave/desktop lint
+
+      # cpal reads ALSA's headers on Linux and the media controls' addon D-Bus's; playerctl checks
+      # those controls. Windows needs nothing more than the runner's MSVC.
+      - name: Install the audio headers
+        if: runner.os == 'Linux'
+        run: scripts/ci/step.sh "Install the audio headers" bash -c "sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev libdbus-1-dev libfuse2 playerctl"
+
+      # Keyed by the crates' lockfile. Main saves a new key's entry after the build (docs/spec.md,
+      # Build and CI › Caches); PRs and tags only read it.
+      - name: Restore the audio engine's build
+        id: native_cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            apps/desktop/native/target
+          key: desktop-native-${{ runner.os }}-${{ hashFiles('apps/desktop/native/Cargo.lock') }}
+          restore-keys: desktop-native-${{ runner.os }}-
+
+      # Decoding and seeking against PCM golden files, and playback with no output device.
+      - name: Audio engine tests
+        run: scripts/ci/step.sh "Audio engine tests" cargo test --locked --manifest-path apps/desktop/native/Cargo.toml
+
+      - name: Build the audio addon
+        run: scripts/ci/step.sh "Build the audio addon" pnpm --filter @wave/desktop build:native
+
+      - name: Save the audio engine's build
+        if: github.ref == 'refs/heads/main' && steps.native_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            apps/desktop/native/target
+          key: ${{ steps.native_cache.outputs.cache-primary-key }}
+
+      # The shared Kotlin runs in a JVM the app ships: its JAR and a runtime jlink trims from
+      # this JDK (#1147).
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+        with:
+          cache-disabled: true
+
+      # Gradle's caches for the shared Kotlin's JAR, keyed by its Gradle files. Main saves a new
+      # key's entry after the build; PRs and tags only read it.
+      - name: Restore Gradle's caches
+        id: gradle_cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: desktop-gradle-${{ runner.os }}-${{ hashFiles('packages/kotlin-shared/**/*.gradle*', 'packages/kotlin-shared/**/gradle*.properties') }}
+          restore-keys: desktop-gradle-${{ runner.os }}-
+
+      - name: Build the JVM
+        run: scripts/ci/step.sh "Build the JVM" pnpm --filter @wave/desktop build:jvm
+
+      - name: Save Gradle's caches
+        if: github.ref == 'refs/heads/main' && steps.gradle_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ steps.gradle_cache.outputs.cache-primary-key }}
+
+      - name: Package the desktop release
+        if: env.DESKTOP_RELEASE == 'true'
+        env:
+          PREPARE_WINDOWS: ${{ matrix.platform == 'win32' && vars.WAVE_WINDOWS_SIGNPATH == 'on' }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          WAVE_DESKTOP_CHANNEL: ${{ endsWith(inputs.release_tag, '-ti') && 'ti' || 'main' }}
+          WAVE_DESKTOP_UPDATE_PUBLIC_KEY: ${{ vars.WAVE_DESKTOP_UPDATE_PUBLIC_KEY }}
+          # The Wave account: the sync service and Google's Desktop client, built into main
+          # (docs/agents/desktop-checks.md, Wave account). Google doesn't treat a Desktop client's
+          # secret as confidential, and every installer carries it, so it is a variable.
+          MAIN_VITE_WAVE_SYNC_URL: ${{ vars.WAVE_SYNC_URL }}
+          MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.WAVE_GOOGLE_DESKTOP_CLIENT_ID }}
+          MAIN_VITE_WAVE_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ vars.WAVE_GOOGLE_DESKTOP_CLIENT_SECRET }}
+          MAIN_VITE_WAVE_SPOTIFY_CLIENT_ID: ${{ vars.WAVE_SPOTIFY_CLIENT_ID }}
+        run: |
+          pnpm --filter @wave/desktop build
+          mode=()
+          if [ "$PREPARE_WINDOWS" = true ]; then mode=(prepare); fi
+          pnpm --filter @wave/desktop exec node scripts/package-release.ts "$RELEASE_TAG" "$RUNNER_TEMP/desktop-release" "${mode[@]}"
+
+      - name: Keep the desktop installers and build evidence
+        if: env.DESKTOP_RELEASE == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-release-${{ matrix.platform }}
+          path: |
+            ${{ runner.temp }}/desktop-release/*.exe
+            ${{ runner.temp }}/desktop-release/*.blockmap
+            ${{ runner.temp }}/desktop-release/*.AppImage
+            ${{ runner.temp }}/desktop-release/windows-app.tar
+            ${{ runner.temp }}/desktop-release/build.json
+          if-no-files-found: error
+          retention-days: 14
+
+      # Linux runners have no display, so the window opens on a virtual one.
+      - name: Smoke test
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            scripts/ci/step.sh "Smoke test" xvfb-run -a pnpm --filter @wave/desktop test:e2e
+            # MPRIS needs a session bus, which only this check gets: playerctl drives Wave.
+            scripts/ci/step.sh "System media controls" env WAVE_PLAYERCTL=1 dbus-run-session -- xvfb-run -a pnpm --filter @wave/desktop exec playwright test e2e/system.spec.ts
+          else
+            scripts/ci/step.sh "Smoke test" pnpm --filter @wave/desktop test:e2e
+          fi
+
+      # Separate from the smoke suite: one window, no retries, real native services.
+      - name: Performance
+        id: performance
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            scripts/ci/step.sh "Performance" xvfb-run -a pnpm --filter @wave/desktop test:perf
+          else
+            scripts/ci/step.sh "Performance" pnpm --filter @wave/desktop test:perf
+          fi
+
+      # Main and release-tag runs always include both desktop jobs, so each release's run
+      # holds its memory at rest. The measurements are kept even when a target fails.
+      - name: Keep desktop performance and memory
+        if: always() && (steps.performance.outcome == 'success' || steps.performance.outcome == 'failure')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-performance-${{ matrix.report }}
+          path: apps/desktop/perf-results
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Keep the smoke test's screenshots
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-smoke-${{ matrix.report }}
+          path: |
+            apps/desktop/test-results
+            apps/desktop/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Report
+        if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci/report.sh "${{ job.status }}" "${{ matrix.name }}"
+
+      - name: Keep the report
+        if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-report-${{ matrix.report }}
+          path: ${{ runner.temp }}/ci-report
+          if-no-files-found: ignore
+          retention-days: 1
+
+  # The desktop's release gate. Signing and publishing the installers, and their update, open only
+  # when Secret scan, Checks and the patch notes (ci.yml's jobs, from inputs.evidence) and both
+  # Desktop jobs succeeded on the run's release source. The phone's jobs count for nothing here,
+  # so a failed APK never refuses the desktop's release. Its record, desktop-release-provenance,
+  # is the desktop's admission (docs/release-provenance.md). It holds no secret and opens no
+  # Environment. Stable desktop releases wait for the owner's RELEASE_DESKTOP_MAIN switch.
+  release-gate:
+    name: Release gate
+    needs: [desktop]
+    if: >-
+      ${{ !cancelled() && github.event_name != 'pull_request' && inputs.release_tag != '' &&
+      (endsWith(inputs.release_tag, '-ti') || vars.RELEASE_DESKTOP_MAIN == 'on') }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      sha: ${{ steps.shared.outputs.sha }}
+      admitted: ${{ steps.desktop.outputs.admitted }}
+      sign_windows: ${{ steps.desktop.outputs.sign_windows }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.source_sha }}
+          sparse-checkout: |
+            apps/updates
+            scripts/ci
+          persist-credentials: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: desktop-release-*
+          path: ${{ runner.temp }}/desktop
+
+      # The same shared prerequisites the phone's gate reads, from the same jobs.
+      - name: Check shared release evidence
+        id: shared
+        env:
+          INPUT_SHA: ${{ inputs.source_sha }}
+          SOURCE_RESULT: ${{ fromJSON(inputs.evidence).source.result }}
+          SOURCE_SHA: ${{ fromJSON(inputs.evidence).source.outputs.sha }}
+          SCAN_RESULT: ${{ fromJSON(inputs.evidence)['secret-scan'].result }}
+          SCAN_SOURCE: ${{ fromJSON(inputs.evidence)['secret-scan'].outputs.source }}
+          SCAN_RANGE: ${{ fromJSON(inputs.evidence)['secret-scan'].outputs.range }}
+          CHECKS_RESULT: ${{ fromJSON(inputs.evidence).checks.result }}
+          CHECKS_SOURCE: ${{ fromJSON(inputs.evidence).checks.outputs.source }}
+          NOTES_RESULT: ${{ fromJSON(inputs.evidence).notes.result }}
+          NOTES_SOURCE: ${{ fromJSON(inputs.evidence).notes.outputs.source }}
+          NOTES_OUTCOME: ${{ fromJSON(inputs.evidence).notes.outputs.outcome }}
+        run: |
+          test "$SOURCE_RESULT" = success || { echo "::error::Release source did not succeed."; exit 1; }
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Release source selected no commit."; exit 1; }
+          test "$INPUT_SHA" = "$SOURCE_SHA" || { echo "::error::This workflow was handed another source."; exit 1; }
+          test "$SCAN_RESULT" = success || { echo "::error::Secret scan did not succeed."; exit 1; }
+          test "$SCAN_SOURCE" = "$SOURCE_SHA" || { echo "::error::Secret scan checked another source."; exit 1; }
+          [[ "$SCAN_RANGE" == "$SOURCE_SHA" || "$SCAN_RANGE" =~ ^[0-9a-f]{40}\.\.$SOURCE_SHA$ ]] || { echo "::error::Secret scan didn't scan up to the source."; exit 1; }
+          test "$CHECKS_RESULT" = success || { echo "::error::Checks did not succeed."; exit 1; }
+          test "$CHECKS_SOURCE" = "$SOURCE_SHA" || { echo "::error::Checks checked another source."; exit 1; }
+          test "$NOTES_RESULT" = success || { echo "::error::Patch notes job did not succeed."; exit 1; }
+          test "$NOTES_SOURCE" = "$SOURCE_SHA" || { echo "::error::Patch notes checked another source."; exit 1; }
+          test "$NOTES_OUTCOME" = success || { echo "::error::Patch notes did not succeed."; exit 1; }
+          echo "sha=$SOURCE_SHA" | tee -a "$GITHUB_OUTPUT"
+
+      # A stable tag promotes the desktop's newest ti release at or below it (promoted_from, by
+      # default the same number's): that release's record must have admitted installers built
+      # from this run's source, and the stable record links it as promotedFrom.
+      - name: Link the promoted ti release
+        id: promoted
+        if: ${{ !endsWith(inputs.release_tag, '-ti') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTED_FROM: ${{ inputs.promoted_from }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          promoted="${PROMOTED_FROM:-${RELEASE_TAG}-ti}"
+          dir="$RUNNER_TEMP/promoted"
+          # Before #1336 the desktop's admission was part of the phone's record.
+          for name in "wave-${promoted#v}.desktop.provenance.json" "wave-${promoted#v}.provenance.json"; do
+            if gh release download "$promoted" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$dir" 2> /dev/null; then
+              record="$dir/$name"
+              break
+            fi
+          done
+          node scripts/ci/release-gate.ts promote-desktop "${record:-$dir/none.json}" "$promoted" "$RELEASE_TAG" "$SOURCE_SHA" > "$RUNNER_TEMP/promoted.json"
+          cat "$RUNNER_TEMP/promoted.json"
+          echo "file=$RUNNER_TEMP/promoted.json" >> "$GITHUB_OUTPUT"
+
+      - name: Create desktop provenance input
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          PROMOTED_FILE: ${{ steps.promoted.outputs.file }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/provenance"
+          node -e 'const fs = require("node:fs"); const [out, source, releaseTag, promoted] = process.argv.slice(1); fs.writeFileSync(out, JSON.stringify({schema:"wave-release-provenance/1",source,releaseTag,...(promoted ? {promotedFrom: JSON.parse(fs.readFileSync(promoted, "utf8"))} : {})})+"\n")' \
+            "$RUNNER_TEMP/provenance/provenance.json" "$SOURCE_SHA" "$RELEASE_TAG" "$PROMOTED_FILE"
+
+      - name: Admit the desktop installers
+        id: desktop
+        env:
+          DESKTOP_RESULT: ${{ needs.desktop.result }}
+          WINDOWS_SIGNPATH: ${{ vars.WAVE_WINDOWS_SIGNPATH }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          test "$DESKTOP_RESULT" = success
+          options=()
+          case "$WINDOWS_SIGNPATH" in
+            on) options=(--pending-windows) ;;
+            ''|off) [[ "$RELEASE_TAG" == *-ti ]] || { echo "::error::Stable desktop requires SignPath."; exit 1; } ;;
+            *) echo "::error::Set WAVE_WINDOWS_SIGNPATH to on or off."; exit 1 ;;
+          esac
+          node apps/updates/scripts/desktop-release.ts admit "$RUNNER_TEMP/provenance/provenance.json" "$RUNNER_TEMP/desktop" "${options[@]}"
+          if [ "$WINDOWS_SIGNPATH" = on ]; then echo "sign_windows=true" >> "$GITHUB_OUTPUT"; fi
+          echo "admitted=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-release-provenance
+          path: ${{ runner.temp }}/provenance/provenance.json
+          retention-days: 14
+
+  sign-windows:
+    name: Sign the Windows release
+    needs: [release-gate]
+    if: >-
+      ${{ needs.release-gate.result == 'success' && needs.release-gate.outputs.sign_windows == 'true' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/v'))) }}
+    runs-on: windows-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'ti' || 'main' }}
+    permissions:
+      actions: read
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      build_sha256: ${{ steps.final.outputs.build_sha256 }}
+      artifact_id: ${{ steps.signed-windows.outputs.artifact-id }}
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      WAVE_DESKTOP_CHANNEL: ${{ endsWith(inputs.release_tag, '-ti') && 'ti' || 'main' }}
+      WAVE_DESKTOP_UPDATE_PUBLIC_KEY: ${{ vars.WAVE_DESKTOP_UPDATE_PUBLIC_KEY }}
+      SIGNPATH_CERTIFICATE_SHA256: ${{ vars.SIGNPATH_CERTIFICATE_SHA256 }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ needs.release-gate.outputs.sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - uses: ./.github/actions/pnpm-store
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-release-provenance
+          path: ${{ runner.temp }}/provenance
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: desktop-release-*
+          path: ${{ runner.temp }}/desktop
+
+      - name: Verify the admitted Windows app payload
+        env:
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+        run: |
+          node apps/updates/scripts/desktop-release.ts verify "$RUNNER_TEMP/provenance/provenance.json" "$RUNNER_TEMP/desktop" --pending-windows
+          for setting in SIGNPATH_ORGANIZATION_ID SIGNPATH_PROJECT_SLUG SIGNPATH_SIGNING_POLICY_SLUG; do
+            test -n "${!setting}" || { echo "::error::Missing $setting"; exit 1; }
+          done
+          [[ "$SIGNPATH_CERTIFICATE_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]] || { echo "::error::Invalid SIGNPATH_CERTIFICATE_SHA256"; exit 1; }
+
+      - name: Extract the admitted Windows app
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory "$env:RUNNER_TEMP/windows-work" | Out-Null
+          & "$env:SystemRoot/System32/tar.exe" -xf "$env:RUNNER_TEMP/desktop/desktop-release-win32/windows-app.tar" -C "$env:RUNNER_TEMP/windows-work"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Install the Windows packager
+        run: pnpm install --frozen-lockfile --filter "@wave/desktop..."
+
+      - name: Upload the admitted Wave.exe for signing
+        id: unsigned-app
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: signpath-unsigned-app-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/windows-work/win-unpacked/Wave.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Sign Wave.exe
+        uses: SignPath/github-action-submit-signing-request@4a84eb4ad763290f059275786f2deed97c2c672b # v3.1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: wave-exe
+          github-artifact-id: ${{ steps.unsigned-app.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: ${{ runner.temp }}/signpath-app
+
+      - name: Build NSIS with the signed Wave.exe
+        id: installer
+        run: |
+          pnpm --filter @wave/desktop exec node scripts/package-release.ts "$RELEASE_TAG" "$RUNNER_TEMP/windows-work" installer "$RUNNER_TEMP/signpath-app"
+          name="$(node --input-type=module -e 'import { artifactName } from "./apps/updates/src/desktopProtocol.ts"; console.log(artifactName("win32", process.argv[1]));' -- "${RELEASE_TAG#v}")"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the NSIS installer for signing
+        id: unsigned-installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: signpath-unsigned-installer-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/windows-work/${{ steps.installer.outputs.name }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Sign the NSIS installer
+        uses: SignPath/github-action-submit-signing-request@4a84eb4ad763290f059275786f2deed97c2c672b # v3.1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: wave-nsis
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: ${{ runner.temp }}/signpath-installer
+
+      - name: Verify the signed installer and generate its blockmap
+        id: final
+        run: |
+          pnpm --filter @wave/desktop exec node scripts/package-release.ts "$RELEASE_TAG" "$RUNNER_TEMP/windows-work" finalize "$RUNNER_TEMP/signpath-installer"
+          hash=$(sha256sum "$RUNNER_TEMP/windows-work/build.json")
+          echo "build_sha256=${hash%% *}" >> "$GITHUB_OUTPUT"
+
+      - name: Keep the signed Windows release
+        id: signed-windows
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: signed-desktop-windows-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/windows-work/${{ steps.installer.outputs.name }}
+            ${{ runner.temp }}/windows-work/${{ steps.installer.outputs.name }}.blockmap
+            ${{ runner.temp }}/windows-work/build.json
+          if-no-files-found: error
+          retention-days: 14
+
+  # Publishes the admitted installers to the version's GitHub Release, then their update. It
+  # doesn't wait for the phone: when the APK's release job hasn't created the GitHub Release yet,
+  # this job creates it, and the APK's adds to it (scripts/ci/publish-release.sh). The desktop's
+  # publications on a channel go one at a time, as do its rollbacks (rollback.yml).
+  release:
+    name: Publish the desktop release
+    needs: [release-gate, sign-windows]
+    if: >-
+      ${{ !cancelled() && needs.release-gate.result == 'success' &&
+      needs.release-gate.outputs.admitted == 'true' &&
+      (needs.release-gate.outputs.sign_windows != 'true' || needs.sign-windows.result == 'success') }}
+    # The desktop update's signing key and the update service's credentials live only in the
+    # release Environments (docs/spec.md, Release secrets), as for the phone's release job.
+    environment: ${{ github.ref == 'refs/heads/main' && 'ti' || 'main' }}
+    concurrency:
+      group: desktop-release-${{ endsWith(inputs.release_tag, '-ti') && 'ti' || 'main' }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ needs.release-gate.outputs.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/ci
+            apps/updates
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Get the admitted desktop installers
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: desktop-release-*
+          path: ${{ runner.temp }}/desktop
+
+      - name: Get the signed Windows release
+        if: needs.release-gate.outputs.sign_windows == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ needs.sign-windows.outputs.artifact_id }}
+          path: ${{ runner.temp }}/desktop/desktop-release-win32
+
+      - name: Get the desktop gate's record
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-release-provenance
+          path: ${{ runner.temp }}/provenance
+
+      # Nothing is published but the installers the gate admitted, and the Windows one SignPath
+      # signed when signing is on.
+      - name: Verify the admitted desktop installers
+        env:
+          SIGN_WINDOWS: ${{ needs.release-gate.outputs.sign_windows }}
+          WINDOWS_BUILD_SHA256: ${{ needs.sign-windows.outputs.build_sha256 }}
+        run: |
+          if [ "$SIGN_WINDOWS" = true ]; then
+            node apps/updates/scripts/desktop-release.ts finalize-windows "$RUNNER_TEMP/provenance/provenance.json" "$RUNNER_TEMP/desktop" "$WINDOWS_BUILD_SHA256"
+          else
+            node apps/updates/scripts/desktop-release.ts verify "$RUNNER_TEMP/provenance/provenance.json" "$RUNNER_TEMP/desktop"
+          fi
+
+      # The installers and the desktop's record (wave-<version>.desktop.provenance.json) go on the
+      # version's GitHub Release, which this creates when the phone hasn't yet.
+      - name: Publish the release
+        id: published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_APP: desktop
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_SHA: ${{ needs.release-gate.outputs.sha }}
+          PATCH_NOTES: ${{ inputs.notes }}
+          PROVENANCE_FILE: ${{ runner.temp }}/provenance/provenance.json
+        run: |
+          if [ -n "$PATCH_NOTES" ]; then
+            export RELEASE_NOTES_FILE="$RUNNER_TEMP/patch-notes.md"
+            printf '%s\n' "$PATCH_NOTES" > "$RELEASE_NOTES_FILE"
+          fi
+          assets="$(node apps/updates/scripts/desktop-release.ts names "$RELEASE_TAG" "$RUNNER_TEMP/desktop")"
+          mapfile -t desktop <<< "$assets"
+          scripts/ci/publish-release.sh "${desktop[@]}"
+
+      # After the GitHub Release, so a desktop never gets an update whose installers it can't find.
+      - name: Publish the desktop update
+        if: steps.published.outputs.url != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WAVE_DESKTOP_UPDATE_SIGNING_KEY: ${{ secrets.WAVE_DESKTOP_UPDATE_SIGNING_KEY }}
+          WAVE_DESKTOP_NOTES: ${{ inputs.desktop_notes }}
+        run: node apps/updates/scripts/desktop-release.ts publish "$RUNNER_TEMP/provenance/provenance.json" "$RUNNER_TEMP/desktop"

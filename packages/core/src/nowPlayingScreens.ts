@@ -8,6 +8,8 @@
  * state of the player, which the app keeps.
  */
 
+import { settleSheet, type SheetState } from "./sheet.ts";
+
 /** A screen of Now Playing. */
 export type NowPlayingScreen = "player" | "queue" | "related";
 
@@ -57,6 +59,49 @@ export interface NowPlayingScreensStep {
 
 /** Every open of Now Playing starts here. */
 export const NOW_PLAYING_OPENS_ON: NowPlayingScreens = { screen: "player", editing: false };
+
+/** Whether the player and Queue pages can take a swipe between them. */
+export const nowPlayingPageSwipesEnabled = (screens: NowPlayingScreens): boolean =>
+  !screens.editing && screens.screen !== "related";
+
+/**
+ * Whether an upward drag on the player opens Related: on the player, out of
+ * edit mode, with a song on ([playing]) and YouTube Music on ([ytMusic]),
+ * which Related reads. The app leaves the Lyrics body out of the drag, so an
+ * upward drag there scrolls the lyrics.
+ */
+export const nowPlayingRelatedSwipeEnabled = ({
+  screens,
+  ytMusic,
+  playing,
+}: {
+  readonly screens: NowPlayingScreens;
+  readonly ytMusic: boolean;
+  readonly playing: boolean;
+}): boolean => screens.screen === "player" && !screens.editing && ytMusic && playing;
+
+/**
+ * Where Related's panel settles when an upward drag on the player lets go
+ * ([translationY] and [velocityY] in dp and dp/s, positive down; [height] the
+ * panel's full travel): by the travel and speed that open the sheet
+ * (`settleSheet`), a flick back down cancelling it.
+ */
+export const settleRelatedRise = ({
+  translationY,
+  velocityY,
+  height,
+}: {
+  readonly translationY: number;
+  readonly velocityY: number;
+  readonly height: number;
+}): SheetState =>
+  settleSheet({
+    from: "closed",
+    // The panel sits below its risen place by the screen less the finger's rise.
+    offset: height - Math.max(0, -translationY),
+    velocity: velocityY,
+    height,
+  });
 
 const show = (screen: NowPlayingScreen, editing = false): NowPlayingScreensStep => ({
   screens: { screen, editing },

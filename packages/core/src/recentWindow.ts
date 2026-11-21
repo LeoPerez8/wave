@@ -1,6 +1,6 @@
 /**
- * "Recently" on Home: the window of counted plays that feeds the Magic Queue
- * carousel's Most listened recently page, In your orbit and From your library.
+ * "Recently" on Home: the window of counted plays that feeds
+ * In your orbit and From your library.
  */
 
 /** How many days back "recently" reaches. */

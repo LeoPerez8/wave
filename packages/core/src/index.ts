@@ -898,6 +898,9 @@ export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
 export {
   NOW_PLAYING_OPENS_ON,
   relatedTimingKind,
+  nowPlayingPageSwipesEnabled,
+  nowPlayingRelatedSwipeEnabled,
+  settleRelatedRise,
   stepNowPlayingScreens,
 } from "./nowPlayingScreens.ts";
 export {
@@ -971,6 +974,7 @@ export {
   magicBatchFailed,
   magicBatchLoading,
   magicPickDue,
+  magicQueueFootnote,
 } from "./magicQueue.ts";
 export { magicPickEnded } from "./magicQueue.ts";
 export { magicBatchLine } from "./magicBatchReport.ts";
@@ -2529,6 +2533,13 @@ export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts"
 export { randomMagicQueuePicks } from "./randomMagicQueuePicks.ts";
 export type { MagicQueuePool, MagicQueueSeedId } from "./randomMagicQueuePicks.ts";
 export {
+  MAGIC_QUEUE_PAGES,
+  magicQueuePages,
+  magicQueuePopularitySteps,
+  redrawMagicQueuePage,
+} from "./magicQueuePages.ts";
+export type { MagicQueuePagesDraw, MagicQueuePagesPool } from "./magicQueuePages.ts";
+export {
   magicQueueMixPicks,
   magicQueueRow,
   magicQueueSeedId,
@@ -2543,23 +2554,17 @@ export type {
 export {
   CAROUSEL_PAGE_MIN_SONGS,
   carouselPageSongs,
-  MAGIC_QUEUE_CAROUSEL_PAGES,
-  magicQueueCarouselKeptPage,
   magicQueueCarouselPage,
   magicQueueCarouselPageLabel,
-  magicQueueCarouselPageTitle,
-  magicQueueCarouselPages,
   magicQueueCarouselRestarts,
+  inYourOrbitSongs,
+  inYourOrbitTap,
+  inYourOrbitTileUnavailable,
+  IN_YOUR_ORBIT_SONGS,
   mostListenedRecently,
   recentPlaysWindow,
 } from "./magicQueueCarousel.ts";
-export type { MagicQueueCarouselPageId, MagicQueueCarouselRow } from "./magicQueueCarousel.ts";
-export { discoveries } from "./discoveries.ts";
-export type {
-  DiscoveriesInput,
-  DiscoveryCatalogSong,
-  DiscoveryLibrarySong,
-} from "./discoveries.ts";
+export type { InYourOrbitTap, MagicQueueCarouselRow } from "./magicQueueCarousel.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios, discoverMixesOfRadiosSteps } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
@@ -3016,11 +3021,14 @@ export {
   NOW_PLAYING_PREVIOUS_ROW_KEY,
   NOW_PLAYING_TRANSPORT_SLOTS,
   editNowPlayingButtons,
+  moveNowPlayingButton,
   nowPlayingButtonsAreDefault,
   nowPlayingRelatedChevronShown,
   nowPlayingSlotRoute,
+  nowPlayingSlotChoiceHolder,
   nowPlayingSlotChoices,
   nowPlayingSlotShow,
+  nowPlayingSlotRunsSongMenu,
   nowPlayingSongMenuShow,
   readNowPlayingButtons,
   readNowPlayingSlotRoute,
@@ -3031,6 +3039,7 @@ export type {
   NowPlayingButtons,
   NowPlayingButtonsEdit,
   NowPlayingSlot,
+  NowPlayingSlotPlace,
   NowPlayingSlotSong,
 } from "./nowPlayingButtons.ts";
 

@@ -6,6 +6,8 @@ owner's S24+ or a car still needs that hardware, so its numbers stay unverified.
 
 ## Build and install
 
+Install this worktree's phone dependencies with `scripts/install-for.sh mobile`.
+
 CI's APKs ship only `arm64-v8a` and crash in `MainApplication.onCreate` on the x86_64 AVDs. Build
 your checkout instead, in the background, since a build takes 8 to 20 minutes:
 

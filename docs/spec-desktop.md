@@ -591,22 +591,43 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   only when what it is built from changed since its previous release (`desktop.yml`, called by
   `ci.yml`; `docs/spec.md` › Build and CI, Phone and desktop builds). A push that changes only the
   desktop still gets a version and publishes only the installers; one that changes only the phone
-  builds none. The desktop's release gate waits only for the shared jobs and the Desktop jobs, so
-  the two apps never hold each other back. A desktop `feat/` PR makes the bump minor. Promote to
-  main publishes the desktop too once v1 is complete (`app=both` or `app=desktop`), from its
-  newest release at or below the promoted version.
+  builds none. `desktop.yml` holds the Desktop jobs (Linux, Windows), the desktop's release gate,
+  Sign the Windows release and the desktop's release job. Its gate waits only for the shared jobs
+  and the Desktop jobs, so the two apps never hold each other back. The desktop's release job
+  publishes the installers and the desktop's record (`wave-<version>.desktop.provenance.json`)
+  to the version's GitHub Release on its own, creating the release when the phone hasn't, then
+  their update (`docs/release-provenance.md`, Desktop installers). A desktop `feat/` PR makes the
+  bump minor and a desktop `fix/` PR a patch, as the phone's do; a change to CI or docs alone,
+  the desktop's included, bumps nothing. The desktop's patch notes count from its own previous
+  release (the newest GitHub Release of the channel holding a desktop installer; a stable one
+  counts as the `-ti` release its desktop was built from), not from the channel's previous tag,
+  so a version only the phone released doesn't drop a line, and the same rule picks what changed
+  since then. With no previous desktop release on the channel, its notes are the hand-written
+  `docs/desktop-first-release-notes.md`. They list the PRs that reach what the desktop is
+  built from and leave the phone's out. A version the desktop releases alone has a GitHub
+  Release with only the installers, the desktop's record and the desktop's notes; phones skip
+  that number. Promote to
+  main publishes the desktop too once v1 is complete and `RELEASE_DESKTOP_MAIN` is on
+  (`app=both`, the default, or `app=desktop`; `app=mobile` publishes no installer). It builds
+  the desktop from the desktop's newest `-ti` release at or below the promoted version that holds
+  both installers, which may be older or newer than the phone's. That run builds only the
+  desktop, from that release's commit, and its record links the release as `promotedFrom`. With
+  `app=both`, a desktop with nothing new since its last stable release is a log line, not a
+  failure; with `app=desktop` it fails the promotion.
   `apps/updates` serves the desktop's updates per channel.
 - Updates are whole-app in v1 (the NSIS blockmap downloads only what changed); no JS-only
   bundles. electron-updater only downloads.
-- Update signing: the release job signs the update manifest and files with Wave's updates key
+- Update signing: the desktop's release job signs the update manifest and files with Wave's updates key
   (Ed25519, in the release Environments), and the app checks them against the public key built
   into it before installing, on Windows and Linux alike, as the phone does. The channel is fixed
   in the build; Wave's code never sets the update endpoint or channel at run time.
 - Roll back an update (`app=desktop`) republishes the previous version for the channel with
-  downgrade allowed, and leaves the phone's update alone.
+  downgrade allowed. It checks the release's desktop record and installers, needs no APK, and
+  writes only the desktop's files in R2 (`desktop/<channel>/…`), so the phone's update and
+  metadata stay as they are; `app=mobile` leaves the desktop's alone the same way.
 - Windows code signing: SignPath Foundation, free for OSI-licensed projects, once the GPL-3.0-only
-  licence is in the repo (#1122). The key stays in SignPath's HSM and the release job asks for
-  the signature. Until then `ti` builds are unsigned and Windows warns on each new version.
+  licence is in the repo (#1122). The key stays in SignPath's HSM and the Sign the Windows
+  release job asks for the signature. Until then `ti` builds are unsigned and Windows warns on each new version.
 - PR runs typecheck, test and lint the desktop, run `cargo test`, and compile the Rust addon on
   both OS. They build no installer and hold no secret, as for the phone.
 - Linux builds run on `ubuntu-22.04` so the AppImage runs on older distributions.
