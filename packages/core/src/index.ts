@@ -2889,3 +2889,5 @@ export {
 export type { DjDiscovery, DjPopularity, DjSettings, DjVariety } from "./djSettings.ts";
 export { magicSessionSliders } from "./magicQueue.ts";
 export type { DjAction, DjState, DjArtistTile, DjGridSources, DjTile, DjTileKey } from "./dj.ts";
+export { djOpeningGrid } from "./djOpening.ts";
+export type { DjOpeningGrid, DjOpeningSources } from "./djOpening.ts";
