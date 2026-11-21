@@ -24,12 +24,16 @@ import {
   magicQueueLabel,
   magicQueueKeepsPlayingSong,
   magicQueueShare,
+  magicSessionSliders,
   magicSignal,
   parseMagicSession,
   sliderStepLabel,
+  startDjQueue as startDjSession,
   startMagicQueue as startSession,
   startStreamedMagicQueue as startStreamedSession,
   wantsMagicBatch,
+  type DjSettings,
+  type DjTile,
   type MagicBatchOutcome,
   type MagicSeed,
   type MagicSeedSong,
@@ -37,6 +41,7 @@ import {
   type MagicSignalKind,
   type QueueState,
   type YtSong,
+  ytAlbumSongs,
   ytTrackId,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -53,6 +58,8 @@ import { oneAtATime } from "@/lib/oneAtATime";
 import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 import { songHasFile, type SongRow, type ArtistRow } from "@wave/client";
+import { readDjAlbumSongs } from "@/dj/djAlbums";
+import { readYtAlbum } from "@/ytmusic/albumPages";
 import { YtMusic } from "@/ytmusic/YtMusic";
 import { appLog } from "@/log/appLog";
 import { currentStreamBufferMs, subscribeStreamBuffer } from "@/settings/streamBuffer";
@@ -61,6 +68,7 @@ import { ytMusicEnabled, subscribeYtMusicEnabled } from "@/settings/ytMusic";
 import { subscribeConnectivity } from "@/native/waveNative";
 
 import { magicQueueYtCandidates } from "./magicQueueRadio";
+import { MAGIC_RADIO_DEADLINE_MS } from "./songRadioSession";
 import { magicSignalsOf } from "./magicSongs";
 import { Player, playbackState, sleepTimerState, sleepTimerLoaded } from "./Player";
 import { onPlayEnded } from "./PlayHistory";
@@ -494,6 +502,172 @@ const begin = (session: MagicSession, startedAt: number, track: QueueTrack) =>
     );
   });
 
+/** A picked batch's songs as queue tracks, in its order: [library]'s files and the batch's own streams. */
+const batchQueueTracks = (
+  batch: ReturnType<typeof completeMagicRadioBatch>,
+  library: readonly SongRow[],
+): QueueTrack[] => {
+  const tracks = new Map<string, QueueTrack>(
+    library.filter(songHasFile).map((song) => [String(song.id), toQueueTrack(song)]),
+  );
+  // The batch's own songs, so a stream that only the Close fill ranked has its track too.
+  for (const candidate of batch.songs)
+    if (candidate.source === "stream" && candidate.song !== null)
+      tracks.set(candidate.trackId, toYtQueueTrack(candidate.song, null));
+  return batch.trackIds.flatMap((id) => tracks.get(id) ?? []);
+};
+
+/** A picked batch's streamed songs, whose covers are cached once it's queued. */
+const batchStreams = (batch: ReturnType<typeof completeMagicRadioBatch>): YtSong[] =>
+  batch.songs.flatMap((candidate) =>
+    candidate.source === "stream" && candidate.song !== null ? [candidate.song] : [],
+  );
+
+/**
+ * How Done in DJ ended: the queue is playing, the seed's radios gave no song
+ * to play, or none of them could be read.
+ */
+export type DjStart = "started" | "empty" | "failed";
+
+/**
+ * The songs of the albums among a DJ seed's [tiles], as seed songs with
+ * their counted plays (`readDjAlbumSongs`): the Library album's, with or
+ * without a file, else the songs of its YT Music page, read by
+ * [deadlineAt] (epoch ms), the first batch's deadline its radios share.
+ * Only the album's browse id is sent.
+ */
+const djAlbumSeedSongs = (tiles: readonly DjTile[], deadlineAt: number) =>
+  Effect.gen(function* () {
+    const store = yield* LibraryStore;
+    const playsOf = (trackIds: readonly string[]) =>
+      store
+        .songCountedPlays(trackIds)
+        .pipe(Effect.orElseSucceed((): ReadonlyMap<string, number> => new Map()));
+    const library = (albumId: number) =>
+      Effect.gen(function* () {
+        const songs = (yield* store.getAlbum(albumId))?.tracks ?? [];
+        const artists = yield* store.artistsByIds([
+          ...new Set(songs.flatMap((song) => song.artistIds)),
+        ]);
+        const names = new Map(artists.map((artist) => [artist.id, artist.name]));
+        const videoIds = yield* store
+          .videoIds(songs.map((song) => song.id))
+          .pipe(Effect.orElseSucceed((): ReadonlyMap<number, string> => new Map()));
+        return magicListSeedSongs(
+          songs.map((song) => ({
+            source: "library" as const,
+            track: {
+              id: song.id,
+              title: song.title,
+              artists: song.artistIds.flatMap((id) => names.get(id) ?? []),
+              durationMs: song.durationMs,
+              ...(videoIds.get(song.id) === undefined ? {} : { videoId: videoIds.get(song.id)! }),
+            },
+          })),
+          yield* playsOf(songs.map((song) => String(song.id))),
+        );
+      });
+    const page = (browseId: string) =>
+      Effect.gen(function* () {
+        const album = yield* Effect.tryPromise(() => readYtAlbum(browseId)).pipe(
+          Effect.timeout(Math.max(0, deadlineAt - Date.now())),
+        );
+        const songs = ytAlbumSongs(browseId, album);
+        return magicListSeedSongs(
+          songs.map((song) => ({ source: "stream" as const, song })),
+          yield* playsOf(songs.map((song) => ytTrackId(song.videoId))),
+        );
+      });
+    return yield* Effect.promise(() =>
+      readDjAlbumSongs(tiles, {
+        library: (albumId) => Effect.runPromise(library(albumId)),
+        page: (browseId) => Effect.runPromise(page(browseId)),
+      }),
+    );
+  });
+
+/**
+ * Starts a Magic Queue from a DJ seed, the selected [tiles] (Core's
+ * `startDjQueue`). No seed song plays first: the session's first batch of 10
+ * is read, from the radios of up to 3 of the selected artists and of the
+ * selected albums' songs (`djAlbumSeedSongs`), and replaces
+ * the queue (with Undo, as any play does), its first song playing. It ranks
+ * with [settings], DJ's own choices from Adjust, not Discover's sliders, and
+ * its Artist variety limits who each batch may hold (`magicQueueYtCandidates`). Nothing is waited for but
+ * the album pages and the radios, under one deadline from the tap
+ * (`MAGIC_RADIO_DEADLINE_MS`): the radios get what the album pages leave of
+ * it. The Library, catalog, graph and taste profile are the last ones
+ * derived. The queue that's playing is left alone unless it starts, and once
+ * [closed] aborts (DJ closed while the batch was read) it never starts: the
+ * batch is dropped as "failed", before anything is saved.
+ */
+export const startDjMagicQueue = (
+  tiles: readonly DjTile[],
+  settings: DjSettings,
+  closed?: AbortSignal,
+) =>
+  Effect.gen(function* () {
+    if (!ytMusicEnabled()) return "failed" satisfies DjStart;
+    const startedAt = Date.now();
+    const deadlineAt = startedAt + MAGIC_RADIO_DEADLINE_MS;
+    const latest = recommendationSnapshot.peek();
+    const library = latest.library ?? { songs: [], artists: [] };
+    const started = startDjSession(tiles, {
+      id: String(startedAt),
+      played: latest.library?.topArtists ?? [],
+      settings,
+      albumSongs: yield* djAlbumSeedSongs(tiles, deadlineAt),
+    });
+    if (started === null) return "empty" satisfies DjStart;
+    const drawn = magicBatchRadios(started, Math.random);
+    const yt = yield* magicQueueYtCandidates(drawn.session, drawn.seeds, library, {
+      catalog: latest.catalog ?? [],
+      graph: latest.graph,
+      taste: latestTasteProfile(),
+      sliders: magicSessionSliders(drawn.session, discoverSliders.get()),
+      profileOf: magicProfileOf(library),
+      deadlineAt,
+    });
+    const batch = completeMagicRadioBatch(
+      drawn.session,
+      yt.candidates,
+      yt.likedCandidates,
+      yt.fallback,
+    );
+    const songs = batchQueueTracks(batch, library.songs);
+    appLog(
+      "info",
+      "WaveTiming",
+      magicBatchLine({
+        first: true,
+        ms: Date.now() - startedAt,
+        outcome:
+          songs.length > 0
+            ? { kind: "appended", songs: songs.length }
+            : { kind: "failed", reason: yt.refilled === null ? "no radio read" : "no songs" },
+      }),
+    );
+    if (songs.length === 0) return (yt.refilled === null ? "failed" : "empty") satisfies DjStart;
+    if (closed?.aborted) return "failed" satisfies DjStart;
+    startingLibrary = { songs: library.songs.filter(songHasFile), artists: library.artists };
+    save(batch.session);
+    failedBatch.set(null);
+    emptyBatch.set(null);
+    const queue = yield* Queue;
+    yield* queue.dispatch(
+      {
+        type: "play",
+        trackIds: songs.map((song) => song.id),
+        startIndex: 0,
+        context: { kind: MAGIC_QUEUE_CONTEXT, id: batch.session.id },
+        shuffle: false,
+      },
+      songs,
+    );
+    yield* cacheYtCoversInBackground(batchStreams(batch));
+    return "started" satisfies DjStart;
+  });
+
 /** Runs [effect] on its own; the Magic Queue is best effort and never disturbs playback. */
 const fork = (effect: Effect.Effect<void, unknown>): void => {
   Effect.runFork(Effect.ignore(effect));
@@ -585,7 +759,8 @@ export const layer = Layer.effectDiscard(
         const catalog = latest.catalog ?? [];
         const graph = latest.graph;
         const taste = latestTasteProfile();
-        const sliders = discoverSliders.get();
+        // A DJ session ranks with its own choices, whatever Discover's sliders say.
+        const sliders = magicSessionSliders(wanted, discoverSliders.get());
         const profileOf = magicProfileOf(library);
         // This batch's radios, drawn once for it and saved before they're read.
         const live = activeMagicSession();
@@ -629,21 +804,13 @@ export const layer = Layer.effectDiscard(
             refill: yt.refilled,
           } satisfies MagicBatchOutcome;
         save(batch.session);
-        const tracks = new Map<string, QueueTrack>(
-          playable.map((song) => [String(song.id), toQueueTrack(song)]),
-        );
-        // The batch's own songs, so a stream that only the Close fill ranked has its track too.
-        for (const candidate of batch.songs)
-          if (candidate.source === "stream" && candidate.song !== null)
-            tracks.set(candidate.trackId, toYtQueueTrack(candidate.song, null));
-        const songs = batch.trackIds.flatMap((id) => tracks.get(id) ?? []);
+        const songs = batchQueueTracks(batch, library.songs);
         yield* queue.dispatch({ type: "append", trackIds: songs.map((song) => song.id) }, songs);
         appended(songs.length);
-        yield* cacheYtCoversInBackground(
-          batch.songs.flatMap((candidate) =>
-            candidate.source === "stream" && candidate.song !== null ? [candidate.song] : [],
-          ),
-        ).pipe(Effect.provideService(YtMusic, ytMusic), Effect.provideService(Player, player));
+        yield* cacheYtCoversInBackground(batchStreams(batch)).pipe(
+          Effect.provideService(YtMusic, ytMusic),
+          Effect.provideService(Player, player),
+        );
         return { kind: "appended", songs: songs.length } satisfies MagicBatchOutcome;
       });
 
