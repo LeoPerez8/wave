@@ -138,6 +138,19 @@ test("a browser that never comes back times out", async () => {
   );
 });
 
+test("a system browser that cannot open fails the sign-in without waiting for a callback", async () => {
+  const fake = google(approve);
+  await assert.rejects(
+    signInWithBrowser({
+      ...fake.options,
+      openExternal: async () => {
+        throw new Error("No browser");
+      },
+    }),
+    (error: unknown) => (error as BrowserSignInError).reason === "failed",
+  );
+});
+
 test("a token endpoint that refuses the code fails the sign-in", async () => {
   const fake = google(approve);
   await assert.rejects(

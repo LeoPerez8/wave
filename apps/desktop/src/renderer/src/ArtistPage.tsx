@@ -2,9 +2,11 @@ import type { YtPick } from "@wave/core";
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import type { ArtistAlbums, ArtistSectionView, CreditedArtist } from "../../shared/artistPage.ts";
 import type { BrowseRow } from "../../shared/browse.ts";
-import type { MenuItem } from "./Menu.tsx";
-import { labels, text } from "./text.ts";
+import type { ArtistStatsPage, StatsRow } from "../../shared/stats.ts";
+import type { MenuItem, MenuPoint } from "./Menu.tsx";
+import { labels, text, language } from "./text.ts";
 import { Shelf, YtSongList, type TileItem } from "./YtLists.tsx";
+import { VirtualTable } from "./VirtualTable.tsx";
 import "./artist.css";
 
 /**
@@ -86,7 +88,14 @@ export const useArtistSection = (
 };
 
 /** The Library | Online toggle at the end of the hero's Play and Shuffle. */
-export function ArtistToggle({ section }: { readonly section: ArtistSection }) {
+export function ArtistToggle({
+  section,
+}: {
+  readonly section: {
+    readonly view: { readonly toggle: YtPick } | null;
+    readonly setPick: (pick: YtPick) => void;
+  };
+}) {
   const { view } = section;
   if (view === null) return null;
   return (
@@ -140,6 +149,85 @@ const releaseTiles = (releases: ArtistSectionView["albums"]): TileItem[] =>
     artworkUrl: release.artworkUrl,
   }));
 
+function ArtistListening({
+  artistId,
+  revision,
+  onError,
+  onPlay,
+  onMenu,
+}: {
+  readonly artistId: number;
+  readonly revision: number;
+  readonly onError: () => void;
+  readonly onPlay: (row: StatsRow) => void;
+  readonly onMenu: (
+    row: BrowseRow,
+    at: { readonly x: number; readonly y: number },
+    element: Element,
+  ) => void;
+}) {
+  const [read, setRead] = useState<{ key: string; stats: ArtistStatsPage }>();
+  const key = `${artistId}:${language}:${revision}`;
+  useEffect(() => {
+    let current = true;
+    void window.wave.stats
+      .artist(artistId, language)
+      .then((stats) => current && setRead({ key, stats }))
+      .catch(onError);
+    return () => {
+      current = false;
+    };
+  }, [artistId, key, onError]);
+  const stats = read?.key === key ? read.stats : undefined;
+  if (stats === undefined)
+    return (
+      <p className="secondary" role="status">
+        {text.stats.loadingListeningStats}
+      </p>
+    );
+  if (!stats.played)
+    return (
+      <p className="secondary" role="status" data-testid="artist-not-played">
+        {text.stats.notPlayedYet}
+      </p>
+    );
+  const preview = {
+    id: `artist-stats-${artistId}`,
+    label: text.stats.mostPlayed,
+    page: { items: stats.mostPlayed, offset: 0, total: stats.mostPlayed.length },
+    trailing: (row: BrowseRow) => text.stats.plays((row as StatsRow).countedPlays),
+    trailingHeading: text.stats.facts.plays,
+  };
+  return (
+    <section
+      className="artist-listening"
+      aria-label={text.stats.mostPlayed}
+      data-testid="artist-listening-stats"
+    >
+      <div className="artist-listening-facts">
+        <span>{stats.plays}</span>
+        <span>{stats.minutesListened}</span>
+        <span>{stats.songsListened}</span>
+        <span>{stats.lastPlayed}</span>
+      </div>
+      <h2>{text.stats.mostPlayed}</h2>
+      <VirtualTable
+        scope={{ kind: "artist", id: artistId }}
+        revision={revision}
+        preview={preview}
+        onOpen={(row) => onPlay(row as StatsRow)}
+        onError={onError}
+        onMenu={(row, at) => {
+          const element = document.getElementById(
+            `artist-stats-${artistId}-${stats.mostPlayed.findIndex((item) => item.key === (row as StatsRow).key)}`,
+          );
+          onMenu(row, at, element ?? document.activeElement ?? document.body);
+        }}
+      />
+    </section>
+  );
+}
+
 /**
  * The artist page's content: the album shelves (Albums, with the releases YouTube Music adds
  * after the Library's; Singles & EPs; Appears on), the Library's songs ([children], the songs
@@ -152,9 +240,12 @@ export function ArtistPage({
   revision,
   section,
   onAlbum,
+  onAlbumMenu,
   onYtAlbum,
   onPlayStreamed,
   onSongMenu,
+  onStatsPlay,
+  onStatsMenu,
   onError,
   children,
 }: {
@@ -162,9 +253,16 @@ export function ArtistPage({
   readonly revision: number;
   readonly section: ArtistSection;
   readonly onAlbum: (id: number) => void;
+  readonly onAlbumMenu: (row: BrowseRow, at: MenuPoint) => void;
   readonly onYtAlbum: (browseId: string) => void;
   readonly onPlayStreamed: (index: number) => void;
   readonly onSongMenu: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
+  readonly onStatsPlay: (row: StatsRow) => void;
+  readonly onStatsMenu: (
+    row: BrowseRow,
+    at: { readonly x: number; readonly y: number },
+    element: Element,
+  ) => void;
   readonly onError: () => void;
   readonly children: ReactNode;
 }) {
@@ -187,6 +285,13 @@ export function ArtistPage({
   const songs = online?.songs.items ?? [];
   return (
     <div className="artist-page" data-testid="artist-page">
+      <ArtistListening
+        artistId={artistId}
+        revision={revision}
+        onError={onError}
+        onPlay={onStatsPlay}
+        onMenu={onStatsMenu}
+      />
       <Shelf
         title={text.library.albums}
         items={[...libraryTiles(library.albums), ...releaseTiles(added)]}
@@ -195,6 +300,10 @@ export function ArtistPage({
             ? onAlbum(library.albums[index]!.id)
             : onYtAlbum(added[index - library.albums.length]!.browseId)
         }
+        onMenu={(index, at) => {
+          const row = library.albums[index];
+          if (row) onAlbumMenu(row, at);
+        }}
       />
       <Shelf
         title={text.library.singlesAndEps}
@@ -205,12 +314,13 @@ export function ArtistPage({
         title={text.library.appearsOn}
         items={libraryTiles(library.appearsOn)}
         onOpen={(index) => onAlbum(library.appearsOn[index]!.id)}
+        onMenu={(index, at) => onAlbumMenu(library.appearsOn[index]!, at)}
       />
       <h2 className="artist-songs-heading">
         {online?.popular ? text.library.popular : text.library.songs}
       </h2>
-      {/* The table stays mounted under Popular: it reads the page's hero. */}
-      {online?.popular ? <div hidden>{children}</div> : children}
+      {/* Under Popular the table keeps only its header: it reads the page's hero and sorts the list. */}
+      {online?.popular ? <div className="artist-popular-head">{children}</div> : children}
       {songs.length > 0 && (
         <YtSongList
           songs={songs}

@@ -228,6 +228,56 @@ describe("Play Next and Add to Queue", () => {
     assert.equal(new Set(state.entries.map((entry) => entry.key)).size, 4);
   });
 
+  test("Add to Queue dropped in Up Next goes between the neighbours it was dropped at", () => {
+    const playing = start("a b c d", 1);
+    const between = apply(playing, {
+      type: "addToQueue",
+      trackIds: ["x", "y"],
+      at: { after: keyOf(playing, "c"), before: keyOf(playing, "d") },
+    });
+    assert.equal(show(between), "a [b] c x y d");
+    assert.deepEqual(
+      between.entries.map((entry) => entry.contextIndex),
+      [0, 1, 2, null, null, 3],
+    );
+    const top = apply(playing, {
+      type: "addToQueue",
+      trackIds: ["x"],
+      at: { after: null, before: keyOf(playing, "c") },
+    });
+    assert.equal(show(top), "a [b] x c d");
+    const bottom = apply(playing, {
+      type: "addToQueue",
+      trackIds: ["x"],
+      at: { after: keyOf(playing, "d"), before: null },
+    });
+    assert.equal(show(bottom), "a [b] c d x");
+  });
+
+  test("a drop whose neighbours left Up Next goes to its top", () => {
+    const playing = start("a b c d", 1);
+    const state = apply(playing, {
+      type: "addToQueue",
+      trackIds: ["x"],
+      at: { after: keyOf(playing, "a"), before: "gone" },
+    });
+    assert.equal(show(state), "a [b] x c d");
+  });
+
+  test("Add to Queue goes after songs dropped among the upcoming context tracks", () => {
+    const playing = start("a b c d e", 1);
+    const state = apply(
+      playing,
+      {
+        type: "addToQueue",
+        trackIds: ["x"],
+        at: { after: keyOf(playing, "d"), before: keyOf(playing, "e") },
+      },
+      { type: "addToQueue", trackIds: ["y"] },
+    );
+    assert.equal(show(state), "a [b] c d x y e");
+  });
+
   test("on an empty queue they start playing the tracks", () => {
     for (const type of ["playNext", "addToQueue"] as const) {
       const { state, playback } = reduceQueue(EMPTY_QUEUE, { type, trackIds: ["x", "y"] });

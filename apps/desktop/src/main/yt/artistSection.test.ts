@@ -8,7 +8,9 @@ import { addTrack, type TestDatabase } from "@wave/client/testing";
 import type { YtAlbumSong, YtArtistAlbum, YtArtistCandidate, YtArtistPage } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { libraryLayer } from "../database.ts";
+import type { LibraryDatabase } from "@wave/client/db/database";
 import { browseLibrary } from "../library/browse.ts";
+import { toggleBrowseSort } from "../library/browseSort.ts";
 import { createArtistSection, type ArtistSectionDeps } from "./artistSection.ts";
 
 /** Runs [use] over a desktop Library file, as main opens it. */
@@ -261,4 +263,37 @@ test("with Online the songs are one Popular list in YouTube Music's order, and P
       listStart: 0,
     });
     assert.deepEqual(section.queue(id, "library"), { ids: inLibraryOrder, listStart: 3 });
+  }));
+
+test("with Online and another sort, the Library's songs keep that sort and the rest follow", () =>
+  inLibrary(async (db) => {
+    addTrack(db, {
+      title: "Sour Times",
+      artist: "Portishead",
+      album: "Dummy",
+      durationMs: 250_000,
+    });
+    const id = seedPortishead(db);
+    const { section } = sectionOver(db);
+    await section.ask(id);
+    assert.equal(section.view(id, "online", 0, 50)!.popular, true);
+
+    // Song name, Z to A: two clicks on the Title header.
+    toggleBrowseSort(db as unknown as LibraryDatabase, "artist", "title");
+    toggleBrowseSort(db as unknown as LibraryDatabase, "artist", "title");
+    const view = section.view(id, "online", 0, 50)!;
+    assert.equal(view.popular, false);
+    assert.deepEqual(
+      view.songs.items.map((row) => row.title),
+      ["Roads", "Machine Gun"],
+    );
+    const sorted = browseLibrary(db, { kind: "artist", id }, 0, 10).items;
+    assert.deepEqual(
+      sorted.map((row) => row.title),
+      ["Sour Times", "Glory Box"],
+    );
+    assert.deepEqual(section.queue(id, "online"), {
+      ids: [...sorted.map((row) => String(row.id)), "yt:roads00001", "yt:machinegun"],
+      listStart: 2,
+    });
   }));

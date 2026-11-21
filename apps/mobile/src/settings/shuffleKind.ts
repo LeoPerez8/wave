@@ -1,4 +1,4 @@
-import { readShuffleKind, type ShuffleKind } from "@wave/core";
+import { readShuffleKind, writeShuffleKind, type ShuffleKind } from "@wave/core";
 
 import { persistedSetting } from "@/lib/persistedSetting";
 
@@ -12,7 +12,7 @@ export const shuffleKindSetting = persistedSetting<ShuffleKind>({
   key: "settings.shuffleKind",
   synced: true,
   read: readShuffleKind,
-  write: (kind) => (kind === "real" ? null : kind),
+  write: writeShuffleKind,
 });
 
 export const shuffleKind = shuffleKindSetting.get;

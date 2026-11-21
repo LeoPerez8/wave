@@ -283,4 +283,5 @@ export const playbackTextEn = {
   allExplicitNotAdded: "Didn't add: every song is explicit.",
   sleepDuration: (hours: number, minutes: number) =>
     hours === 0 ? `${minutes} min` : minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`,
+  lyricsOnline: "Lyrics online",
 };

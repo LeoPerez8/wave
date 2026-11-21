@@ -141,6 +141,40 @@ export default function RootLayout() {
     };
   }, [granted, genreLookups]);
 
+  // Mood lookups send candidate titles and artists to Deezer and ReccoBeats: "Fix songs online".
+  useEffect(() => {
+    if (!granted || !genreLookups) return;
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    const cancel = afterFirstSettled("djMoodFeatures", () => {
+      void import("@/dj/djMoodLookup").then(({ startDjMoodLookup }) => {
+        if (!disposed) stop = startDjMoodLookup();
+      });
+    });
+    return () => {
+      disposed = true;
+      cancel();
+      stop?.();
+    };
+  }, [granted, genreLookups]);
+
+  // Library songs' mood features, by their file's ISRC tag, while Fix songs online is on.
+  useEffect(() => {
+    if (!granted || !genreLookups) return;
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    const cancel = afterFirstSettled("djLibraryMoodFeatures", () => {
+      void import("@/dj/djLibraryMoodLookup").then(({ startDjLibraryMoodLookup }) => {
+        if (!disposed) stop = startDjLibraryMoodLookup();
+      });
+    });
+    return () => {
+      disposed = true;
+      cancel();
+      stop?.();
+    };
+  }, [granted, genreLookups]);
+
   // SQLite gathers the planner statistics the Library database lacks (src/library/db/connection.ts).
   useEffect(() => afterFirstSettled("optimize", optimizeLibraryDatabase), []);
 

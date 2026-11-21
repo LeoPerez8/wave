@@ -23,9 +23,12 @@ export const createPlaylistReplay = async (
     root,
     "apps/mobile/src/library/libraryChanges.ts",
   );
-  const modern = existsSync(
-    resolve(root, "apps/mobile/src/library/playlistRecommendationVisit.ts"),
-  );
+  // The visit's follower moved from the phone to the shared client package.
+  const followPath = [
+    "packages/client/src/playlistSuggestionsFollow.ts",
+    "apps/mobile/src/library/playlistRecommendationVisit.ts",
+  ].find((path) => existsSync(resolve(root, path)));
+  const modern = followPath !== undefined;
   const work = { reads: 0, ranks: 0, rowsRead: 0, statements: 0, notifications: 0 };
   let measuring = false,
     tracing = false;
@@ -91,12 +94,13 @@ export const createPlaylistReplay = async (
             },
           )
         : observe(store, turn, bus.onLibraryChange);
-  const visitModule = modern
-    ? await loadWorktreeModule<typeof import("../../src/library/playlistRecommendationVisit.ts")>(
-        root,
-        "apps/mobile/src/library/playlistRecommendationVisit.ts",
-      )
-    : null;
+  const visitModule =
+    followPath !== undefined
+      ? await loadWorktreeModule<typeof import("@wave/client/playlistSuggestionsFollow")>(
+          root,
+          followPath,
+        )
+      : null;
   const steps = modern
     ? await loadWorktreeModule<typeof import("../../src/lib/stepped.ts")>(
         root,

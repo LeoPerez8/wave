@@ -10,10 +10,12 @@ import {
   explicitSkipNotice,
   playReplacesQueue,
   queuedPassedOver,
+  readDontPlayExplicit,
   reduceQueue,
   settleUnsearched,
   startPlayingWalk,
   unsearchedTrackId,
+  writeDontPlayExplicit,
 } from "./index.ts";
 import type { ExplicitFlag, QueueCommand, QueueState, UnsearchedSong } from "./index.ts";
 
@@ -272,4 +274,12 @@ describe("what a play says when Don't play explicit passed over its songs", () =
     assert.equal(notice({ type: "addToQueue", trackIds: ["a", "b"] }), null);
     assert.equal(notice({ type: "next" }), null);
   });
+});
+
+test("Don't play explicit is off unless stored on, and only on is kept", () => {
+  assert.equal(readDontPlayExplicit(null), false);
+  assert.equal(readDontPlayExplicit("off"), false);
+  assert.equal(readDontPlayExplicit("on"), true);
+  assert.equal(writeDontPlayExplicit(true), "on");
+  assert.equal(writeDontPlayExplicit(false), null);
 });

@@ -7,12 +7,16 @@ import type { LibraryDatabase } from "@wave/client/db/database";
 import { chunks } from "@wave/client/db/chunks";
 import { setFavorites } from "@wave/client/db/playHistory";
 import { addToPlaylist } from "@wave/client/db/playlists";
+import { isCollaborative, refuseCollaborative } from "./collaborativePlaylists.ts";
 import {
   canFixSong,
   desktopSongActions,
+  ytTrackId,
   type ActionItem,
   type ActionSurface,
   type ExplicitFlag,
+  type PlaylistSong,
+  type YtAlbumSong,
 } from "@wave/core";
 import { sql } from "drizzle-orm";
 import type { BrowseScope } from "../../shared/browse.ts";
@@ -23,15 +27,24 @@ import type {
   SongRunResult,
   SongTarget,
 } from "../../shared/songActions.ts";
-import { browseTrackIds } from "./browse.ts";
+import { browseTrackIds, playlistSongs, type PlaylistSong as ListedSong } from "./browse.ts";
 import { lookupsEnabled } from "../lookupSettings.ts";
+import { streamedLibraryFacts, streamedPlaylistEntry } from "../yt/streamedSong.ts";
 
 /** What main needs to run the entries. */
 export interface SongActionPorts {
   readonly download: (trackIds: readonly number[]) => Promise<void>;
   readonly db: LibraryDatabase;
   /** Queues songs, as the Queue's Play Next and Add to Queue do. */
-  readonly queue: (type: "playNext" | "addToQueue", trackIds: readonly string[]) => Promise<void>;
+  readonly queue: (
+    type: "playNext" | "addToQueue",
+    trackIds: readonly string[],
+    songs: readonly YtAlbumSong[],
+  ) => Promise<void>;
+  readonly runStreamed: (
+    song: YtAlbumSong,
+    action: "favorite" | "unfavorite" | "download",
+  ) => Promise<unknown>;
   /** Takes songs out of the Library, keeping their files out of later scans. */
   readonly removeSongs: (trackIds: readonly number[]) => Promise<void>;
   /** Tells the window its rows changed (a star). */
@@ -42,23 +55,45 @@ export interface SongActionPorts {
   readonly removeFromPlaylist: (playlistId: number, trackIds: readonly number[]) => number;
 }
 
-/** [target]'s song ids, once each, in its list's order. */
-export const targetSongs = (db: LibraryDatabase, target: SongTarget): number[] => {
-  const listed = [...new Set(browseTrackIds(db, target.scope).map(Number))];
-  if ("all" in target) {
-    const except = new Set(target.except);
-    return listed.filter((id) => !except.has(id));
-  }
-  const named = new Set(target.ids);
-  return listed.filter((id) => named.has(id));
+const rowKey = (song: ListedSong) => ("trackId" in song ? song.trackId : -song.itemId);
+
+/** The target's entries in list order, including stored streamed songs on a playlist page. */
+export const targetEntries = (db: LibraryDatabase, target: SongTarget): ListedSong[] => {
+  const { scope } = target;
+  const mixed =
+    scope.kind === "playlist" && scope.id !== undefined
+      ? playlistSongs(db, scope.id, scope.find)
+      : undefined;
+  const named = new Set("all" in target ? target.except : target.ids);
+  const seen = new Set<number>();
+  return (mixed ?? browseTrackIds(db, scope).map((id) => ({ trackId: Number(id) }))).filter(
+    (song) => {
+      const key = rowKey(song);
+      if (seen.has(key) || named.has(key) === "all" in target) return false;
+      seen.add(key);
+      return true;
+    },
+  );
 };
+
+/** [target]'s Library song ids, once each, in its list's order. */
+export const targetSongs = (db: LibraryDatabase, target: SongTarget): number[] =>
+  targetEntries(db, target).flatMap((song) => ("trackId" in song ? [song.trackId] : []));
+
+const playlistEntry = (db: LibraryDatabase, entry: ListedSong): PlaylistSong =>
+  "trackId" in entry
+    ? { source: "library", trackId: entry.trackId }
+    : streamedPlaylistEntry(db, entry.song);
+
+export const targetPlaylistEntries = (db: LibraryDatabase, target: SongTarget): PlaylistSong[] =>
+  targetEntries(db, target).map((entry) => playlistEntry(db, entry));
 
 interface SongFacts extends ActionItem {
   readonly id: number;
   readonly title: string;
 }
 
-const songFacts = (db: LibraryDatabase, ids: readonly number[]): SongFacts[] => {
+export const songFacts = (db: LibraryDatabase, ids: readonly number[]): SongFacts[] => {
   const found = new Map<number, SongFacts>();
   for (const part of chunks(ids)) {
     const list = sql.join(
@@ -114,9 +149,33 @@ export const songMenu = (
   surface: ActionSurface,
   ytMusic = false,
 ): SongMenu => {
-  // A playlist's page offers Remove from Playlist.
-  const inPlaylist = target.scope.kind === "playlist";
-  const items = songFacts(db, targetSongs(db, target)).map((song) => ({ ...song, inPlaylist }));
+  // A playlist's page offers Remove from Playlist, unless the playlist is collaborative.
+  const { scope } = target;
+  const inPlaylist =
+    scope.kind === "playlist" && !(scope.id !== undefined && isCollaborative(db, scope.id));
+  const listed = targetEntries(db, target);
+  const local = new Map(
+    songFacts(
+      db,
+      listed.flatMap((song) => ("trackId" in song ? [song.trackId] : [])),
+    ).map((song) => [song.id, song]),
+  );
+  const items = listed.flatMap((entry): (ActionItem & { title: string })[] => {
+    if ("trackId" in entry) {
+      const song = local.get(entry.trackId);
+      return song ? [{ ...song, inPlaylist }] : [];
+    }
+    const facts = streamedLibraryFacts(db, entry.song);
+    return [
+      {
+        title: entry.song.title,
+        streamed: true,
+        downloaded: facts.hasFile,
+        favorite: facts.starred,
+        inPlaylist,
+      },
+    ];
+  });
   const entries = desktopSongActions({
     items,
     surface,
@@ -124,7 +183,7 @@ export const songMenu = (
     page: pageOf(target.scope),
     onlineLookups: lookupsEnabled(db),
     ytMusic,
-    copyLink: ytMusic,
+    share: !items.some((item) => item.streamed),
   });
   const artistIds = entries.flatMap((entry) =>
     entry.action !== "goToArtist" || !("artists" in entry)
@@ -164,38 +223,52 @@ export const runSongAction = async (
   playlistId?: number,
 ): Promise<SongRunResult> => {
   const { db } = ports;
-  const ids = targetSongs(db, target);
+  const entries = targetEntries(db, target);
+  const ids = entries.flatMap((song) => ("trackId" in song ? [song.trackId] : []));
+  const streams = entries.flatMap((entry) => ("song" in entry ? [entry.song] : []));
   switch (action) {
     case "download": {
       const missing = songFacts(db, ids)
         .filter((song) => song.missing === true)
         .map((song) => song.id);
       await ports.download(missing);
-      return { kind: "downloaded", count: missing.length };
+      const online = streams.filter((song) => !streamedLibraryFacts(db, song).hasFile);
+      for (const song of online) await ports.runStreamed(song, action);
+      return { kind: "downloaded", count: missing.length + online.length };
     }
     case "playNext":
     case "addToQueue": {
       // A missing song has no file to play, as the phone's menu says by leaving these out.
-      const playable = songFacts(db, ids).filter((song) => song.missing !== true);
-      await ports.queue(
-        action,
-        playable.map((song) => String(song.id)),
+      const playable = new Set(
+        songFacts(db, ids)
+          .filter((song) => !song.missing)
+          .map((song) => song.id),
       );
-      return { kind: "queued", count: playable.length };
+      const trackIds = entries.flatMap((entry) =>
+        "song" in entry
+          ? [ytTrackId(entry.song.videoId)]
+          : playable.has(entry.trackId)
+            ? [String(entry.trackId)]
+            : [],
+      );
+      await ports.queue(action, trackIds, streams);
+      return { kind: "queued", count: trackIds.length };
     }
     case "favorite":
     case "unfavorite": {
       const on = action === "favorite";
       setFavorites(db, ids, on, Date.now());
+      for (const song of streams) await ports.runStreamed(song, action);
       ports.changed();
-      return { kind: "favorite", on, count: ids.length };
+      return { kind: "favorite", on, count: entries.length };
     }
     case "addToPlaylist": {
       if (playlistId === undefined) throw new Error("No playlist to add to");
+      refuseCollaborative(db, playlistId);
       const result = addToPlaylist(
         db,
         playlistId,
-        ids.map((id) => ({ source: "library", trackId: id })),
+        entries.map((entry) => playlistEntry(db, entry)),
         Date.now(),
       );
       ports.changed();
@@ -210,7 +283,11 @@ export const runSongAction = async (
       const { scope } = target;
       if (scope.kind !== "playlist" || scope.id === undefined)
         throw new Error("The songs aren't a playlist's");
-      return { kind: "playlistRemoved", count: ports.removeFromPlaylist(scope.id, ids) };
+      refuseCollaborative(db, scope.id);
+      return {
+        kind: "playlistRemoved",
+        count: ports.removeFromPlaylist(scope.id, entries.map(rowKey)),
+      };
     }
     case "removeFromLibrary":
       await ports.removeSongs(ids);

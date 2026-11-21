@@ -26,7 +26,19 @@ const noteCandidates = (page: CatalogPage): Effect.Effect<void, never, LibrarySt
     const store = yield* LibraryStore;
     const at = Date.now();
     whenFree(
-      () => Effect.runFork(store.addCandidates(page, at).pipe(Effect.ignore)),
+      () =>
+        Effect.runFork(
+          store
+            .addCandidates(page, at)
+            .pipe(
+              Effect.andThen(
+                Effect.promise(() =>
+                  import("@/dj/djMoodLookup").then((module) => module.requestDjMoodFill()),
+                ),
+              ),
+              Effect.ignore,
+            ),
+        ),
       "candidate catalog",
     );
   });
@@ -45,6 +57,7 @@ export const noteRadioNow = (
     if (songs.length === 0) return;
     const store = yield* LibraryStore;
     yield* store.addCandidates({ songs, seed }, Date.now()).pipe(Effect.ignore);
+    yield* Effect.promise(() => import("@/dj/djMoodLookup").then((m) => m.requestDjMoodFill()));
   });
 
 /**

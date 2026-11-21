@@ -3,7 +3,7 @@ import { appLyricsTranslationTarget, lyricsTranslationLanguageName, type Lyrics 
 import { Storage } from "expo-sqlite/kv-store";
 import { useEffect, useMemo, useState } from "react";
 
-import { translateLyrics, type TranslationService } from "./lyricsTranslationSource";
+import { translateLyrics, type TranslationService } from "@wave/client/lyricsTranslationSource";
 
 /** A request that takes longer than this has failed. */
 const REQUEST_TIMEOUT_MS = 15_000;

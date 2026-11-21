@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after } from "node:test";
 import { type Client, createClient } from "@libsql/client";
+import type { Collaboration, EndedCollaboration } from "./collaborations.ts";
 import { GOOGLE_CERTS_URL } from "./google.ts";
 import { type SyncLimits, SYNC_LIMITS } from "./limits.ts";
 import { migrate } from "./migrations.ts";
@@ -408,6 +409,8 @@ export interface Pulled {
   readonly dislikes: readonly PulledRow[];
   readonly cursor: string;
   readonly more: boolean;
+  readonly collaborations: readonly Collaboration[];
+  readonly endedCollaborations: readonly EndedCollaboration[];
 }
 
 /** Pushes [body] and fails the test unless it's accepted. */

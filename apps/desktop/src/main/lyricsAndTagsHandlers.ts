@@ -12,6 +12,7 @@ import { Account } from "./account/accountLayer.ts";
 import { Downloads } from "./downloads/downloadsLayer.ts";
 import { DesktopLibrary } from "./library/library.ts";
 import { readLyricsAndTags, saveLyricsAndTags } from "./library/lyricsAndTags.ts";
+import { GeniusLyricsSearch } from "./lyrics/geniusLyricsSearchLayer.ts";
 
 type LyricsAndTagsCall = (typeof LYRICS_AND_TAGS_CALLS)[number];
 
@@ -21,7 +22,7 @@ export type LyricsAndTagsHandlers = {
   ) => Effect.Effect<
     BridgeContract[C]["result"],
     unknown,
-    Account | Database | DesktopLibrary | Downloads
+    Account | Database | DesktopLibrary | Downloads | GeniusLyricsSearch
   >;
 };
 
@@ -48,6 +49,7 @@ export const lyricsAndTagsHandlers: LyricsAndTagsHandlers = {
           const saved = saveLyricsAndTags(yield* Database, change, Date.now());
           // Off means no more requests, the whole-Library run's too.
           if (!saved.fixSongsOnline) (yield* Downloads).libraryFix.cancel();
+          if (!saved.geniusInsights) (yield* GeniusLyricsSearch).cancel();
           (yield* Account).settingsEdited();
           return yield* view;
         })

@@ -284,6 +284,23 @@ export const createSearchIndex = <E extends SearchEntry>(entries: readonly E[]):
   );
 };
 
+/**
+ * Whether one entry matches [text], as an index's search would find it, for
+ * matching rows one at a time (a database's query); null for a query with
+ * nothing to match by. Each call normalizes the entry's text again.
+ */
+export const searchMatcher = (text: string): ((entry: SearchEntry) => boolean) | null => {
+  const normalized = normalizeSearchText(text);
+  if (normalized === "") return null;
+  const words = normalized.split(" ");
+  const query: Query = {
+    text: normalized,
+    compact: words.join(""),
+    wordStarts: words.map((word) => ` ${word}`),
+  };
+  return (entry) => tierOf(prepareSearchEntry(entry, 0, 0, normalizeSearchText), query) !== null;
+};
+
 /** A search index over entries already prepared (`prepareSearchEntry`). */
 export const searchIndexOver = <E extends SearchEntry>(
   indexed: readonly Indexed<E>[],

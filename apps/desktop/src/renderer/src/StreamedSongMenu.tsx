@@ -1,9 +1,10 @@
 /**
  * A streamed YouTube Music song's menu in the window (`window.wave.streamed`), as the phone gives
  * it: Play Next, Add to Queue, the Magic Queue, Add to Playlist, the star, Go to Album and Go to
- * Artist, Copy Link and its download. Now Playing's Add to Playlist and Download buttons too.
+ * Artist, Release Date, Share and its download. Now Playing's Add to Playlist and Download
+ * buttons too.
  */
-import type { ActionSurface, StreamedArtistTarget } from "@wave/core";
+import type { ActionSurface, StreamedArtistTarget, UpNextPlace } from "@wave/core";
 import { useCallback, useEffect, useState } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import type {
@@ -14,7 +15,7 @@ import type {
 } from "../../shared/streamedSongs.ts";
 import { Icon } from "./Icon.tsx";
 import type { MenuItem } from "./Menu.tsx";
-import { copyLink } from "./copyLink.ts";
+import { songShareItems } from "./SongShare.tsx";
 import { songActionToast } from "./songActionToast.ts";
 import { text } from "./text.ts";
 
@@ -31,37 +32,53 @@ export interface StreamedMenuOptions {
   readonly notify: (message: string | null) => void;
   /** Reads the player and the rows again once an action changed them. */
   readonly changed: () => void;
+  /** Opens Release Date for the song with [videoId]. */
+  readonly releaseDate: (videoId: string) => void;
 }
 
 /** The playlists Add to Playlist offers: the sidebar's first page. */
 const playlistRows = async () =>
-  (await window.wave.library.browse({ kind: "playlists" }, 0, 200)).items;
+  (await window.wave.library.browse({ kind: "playlists" }, 0, 200)).items.filter(
+    // The desktop adds nothing to a collaborative playlist.
+    (row) => !row.collaborative,
+  );
 
 /** Add to Playlist's submenu: the playlists, each adding the song with [add]. */
 export const playlistItems = async (
   add: (playlistId: number) => void,
+  create?: () => void,
 ): Promise<readonly MenuItem[]> => {
   const rows = await playlistRows();
-  return rows.length === 0
-    ? [{ key: "none", label: text.desktopLibrary.noPlaylists, disabled: true }]
-    : rows.map((row: BrowseRow) => ({
-        key: `playlist-${row.id}`,
-        label: row.title,
-        run: () => add(row.id),
-      }));
+  return [
+    ...(create ? [{ key: "new-playlist", label: text.playlists.newPlaylist, run: create }] : []),
+    ...(rows.length === 0
+      ? [{ key: "none", label: text.desktopLibrary.noPlaylists, disabled: true }]
+      : rows.map((row: BrowseRow) => ({
+          key: `playlist-${row.id}`,
+          label: row.title,
+          run: () => add(row.id),
+        }))),
+  ];
 };
 
 /** Runs [action] on a streamed song and says what it did, as a Library song's menu does. */
-export function useStreamedSongs({ go, failed, notify, changed }: StreamedMenuOptions) {
+export function useStreamedSongs({
+  go,
+  failed,
+  notify,
+  changed,
+  releaseDate,
+}: StreamedMenuOptions) {
   const run = useCallback(
     async (
       videoId: string,
       action: StreamedRunAction,
       surface: ActionSurface = "menu",
       playlistId?: number,
+      at?: UpNextPlace,
     ) => {
       try {
-        const result = await window.wave.streamed.run(videoId, action, playlistId);
+        const result = await window.wave.streamed.run(videoId, action, playlistId, at);
         changed();
         switch (result.kind) {
           case "queued":
@@ -113,11 +130,18 @@ export function useStreamedSongs({ go, failed, notify, changed }: StreamedMenuOp
                 .then(changed)
                 .catch(() => failed(text.playbackText.couldntStartTheMagicQueue)),
           };
+        case "releaseDate":
+          return {
+            key,
+            label: text.itemActions.labels.releaseDate,
+            run: () => releaseDate(videoId),
+          };
         case "share":
           return {
             key,
-            label: text.share.copyLink,
-            run: () => void copyLink(window.wave.links.copySong(videoId)),
+            label: text.itemActions.labels.share,
+            submenu: text.itemActions.labels.share,
+            open: () => songShareItems(videoId, notify),
           };
         case "goToAlbum": {
           const album = entry.album;
@@ -153,7 +177,7 @@ export function useStreamedSongs({ go, failed, notify, changed }: StreamedMenuOp
         }
       }
     },
-    [run, go, goToArtist, changed, failed],
+    [run, go, goToArtist, changed, failed, notify, releaseDate],
   );
 
   /** [videoId]'s menu entries; [playing] for the song playing (no Play Next). */

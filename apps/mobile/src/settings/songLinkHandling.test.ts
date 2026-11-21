@@ -17,6 +17,7 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
   };
   export const changeAppState = (state) => { for (const listener of listeners) listener(state); };
   export const phone = { state: { allowed: true, hosts: { "music.youtube.com": 0 } } };
+  export const waveSyncUrl = "https://wave-sync.example.workers.dev";
   export const WaveNative = {
     songLinkHandling: () => phone.state,
     songLinkOpeners: () => null,
@@ -85,5 +86,15 @@ test("the line follows a language switch without leaving Wave", () => {
     "Ativado: links do YouTube Music, Spotify e Deezer abrem no Wave.",
   );
   act(() => io.setLanguage("en"));
+  unmount();
+});
+
+test("the sync service's invite host is no song link: left off, every song link is still on", () => {
+  io.phone.state = {
+    allowed: true,
+    hosts: { "music.youtube.com": 1, "wave-sync.example.workers.dev": 0 },
+  };
+  const { seen, unmount } = mount();
+  assert.equal(seen.at(-1)?.handling, "all");
   unmount();
 });

@@ -472,6 +472,7 @@ export const settingsPtBr: typeof settingsEn = {
   folderCovered: (name) => `O Wave já mostra as músicas de ${name}, que inclui esta pasta.`,
   folderIgnored: (name) => `O Wave já ignora ${name}, que inclui esta pasta.`,
   savedColour: (n, hex) => `Cor salva ${n}, ${hex}`,
+  removeSavedColour: (name) => `Remover ${name}`,
   removeFolder: (name) => `Remover ${name}?`,
   couldntFixSongsToast: (message) => `Não foi possível corrigir as músicas: ${message}`,
   musicFolderCount: (n) =>

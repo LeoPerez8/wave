@@ -7,14 +7,18 @@ import {
   DJ_MAX_SELECTED,
   djAlbumTile,
   djArtistTile,
+  djGenreTiles,
+  djGenreTile,
   djOpened,
   type DjAlbum,
   type DjState,
   type DjTile,
   type DjTileKey,
 } from "./dj.ts";
+import type { GenreMixDjCandidate, GenreMixLibrary } from "./genreMixes.ts";
 import { DEFAULT_DJ_SETTINGS, parseDjSettings, type DjSettings } from "./djSettings.ts";
 import { isRecord, readStoredRecord } from "./storedJson.ts";
+import type { TasteProfile } from "./tasteProfile.ts";
 
 /** Where DJ's last selection and Adjust choices are kept, on this device only (not synced). */
 export const DJ_REMEMBERED_SETTING = "dj.remembered";
@@ -45,7 +49,8 @@ const sameSettings = (a: DjSettings, b: DjSettings): boolean =>
   a.variety === b.variety &&
   a.discovery === b.discovery &&
   a.popularity === b.popularity &&
-  a.newReleases === b.newReleases;
+  a.newReleases === b.newReleases &&
+  a.mood === b.mood;
 
 /** What to keep for [remembered]: null (nothing) with no selection and the default choices. */
 export const storedDjRemembered = ({ tiles, settings }: DjRemembered): string | null =>
@@ -57,6 +62,8 @@ export const storedDjRemembered = ({ tiles, settings }: DjRemembered): string | 
 const TILE_READERS: { readonly [K in DjTile["kind"]]: (kept: StoredTile) => DjTile | null } = {
   // The Library's artist is found again as DJ reopens (`djReopened`): an id kept here could go stale.
   artist: ({ name }) => (typeof name === "string" ? djArtistTile(name) : null),
+  // A family keeps its Genre mixes name; its current artist seeds are rebuilt when DJ opens.
+  genre: ({ name }) => (typeof name === "string" ? djGenreTile(name) : null),
   // The Library's album is found again too: only what YT Music knows it by is kept.
   album: ({ name, artist, browseId, cover }) =>
     typeof name === "string" && typeof artist === "string"
@@ -111,11 +118,19 @@ export const djReopened = ({
   remembered,
   artists = [],
   albums = [],
+  genreLibrary,
+  genreCandidates,
+  taste = null,
 }: {
   readonly grid: readonly DjTile[];
   readonly remembered: readonly DjTile[];
   readonly artists?: readonly { readonly id: number; readonly name: string }[];
   readonly albums?: readonly DjAlbum[];
+  /** Current Genre mixes inputs, used to restore only families that still have seed artists. */
+  readonly genreLibrary?: GenreMixLibrary | null;
+  /** Genre mixes' families worked out once (`genreMixDjCandidates`), used in place of [genreLibrary]. */
+  readonly genreCandidates?: readonly GenreMixDjCandidate[] | null;
+  readonly taste?: TasteProfile | null;
 }): DjState => {
   const fresh = new Set(grid.map((tile) => tile.key));
   const library = new Map<DjTileKey, DjTile>();
@@ -127,10 +142,26 @@ export const djReopened = ({
     const tile = djAlbumTile(album);
     if (tile !== null && !library.has(tile.key)) library.set(tile.key, tile);
   }
+  const genres = new Map(
+    djGenreTiles(
+      {
+        artists,
+        albums,
+        taste,
+        genreLibrary: genreLibrary ?? null,
+        genreCandidates: genreCandidates ?? null,
+      },
+      { includeUnscored: true },
+    ).map((tile) => [tile.key, tile]),
+  );
   const selected = new Map<DjTileKey, DjTile>();
   for (const tile of remembered) {
     if (selected.size >= DJ_MAX_SELECTED) break;
-    if (!selected.has(tile.key)) selected.set(tile.key, library.get(tile.key) ?? tile);
+    if (selected.has(tile.key)) continue;
+    if (tile.kind === "genre") {
+      const current = genres.get(tile.key);
+      if (current !== undefined) selected.set(tile.key, current);
+    } else selected.set(tile.key, library.get(tile.key) ?? tile);
   }
   const added = [...selected.values()].filter((tile) => !fresh.has(tile.key));
   return { ...djOpened([...added, ...grid]), selected: [...selected.keys()] };

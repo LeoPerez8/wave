@@ -1,0 +1,20 @@
+/* Release Date's dialog (ReleaseDate.tsx); its input and problem line are the playlist dialogs'. */
+.release-date-fields {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 12px;
+}
+.release-date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.release-date-field .dialog-input {
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.dialog-hint {
+  min-height: 1.2em;
+  font-size: 12px;
+}

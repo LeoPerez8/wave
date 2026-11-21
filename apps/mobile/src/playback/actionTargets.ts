@@ -7,7 +7,6 @@ import {
   type ItemKind,
   type MixedSong,
   type PlaylistPlace,
-  type PlaylistSong,
   type QueueSong,
   type UnsearchedSong,
   ytAlbumSongs,
@@ -371,12 +370,6 @@ export const targetEntries = async (target: ActionItems): Promise<readonly Targe
     queueSongTrackId,
   );
 };
-
-/** [entries] as songs a playlist takes (Core's `PlaylistSong`); an unsearched song stays unsearched. */
-export const toPlaylistSongs = (entries: readonly TargetEntry[]): PlaylistSong[] =>
-  entries.map((entry) =>
-    entry.source === "library" ? { source: "library", trackId: entry.track.id } : entry,
-  );
 
 /**
  * What Core's `itemActions` needs to know about each of [target]'s items;

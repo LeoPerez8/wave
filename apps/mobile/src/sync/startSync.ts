@@ -83,6 +83,20 @@ export const startSync = (): void => {
   libraryVersion.subscribe(changed(true));
 };
 
+/**
+ * The page of the collaborative playlist [playlistId] pulls it (`WaveSync.syncPlaylist`).
+ * Signed out, `WaveSync` isn't built and nothing is sent.
+ */
+export const syncCollaborativePage = (playlistId: number): Promise<void> => {
+  if (!syncing) return Promise.resolve();
+  return appRuntime
+    .runPromise(
+      // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+      WaveSync.use((sync) => sync.syncPlaylist(playlistId)),
+    )
+    .catch(() => {});
+};
+
 /** Builds `WaveSync` and starts it, the first time an account is signed in. */
 const startSyncing = (): void => {
   if (syncing) return;
@@ -99,4 +113,11 @@ const startSyncing = (): void => {
       ),
     )
     .catch((error: unknown) => console.warn("[wave] Couldn't start syncing", error));
+};
+
+/** Syncs now, while signed in (an invite was just joined, so its playlist arrives). */
+export const syncNow = (): void => {
+  if (!syncing) return;
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+  void appRuntime.runPromise(WaveSync.use((sync) => sync.now)).catch(() => {});
 };

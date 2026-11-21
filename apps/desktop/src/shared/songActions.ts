@@ -1,23 +1,24 @@
 /** What a song's menu and the selection bar act on, and what their actions report back. */
-import type { ActionSurface, ItemActionEntry, SongTagOutcome, TagLookupStop } from "@wave/core";
+import type { ActionSurface, DesktopSongEntry, SongTagOutcome, TagLookupStop } from "@wave/core";
 import type { BrowseScope } from "./browse.ts";
 
-/** The most songs a target names one by one; Select All names the unchecked ones instead. */
+/** The ordinary array limit; large table selections use a packed vector of IDs. */
 export const MAX_TARGET_IDS = 10_000;
+export type SongIds = readonly number[] | Float64Array;
 
 /**
  * The songs acted on, in [scope]'s list order: the ones named, or every song of the list
- * but the unchecked ones (Select All).
+ * but the unchecked ones (Select All). A negative ID denotes a streamed playlist entry.
  */
 export type SongTarget =
-  | { readonly scope: BrowseScope; readonly ids: readonly number[] }
-  | { readonly scope: BrowseScope; readonly all: true; readonly except: readonly number[] };
+  | { readonly scope: BrowseScope; readonly ids: SongIds }
+  | { readonly scope: BrowseScope; readonly all: true; readonly except: SongIds };
 
 export type { ActionSurface };
 
 /** The entries to show for a target (Core's `desktopSongActions`), with what they need. */
 export interface SongMenu {
-  readonly entries: readonly ItemActionEntry[];
+  readonly entries: readonly DesktopSongEntry[];
   /** How many songs the target holds. */
   readonly count: number;
   /** The first song's title, for the menu's name and Remove from Library's question. */
@@ -40,6 +41,9 @@ export const SONG_RUN_ACTIONS = [
   "fixSongs",
 ] as const;
 export type SongRunAction = (typeof SONG_RUN_ACTIONS)[number];
+
+/** What Show in Folder did: the file manager opened, the drive isn't connected, or no file. */
+export type ShowInFolderResult = "shown" | "unavailable" | "gone";
 
 /** What an action did, for its toast. */
 export type SongRunResult =

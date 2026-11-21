@@ -57,6 +57,18 @@ test("a list's own keys work only while it has focus", () => {
   assert.equal(desktopKey(press("k", { ctrl: true }), "list"), undefined);
 });
 
+test("selection keys work in a list and leave text-field selection alone", () => {
+  for (const [key, command] of [
+    [press("ArrowUp", { shift: true }), "extendUp"],
+    [press("ArrowDown", { shift: true }), "extendDown"],
+    [press("a", { ctrl: true }), "selectAllRows"],
+  ] as const) {
+    assert.equal(desktopKey(key, "list"), command);
+    assert.equal(desktopKey(key, "field"), undefined);
+    assert.equal(desktopKey(key, "other"), undefined);
+  }
+});
+
 test("the app's shortcuts work wherever focus is, except where a field edits text", () => {
   assert.deepEqual(everywhere(press("Escape")), Array(5).fill("close"));
   assert.deepEqual(everywhere(press("q", { ctrl: true })), Array(5).fill("quit"));
@@ -108,7 +120,13 @@ test("Ctrl+/ lists every shortcut, each named in English and Brazilian Portugues
       }
   for (const command of new Set(commands))
     assert.ok(
-      listed.has(command === "volumeUp" || command === "volumeDown" ? "volume" : command),
+      listed.has(
+        command === "volumeUp" || command === "volumeDown"
+          ? "volume"
+          : command === "extendUp" || command === "extendDown"
+            ? "extendRowSelection"
+            : command,
+      ),
       command,
     );
   for (const language of ["en", "pt-BR"] as const) {

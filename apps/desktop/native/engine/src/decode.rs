@@ -10,10 +10,12 @@ use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, TrackType};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::{MetadataOptions, RawValue};
+use symphonia::core::packet::Packet;
 use symphonia::core::units::{TimeBase, Timestamp};
 use symphonia_adapter_libopus::OpusDecoder;
 
 use crate::error::EngineError;
+use crate::he_aac::HeAac;
 use crate::stream::Origin;
 
 /// Symphonia's codecs plus Opus through libopus.
@@ -31,13 +33,18 @@ fn codecs() -> &'static CodecRegistry {
 /// 80 ms; AAC and Vorbis need one packet's overlap.
 const PREROLL_SECONDS: f64 = 0.1;
 
+enum PacketDecoder {
+    Standard(Box<dyn AudioDecoder>),
+    HeAac(Box<HeAac>),
+}
+
 pub struct Decoder {
     /// Where the song is read from, to open it again.
     source: Origin,
     /// The demuxer has run out; Symphonia's MP4 reader can't seek after that.
     at_end: bool,
     format: Box<dyn FormatReader>,
-    decoder: Box<dyn AudioDecoder>,
+    decoder: PacketDecoder,
     track_id: u32,
     rate: u32,
     time_base: Option<TimeBase>,
@@ -77,18 +84,6 @@ impl Decoder {
         let mut format = symphonia::default::get_probe()
             .probe(&hint, stream, FormatOptions::default(), MetadataOptions::default())
             .map_err(|e| EngineError::Unsupported(e.to_string()))?;
-        let smpb = format.metadata().current().and_then(|rev| {
-            rev.media.tags.iter().find_map(|tag| {
-                if !tag.raw.key.contains("iTunSMPB") {
-                    return None;
-                }
-                match &tag.raw.value {
-                    RawValue::String(s) => crate::gapless::smpb(s),
-                    RawValue::Binary(b) => crate::gapless::smpb(&String::from_utf8_lossy(b)),
-                    _ => None,
-                }
-            })
-        });
         let track = format
             .default_track(TrackType::Audio)
             .ok_or_else(|| EngineError::Unsupported("no audio track".into()))?;
@@ -98,20 +93,68 @@ impl Decoder {
             .and_then(|p| p.audio())
             .ok_or_else(|| EngineError::Unsupported("no audio codec".into()))?
             .clone();
-        let decoder = codecs()
-            .make_audio_decoder(&params, &AudioDecoderOptions::default())
-            .map_err(|e| EngineError::Unsupported(e.to_string()))?;
-        let rate =
+        let track_id = track.id;
+        let mut time_base = track.time_base;
+        let duration_ticks = track.duration;
+        let mut num_frames = track.num_frames;
+        let mut rate =
             params.sample_rate.ok_or_else(|| EngineError::Unsupported("no sample rate".into()))?;
-        let num_frames = track.num_frames;
+        let mut smpb_scale = 1;
+        let mut first_packet = None;
+        let mut he_aac = HeAac::candidate(&params);
+        if let Some(candidate) = &mut he_aac
+            && candidate.output_rate.is_none()
+        {
+            first_packet = next_audio_packet(&mut *format, track_id)?;
+            if let Some(packet) = &first_packet {
+                candidate.probe(&packet.data);
+            }
+        }
+        let decoder = if let Some(he_aac) = he_aac
+            && let Some(output_rate) = he_aac.output_rate
+        {
+            rate = output_rate;
+            smpb_scale = u64::from(rate / he_aac.core_rate);
+            // ADTS packets count core frames. MP4 supplies the track timescale.
+            time_base = time_base.or_else(|| TimeBase::try_from_recip(he_aac.core_rate));
+            num_frames = duration_ticks
+                .map(|ticks| ticks_to_frames(ticks.get() as i64, time_base, rate).max(0) as u64);
+            PacketDecoder::HeAac(Box::new(he_aac))
+        } else {
+            PacketDecoder::Standard(
+                codecs()
+                    .make_audio_decoder(&params, &AudioDecoderOptions::default())
+                    .map_err(|e| EngineError::Unsupported(e.to_string()))?,
+            )
+        };
+
         let trim = if extension
             .as_deref()
             .is_some_and(|s| s.eq_ignore_ascii_case("m4a") || s.eq_ignore_ascii_case("mp4"))
         {
-            smpb.or_else(|| {
-                let reader = source.source().ok()?;
-                crate::gapless::from_mp4_reader(reader, length?, track.id, rate)
-            })
+            format
+                .metadata()
+                .current()
+                .and_then(|rev| {
+                    rev.media.tags.iter().find_map(|tag| {
+                        if !tag.raw.key.contains("iTunSMPB") {
+                            return None;
+                        }
+                        match &tag.raw.value {
+                            RawValue::String(s) => crate::gapless::smpb(s, num_frames, smpb_scale),
+                            RawValue::Binary(b) => crate::gapless::smpb(
+                                &String::from_utf8_lossy(b),
+                                num_frames,
+                                smpb_scale,
+                            ),
+                            _ => None,
+                        }
+                    })
+                })
+                .or_else(|| {
+                    let reader = source.source().ok()?;
+                    crate::gapless::from_mp4_reader(reader, length?, track_id, rate)
+                })
         } else {
             None
         };
@@ -119,8 +162,8 @@ impl Decoder {
         let mut decoder = Decoder {
             source: source.clone(),
             at_end: false,
-            track_id: track.id,
-            time_base: track.time_base,
+            track_id,
+            time_base,
             format,
             decoder,
             rate,
@@ -132,7 +175,7 @@ impl Decoder {
             channels: 2,
         };
         let first = decoder
-            .decode_next()?
+            .decode_next(first_packet)?
             .ok_or_else(|| EngineError::Unsupported("no audio in the file".into()))?;
         decoder.origin = first.first_frame;
         // Demuxers count delay and padding out of `num_frames`, except that Opus counts its
@@ -167,7 +210,7 @@ impl Decoder {
             return Ok(Some(samples));
         }
         loop {
-            let Some(chunk) = self.decode_next()? else {
+            let Some(chunk) = self.decode_next(None)? else {
                 return Ok(None);
             };
             if let Some(samples) = self.trim_chunk(chunk) {
@@ -195,13 +238,25 @@ impl Decoder {
         if self.at_end {
             *self = Decoder::open_origin(&self.source.clone())?;
         }
-        let preroll = (self.rate as f64 * PREROLL_SECONDS) as u64;
-        let from = frame.saturating_sub(preroll) as i64 + self.origin;
+        // HE-AAC also needs to settle the SBR filterbanks and Parametric Stereo history.
+        let from = match self.decoder {
+            PacketDecoder::HeAac(_) => (self.origin + frame as i64 - i64::from(self.rate)).max(0),
+            _ => {
+                let preroll = (self.rate as f64 * PREROLL_SECONDS) as u64;
+                frame.saturating_sub(preroll) as i64 + self.origin
+            }
+        };
         let ts = self.frames_to_ticks(from.max(0));
         self.format
             .seek(SeekMode::Accurate, SeekTo::Timestamp { ts, track_id: self.track_id })
             .map_err(|e| EngineError::Decode(e.to_string()))?;
-        self.decoder.reset();
+        match &mut self.decoder {
+            PacketDecoder::Standard(decoder) => decoder.reset(),
+            PacketDecoder::HeAac(decoder) if from <= 0 => decoder.reset(),
+            // Keep the SBR header between seeks. A later packet can refer to it without
+            // repeating it, and the preroll replaces the audio history before playback.
+            PacketDecoder::HeAac(_) => {}
+        }
         self.pending = None;
         self.drop_before = frame;
         Ok(())
@@ -210,42 +265,55 @@ impl Decoder {
     /// The next packet's audio, placed on the track's timeline. A packet can give fewer frames
     /// than it lasts (trimmed, or priming the decoder after a seek), so its place is measured
     /// back from where it ends.
-    fn decode_next(&mut self) -> Result<Option<Chunk>, EngineError> {
+    fn decode_next(
+        &mut self,
+        mut first_packet: Option<Packet>,
+    ) -> Result<Option<Chunk>, EngineError> {
         loop {
-            let packet = match self.format.next_packet() {
-                Ok(Some(packet)) => packet,
-                Ok(None) => {
-                    self.at_end = true;
-                    return Ok(None);
-                }
-                Err(SymphoniaError::IoError(e))
-                    if e.kind() == std::io::ErrorKind::UnexpectedEof =>
-                {
-                    self.at_end = true;
-                    return Ok(None);
-                }
-                Err(e) => return Err(EngineError::Decode(e.to_string())),
+            let packet = match first_packet.take() {
+                Some(packet) => Some(packet),
+                None => next_audio_packet(&mut *self.format, self.track_id)?,
             };
-            if packet.track_id != self.track_id {
-                continue;
-            }
-            let buffer = match self.decoder.decode(&packet) {
-                Ok(buffer) => buffer,
-                // A damaged packet is skipped, as players do.
-                Err(SymphoniaError::DecodeError(_)) => continue,
-                Err(e) => return Err(EngineError::Decode(e.to_string())),
+            let Some(packet) = packet else {
+                self.at_end = true;
+                return Ok(None);
             };
-            let channels = buffer.spec().channels().count().max(1);
-            self.channels = channels;
             self.scratch.clear();
-            buffer.copy_to_vec_interleaved(&mut self.scratch);
-            let frames = (self.scratch.len() / channels) as i64;
-            if frames == 0 {
+            let channels = match &mut self.decoder {
+                PacketDecoder::Standard(decoder) => {
+                    let buffer = match decoder.decode(&packet) {
+                        Ok(buffer) => buffer,
+                        // A damaged packet is skipped, as players do.
+                        Err(SymphoniaError::DecodeError(_)) => continue,
+                        Err(e) => return Err(EngineError::Decode(e.to_string())),
+                    };
+                    buffer.copy_to_vec_interleaved(&mut self.scratch);
+                    buffer.spec().channels().count().max(1)
+                }
+                PacketDecoder::HeAac(decoder) => {
+                    let frame = decoder
+                        .decode(&packet.data)
+                        .map_err(|e| EngineError::Decode(e.to_string()))?;
+                    if frame.pcm.is_empty() {
+                        continue;
+                    }
+                    if frame.sample_rate != self.rate {
+                        return Err(EngineError::Decode(
+                            "HE-AAC output sample rate changed".into(),
+                        ));
+                    }
+                    self.scratch.extend(frame.pcm.into_iter().map(|s| f32::from(s) / 32768.0));
+                    frame.channels
+                }
+            };
+            if self.scratch.is_empty() {
                 continue;
             }
+            self.channels = channels;
+            let frames = (self.scratch.len() / channels) as i64;
             let end = packet.pts.get() + packet.dur.get() as i64 - packet.trim_end.get() as i64;
             return Ok(Some(Chunk {
-                first_frame: self.ticks_to_frames(end) - frames,
+                first_frame: ticks_to_frames(end, self.time_base, self.rate) - frames,
                 samples: to_stereo(&self.scratch, channels),
             }));
         }
@@ -261,15 +329,31 @@ impl Decoder {
             _ => Timestamp::new(frames),
         }
     }
+}
 
-    fn ticks_to_frames(&self, ticks: i64) -> i64 {
-        match self.time_base {
-            Some(base) if !is_per_frame(base, self.rate) => {
-                let seconds = ticks as f64 * base.numer.get() as f64 / base.denom.get() as f64;
-                (seconds * self.rate as f64).round() as i64
+fn next_audio_packet(
+    format: &mut dyn FormatReader,
+    track_id: u32,
+) -> Result<Option<Packet>, EngineError> {
+    loop {
+        match format.next_packet() {
+            Ok(Some(packet)) if packet.track_id != track_id => continue,
+            Ok(packet) => return Ok(packet),
+            Err(SymphoniaError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                return Ok(None);
             }
-            _ => ticks,
+            Err(e) => return Err(EngineError::Decode(e.to_string())),
         }
+    }
+}
+
+fn ticks_to_frames(ticks: i64, time_base: Option<TimeBase>, rate: u32) -> i64 {
+    match time_base {
+        Some(base) if !is_per_frame(base, rate) => {
+            let seconds = ticks as f64 * base.numer.get() as f64 / base.denom.get() as f64;
+            (seconds * rate as f64).round() as i64
+        }
+        _ => ticks,
     }
 }
 

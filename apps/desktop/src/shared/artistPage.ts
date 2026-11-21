@@ -3,7 +3,13 @@
  * window sees them (`window.wave.artistPage`): the album shelves, and the YouTube Music section
  * the page shows with YT Music on (docs/spec.md, "Artist page").
  */
-import type { YtArtistAlbum, YtArtistSectionNote, YtPick } from "@wave/core";
+import type {
+  DiscHead,
+  YtArtistAlbum,
+  YtArtistSectionNote,
+  YtLibraryAlbumNote,
+  YtPick,
+} from "@wave/core";
 import type { Invoke, Page } from "./bridge.ts";
 import type { BrowseRow } from "./browse.ts";
 import type { PlayStart } from "./playerView.ts";
@@ -47,6 +53,32 @@ export interface ArtistSectionView {
   readonly singles: readonly YtArtistAlbum[];
 }
 
+/**
+ * A Library album page's YouTube Music section, or null when it has none (YT Music off, an album
+ * artist that isn't an artist's name): the Library | Online toggle, and with Online the album's
+ * tracklist with the release's songs the Library lacks (docs/spec.md, "Album page").
+ */
+export interface AlbumSectionView {
+  /** The toggle's selected segment. */
+  readonly toggle: YtPick;
+  /** A quiet line under the tracks, or null. */
+  readonly note: YtLibraryAlbumNote | null;
+  /** Whether YouTube Music should be asked now: call `albumAsk`. */
+  readonly asks: boolean;
+  /** What picking Online asks again after an ask got no answer; null: nothing. */
+  readonly retry: "artist" | "release" | null;
+  /**
+   * With Online, the album's whole tracklist in the release's order: the Library's songs and the
+   * release's songs streamed, each row's `trackNumber` its place on the release. Null shows the
+   * album as it is.
+   */
+  readonly tracks: readonly BrowseRow[] | null;
+  /** The "Disc n" heads over [tracks]. */
+  readonly discs: readonly DiscHead[];
+  /** The release's browse id once its songs are read: its Download acts on them. */
+  readonly release: string | null;
+}
+
 /** Where Play on the artist page starts: a Library row, or a song YouTube Music adds. */
 export type ArtistPlayStart = { readonly library: number } | { readonly streamed: number } | null;
 
@@ -78,6 +110,29 @@ export interface ArtistPageContract {
     ];
     readonly result: PlayStart;
   };
+  /** A Library album's YouTube Music section with [pick] picked (null: none yet); null: none. */
+  readonly "artistPage.albumSection": {
+    readonly args: readonly [albumId: number, pick: YtPick | null];
+    readonly result: AlbumSectionView | null;
+  };
+  /**
+   * Asks YouTube Music what the album's section waits for (its artist, or its release's page);
+   * with [again], what an ask that got no answer asked. Resolves once answered, however it went.
+   */
+  readonly "artistPage.albumAsk": {
+    readonly args: readonly [albumId: number, pick: YtPick | null, again: boolean];
+    readonly result: void;
+  };
+  /** Plays the album's tracklist as the section shows it from row [start] (null: the first). */
+  readonly "artistPage.albumPlay": {
+    readonly args: readonly [
+      albumId: number,
+      pick: YtPick | null,
+      start: number | null,
+      shuffle: boolean,
+    ];
+    readonly result: PlayStart;
+  };
 }
 
 export const ARTIST_PAGE_CALLS = [
@@ -86,6 +141,9 @@ export const ARTIST_PAGE_CALLS = [
   "artistPage.section",
   "artistPage.ask",
   "artistPage.play",
+  "artistPage.albumSection",
+  "artistPage.albumAsk",
+  "artistPage.albumPlay",
 ] as const;
 
 export const artistPageBridge = (invoke: Invoke) => ({
@@ -96,4 +154,10 @@ export const artistPageBridge = (invoke: Invoke) => ({
   ask: (artistId: number) => invoke("artistPage.ask", artistId),
   play: (artistId: number, pick: YtPick | null, start: ArtistPlayStart, shuffle: boolean) =>
     invoke("artistPage.play", artistId, pick, start, shuffle),
+  albumSection: (albumId: number, pick: YtPick | null) =>
+    invoke("artistPage.albumSection", albumId, pick),
+  albumAsk: (albumId: number, pick: YtPick | null, again: boolean) =>
+    invoke("artistPage.albumAsk", albumId, pick, again),
+  albumPlay: (albumId: number, pick: YtPick | null, start: number | null, shuffle: boolean) =>
+    invoke("artistPage.albumPlay", albumId, pick, start, shuffle),
 });

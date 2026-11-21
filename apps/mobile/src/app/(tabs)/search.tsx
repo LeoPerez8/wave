@@ -52,7 +52,7 @@ import { expansionAfterTyping, NO_EXPANSION, showAllLyricsOf, showAllOf } from "
 import { useGeniusLyricsSearch } from "@/search/geniusLyricsSearch";
 import { playSearchSong } from "@/search/playSearchSong";
 import { geniusHitLookup } from "@/search/GeniusHitActions";
-import { geniusHitOpener } from "@/search/geniusHitMenu";
+import { geniusHitOpener } from "@wave/client/geniusHitMenu";
 import { openRecognize, recognizeAvailable } from "@/recognize/RecognizeCard";
 import { useSearchRequests } from "@/search/queryRequest";
 import { useYtMusicSection } from "@/search/ytMusicSearch";

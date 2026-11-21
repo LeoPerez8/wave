@@ -3,16 +3,9 @@
  * recommendations): those of 3 of its songs, drawn per renewal and kept apart
  * per playlist, each read as the Magic Queue reads a song's radio (#642).
  */
-import {
-  drawPlaylistSeeds,
-  parsePlaylistSeedHistory,
-  playlistSeedHistoryWith,
-  storedPlaylistSeedHistory,
-  type PlaylistRecommendationTrack,
-  type RadioRankingPage,
-} from "@wave/core";
+import { type PlaylistRecommendationTrack, type RadioRankingPage } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { Storage } from "expo-sqlite/kv-store";
+import { drawSuggestionSeeds } from "@wave/client/playlistSuggestionStorage";
 
 import type { SongRadioSeed } from "@/playback/songRadioSession";
 import { YtMusic } from "@/ytmusic/YtMusic";
@@ -20,9 +13,7 @@ import { YtMusic } from "@/ytmusic/YtMusic";
 import { createAppSongRadioReaders } from "@/playback/songRadioSetup";
 
 import type { LibraryStore } from "./LibraryStore";
-
-/** Each playlist's latest seed draws, on the phone (not synced). */
-const SEED_DRAWS = "playlistSuggestions.seedDraws";
+import { phoneSuggestionStorage } from "./playlistSuggestionStorage";
 
 const radioReaders = createAppSongRadioReaders("Playlist suggestions");
 
@@ -35,33 +26,12 @@ const radioSeed = (track: PlaylistRecommendationTrack): SongRadioSeed => ({
   ...(track.videoId === "" ? {} : { videoId: track.videoId }),
 });
 
-/**
- * Draws playlist [playlistId]'s next seeds and saves its recent history so
- * subsequent renewals avoid them while other songs remain.
- */
+/** Draws playlist [playlistId]'s next seeds, on the phone (not synced): see `drawSuggestionSeeds`. */
 export const playlistSuggestionSeeds = (
   playlistId: number,
   playlist: readonly PlaylistRecommendationTrack[],
-): PlaylistRecommendationTrack[] => {
-  let history = parsePlaylistSeedHistory(null);
-  try {
-    history = parsePlaylistSeedHistory(Storage.getItemSync(SEED_DRAWS));
-  } catch {
-    // Unreadable history: the draw just doesn't avoid earlier seeds.
-  }
-  const recent = history.get(playlistId) ?? [];
-  const draw = drawPlaylistSeeds(playlist, { recent, random: Math.random });
-  if (draw.recent !== recent)
-    try {
-      Storage.setItemSync(
-        SEED_DRAWS,
-        storedPlaylistSeedHistory(playlistSeedHistoryWith(history, playlistId, draw.recent)),
-      );
-    } catch {
-      // Not saved: the next visit may draw these seeds again.
-    }
-  return draw.seeds;
-};
+): PlaylistRecommendationTrack[] =>
+  drawSuggestionSeeds(phoneSuggestionStorage, playlistId, playlist);
 
 /**
  * [seeds]' radios for visit [visitId], all at once: a cached first page at

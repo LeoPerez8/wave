@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { _electron as electron, expect, test } from "@playwright/test";
 import { Database } from "@wave/client";
+import { recordPlay } from "@wave/client/db/playHistory";
 import { addTrack, type TestDatabase } from "@wave/client/testing";
 import { catalogueOf } from "@wave/core";
+import { creditSplits, relinkCredits } from "@wave/client/db/credits";
 import { sql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import { libraryLayer } from "../src/main/database.ts";
@@ -20,7 +22,7 @@ import { libraryLayer } from "../src/main/database.ts";
 const appFolder = join(import.meta.dirname, "..");
 const text = catalogueOf("en", "desktop");
 
-const seed = (data: string, ytMusic: "on" | "off") => {
+const seed = (data: string, ytMusic: "on" | "off", withHistory = false) => {
   const cover = join(
     appFolder,
     "../../packages/kotlin-shared/src/testFixtures/resources/fixtures/cover.png",
@@ -29,13 +31,21 @@ const seed = (data: string, ytMusic: "on" | "off") => {
   return Effect.runPromise(
     Effect.gen(function* () {
       const db = (yield* Database) as unknown as TestDatabase;
-      for (const [title, album, artist, albumArtist, year] of [
+      const tracks = [
         ["Pink Moon", "Pink Moon", "Nick Drake", "Nick Drake", 1972],
         ["Road", "Pink Moon", "Nick Drake", "Nick Drake", 1972],
         ["Hazey Jane II", "Bryter Layter", "Nick Drake", "Nick Drake", 1971],
         ["Time Has Told Me", "Folk Collection", "Nick Drake", "Various Artists", 1990],
-      ] as const)
-        addTrack(db, {
+        ...(withHistory
+          ? ([
+              ["Collaboration", "Positions", "Nick Drake, Vashti Bunyan", "Nick Drake", 1972],
+              ["Quiet Song", "Quiet Album", "Quiet Artist", "Quiet Artist", 1975],
+            ] as const)
+          : []),
+      ] as const;
+      const ids = new Map<string, number>();
+      for (const [title, album, artist, albumArtist, year] of tracks) {
+        const id = addTrack(db, {
           title,
           album,
           artist,
@@ -44,9 +54,41 @@ const seed = (data: string, ytMusic: "on" | "off") => {
           durationMs: 180000,
           artworkHash: hash,
         });
+        ids.set(title, id);
+      }
+      if (withHistory) relinkCredits(db, creditSplits());
       db.run(sql`UPDATE artwork SET path=${cover}, thumb_path=${cover} WHERE hash=${hash}`);
       db.run(sql`UPDATE artists SET artwork_hash=${hash}`);
       db.run(sql`INSERT INTO desktop_settings(key,value) VALUES('settings.ytMusic',${ytMusic})`);
+      if (withHistory) {
+        for (const title of ["Collaboration", "Road"]) {
+          const song = join(data, `${title}.flac`);
+          copyFileSync(
+            join(
+              appFolder,
+              "../../packages/kotlin-shared/src/testFixtures/resources/fixtures/tagged.flac",
+            ),
+            song,
+          );
+          db.run(sql`UPDATE tracks SET path=${song} WHERE id=${ids.get(title)}`);
+        }
+        const now = Date.now();
+        for (const [title, count] of [
+          ["Collaboration", 2],
+          ["Road", 1],
+        ] as const)
+          for (let index = 0; index < count; index++)
+            recordPlay(db, {
+              trackId: String(ids.get(title)),
+              startedAt: now - (count - index),
+              counted: true,
+              listenedMs: 90_000,
+              durationMs: 180_000,
+              endReason: "completed",
+              source: "desktop",
+              context: null,
+            });
+      }
     }).pipe(Effect.provide(libraryLayer(join(data, "wave.db")))),
   );
 };
@@ -90,6 +132,51 @@ test("an artist's page has their photo and album shelves, and an album's hero li
     await link.click();
     await expect(hero.locator("h1")).toHaveText("Nick Drake");
     await expect(artist).toBeVisible();
+  } finally {
+    await app.close();
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
+test("an artist's page shows shared listening stats, credits collaborations, and plays its ranked list", async () => {
+  const data = mkdtempSync(join(tmpdir(), "wave-artist-stats-"));
+  await seed(data, "off", true);
+  const app = await launch(data);
+  try {
+    const page = await app.firstWindow();
+    await page.getByRole("button", { name: "Artists", exact: true }).click();
+    await page.getByRole("row", { name: /Nick Drake/ }).dblclick();
+    const stats = page.getByTestId("artist-listening-stats");
+    await expect(stats.getByText("3 plays", { exact: true })).toBeVisible();
+    await expect(stats.getByText("4 minutes listened", { exact: true })).toBeVisible();
+    await expect(stats.getByText("2 of 5 songs", { exact: true })).toBeVisible();
+    await expect(stats.getByText(/^Last played/)).toBeVisible();
+    const mostPlayed = stats.getByRole("row", { name: /Collaboration/ });
+    await expect(mostPlayed).toBeVisible();
+    await mostPlayed.click({ button: "right" });
+    await expect(page.getByRole("menuitem", { name: "Play Next", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(stats.getByRole("row")).toHaveText([
+      /Plays$/,
+      /Collaboration.*2 plays/,
+      /Road.*1 play/,
+    ]);
+    await stats.getByRole("row", { name: /Road/ }).dblclick();
+    await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Road", exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Artists", exact: true }).click();
+    await page.getByRole("row", { name: /Vashti Bunyan/ }).dblclick();
+    const vashtiStats = page
+      .getByTestId("artist-listening-stats")
+      .locator(".artist-listening-facts");
+    await expect(vashtiStats.getByText("2 plays", { exact: true })).toBeVisible();
+    await expect(vashtiStats.getByText("1 of 1 song", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Artists", exact: true }).click();
+    await page.getByRole("row", { name: /Quiet Artist/ }).dblclick();
+    await expect(page.getByTestId("artist-not-played")).toHaveText("Not played yet");
+    await expect(page.getByTestId("artist-listening-stats")).toHaveCount(0);
   } finally {
     await app.close();
     rmSync(data, { recursive: true, force: true });

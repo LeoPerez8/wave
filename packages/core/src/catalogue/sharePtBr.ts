@@ -13,6 +13,8 @@ export const sharePtBr: typeof shareEn = {
   shareRecap: "Compartilhar Retrospectiva",
   recapSlide: (title: string) => `Slide da Retrospectiva de ${title}`,
   copyLink: "Copiar Link",
+  copySpotifyLink: "Copiar Link do Spotify",
+  copyYtMusicLink: "Copiar Link do YT Music",
   songLink: "Link da música",
   linkCopied: "Link copiado",
   copyFailed: "Não foi possível copiar o link",
@@ -26,11 +28,15 @@ export const sharePtBr: typeof shareEn = {
   instagramStories: "Stories do Instagram",
   whatsApp: "WhatsApp",
   saveImage: "Salvar imagem",
+  copyImage: "Copiar imagem",
   more: "Mais",
   savedToGallery: "Salva na galeria",
   instagramFailed: "Não foi possível abrir o Instagram",
   whatsAppFailed: "Não foi possível abrir o WhatsApp",
   saveImageFailed: "Não foi possível salvar a imagem",
+  imageSaved: "Imagem salva",
+  imageCopied: "Imagem copiada",
+  copyImageFailed: "Não foi possível copiar a imagem",
   shareImageFailed: "Não foi possível compartilhar a imagem",
   share: "Compartilhar",
   sharing: (playlist: string, service: string) => `Compartilhando ${playlist} no ${service}…`,
@@ -44,6 +50,14 @@ export const sharePtBr: typeof shareEn = {
     plural("pt-BR", total, {
       one: `${formatNumber("pt-BR", found)} de ${formatNumber("pt-BR", total)} música encontrada`,
       other: `${formatNumber("pt-BR", found)} de ${formatNumber("pt-BR", total)} músicas encontradas`,
+    }),
+  /** A playlist's menu on the desktop, which has no Share card of services. */
+  shareToSpotify: "Compartilhar no Spotify",
+  /** The desktop's toast, which copies the link in place of a share sheet. */
+  foundAndCopied: (found: number, total: number) =>
+    plural("pt-BR", total, {
+      one: `${formatNumber("pt-BR", found)} de ${formatNumber("pt-BR", total)} música encontrada. Link copiado.`,
+      other: `${formatNumber("pt-BR", found)} de ${formatNumber("pt-BR", total)} músicas encontradas. Link copiado.`,
     }),
   signInTitle: (service: string) => `Iniciar Sessão no ${service}`,
   signInMessage: {

@@ -161,17 +161,26 @@ export const playlistRemovals = (places: readonly PlaylistPlace[]): PlaylistRemo
 
 /**
  * The alert that asks before deleting playlists, once however many: one is
- * named, several are counted. Their songs stay in the library.
+ * named, several are counted. Their songs stay in the library. One the owner
+ * shares with [otherMembers] others (a collaborative playlist) says instead
+ * that they keep a copy.
  */
 export const confirmPlaylistDeletion = (
-  playlists: readonly { readonly name: string }[],
+  playlists: readonly { readonly name: string; readonly otherMembers?: number | undefined }[],
   language: AppLanguage = "en",
 ): AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> } => {
-  const text = catalogueOf(language).playlists;
+  const catalogue = catalogueOf(language);
+  const text = catalogue.playlists;
   const only = playlists.length === 1 ? playlists[0] : undefined;
+  const others = only?.otherMembers ?? 0;
   return {
     title: only === undefined ? text.deleteMany(playlists.length) : text.deleteOne(only.name),
-    message: only === undefined ? text.theirSongsStay : text.itsSongsStay,
+    message:
+      only === undefined
+        ? text.theirSongsStay
+        : others > 0
+          ? catalogue.collaborativeMenu.deleteMessage(others)
+          : text.itsSongsStay,
     action: { label: text.delete, destructive: true },
   };
 };

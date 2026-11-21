@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { contentSecurityPolicy, guardWindow, type GuardedContents } from "./security.ts";
+import {
+  contentSecurityPolicy,
+  guardWindow,
+  windowWebPreferences,
+  type GuardedContents,
+} from "./security.ts";
 
 const directives = (policy: string) =>
   new Map(
@@ -75,4 +80,15 @@ test("a web link opens in the system browser, and nothing opens inside Wave", ()
   assert.equal(open("javascript:alert(1)"), "deny");
   assert.equal(open("not a url"), "deny");
   assert.deepEqual(opened, ["https://genius.com/song", "http://example.com/"]);
+});
+
+test("every Wave window is sandboxed and isolated from its preload, with no Node in the page", () => {
+  assert.deepEqual(windowWebPreferences("/wave/preload.cjs"), {
+    preload: "/wave/preload.cjs",
+    contextIsolation: true,
+    sandbox: true,
+    nodeIntegration: false,
+    webviewTag: false,
+    autoplayPolicy: "no-user-gesture-required",
+  });
 });

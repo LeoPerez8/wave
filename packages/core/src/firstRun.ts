@@ -135,3 +135,13 @@ export const nextFirstRunStep = (state: FirstRunState): FirstRunStep => {
   if (onUpdate) return songLinks === "none" ? card : "rememberSongLinks";
   return songLinks === "all" ? "rememberSongLinks" : card;
 };
+
+/**
+ * Bring your music on the desktop (docs/spec-desktop.md, story D5a), as a launch finds it.
+ * The desktop keeps its own answer, apart from the phone's: answering the invitation stores
+ * `due`, and answering the card stores anything else. Nothing [stored] is a computer whose
+ * invitation is still to come, one that answered it before the card existed, or a build that
+ * can't sign in and so has no invitation: none of them gets the card.
+ */
+export const desktopBringYourMusic = (stored: string | null): FirstRunAnswer =>
+  stored === "due" ? "due" : "done";

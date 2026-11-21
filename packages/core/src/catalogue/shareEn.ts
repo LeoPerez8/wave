@@ -15,6 +15,9 @@ export const shareEn = {
   /** A Recap slide's preview, for TalkBack. */
   recapSlide: (title: string) => `${title} Recap slide`,
   copyLink: "Copy Link",
+  /** The desktop's Share submenu: the song's Spotify and YT Music addresses go to the clipboard. */
+  copySpotifyLink: "Copy Spotify Link",
+  copyYtMusicLink: "Copy YT Music Link",
   /** What the clipboard calls a copied song link. */
   songLink: "Song link",
   linkCopied: "Link copied",
@@ -30,11 +33,16 @@ export const shareEn = {
   instagramStories: "Instagram Stories",
   whatsApp: "WhatsApp",
   saveImage: "Save image",
+  /** The desktop's second destination: the card goes to the clipboard as an image. */
+  copyImage: "Copy image",
   more: "More",
   savedToGallery: "Saved to your gallery",
   instagramFailed: "Couldn't open Instagram",
   whatsAppFailed: "Couldn't open WhatsApp",
   saveImageFailed: "Couldn't save the image",
+  imageSaved: "Image saved",
+  imageCopied: "Image copied",
+  copyImageFailed: "Couldn't copy the image",
   shareImageFailed: "Couldn't share the image",
   share: "Share",
   sharing: (playlist: string, service: string) => `Sharing ${playlist} on ${service}…`,
@@ -49,6 +57,14 @@ export const shareEn = {
     plural("en", total, {
       one: `${formatNumber("en", found)} of ${formatNumber("en", total)} song found`,
       other: `${formatNumber("en", found)} of ${formatNumber("en", total)} songs found`,
+    }),
+  /** A playlist's menu on the desktop, which has no Share card of services. */
+  shareToSpotify: "Share to Spotify",
+  /** The desktop's toast, which copies the link in place of a share sheet. */
+  foundAndCopied: (found: number, total: number) =>
+    plural("en", total, {
+      one: `${formatNumber("en", found)} of ${formatNumber("en", total)} song found. Link copied.`,
+      other: `${formatNumber("en", found)} of ${formatNumber("en", total)} songs found. Link copied.`,
     }),
   signInTitle: (service: string) => `Sign In to ${service}`,
   signInMessage: {

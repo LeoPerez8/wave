@@ -9,6 +9,7 @@ import { selectNowPlayingSong } from "@wave/client/db/nowPlayingSong";
 import { addPendingFavorites, removePendingFavorites } from "@wave/client/db/pendingFavorites";
 import { setFavorites } from "@wave/client/db/playHistory";
 import { addToPlaylist } from "@wave/client/db/playlists";
+import { refuseCollaborative } from "../library/collaborativePlaylists.ts";
 import {
   artistPhotoName,
   missingSongJobId,
@@ -30,7 +31,7 @@ import type {
   StreamedRunResult,
   StreamedSongMenu,
 } from "../../shared/streamedSongs.ts";
-import type { DownloadsShape } from "../downloads/downloads.ts";
+import type { AskedBy, DownloadsShape } from "../downloads/downloads.ts";
 
 export interface StreamedSongPorts {
   readonly db: LibraryDatabase;
@@ -44,7 +45,7 @@ export interface StreamedSongPorts {
   readonly changed: () => void;
 }
 
-/** The entries the desktop offers; Select, Release Date and the playing card's are the phone's. */
+/** The entries the desktop offers; Select and the playing card's are the phone's. */
 const OFFERED: ReadonlySet<string> = new Set<StreamedEntry["action"]>([
   "playNext",
   "addToQueue",
@@ -54,6 +55,7 @@ const OFFERED: ReadonlySet<string> = new Set<StreamedEntry["action"]>([
   "unfavorite",
   "goToAlbum",
   "goToArtist",
+  "releaseDate",
   "share",
 ]);
 
@@ -85,25 +87,32 @@ export const streamedArtistTarget = (
 };
 
 /** Whether [song] is starred: a pending favorite, or the Library's song for it starred. */
-export const streamedStarred = (db: LibraryDatabase, song: YtAlbumSong): boolean => {
-  const answer = selectNowPlayingSong(db, { trackId: ytTrackId(song.videoId), song });
-  return answer.favorite || answer.pendingFavorite;
+export const streamedStarred = (db: LibraryDatabase, song: YtAlbumSong): boolean =>
+  streamedLibraryFacts(db, song).starred;
+
+export const streamedLibraryFacts = (db: LibraryDatabase, song: YtAlbumSong) => {
+  const { track, favorite, pendingFavorite } = selectNowPlayingSong(db, {
+    trackId: ytTrackId(song.videoId),
+    song,
+  });
+  return { track, starred: favorite || pendingFavorite, hasFile: track?.path != null };
+};
+
+export const streamedPlaylistEntry = (db: LibraryDatabase, song: YtAlbumSong): PlaylistSong => {
+  const { track } = streamedLibraryFacts(db, song);
+  return track === null ? { source: "stream", song } : { source: "library", trackId: track.id };
 };
 
 /** What the Library holds of [song]: its song (with a file or missing) and its star. */
 const libraryFacts = (ports: StreamedSongPorts, song: YtAlbumSong) => {
-  const { track, favorite, pendingFavorite } = selectNowPlayingSong(ports.db, {
-    trackId: ytTrackId(song.videoId),
-    song,
-  });
-  const hasFile = track !== null && track.path !== null;
+  const { track, starred, hasFile } = streamedLibraryFacts(ports.db, song);
   // A missing song downloads into its Library entry; anything else as a new song.
   const jobId = track !== null && !hasFile ? missingSongJobId(track.id) : (song.videoId as string);
   const status =
     track !== null && !hasFile
       ? ports.downloads.status(track.id)
       : ports.downloads.ytStatus(song.videoId);
-  return { track, starred: favorite || pendingFavorite, hasFile, jobId, status };
+  return { track, starred, hasFile, jobId, status };
 };
 
 export const streamedSongMenu = (
@@ -124,7 +133,9 @@ export const streamedSongMenu = (
       .map((entry): StreamedEntry => {
         if (entry.action === "goToAlbum") return { action: "goToAlbum", album: entry.album };
         if (entry.action !== "goToArtist")
-          return { action: entry.action as StreamedRunAction | "magicQueue" | "share" };
+          return {
+            action: entry.action as StreamedRunAction | "magicQueue" | "releaseDate" | "share",
+          };
         return { action: "goToArtist", artists: entry.artists };
       }),
     ...(hasFile ? [] : ytDownloadActions(status, { inLibrary: false })).map((action) => ({
@@ -147,8 +158,11 @@ export const runStreamedAction = async (
 ): Promise<StreamedRunResult> => {
   const { db, downloads } = ports;
   const { track, hasFile, jobId, status } = libraryFacts(ports, song);
-  /** Asks for the song; [by] a star, taking the star back takes the download back too. */
-  const download = (by?: "star") =>
+  /**
+   * Asks for the song; [by] a star, taking the star back takes the download back too, or Add to
+   * Playlist, whose toast is the only word of it.
+   */
+  const download = (by?: AskedBy) =>
     track !== null && !hasFile
       ? downloads.missing([track.id], by)
       : downloads.yt([song.videoId], by);
@@ -172,12 +186,13 @@ export const runStreamedAction = async (
     }
     case "addToPlaylist": {
       if (playlistId === undefined) throw new Error("No playlist to add to");
+      refuseCollaborative(db, playlistId);
       const entry: PlaylistSong =
         track === null ? { source: "stream", song } : { source: "library", trackId: track.id };
       const result = addToPlaylist(db, playlistId, [entry], Date.now());
       ports.changed();
       // The desktop's playlists list the Library's songs: the song comes into the Library.
-      if (!hasFile && status === null) await download();
+      if (!hasFile && status === null) await download("playlist");
       return {
         kind: "playlist",
         name: result.name,

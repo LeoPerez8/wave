@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { homePlays } from "./db/playHistory.ts";
 import { playEvents } from "./db/schema.ts";
+import { loadPlayback } from "./db/playback.ts";
 import { addTrack, openTestDatabase, libraryRow } from "./db/testDatabase.ts";
+import { savedQueueState } from "@wave/core";
 import {
   createPlaybackSession,
   type AudioPort,
@@ -481,4 +483,256 @@ test("Undo to a song that won't load goes back to the old queue, stopped", async
   assert.equal(undone.status.state, "idle");
   assert.equal(undone.canUndo, false);
   assert.ok(changes > before, "the change is told");
+});
+
+test("a Recap's music plays in place of the queue, counts no play, and gives the queue back paused where it was", async (t) => {
+  const db = await openTestDatabase();
+  const a = addTrack(db, { title: "First" });
+  const b = addTrack(db, { title: "Second" });
+  const top = addTrack(db, { title: "Top Song" });
+  let now = 1000;
+  const session = await createPlaybackSession({
+    db,
+    audio: device(),
+    source: "desktop",
+    now: () => now,
+  });
+  t.after(() => session.close());
+  await session.dispatch({
+    type: "play",
+    trackIds: [String(a), String(b)],
+    startIndex: 1,
+    context: { kind: "album", id: "1" },
+  });
+  await session.seek(12000);
+  await session.pause();
+  const playsBefore = db.select().from(playEvents).all().length;
+
+  const loan = await session.borrow();
+  await loan.play(String(top));
+  assert.deepEqual(
+    session.snapshot().queue.entries.map((entry) => entry.trackId),
+    [String(top)],
+  );
+  assert.equal(session.snapshot().status.state, "playing");
+  assert.equal(session.snapshot().canUndo, false, "a Recap's music offers no Undo");
+  now += 60000;
+  await session.flush();
+  // Quitting mid-Recap must find the owner's queue, not the Recap's song.
+  assert.deepEqual(
+    savedQueueState(loadPlayback(db)!.parts)?.entries.map((entry) => entry.trackId),
+    [String(a), String(b)],
+  );
+  assert.equal(loadPlayback(db)!.positionMs, 12000);
+
+  await loan.giveBack();
+  const { queue, status } = session.snapshot();
+  assert.deepEqual(
+    queue.entries.map((entry) => entry.trackId),
+    [String(a), String(b)],
+  );
+  assert.equal(queue.index, 1);
+  assert.equal(status.state, "paused");
+  assert.equal(status.positionMs, 12000);
+  assert.equal(db.select().from(playEvents).all().length, playsBefore, "no play was recorded");
+  assert.equal(
+    homePlays(db)
+      .mostPlayed.map(libraryRow)
+      .some((row) => row.id === top),
+    false,
+  );
+});
+
+test("turning Don't play explicit on during a Recap removes explicit songs from the queue it gives back", async (t) => {
+  const db = await openTestDatabase();
+  const explicit = addTrack(db, { title: "Explicit", explicit: "explicit" });
+  const clean = addTrack(db, { title: "Clean" });
+  const top = addTrack(db, { title: "Recap song" });
+  let on = false;
+  const session = await createPlaybackSession({
+    db,
+    audio: device(),
+    source: "desktop",
+    dontPlayExplicit: () => on,
+  });
+  t.after(() => session.close());
+  await session.dispatch({
+    type: "play",
+    trackIds: [String(explicit), String(clean), String(explicit)],
+    context: { kind: "album", id: "1" },
+  });
+  await session.seek(12000);
+  await session.pause();
+
+  const loan = await session.borrow();
+  await loan.play(String(top));
+  on = true;
+  await session.dropExplicit();
+  assert.equal(session.snapshot().queue.entries[0]?.trackId, String(top));
+  const saved = loadPlayback(db)!;
+  on = false;
+  await loan.giveBack();
+
+  const { queue, status } = session.snapshot();
+  assert.deepEqual(
+    queue.entries.map((entry) => entry.trackId),
+    [String(clean)],
+  );
+  assert.equal(queue.index, 0);
+  assert.equal(status.state, "paused");
+  assert.equal(status.positionMs, 0);
+  assert.deepEqual(
+    savedQueueState(saved.parts)?.entries.map((entry) => entry.trackId),
+    [String(clean)],
+  );
+  assert.equal(saved.positionMs, 0);
+});
+
+test("a queue played during a Recap stays when the Recap closes", async (t) => {
+  const db = await openTestDatabase();
+  const a = addTrack(db, { title: "First" });
+  const top = addTrack(db, { title: "Top Song" });
+  const session = await createPlaybackSession({ db, audio: device(), source: "desktop" });
+  t.after(() => session.close());
+  const loan = await session.borrow();
+  await loan.play(String(top));
+  await session.dispatch({
+    type: "play",
+    trackIds: [String(a)],
+    context: { kind: "songs", id: null },
+  });
+  await loan.giveBack();
+  assert.deepEqual(
+    session.snapshot().queue.entries.map((entry) => entry.trackId),
+    [String(a)],
+  );
+  assert.equal(session.snapshot().status.state, "playing");
+});
+
+test("a Recap opened over an empty queue leaves it empty and silent when it closes", async (t) => {
+  const db = await openTestDatabase();
+  const top = addTrack(db, { title: "Top Song" });
+  const session = await createPlaybackSession({ db, audio: device(), source: "desktop" });
+  t.after(() => session.close());
+  const loan = await session.borrow();
+  await loan.play(String(top));
+  await loan.giveBack();
+  assert.equal(session.snapshot().queue.entries.length, 0);
+  assert.notEqual(session.snapshot().status.state, "playing");
+});
+
+test("a file outside the Library plays from its path between Library songs and records no play", async (t) => {
+  const db = await openTestDatabase();
+  const a = addTrack(db, { title: "Library" });
+  const loaded: string[] = [];
+  const preloaded: (string | undefined)[] = [];
+  const audio = device();
+  let now = 1000;
+  const ended: string[] = [];
+  const session = await createPlaybackSession({
+    db,
+    audio: {
+      ...audio,
+      load: (path, key) => {
+        loaded.push(path);
+        return audio.load(path, key);
+      },
+      preload: (path, key) => {
+        preloaded.push(path);
+        return audio.preload(path, key);
+      },
+    },
+    source: "desktop",
+    now: () => now,
+    openedFile: (path) => path !== "/gone/Deleted.mp3",
+    playEnded: (play) => ended.push(play.trackId),
+  });
+  t.after(() => session.close());
+  await session.dispatch({
+    type: "play",
+    trackIds: ["file:/tmp/Outside.mp3", "file:/gone/Deleted.mp3", String(a)],
+    context: { kind: "files", id: null },
+  });
+  assert.deepEqual(loaded, ["/tmp/Outside.mp3"]);
+  assert.match(String(preloaded.at(-1)), /Library\.mp3$/, "a file that is gone is skipped");
+  await session.play();
+  now += 40000;
+  await session.dispatch({ type: "next" });
+  assert.equal(db.select().from(playEvents).all().length, 1, "only the Library song has a play");
+  assert.equal(db.select().from(playEvents).all()[0]?.trackId, a);
+  assert.deepEqual(ended, [], "a play of a file outside the Library isn't told as one to sync");
+});
+
+test("without an opened-file reader, a file entry is skipped as unplayable", async (t) => {
+  const db = await openTestDatabase();
+  const a = addTrack(db, { title: "Library" });
+  const session = await createPlaybackSession({ db, audio: device(), source: "phone" });
+  t.after(() => session.close());
+  await session.dispatch({
+    type: "play",
+    trackIds: ["file:/tmp/Outside.mp3", String(a)],
+    context: { kind: "files", id: null },
+  });
+  const { queue } = session.snapshot();
+  assert.equal(queue.entries[queue.index]?.trackId, String(a));
+});
+
+test("with Don't play explicit on, explicit Library and YT Music songs stay out of the queue, and turning it on takes them out", async (t) => {
+  const db = await openTestDatabase();
+  const clean = addTrack(db, { title: "Clean" });
+  const explicit = addTrack(db, { title: "Explicit", explicit: "explicit" });
+  const unknown = addTrack(db, { title: "Unknown" });
+  const streamed = (videoId: string, isExplicit: boolean) => ({
+    videoId,
+    title: videoId,
+    artists: ["Someone"],
+    album: null,
+    albumId: null,
+    durationMs: 60000,
+    artworkUrl: null,
+    explicit: isExplicit,
+  });
+  const songs = [streamed("cleanstream", false), streamed("explicitone", true)];
+  let on = true;
+  const session = await createPlaybackSession({
+    db,
+    audio: device(),
+    source: "desktop",
+    streamed: (videoId) => songs.find((song) => song.videoId === videoId),
+    dontPlayExplicit: () => on,
+  });
+  t.after(() => session.close());
+  const queued = () => session.snapshot().queue.entries.map((entry) => entry.trackId);
+  const current = () => {
+    const { queue } = session.snapshot();
+    return queue.entries[queue.index]?.trackId;
+  };
+  const all = [
+    String(explicit),
+    String(clean),
+    "yt:explicitone",
+    "yt:cleanstream",
+    String(unknown),
+  ];
+  const play = { type: "play", trackIds: all, context: { kind: "songs", id: null } } as const;
+
+  // The tapped explicit song gives way to the next clean one; a song nothing says about plays.
+  await session.dispatch({ ...play, startIndex: 0 });
+  assert.deepEqual(queued(), [String(clean), "yt:cleanstream", String(unknown)]);
+  assert.equal(current(), String(clean));
+  await session.dispatch({ type: "addToQueue", trackIds: ["yt:explicitone", String(explicit)] });
+  assert.deepEqual(queued(), [String(clean), "yt:cleanstream", String(unknown)]);
+
+  on = false;
+  await session.dispatch({ ...play, startIndex: 2 });
+  assert.deepEqual(queued(), all);
+  assert.equal(current(), "yt:explicitone");
+  assert.equal(session.snapshot().status.state, "playing");
+
+  // The switch turns on: the queue's explicit songs go, the playing one too.
+  on = true;
+  await session.dropExplicit();
+  assert.deepEqual(queued(), [String(clean), "yt:cleanstream", String(unknown)]);
+  assert.equal(current(), "yt:cleanstream");
+  assert.equal(session.snapshot().status.state, "playing");
 });

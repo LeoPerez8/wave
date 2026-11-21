@@ -9,4 +9,6 @@ export const listeningHistoryEn = {
   unknownSong: "Unknown song",
   /** A search result's icon, opening the full history at that play. */
   goToMoment: "Go to this moment",
+  /** The desktop table's column for when each play started. */
+  timeColumn: "Time",
 };

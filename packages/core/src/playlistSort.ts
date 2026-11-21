@@ -34,6 +34,15 @@ export interface PlaylistOrder {
   readonly order: readonly number[];
 }
 
+/** Where the order is kept, on the phone and the computer alike (each its own; it doesn't sync). */
+export const PLAYLIST_ORDER_SETTING = "settings.playlistOrder";
+
+/** Whether [a] and [b] are the same sort and the same arranged order. */
+export const samePlaylistOrder = (a: PlaylistOrder, b: PlaylistOrder): boolean =>
+  a.sort === b.sort &&
+  a.order.length === b.order.length &&
+  a.order.every((id, index) => id === b.order[index]);
+
 /** The order of an install that never picked one: by name, as the list always was. */
 const DEFAULT_PLAYLIST_ORDER: PlaylistOrder = { sort: "name", order: [] };
 

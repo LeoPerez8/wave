@@ -1,7 +1,9 @@
 /** Magic Queue reads its seed's radio and ranks it with the last available Wave signals. */
 import {
   catalogSeedKey,
+  djRadioSongAllowed,
   djNewReleasesRanked,
+  djMoodRanked,
   djVarietyCandidates,
   identityKey,
   recordingMatches,
@@ -108,6 +110,21 @@ export const magicQueueYtCandidates = (
     // A DJ session's New releases ranks with its artists' saved pages; none is asked for.
     const store = yield* LibraryStore;
     savedPage = (name) => Effect.runPromise(store.ytArtist(identityKey(name)));
+    const mood = (sessionNow?.() ?? session).dj?.mood ?? null;
+    const catalogVideos = catalog.map(({ song }) => song.videoId);
+    const moodFeatures =
+      mood === null
+        ? new Map()
+        : yield* store.djMoodFeatures(catalogVideos).pipe(Effect.orElseSucceed(() => new Map()));
+    const libraryMoodFeatures =
+      mood === null
+        ? new Map()
+        : yield* store.djLibraryMoodFeatures().pipe(Effect.orElseSucceed(() => new Map()));
+    const genreRows =
+      mood === null
+        ? []
+        : yield* store.songGenres(catalogVideos).pipe(Effect.orElseSucceed(() => []));
+    const moodGenres = new Map(genreRows.map(({ id, genre }) => [String(id), genre] as const));
     const releases = yield* Effect.promise(() => releasePages(sessionNow?.() ?? session, graph));
     const seeds = drawn.length > 0 ? drawn : [legacySeed(session)];
     const liked = ((sessionNow?.() ?? session).likedRadios ?? []).filter(
@@ -146,7 +163,13 @@ export const magicQueueYtCandidates = (
     // A DJ session's New releases raises the songs on its artists' recent releases; any other keeps the order.
     const rank = (group: readonly SongRadioSeed[], original: boolean, faithfulFallback = false) =>
       Effect.map(radioRanked(group, original, faithfulFallback), (ranked) =>
-        djNewReleasesRanked(sessionNow?.() ?? session, ranked, releases, Date.now()),
+        djMoodRanked(
+          djNewReleasesRanked(sessionNow?.() ?? session, ranked, releases, Date.now()),
+          mood,
+          moodFeatures,
+          moodGenres,
+          libraryMoodFeatures,
+        ),
       );
     const radioRanked = (
       group: readonly SongRadioSeed[],
@@ -156,14 +179,26 @@ export const magicQueueYtCandidates = (
       const current = sessionNow?.() ?? session;
       const read = readers.current(session.id, group);
       // Old artist radios still provide an offline fallback until an ordered page is saved.
-      const fallback = catalog
-        .filter((entry) =>
-          entry.radios.some((r) => artists.some((name) => catalogSeedKey(name) === r.seed)),
-        )
-        .map((entry) => entry.song);
-      const radios = read.flatMap(({ seed, page }) =>
-        page === null ? [] : [{ id: seed.id, artists: seed.artists, songs: page.songs }],
-      );
+      const familyAllowed = (id: string, songArtists: readonly string[]): boolean =>
+        djRadioSongAllowed(current, id, songArtists, profileOf, graph);
+      const fallback = catalog.flatMap((entry) => {
+        const matching = entry.radios.filter((radio) =>
+          artists.some((name) => catalogSeedKey(name) === radio.seed),
+        );
+        return matching.some((radio) => familyAllowed(`artist:${radio.seed}`, entry.song.artists))
+          ? [entry.song]
+          : [];
+      });
+      const radios = read.flatMap(({ seed, page }) => {
+        if (page === null) return [];
+        return [
+          {
+            id: seed.id,
+            artists: seed.artists,
+            songs: page.songs.filter((song) => familyAllowed(seed.id, song.artists)),
+          },
+        ];
+      });
       if (original && radios.length === 0 && !connected)
         radios.push({ id: seeds[0]!.id, artists, songs: fallback });
       const exclude = magicRadioExclusions(

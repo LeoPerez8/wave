@@ -508,6 +508,37 @@ describe("the card", () => {
     assert.deepEqual(labels(view), ["Close", "Open Settings"]);
   });
 
+  test("on the desktop, offers Try Again with the microphone off, after the settings when there are some", () => {
+    const desktop = catalogueOf("en", "desktop");
+    const withSettings = recognizeCardView(
+      { kind: "denied" },
+      { ytMusic: true, denied: ["openSettings", "tryAgain"] },
+      desktop,
+    );
+    assert.deepEqual(withSettings.actions, ["close", "openSettings", "tryAgain"]);
+    assert.doesNotMatch(withSettings.lines.join(" "), /android|\bphone|celular/i);
+    const without = recognizeCardView(
+      { kind: "denied" },
+      { ytMusic: true, denied: ["tryAgain"] },
+      desktop,
+    );
+    assert.deepEqual(without.actions, ["close", "tryAgain"]);
+  });
+
+  test("on the desktop, the listening lines name the computer, not the phone", () => {
+    for (const language of ["en", "pt-BR"] as const) {
+      const desktop = catalogueOf(language, "desktop");
+      const lines = [
+        ...recognizeCardView({ kind: "listening" }, undefined, desktop).lines,
+        ...recognizeCardView({ kind: "listening", source: "playback" }, undefined, desktop).lines,
+        ...recognizeCardView({ kind: "ended", end: { kind: "blocked" } }, undefined, desktop).lines,
+        recognizeCardView({ kind: "ended", end: { kind: "blocked" } }, undefined, desktop).title,
+        ...recognizeCardView({ kind: "denied" }, undefined, desktop).lines,
+      ];
+      for (const line of lines) assert.doesNotMatch(line, /\bphone|celular|android/i, line);
+    }
+  });
+
   test("says a failure is a failure, never No match", () => {
     for (const failure of ["network", "refused", "unreadable", "capture"] as const) {
       const view = recognizeCardView({

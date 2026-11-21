@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { LoudnessResult, PlaybackStatus } from "../../shared/playback.ts";
-import { answer, playbackEvent, stamped, type AddonEngine, type AudioCall } from "./protocol.ts";
+import {
+  answer,
+  outputsEvent,
+  playbackEvent,
+  stamped,
+  type AddonEngine,
+  type AudioCall,
+} from "./protocol.ts";
 
 const paused: PlaybackStatus = { state: "paused", positionMs: 0, durationMs: 1000 };
 
@@ -151,4 +158,27 @@ test("an answer carries the time the process took it", () => {
   });
   const refused = answer(engine, { id: 2, call: "load", args: ["/missing"] });
   assert.equal(stamped(refused, 500), refused);
+});
+
+test("the outputs are reported when the process starts and each time the list changes", () => {
+  const { engine } = fakeEngine();
+  let outputs = [{ id: "wasapi:speakers", name: "Speakers" }];
+  const watched: AddonEngine = { ...engine, outputs: () => outputs };
+  const first = outputsEvent(watched, undefined);
+  assert.deepEqual(first, { event: "outputs", outputs });
+  assert.equal(outputsEvent(watched, first!.outputs), undefined);
+  outputs = [...outputs, { id: "wasapi:headphones", name: "Headphones" }];
+  assert.deepEqual(outputsEvent(watched, first!.outputs)?.outputs, outputs);
+  // An engine built before outputs could be picked has only the system's default.
+  assert.deepEqual(outputsEvent(engine, undefined), { event: "outputs", outputs: [] });
+});
+
+test("picking an output reaches the engine, and none means the system's default", () => {
+  const { engine } = fakeEngine();
+  const picked: (string | undefined)[] = [];
+  const picks: AddonEngine = { ...engine, setOutput: (id) => void picked.push(id) };
+  assert.equal(answer(picks, { id: 1, call: "setOutput", args: ["wasapi:headphones"] }).ok, true);
+  assert.equal(answer(picks, { id: 2, call: "setOutput", args: [null] }).ok, true);
+  assert.deepEqual(picked, ["wasapi:headphones", undefined]);
+  assert.equal(answer(engine, { id: 3, call: "setOutput", args: ["wasapi:headphones"] }).ok, true);
 });

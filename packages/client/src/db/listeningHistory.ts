@@ -1,7 +1,10 @@
 import {
   findListeningHistory,
   hasFindQuery,
+  startingAt,
   UNKNOWN_SONG_TITLE,
+  type ListeningHistoryCursor,
+  type ListeningHistoryPageOf,
   type PlaySnapshot,
   type YtAlbumSong,
 } from "@wave/core";
@@ -23,18 +26,8 @@ export interface ListeningHistoryRow {
   readonly song: SongRow | null;
 }
 
-export interface ListeningHistoryCursor {
-  readonly startedAt: number;
-  readonly id: number;
-}
-
-export interface ListeningHistoryPage {
-  readonly rows: readonly ListeningHistoryRow[];
-  /** Where older plays go on, or null at the first play. */
-  readonly next: ListeningHistoryCursor | null;
-  /** Where newer plays go on, for a page opened at a moment; null when it reaches the newest play. */
-  readonly newer: ListeningHistoryCursor | null;
-}
+export { startingAt, type ListeningHistoryCursor };
+export type ListeningHistoryPage = ListeningHistoryPageOf<ListeningHistoryRow>;
 
 const UNKNOWN: PlaySnapshot = {
   title: UNKNOWN_SONG_TITLE,
@@ -78,12 +71,6 @@ const olderThan = (cursor: ListeningHistoryCursor) =>
 const newerThan = (cursor: ListeningHistoryCursor) =>
   sql`(${playEvents.startedAt}, ${playEvents.id}) > (${cursor.startedAt}, ${cursor.id})`;
 const cursorOf = ({ id, startedAt }: Play): ListeningHistoryCursor => ({ id, startedAt });
-
-/** The cursor a read older than starts at [play] itself: ids are integers, so none sits between. */
-export const startingAt = (play: ListeningHistoryCursor): ListeningHistoryCursor => ({
-  startedAt: play.startedAt,
-  id: play.id + 1,
-});
 
 /** Counted plays, including streamed and removed songs and a current play once counted. */
 export const listeningHistory = (

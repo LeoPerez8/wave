@@ -1,9 +1,12 @@
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   BrowserWindow,
+  ClipboardItem,
   clipboard,
   app,
+  desktopCapturer,
   dialog,
   ipcMain,
   net,
@@ -11,6 +14,8 @@ import {
   nativeImage,
   nativeTheme,
   safeStorage,
+  session as electronSession,
+  systemPreferences,
 } from "electron";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -23,7 +28,7 @@ import { playbackLayer } from "./playback/playback.ts";
 import { libraryLayer } from "./database.ts";
 import { kotlinLayer } from "./kotlin/kotlin.ts";
 import { jvmCommand, spawnLines } from "./kotlin/spawn.ts";
-import { guardWindow } from "./security.ts";
+import { guardWindow, windowWebPreferences } from "./security.ts";
 import { desktopLibraryLayer } from "./library/library.ts";
 import { desktopPlaylistsLayer } from "./library/playlists.ts";
 import { nativeImageCodec } from "./library/nativeImageCodec.ts";
@@ -45,11 +50,16 @@ import { lookupsEnabled } from "./lookupSettings.ts";
 import { artistPhotosEnabled } from "./library/lyricsAndTags.ts";
 import { ytMusicLayer } from "./yt/ytMusic.ts";
 import { desktopLinksLayer } from "./links/layer.ts";
+import { cardImagesLayer } from "./cards/cardImages.ts";
 import { downloadsLayer } from "./downloads/downloadsLayer.ts";
 import { keyringHost } from "./downloads/keyring.ts";
 import type { KotlinEvent } from "./kotlin/protocol.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
+import { geniusLyricsSearchLayer } from "./lyrics/geniusLyricsSearchLayer.ts";
+import { guardCapture } from "./recognize/capturePermissions.ts";
+import { fetchCover } from "./recognize/cover.ts";
+import { Recognize, recognizeLayer, type RecognizeShape } from "./recognize/recognizeLayer.ts";
 import { botguardPost, createPoTokens, poTokenHost } from "./yt/poTokens.ts";
 import { openPoTokenPage } from "./yt/poTokenWindow.ts";
 import { createWaveAccount } from "./account/account.ts";
@@ -59,13 +69,18 @@ import { signInWithBrowser } from "./account/browserSignIn.ts";
 import { accountConfig } from "./account/config.ts";
 import { sessionStore } from "./account/sessionStore.ts";
 import { installDesktopSystem } from "./system/desktopSystem.ts";
+import { installMiniPlayer } from "./system/miniPlayerWindow.ts";
 import { configureAutostart } from "./system/autostart.ts";
 import { followStart } from "./system/startup.ts";
+import { createOpenedFiles, launchFiles } from "./system/openedFiles.ts";
 import { Playback } from "./playback/playback.ts";
 import { YtMusic } from "./yt/ytMusic.ts";
 import { ytAccountLayer } from "./yt/ytAccountLayer.ts";
 import { createYtSessions, ytSessionStore } from "./yt/ytSessionStore.ts";
 import { ytSignInSystem } from "./yt/ytSignInSystem.ts";
+import { spotifySessionStore } from "./spotify/spotifyAccount.ts";
+import { spotifyAccountLayer } from "./spotify/spotifyAccountLayer.ts";
+import { spotifyImportLayer } from "./spotify/spotifyImportLayer.ts";
 
 // %APPDATA%\Wave or ~/.config/Wave, from the product name; tests point it at a folder of their own.
 const dataFolder = process.env["WAVE_DATA_DIR"];
@@ -134,14 +149,7 @@ const createWindow = (
         }
       : {}),
     title: "Wave",
-    webPreferences: {
-      preload: join(import.meta.dirname, "../preload/index.cjs"),
-      contextIsolation: true,
-      sandbox: true,
-      nodeIntegration: false,
-      webviewTag: false,
-      autoplayPolicy: "no-user-gesture-required",
-    },
+    webPreferences: windowWebPreferences(join(import.meta.dirname, "../preload/index.cjs")),
   });
   guardWindow(created.webContents, (url) => void shell.openExternal(url));
   // Ctrl+Q quits from anywhere in the window, a field included.
@@ -200,9 +208,18 @@ const createWindow = (
   });
 };
 
+/** Plays the files Wave was opened with, once the services are up; set as they start. */
+let playOpenedFiles: (paths: readonly string[]) => void = () => {};
+const openedFiles = createOpenedFiles({ play: (paths) => playOpenedFiles(paths) });
+
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on("second-instance", showWindow);
+  // A launch while Wave runs hands its files to this window, which comes forward either way.
+  app.on("second-instance", (_event, argv, workingDirectory) => {
+    openedFiles.opened(launchFiles(argv, workingDirectory));
+    showWindow();
+  });
+  openedFiles.opened(launchFiles(process.argv, process.cwd()));
   app.on("window-all-closed", () => app.quit());
   // Utility processes start only once the app is ready, so the services wait for it too.
   void app.whenReady().then(async () => {
@@ -223,6 +240,8 @@ else {
       jar: process.env["WAVE_KOTLIN_JAR"] ?? join(resources, "jvm", "wave-kotlin.jar"),
       dataDir: join(app.getPath("userData"), "kotlin"),
       platform: process.platform,
+      // Tests point Recognize at a fake Shazam; a packaged Wave always asks Shazam.
+      shazamUrl: app.isPackaged ? undefined : process.env["WAVE_SHAZAM_URL"],
     });
     // What the JVM tells main unasked (`ready`, `downloadsChanged`), for whoever listens.
     const kotlinListeners = new Set<(event: KotlinEvent) => void>();
@@ -330,11 +349,14 @@ else {
         };
       })(),
       pickFolder,
+      // Called when Show in Folder runs, so an e2e run can stand in for the file manager.
+      showItemInFolder: (path) => shell.showItemInFolder(path),
     }).pipe(Layer.provideMerge(services));
     const downloads = downloadsLayer({
       get catalogue() {
         return text;
       },
+      language: () => language,
       platform: process.platform,
       musicFolder,
       pickFolder,
@@ -360,6 +382,9 @@ else {
       app.isPackaged,
     );
     const { clientId } = config;
+    const spotifyClientId =
+      (app.isPackaged ? undefined : process.env["WAVE_SPOTIFY_CLIENT_ID"]?.trim() || undefined) ??
+      (import.meta.env.MAIN_VITE_WAVE_SPOTIFY_CLIENT_ID?.trim() || null);
     const account = createWaveAccount({
       // The session stays in main, sealed by the system's keyring; without one it isn't written.
       store: sessionStore({
@@ -423,22 +448,121 @@ else {
           language = view.language;
           text = catalogueOf(language, "desktop");
         },
+        // An edit in Settings › Appearance, or a pull: the window's frame follows at once.
+        themeChanged: (stored) => {
+          theme = readThemeChoice(stored);
+          if (window === undefined || window.isDestroyed()) return;
+          window.setBackgroundColor(colours().background);
+          if (process.platform === "win32")
+            window.setTitleBarOverlay({
+              color: colours().background,
+              symbolColor: colours().foreground,
+              height: 48,
+            });
+        },
         focused: () => BrowserWindow.getFocusedWindow() !== null,
       }).pipe(
         Layer.provideMerge(
           Layer.mergeAll(
+            cardImagesLayer({
+              save: async (fileName, png) => {
+                const options = {
+                  defaultPath: join(app.getPath("pictures"), fileName),
+                  filters: [{ name: "PNG", extensions: ["png"] }],
+                };
+                const window = BrowserWindow.getFocusedWindow();
+                const result = await (window === null
+                  ? dialog.showSaveDialog(options)
+                  : dialog.showSaveDialog(window, options));
+                if (result.canceled || !result.filePath) return false;
+                await writeFile(result.filePath, png);
+                return true;
+              },
+              copy: (png) =>
+                clipboard.write([
+                  new ClipboardItem({
+                    "image/png": new Blob([Buffer.from(png)], { type: "image/png" }),
+                  }),
+                ]),
+            }),
             desktopLinksLayer({
               online: () => net.isOnline(),
               writeClipboard: (text) => clipboard.writeText(text),
+            }),
+            geniusLyricsSearchLayer({
+              account,
+              online: () => net.isOnline(),
+              openExternal: (url) => shell.openExternal(url),
+            }),
+            recognizeLayer({
+              online: () => net.isOnline(),
+              // Windows' privacy switch for desktop apps; Linux has none to read.
+              microphone: () =>
+                process.platform === "linux" ||
+                systemPreferences.getMediaAccessStatus("microphone") === "granted" ||
+                systemPreferences.getMediaAccessStatus("microphone") === "not-determined"
+                  ? "granted"
+                  : "denied",
+              systemAudio: process.platform === "linux" ? "monitor" : "loopback",
+              catalogue: () => text,
+              language: () => language,
+              events: (listener) => {
+                kotlinListeners.add(listener);
+                return () => kotlinListeners.delete(listener);
+              },
+              openPrivacySettings:
+                process.platform === "win32"
+                  ? () => shell.openExternal("ms-settings:privacy-microphone")
+                  : null,
+              fetchCover: (url) => fetchCover(url, fetch),
+              log: (level, line) =>
+                process.stderr.write(`[recognize] ${level}: ${line}
+`),
             }),
             ytAccountLayer({
               sessions: ytSessions,
               online: () => net.isOnline(),
               startSignIn: ytSignIn.start,
             }),
+            spotifyImportLayer({ fetch: (input, init) => globalThis.fetch(input, init) }).pipe(
+              Layer.provideMerge(
+                spotifyAccountLayer({
+                  clientId: spotifyClientId,
+                  store: spotifySessionStore({
+                    box: safeStorage,
+                    file: join(app.getPath("userData"), "spotify-session.bin"),
+                    files: {
+                      ...sealedFiles,
+                      // A refresh can rotate the token. An interrupted write leaves the old file readable.
+                      write: (file, bytes) => {
+                        const temp = `${file}.tmp`;
+                        try {
+                          sealedFiles.write(temp, bytes);
+                          renameSync(temp, file);
+                        } finally {
+                          sealedFiles.remove(temp);
+                        }
+                      },
+                      remove: (file) => {
+                        sealedFiles.remove(`${file}.tmp`);
+                        sealedFiles.remove(file);
+                      },
+                    },
+                    platform: process.platform,
+                  }),
+                  openExternal: (url) => shell.openExternal(url),
+                  online: () => net.isOnline(),
+                  fetch: (input, init) => globalThis.fetch(input, init),
+                  page: () => ({
+                    title: text.desktopAccount.browserTitle,
+                    message: text.desktopAccount.browserMessage,
+                  }),
+                }),
+              ),
+            ),
           ).pipe(
             Layer.provideMerge(
-              ytFeaturesLayer({ online: () => net.isOnline() }).pipe(
+              ytFeaturesLayer({ online: () => net.isOnline(), language: () => language }).pipe(
                 Layer.provideMerge(
                   playlists.pipe(
                     Layer.provideMerge(
@@ -463,6 +587,21 @@ else {
         }),
       ),
     );
+    // Only Recognize's session may capture, and only once the services are up.
+    let recognize: RecognizeShape | undefined;
+    guardCapture(electronSession.defaultSession, {
+      trusted: (contents) => window !== undefined && contents === window.webContents,
+      trustedFrame: (frame) => window !== undefined && frame === window.webContents.mainFrame,
+      allows: (kind) => recognize?.allows(kind) ?? false,
+      screen: async () =>
+        (
+          await desktopCapturer.getSources({
+            types: ["screen"],
+            thumbnailSize: { width: 0, height: 0 },
+          })
+        )[0],
+      loopback: process.platform === "win32",
+    });
     const readTheme = () =>
       runtime.runPromise(Effect.map(Account, (it) => readThemeChoice(it.view().theme)));
     // Builds the services now, so the JVM starts with the app rather than on the first call.
@@ -471,13 +610,32 @@ else {
       nativeTheme.themeSource = await runtime.runPromise(Effect.map(Database, appearance));
       theme = await readTheme();
     })();
+    // The floating mini player: a second window on the same preload and page rules.
+    const miniPlayer = installMiniPlayer({
+      db: () => started.then(() => runtime.runPromise(Database)),
+      preload: join(import.meta.dirname, "../preload/index.cjs"),
+      load: (mini) => {
+        const devServer = process.env["ELECTRON_RENDERER_URL"];
+        if (!app.isPackaged && devServer !== undefined)
+          void mini.loadURL(new URL("mini.html", devServer).href);
+        else void mini.loadFile(join(import.meta.dirname, "../renderer/mini.html"));
+      },
+      title: () => text.desktopWindow.miniPlayer,
+      background: () => colours().background,
+      openExternal: (url) => void shell.openExternal(url),
+      quit: () => app.quit(),
+    });
     // A call from the page waits for the services it needs.
     registerBridge(
       ipcMain,
       runtime,
-      (event) =>
-        window !== undefined &&
-        (event as Electron.IpcMainInvokeEvent).senderFrame === window.webContents.mainFrame,
+      (event) => {
+        const frame = (event as Electron.IpcMainInvokeEvent).senderFrame;
+        return (
+          (window !== undefined && frame === window.webContents.mainFrame) ||
+          miniPlayer.trusts(frame)
+        );
+      },
       (mode) => {
         nativeTheme.themeSource = mode;
       },
@@ -501,6 +659,7 @@ else {
         channel: desktopBuild?.channel ?? null,
         folder: app.getPath("userData"),
       }),
+      { open: miniPlayer.open, close: miniPlayer.close, showMain: showWindow },
     );
     // The queue's position and the play so far are saved before the app exits.
     let quitting = false;
@@ -520,6 +679,8 @@ else {
       system?.beginQuit();
       system?.close();
       poTokens.close();
+      // Its position is saved while the Library is still open.
+      miniPlayer.close();
       // Services that hang as they close don't keep a process nobody can see.
       void closeServices()
         .then(() => installUpdate?.())
@@ -564,8 +725,12 @@ else {
       runtime.runPromise(Playback),
       runtime.runPromise(YtMusic),
     ]);
+    recognize = await runtime.runPromise(Recognize);
     // Closed while the services started: Wave is quitting.
     if (window === undefined || quitting) return;
+    // A file that won't open leaves its queue showing, stopped, as any such song does.
+    playOpenedFiles = (paths) => void playback.openFiles(paths).catch(() => {});
+    openedFiles.ready();
     system = installDesktopSystem({
       window,
       db,
@@ -576,6 +741,7 @@ else {
       mediaAddon: process.env["WAVE_MEDIA_ADDON"] ?? join(resources, "native", "wave-media.node"),
       cache: cacheFolder("system-media"),
       show: showWindow,
+      miniPlayer: () => void miniPlayer.open().catch(() => {}),
     });
   });
 }

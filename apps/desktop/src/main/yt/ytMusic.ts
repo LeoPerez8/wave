@@ -16,6 +16,7 @@ import type { YtStatus } from "../../shared/yt.ts";
 import type { ResolvedStream } from "../audio/protocol.ts";
 import { Kotlin } from "../kotlin/kotlin.ts";
 import type { KotlinMethods } from "../kotlin/protocol.ts";
+import { readRemoteImage } from "../library/remoteImage.ts";
 import { preference, savePreference } from "../preferences.ts";
 
 export interface YtSearch {
@@ -178,20 +179,7 @@ export const createYtMusic = (deps: YtMusicDeps): YtMusicShape => {
   const enabled = () => deps.read(YT_MUSIC_SETTING) !== "off";
   const tell = () => deps.call("setYtMusic", { enabled: enabled() }).catch(() => undefined);
 
-  const cover = async (url: string): Promise<string | null> => {
-    try {
-      const response = await fetchImage(url, { redirect: "error", credentials: "omit" });
-      const type = response.headers.get("content-type")?.split(";")[0]?.trim() ?? "";
-      if (!response.ok || !/^image\/[a-z0-9.+-]+$/i.test(type)) return null;
-      const length = Number(response.headers.get("content-length") ?? 0);
-      if (length > maxArtworkBytes) return null;
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (bytes.byteLength === 0 || bytes.byteLength > maxArtworkBytes) return null;
-      return `data:${type};base64,${Buffer.from(bytes).toString("base64")}`;
-    } catch {
-      return null;
-    }
-  };
+  const cover = (url: string) => readRemoteImage(fetchImage, url, maxArtworkBytes);
 
   return {
     enabled,

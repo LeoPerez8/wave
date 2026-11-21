@@ -1,0 +1,149 @@
+.content:has(.stats-page) {
+  overflow-y: auto;
+}
+.stats-page {
+  padding-bottom: 32px;
+}
+.stats-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  border-bottom: 1px solid var(--color-separator);
+}
+.stats-tabs button {
+  padding: 4px 0 10px;
+  border-bottom: 2px solid transparent;
+  color: var(--color-secondary);
+  white-space: nowrap;
+}
+.stats-tabs button:hover,
+.stats-tabs button[aria-selected="true"] {
+  color: var(--color-foreground);
+}
+.stats-tabs button[aria-selected="true"] {
+  border-color: var(--color-accent);
+  font-weight: 600;
+}
+.stats-period-panel {
+  display: grid;
+  gap: 28px;
+  margin-top: 22px;
+}
+.stats-period-panel > * {
+  min-width: 0;
+}
+.stats-section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.stats-section-heading h2 {
+  margin: 0;
+}
+.home-stats h2 {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--color-secondary);
+}
+.stats-section-heading button {
+  flex: none;
+  color: var(--color-accent);
+  font-size: 13px;
+}
+.stats-section-heading button:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.home-stats {
+  max-width: 480px;
+}
+.home-stats dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-separator);
+}
+.home-stats dd,
+.stats-rank,
+.stats-podium {
+  font-variant-numeric: tabular-nums;
+}
+.stats-rank {
+  flex: 0 0 3ch;
+  text-align: right;
+}
+.stats-table,
+.stats-full {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.stats-full,
+.stats-full .stats-table {
+  flex: 1;
+}
+.stats-full > p:first-child {
+  margin-bottom: 12px;
+}
+.stats-table .table-area {
+  padding-right: 0;
+}
+.stats-table .table-columns {
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) 28px 90px;
+}
+.stats-table .table-area.no-star .table-columns {
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) 90px;
+}
+.stats-table .table-area.no-third.no-star .table-columns {
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) 90px;
+}
+@container (width < 760px) {
+  .stats-table .table-columns {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) 28px 90px;
+  }
+  .stats-table .table-area.no-star .table-columns {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) 90px;
+  }
+}
+.stats-table .time-column {
+  white-space: nowrap;
+}
+.stats-podium {
+  max-width: 520px;
+}
+.stats-bars {
+  position: relative;
+}
+.stats-bar {
+  position: absolute;
+  bottom: 0;
+  border: 2px solid var(--color-background);
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+}
+.stats-bar span {
+  position: absolute;
+  top: 8px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+}
+.stats-genre-labels {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
+  font-size: 12px;
+  text-align: center;
+}
+.stats-genre-labels div {
+  display: flex;
+  flex-direction: column;
+  padding: 0 4px;
+  overflow-wrap: anywhere;
+}

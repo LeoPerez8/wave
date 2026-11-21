@@ -216,8 +216,8 @@ test("missing favorites queue at startup and when starred from Songs", async () 
     await expect.poll(async () => (await downloads(page)).online, ONLINE_WAIT).toBe(false);
     const titles = () =>
       page.evaluate(async () =>
-        (await (window as unknown as Wave).wave.downloads.rows(0, 10)).items.map(
-          (row) => row.title,
+        (await (window as unknown as Wave).wave.downloads.rows(0, 10)).items.flatMap((row) =>
+          "title" in row ? [row.title] : [],
         ),
       );
     await page.getByRole("button", { name: "Songs", exact: true }).click();
@@ -285,7 +285,7 @@ test("a YouTube Music song downloads into the Library with its tags", async () =
       .poll(async () => (await downloads(page)).progress, { timeout: 180_000, intervals: [1_000] })
       .toBeNull();
     const rows = await page.evaluate(() => (window as unknown as Wave).wave.downloads.rows(0, 10));
-    expect(rows.items.map((row) => row.status)).toEqual([]);
+    expect(rows.items.map((row) => row.kind)).toEqual([]);
     await expect(page.getByText("Songs you download show here")).toBeVisible();
 
     const [file] = audioFiles(music);

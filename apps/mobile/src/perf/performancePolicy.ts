@@ -109,7 +109,7 @@ const FOLLOWED_FINDER =
   "Once per shared Library query version while this visible page or menu follows it; unchanged renders reuse the finder.";
 
 export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
-  "library/playlistSuggestionsVisit.ts#openPlaylistSuggestionsVisit": {
+  "library/playlistSuggestionsVisit.ts#phoneHost": {
     howOften:
       "Once per settled visible playlist visit, whether or not the section ever mounts; source edits coalesce into one refresh, never while hidden.",
     reason:
@@ -1109,10 +1109,6 @@ export const OWN_DEFERRALS: Record<string, { readonly reason: string }> = {
   "library/artistLookup.ts": {
     reason:
       "A tapped artist link's or menu's own lookup: the owner waits for it, so it yields between pages without queuing behind background work.",
-  },
-  "library/listeningHistoryReads.ts": {
-    reason:
-      "An open list revalidating its pages after a Library edit: the screen's own read, which yields between pages for the owner's touches.",
   },
   "nowPlaying/SleepTimer.tsx": {
     reason: "The sleep timer card's label clock: a UI timer reading the time, not work.",

@@ -215,14 +215,14 @@ const albumsInOrder = (
   return ids.flatMap((id) => byId.get(id) ?? []);
 };
 
-const recentlyAddedAlbums = (db: LibraryDatabase, scope: TrackScope): AlbumRow[] => {
+const recentlyAddedAlbums = (db: LibraryDatabase, scope: TrackScope, limit = SHELF): AlbumRow[] => {
   const { tracks } = schema;
   const ids = db
     .select({ id: tracks.albumId })
     .from(tracks)
     .groupBy(tracks.albumId)
     .orderBy(desc(max(tracks.addedAt)), desc(tracks.albumId))
-    .limit(SHELF)
+    .limit(limit)
     .all()
     .map((row) => row.id);
   return albumsInOrder(db, ids, scope);
@@ -237,9 +237,10 @@ const recentlyPlayedShelf = (
   db: LibraryDatabase,
   scope: TrackScope,
   streamed: readonly StreamedListeningTotal[],
+  limit = SHELF,
 ): PlayedAlbum[] => {
   const { playTotals, tracks } = schema;
-  for (let page = SHELF * PAGE_GROWTH; ; page *= PAGE_GROWTH) {
+  for (let page = Math.min(limit, SHELF) * PAGE_GROWTH; ; page *= PAGE_GROWTH) {
     const songs = db
       .select({ albumId: tracks.albumId, lastPlayedAt: playTotals.lastPlayedAt })
       .from(playTotals)
@@ -247,10 +248,10 @@ const recentlyPlayedShelf = (
       .orderBy(desc(playTotals.lastPlayedAt))
       .limit(page)
       .all();
-    const ids = recentlyPlayedAlbums(songs, SHELF, songs.length < page);
+    const ids = recentlyPlayedAlbums(songs, limit, songs.length < page);
     if (ids !== null) {
       const local = albumsInOrder(db, ids, scope);
-      return scope === "files" ? local : recentlyPlayedEntities(db, local, SHELF, streamed);
+      return scope === "files" ? local : recentlyPlayedEntities(db, local, limit, streamed);
     }
   }
 };
@@ -512,6 +513,17 @@ export const homePlays = (db: LibraryDatabase, scope: TrackScope = "library"): H
     mostPlayed: mostPlayedSongs(db, scope, streamed),
   };
 };
+
+/** How many albums a Home shelf's See all lists. */
+const SEE_ALL = 1_000;
+
+/** Recently Added's See all: the shelf's order, past its 12 albums. */
+export const recentlyAddedList = (db: LibraryDatabase): AlbumRow[] =>
+  recentlyAddedAlbums(db, "library", SEE_ALL);
+
+/** Recently Played's See all: the shelf's order, past its 12 albums, streamed ones included. */
+export const recentlyPlayedList = (db: LibraryDatabase): PlayedAlbum[] =>
+  recentlyPlayedShelf(db, "library", streamedListeningTotals(db), SEE_ALL);
 
 /** Favorites, which stars change. */
 export const homeFavorites = (

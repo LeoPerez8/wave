@@ -79,6 +79,7 @@ test("Home shows the phone's local sections, follows the saved arrangement and o
       "Most played",
       "Most played albums",
       "Most played artists",
+      "Stats",
     ]);
     const table = home.getByRole("grid", { name: "Most played" });
     await expect(table.getByRole("row").nth(1)).toContainText("Blue");

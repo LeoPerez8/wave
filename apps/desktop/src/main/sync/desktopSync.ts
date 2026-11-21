@@ -10,6 +10,7 @@ import { creditSplits } from "@wave/client/db/credits";
 import type { LibraryDatabase } from "@wave/client/db/database";
 import { signOut } from "@wave/client/db/missingSongs";
 import { selectJoinedAccount } from "@wave/client/db/syncRows";
+import { collaborationService } from "@wave/client/sync/collaborationService";
 import { syncCycle, type SyncedChanges } from "@wave/client/sync/syncCycle";
 import {
   DESKTOP_SYNC_PERIOD_MS,
@@ -126,6 +127,10 @@ export const createDesktopSync = (deps: DesktopSyncDeps): DesktopSync => {
         songsChanged: songs,
         wait: deps.wait ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
         historyChanged: () => void revision++,
+        // The desktop shows collaborative playlists and edits none: it pulls each one and
+        // pushes nothing of them (docs/spec-desktop.md, Wave account and sync).
+        collaboration: collaborationService(account),
+        pushCollaborative: false,
       });
       if (changedAnything(pulled)) revision++;
       if (pulled.preferences.length > 0)

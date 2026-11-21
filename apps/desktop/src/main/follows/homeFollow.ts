@@ -28,10 +28,13 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import type { HomeFollowView, HomeReleaseOpening } from "../../shared/homeFollow.ts";
+import { stampPreference } from "@wave/client/db/sync";
+import { sql } from "drizzle-orm";
 import { ytRow } from "../../shared/yt.ts";
 import type { YtAlbumView } from "../../shared/ytPages.ts";
 import { preference, savePreference } from "../preferences.ts";
-import { syncedPreference } from "../sync/desktopSync.ts";
+import { keepPreference, syncedPreference } from "../sync/desktopSync.ts";
+import { createFollowedArtists, FollowedArtists } from "./followedArtists.ts";
 import type { YtPagesShape } from "../yt/ytPages.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
 import { YtFeatures } from "../yt/ytServices.ts";
@@ -280,28 +283,50 @@ export class HomeFollow extends Context.Service<HomeFollow, HomeFollowShape>()(
   "@wave/desktop/HomeFollow",
 ) {}
 
-/** HomeFollow over the Library and YT Music's pages; shows are asked with the account's session. */
+/**
+ * HomeFollow over the Library and YT Music's pages, and FollowedArtists beside it; shows are
+ * asked with the account's session.
+ */
 const homeFollowLayer = (options: {
   readonly request: WaveServiceRequest;
   readonly configured: boolean;
   readonly signedIn: () => boolean;
   readonly online: () => boolean;
+  /** The system's region; the owner's Country choice in Settings comes first. */
   readonly country: () => string;
   readonly fetch: typeof fetch;
 }) =>
-  Layer.effect(
-    HomeFollow,
+  Layer.effectContext(
     Effect.gen(function* () {
       const db = yield* Database;
       const yt = yield* YtMusic;
       const features = yield* YtFeatures;
-      return createHomeFollow({
+      const followed = createFollowedArtists({
+        db,
+        configured: options.configured,
+        signedIn: options.signedIn,
+        systemCountry: options.country,
+        setting: (key) => syncedPreference(db, key),
+        saveSetting: (key, value) => {
+          keepPreference(db, key, value);
+          stampPreference(db, key, Date.now());
+        },
+        local: {
+          get: (key) => preference(db, key),
+          set: (key, value) => {
+            if (value === null) db.run(sql`DELETE FROM desktop_settings WHERE key = ${key}`);
+            else savePreference(db, key, value);
+          },
+        },
+        fetch: options.fetch,
+      });
+      const home = createHomeFollow({
         db,
         configured: options.configured,
         signedIn: options.signedIn,
         ask: (path) => askWaveService(options.request, path),
         online: options.online,
-        country: options.country,
+        country: followed.country,
         setting: (key) => syncedPreference(db, key),
         local: {
           get: (key) => preference(db, key),
@@ -311,10 +336,11 @@ const homeFollowLayer = (options: {
         pages: features.pages,
         fetch: options.fetch,
       });
+      return Context.make(HomeFollow, home).pipe(Context.add(FollowedArtists, followed));
     }),
   );
 
-/** [base] with HomeFollow over it. */
+/** [base] with HomeFollow and FollowedArtists over it. */
 export const withHomeFollow =
   (options: Parameters<typeof homeFollowLayer>[0]) =>
   <A, E, R>(base: Layer.Layer<A, E, R>) =>

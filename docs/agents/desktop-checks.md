@@ -41,6 +41,18 @@ Build the addon before `test:e2e`: without it the app runs, but every player cal
 fixture in `native/engine/tests/fixtures`; its `device` annotation (`--reporter=json`) names the
 output that played it, or `none` when the engine kept time without one, as on CI.
 
+### Output device
+
+`settings.outputs()` answers `{outputs, chosen}`: the system's outputs as the engine last listed
+them and the one picked (`connected` false while it is away). `settings.setOutput(id | null)`
+takes an id from that list, or null for System default. The engine decides where to play
+(`target_device` in `native/engine/src/output.rs`); the audio process pushes the list as an
+`outputs` event and takes the choice as the `setOutput` call, which a restarted process gets
+again. `e2e/outputDevice.spec.ts` picks one of the machine's real outputs with a paused song and
+checks the position and a restart; its `outputs` annotation is 0 on a machine without one, where
+it stops after the list. Its screenshot is `output-device-<platform>.png`. Unplugging is checked
+against a fake in `src/main/bridge.test.ts`, and on real hardware by the owner.
+
 ## The JVM
 
 The shared Kotlin (`packages/kotlin-shared`) runs in a JVM main starts with the app
@@ -164,6 +176,50 @@ and a fake token endpoint on `127.0.0.1`, answers the browser's redirect itself,
 temporary data and music folder. Check Delete Account only this way, never on a real account or
 the deployed service. `WAVE_SHOTS_DIR` says where its screenshots go.
 
+## Spotify account
+
+Register `http://127.0.0.1/spotify/callback` in Spotify's app dashboard. Wave adds a random
+port at sign-in. Set the public client ID in the `WAVE_SPOTIFY_CLIENT_ID` repository variable
+for releases, or in the same environment variable for an unpackaged run. Release builds pass
+that ID to main as `MAIN_VITE_WAVE_SPOTIFY_CLIENT_ID`. Spotify PKCE needs only the client ID.
+See [Spotify's redirect URI rules](https://developer.spotify.com/documentation/web-api/concepts/redirect_uri)
+and [Development Mode requirements](https://developer.spotify.com/documentation/web-api/concepts/quota-modes).
+
+`e2e/spotifyAccount.spec.ts` fakes Spotify's browser and API responses and uses a separate data
+folder for each test. It checks the profile, restart, Sign Out, Sign In Again, and the no-keyring
+notice. The owner can verify the system browser and consent screen with a registered Spotify app.
+
+## From Spotify
+
+Import Playlists on the Playlists page offers From Files and, while YT Music is on, From Spotify.
+Main reads the account with Spotify's Web API (`src/main/spotify/spotifyImport.ts`, Core's
+`readSpotifyWebLibrary` and `readSpotifyWebPlaylist`) and the window uses
+`wave.spotifyImport.library`, `run`, `cancel`, `artwork` and `missing`. `run` accepts only
+sources the last `library` listed. A playlist Spotify answers 403 or 404 for is skipped, which
+is what Development Mode does for playlists the account doesn't own.
+
+A playlist page hides songs the Library lacks until YT Music has them, so its hero counts them
+("2 not in your library") and lists them. Reading that list has main look them up on YT Music;
+each one found takes its place among the page's rows.
+
+`e2e/spotifyImport.spec.ts` fakes Spotify's browser and Web API. It checks the choice with YT
+Music off and on, the sign-in before the picker, the rows, Import, the Imported label, Try Again
+and Sign In Again. Its two absent songs are looked up on the live YT Music when the JVM is
+built; the check holds whether or not it answers. Import & Download's queueing is covered in
+`src/main/spotify/spotifyImport.test.ts`. A real account and a real download are owner checks.
+
+## Share to Spotify
+
+A playlist's menu has Share to Spotify when the build names a Spotify client ID. Main matches the
+songs with Spotify's search (Core's `spotifyWebShareMatch`), makes a public playlist or updates
+the one it made before, and copies its link (`src/main/spotify/playlistShare.ts`). The window
+calls `wave.spotifyShare.playlist(id)` and hears only how it went. The Spotify playlist made for
+each Wave playlist is remembered in `desktop_settings` as `share.spotify.<playlist id>`.
+
+`e2e/spotifyShare.spec.ts` fakes Spotify's sign-in and Web API in main. It checks the sign-in
+question, the playlist Spotify got, the toast, the clipboard, a second share and a failure. The
+owner can verify a real account: the playlist appears public in Spotify with the matched songs.
+
 ## Song menus and keys
 
 `e2e/songMenus.spec.ts` opens a song's menu by right-click, Shift+F10 and the Menu key, queues
@@ -179,6 +235,34 @@ to Playlist and Remove from Library. A target is `{scope, ids}` or `{scope, all:
 (at most 10,000 ids). Remove from Library adds a file exclusion, so later scans skip the file
 until Settings includes it again; the file stays on disk. The renderer's keys go through Core's
 `desktopKey`, with focus read by `keys.ts`.
+
+## Sorting a page's songs
+
+`e2e/pageSort.spec.ts` sorts a playlist's, an artist's and a genre's songs from their headers,
+checks that Move Up and Move Down show only in a playlist's Custom order, that Play queues the
+order shown, and that each choice survives a restart. Screenshots are
+`page-sort-<page>-<platform>.png`.
+
+`library.sortBy(kind, key, playlistId?)` takes a playlist's id for its own sort, which is kept
+in the synced `settings.playlistSongs.<n>` preferences as the phone keeps it; artists and genres
+share `tableSort.artist` and `tableSort.genre` on this computer. `BrowsePage.sort` is the order
+shown, and a row's `order` is its place in the playlist's own order or its Popular rank. A
+sorted playlist and an artist's Popular are ordered by Core in main, which reads the whole list
+for each page. The Release date sort reads the file's date tag, else its Year.
+
+## Listening History
+
+`e2e/listeningHistory.spec.ts` seeds 3,000 counted plays, a streamed play with YT Music off, a
+play of a song removed since and one that never counted. It checks the day headers, the dimmed
+rows, that scrolling reads more pages while few rows are drawn, the search, Go to This Moment
+with its 3-second tint, Back to the results, a double click that plays, and the Settings entry.
+Screenshots are `listening-history-<platform>.png` and `listening-history-moment-<platform>.png`.
+
+`history.page(from, query)` returns 50 plays: the newest (`{ before: undefined }`), older than a
+cursor, newer than one (`{ after }`) or around a play (`{ around }`). `history.play(playId)`
+replays that play's song alone; main reads the play again and does nothing for a dimmed one.
+The rows come from `src/main/library/history.ts`, over Client's `db/listeningHistory`; the
+paging is Core's `listeningHistoryReads`, which the phone uses too.
 
 ## Downloads and Fix Songs
 
@@ -207,9 +291,72 @@ and `tags.writeSong`. Its `downloadsChanged` events trigger journal reads. Souls
 are sealed by main's `seal/unseal` host calls through Electron's keyring; without a keyring they
 stay in memory. Rebuild the JAR with `pnpm --filter @wave/desktop build:jvm` after Kotlin changes.
 
+The Downloads page reads `downloads.rows(offset, limit, failedShown)`: Core's `downloadListRows`
+then `failedDownloadRows`, the failed songs only while shown. `downloads.move` takes a waiting
+song or a group onto another's place (`to`) or one step (`step`), and `downloads.failedReason`
+retries or removes every song that failed for one reason. `downloads.view()` carries the run's
+`panel`, the `summary` line and `pauseNotice`; main follows Core's `ytThrottle` and has the JVM
+pause YouTube's jobs (`downloads.pauseYoutube`). `e2e/downloadsPage.spec.ts` checks the page
+offline with 1,205 queued songs: the groups, a bounded list, a group and a song moved by drag
+and by Move Up, and the failed section. Its screenshots are `downloads-<step>-<platform>.png`.
+
 `e2e/downloads.spec.ts` checks a missing Search song waiting offline and resuming through the real
 JVM, and a live YouTube download with its tags read back and its Library entry visible. The live
 check stops after search on CI; inspect its annotations if YouTube refuses the machine.
+
+## Recap and card images
+
+`e2e/recap.spec.ts` seeds three months of counted plays, opens the Recap from Home's card and
+from Stats' Recaps row, moves with Right and Left, waits for a story to move on after six
+seconds and for the summary to stay, and closes with Esc. It reads the queue before and after,
+and counts `play_events` once the app has closed. Save Image runs with `dialog.showSaveDialog`
+replaced in main, so no dialog opens; the spec reads the file's size from its PNG header and
+the clipboard's image through Electron. Screenshots are `recap-<platform>-home.png`,
+`-songs.png`, `-summary.png`, `-stats.png`, and the saved story is `recap-<platform>-image.png`.
+
+`stats.recaps()` lists the periods with a Recap, `stats.recap(id)` opens one (Home stops
+announcing it), and `stats.recapStory(index)` and `stats.recapClosed()` drive its music.
+`cards.saveImage(fileName, pngBase64)` and `cards.copyImage(pngBase64)` take a PNG of at most
+1080 by 1920 and a file name of the form `Wave - <title> - <yyyyMMdd-HHmmss>.png`; main refuses
+anything else. The window draws the PNG from a card element at the size it is laid out at
+(`renderer/src/cardImage.ts`); a Recap story is 1080 by 1920.
+The native save dialog itself is an owner check.
+
+## Home's editor
+
+`e2e/homeEditor.spec.ts` edits Home from its Edit Home dialog with the keyboard alone (Move Up,
+Remove, Add, Discover's rows), drags a row, then edits again under Settings › Home. It checks
+Home's headings after each change and, once the app has closed, that a section this Wave doesn't
+draw kept its place in the stored arrangement. Screenshots are `home-editor-<platform>-light.png`,
+`-dark.png` and `-settings.png`.
+
+`home.arrangement()` gives Core's `HomeArrangement`; `home.edit(edit)` takes one
+`HomeArrangementEdit`, which main checks with `readHomeArrangementEdit`, applies to the synced
+`settings.homeArrangement` with `editStoredHomeArrangement` (`src/main/homeArrangement.ts`) and
+stamps for sync. `bridge.test.ts` syncs it with a phone both ways.
+
+## Lyrics translation
+
+`e2e/lyricsTranslation.spec.ts` turns Translate on in the Lyrics tab and Now Playing against a
+stand-in for Google Translate (it replaces `globalThis.fetch` in main, which the translation
+reads at call time). It checks the skeleton, each line's translation, the sung line, the
+"already in" line, a failed request with Try Again, that nothing is sent while Translate is off,
+and that a restart keeps the switch and shows the saved translation with Google out of reach.
+The real endpoint is an owner check. `wave.lyrics.translateOn`, `setTranslateOn` and
+`translation(trackId, language)` are the calls; main reads the lyrics itself
+(`src/main/lyrics/translation.ts`).
+
+## Theme editor
+
+`e2e/themeEditor.spec.ts` edits the theme in Settings › Appearance: a background in each mode, a
+custom colour typed and saved by keyboard alone, a saved colour applied and removed, the colour
+well, and Reset. It reads the window's `--color-*` tokens after each pick; screenshots are
+`theme-editor-light.png`, `theme-editor-dark.png` and `theme-editor-picker.png`.
+
+`settings.editTheme(edit)` takes one of Core's `ThemeEdit` values, which main checks with
+`readThemeEdit`, applies to the synced `settings.theme` with Core's theme choice rules
+(`src/main/theme.ts`) and stamps for sync. It returns the stored theme, the value
+`account.view().theme` then holds. `bridge.test.ts` syncs it with a phone both ways.
 
 ## Links
 
@@ -219,6 +366,49 @@ the same card and no service is asked anything. It also checks that pasted text 
 does nothing, that a paste into the search field stays a paste, and that Copy Link reaches the
 system clipboard. What a link opens with YT Music on is tested in
 `src/main/links/links.test.ts`, against a fake JVM and `fetch`.
+
+## Online lyrics search
+
+`lyrics.searchOnline(query)` asks Genius through the sync service with the Wave session
+(`src/main/lyrics/geniusLyricsSearch.ts`, the phone's `requestGeniusLyricsSearch` from
+`@wave/client/geniusLyricsSearch`), and `lyrics.openOnlineHit(id)` plays or opens a hit of the
+last answer. The window waits for the typing pause and lists the hits (`OnlineLyrics.tsx`).
+
+`e2e/geniusLyricsSearch.spec.ts` runs it against the sync service in memory and a fake Genius
+(`e2e/geniusFixture.ts`), with YT Music off: the three-word rule, the signed-out, failed and
+offline lines, five hits then twenty, the hit a Library Lyrics row hides, a Library song that
+plays and a Genius page that opens. A hit that plays from YT Music is tested in
+`src/main/lyrics/geniusLyricsSearch.test.ts` against a fake search; the live one is an owner
+check.
+
+## Opening files
+
+`e2e/openFiles.spec.ts` starts Wave with a file outside the Library as its argument, then launches
+it again with more files while it runs: they play in the running window as a new queue with
+Undo, a text file among them is ignored, and only the Library's song leaves a counted play. The
+screenshot is `open-files-<platform>.png`. `Playback.openFiles` is main's entry
+(`src/main/playback/playback.ts`); `src/main/system/openedFiles.ts` gathers the files of
+launches that come close together. What the installer registers and the AppImage declares is
+`scripts/file-types.ts`, tested in `src/fileTypes.test.ts` without building an installer; "Open
+with" after a real install is an owner check.
+
+## Recognize
+
+Main runs the phone's session (`@wave/client/recognizeSession`) over the JVM's Shazam client
+(`DesktopRecognize.kt`): `src/main/recognize/desktopRecognize.ts` decides what is captured and
+`capturePermissions.ts` allows the window only that. The window captures in
+`renderer/src/recognizeCapture.ts` and shows `Recognize.tsx`. A development build passes
+`WAVE_SHAZAM_URL` to the JVM as `--shazam-url`, so Shazam's requests go to a fake; a packaged
+one never does. The JVM in `apps/desktop/jvm` must be rebuilt (`pnpm build:jvm`, JDK 21) after a
+Kotlin change, or point `WAVE_KOTLIN_JAR` at a build that has it.
+
+`e2e/recognize.spec.ts` runs with Chromium's fake microphone
+(`--use-fake-device-for-media-stream`) against a fake Shazam: the card listening with Cancel,
+playback paused and resumed, a Library match with its actions, Add to Shazam creating the
+playlist, No match and No connection with Try Again, and no microphone for the page outside a
+session. A refused microphone, a capture failure and a YT Music match are tested in
+`src/main/recognize/desktopRecognize.test.ts` and Core. Recognizing a real song from the
+microphone and from what the computer plays is an owner check.
 
 ## The dev window
 
@@ -249,6 +439,17 @@ start and Settings › Window. Two variables add the real system controls to it:
 
 The spec never turns on Start with the system, so it writes no login entry. `autostart.test.ts`
 covers what the switch registers.
+
+## Mini player
+
+`e2e/miniPlayer.spec.ts` opens the mini player from the player bar and from the tray menu's
+entry (read off the menu template Wave builds, since Playwright can't click a tray), checks that
+it is above other windows with the main window's web preferences and CSP, drives its buttons and
+Space, hides and brings back the main window, and checks the position after a restart and after
+a stored position that is on no screen. The screenshot is `mini-player-<platform>.png`. Find the
+windows by title: the main one is "Wave", the mini player is the catalogue's "Mini Player".
+`src/main/system/miniPlayer.test.ts` covers the window's placement against fake screens.
+Dragging it by hand and unplugging a monitor remain owner checks.
 
 ## Linux under WSLg
 
@@ -285,3 +486,15 @@ The output contains the installer, the Windows blockmap on Windows, and `build.j
 the release evidence. Linux packaging uses Ubuntu 22.04 with the ALSA and D-Bus headers
 and the FUSE 2 runtime.
 See [Release provenance](../release-provenance.md#desktop-installers) for publication and rollback.
+
+## Kinds of shuffle
+
+`e2e/shuffleKinds.spec.ts` opens the kinds of shuffle from a hero's Shuffle and the player bar's
+by right-click, Shift+F10 and the Menu key, picks one, reads the queue Even Shuffle made, and
+changes the choice in Settings › Playback. It plays silent WAV files it writes, so it needs the
+audio addon. Screenshots are `shuffle-kinds-menu-<platform>.png` and
+`shuffle-kinds-settings-<platform>.png`.
+
+The choice is `shuffleKind` in `settings.playback()`, the phone's synced `settings.shuffleKind`.
+A pick on the menu also sends the queue command `{ type: "reshuffle" }`. `bridge.test.ts` syncs
+it with a phone both ways and checks the order Even Shuffle gives.

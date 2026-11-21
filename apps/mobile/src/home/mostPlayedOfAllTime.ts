@@ -3,7 +3,7 @@ import { STATS_TOP } from "@wave/core";
 import { libraryQuery, useLibraryQuery } from "@/library/hooks";
 import { LibraryStore } from "@/library/LibraryStore";
 
-import { topAlbumsAndArtists, type TopAlbumsAndArtists } from "@/stats/Stats";
+import { topAlbumsAndArtists, type TopAlbumsAndArtists } from "@wave/client/db/statsQueries";
 
 /** How many artists Most played artists shows; Most played albums shows a Stats top. */
 const MOST_PLAYED_ARTISTS = 5;

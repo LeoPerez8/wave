@@ -9,13 +9,24 @@ import { Database } from "@wave/client";
 import { saveMeasurement, selectSongsToMeasure } from "@wave/client/db/loudness";
 import { selectMissingSongs } from "@wave/client/db/missingSongs";
 import { setFavorites } from "@wave/client/db/playHistory";
-import { createPlaybackSession, type AudioPort } from "@wave/client/playbackSession";
+import {
+  createPlaybackSession,
+  type AudioPort,
+  type QueueLoan,
+} from "@wave/client/playbackSession";
+import { queueShuffle } from "@wave/client/queueShuffle";
 import { createQueueGains, queueAlbum } from "@wave/client/queueGains";
 import { createSongMeasurements } from "@wave/client/songMeasurements";
 import {
   listPlay,
   missingSongYtSong,
+  openedAudioFiles,
+  openedFilePath,
+  openedFileTitle,
+  openedFilesQueue,
   parseTrackId,
+  scanPath,
+  scanPathKey,
   tappedMissingSong,
   skipMissingSongs,
   ytTrackId,
@@ -26,9 +37,12 @@ import {
   type SleepTimer,
   type SleepTimerChoice,
 } from "@wave/core";
+import { sql } from "drizzle-orm";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { statSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 
 import type { Page } from "../../shared/bridge.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
@@ -39,14 +53,22 @@ import type {
   QueueRow,
 } from "../../shared/playerView.ts";
 import { ytRow } from "../../shared/yt.ts";
-import type { PlaybackSettings } from "../../shared/playbackSettings.ts";
+import { PLAYABLE_EXTENSIONS } from "../../shared/playback.ts";
+import type { OutputSettings, PlaybackSettings } from "../../shared/playbackSettings.ts";
 import { Player } from "../audio/player.ts";
-import { browseSongs, browseTrackIds, playlistSongs } from "../library/browse.ts";
+import { Kotlin } from "../kotlin/kotlin.ts";
+import {
+  browseSongs,
+  browseTrackIds,
+  playlistSongs,
+  type PlaylistSong,
+} from "../library/browse.ts";
 import { DesktopLibrary } from "../library/library.ts";
 import { preference, savePreference } from "../preferences.ts";
 import { YtMusic } from "../yt/ytMusic.ts";
 import { streamedStarred } from "../yt/streamedSong.ts";
 import { streamedWithinBuffer } from "./bufferAhead.ts";
+import { outputSettings, readOutput, saveOutput } from "./outputDevice.ts";
 import { readPlaybackSettings, savePlaybackSettings } from "./playbackSettings.ts";
 import { createSleepTimer } from "./sleepTimer.ts";
 import { Downloads } from "../downloads/downloadsLayer.ts";
@@ -70,6 +92,21 @@ export interface PlaybackShape extends PlaybackTransport {
     context: NonNullable<QueueState["context"]>,
     shuffle?: boolean,
   ) => Promise<PlayStart>;
+  /**
+   * Activates the song at [index] of [songs], Library songs and streamed ones mixed, as a
+   * playlist's page lists them: a Graveyard's songs.
+   */
+  readonly playEntries: (
+    songs: readonly PlaylistSong[],
+    index: number,
+    context: NonNullable<QueueState["context"]>,
+  ) => Promise<PlayStart>;
+  /**
+   * Plays the audio files among [paths] (absolute), in order, as a new queue: files opened with
+   * Wave. A file the Library has plays as its song; any other plays without joining the Library.
+   * Paths that aren't audio files, or aren't there, are ignored; false when none is left.
+   */
+  readonly openFiles: (paths: readonly string[]) => Promise<boolean>;
   readonly dismissUndo: () => void;
   /** Stars or unstars the current song. */
   readonly favorite: () => void;
@@ -95,6 +132,13 @@ export interface PlaybackShape extends PlaybackTransport {
   readonly setSettings: (change: Partial<PlaybackSettings>) => Promise<PlaybackSettings>;
   /** Plays by the stored settings again, after sync pulled the account's values. */
   readonly applySettings: () => Promise<void>;
+  /** The system's outputs and the one picked for this computer. */
+  readonly outputs: () => OutputSettings;
+  /**
+   * Moves playback to the output with [id], one the system has now, or back to the system's
+   * default with null; the song goes on from where it is. Rejects an id the system doesn't have.
+   */
+  readonly setOutput: (id: string | null) => Promise<OutputSettings>;
   /**
    * Starts a sleep timer, replacing the running one; null cancels it. End of queue also means
    * nothing adds songs to a queue that plays out.
@@ -109,6 +153,18 @@ export interface PlaybackShape extends PlaybackTransport {
   readonly dispatch: (command: QueueCommand) => Promise<void>;
   /** Hears the queue change and plays end, until the returned function is called. */
   readonly watch: (watcher: QueueWatcher) => () => void;
+  /**
+   * A Recap's music (docs/spec.md, Recap): with nothing playing as the Recap opens, its stories'
+   * songs play in place of the queue, on no record, and closing gives the queue back paused
+   * where it was. With a song playing, the Recap leaves it alone.
+   */
+  readonly recap: {
+    /** A Recap opened; [songs] is the Library song each of its stories plays, in story order. */
+    readonly opened: (songs: readonly (number | null)[]) => Promise<void>;
+    /** Story [index] shows. False when no open Recap has that story. */
+    readonly story: (index: number) => Promise<boolean>;
+    readonly closed: () => Promise<void>;
+  };
 }
 
 /** What follows the queue from main: the Magic Queue. */
@@ -124,6 +180,18 @@ export class Playback extends Context.Service<Playback, PlaybackShape>()(
   "@wave/desktop/Playback",
 ) {}
 
+/** Whether [path] is a file that can be read now. */
+const isFile = (path: string): boolean => {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+};
+
+/** The most files outside the Library whose tags are kept in memory. */
+const OUTSIDE_FILES_KEPT = 500;
+
 const savedVolume = (value: string | undefined): number => {
   const volume = Number(value ?? 1);
   return Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : 1;
@@ -137,6 +205,7 @@ export const playbackLayer = Layer.effect(
     const library = yield* DesktopLibrary;
     const yt = yield* YtMusic;
     const downloads = yield* Downloads;
+    const kotlin = yield* Kotlin;
     const run = Effect.runPromise;
     const audio: AudioPort = {
       load: (path, key, options) => run(player.load(path, key, options?.gainDb)),
@@ -173,12 +242,15 @@ export const playbackLayer = Layer.effect(
         source: "desktop",
         available: (path) => !library.unavailable(path),
         streamed: yt.song,
+        shuffle: queueShuffle({ db, kind: () => settings.shuffleKind, streamed: yt.song }),
+        openedFile: isFile,
         playEnded: (play, byNext) => {
           tell("played");
           for (const watcher of watchers) watcher.playEnded(play, byNext);
         },
         stopped: (why) => stoppedBy(why),
         gainDb: gains.gainDb,
+        dontPlayExplicit: () => settings.dontPlayExplicit,
       }),
     );
     const sleep = createSleepTimer({
@@ -244,16 +316,27 @@ export const playbackLayer = Layer.effect(
       await run(player.setCrossfade(settings.crossfadeSeconds));
       await run(player.setNormalize(settings.normalizeVolume));
     };
-    /** Plays by [next] from here, measuring or not as its Normalize Volume says. */
+    /**
+     * Plays by [next] from here, measuring or not as its Normalize Volume says. Don't Play
+     * Explicit turning on takes the queue's explicit songs out, and the Magic Queue hears
+     * Continue with Magic Queue change.
+     */
     const playBySettings = async (next: typeof settings) => {
       const switched = next.normalizeVolume !== settings.normalizeVolume;
+      const explicitOff = next.dontPlayExplicit && !settings.dontPlayExplicit;
+      const continues = next.continueQueue !== settings.continueQueue;
       settings = next;
       await sendSettings();
       sendBuffer();
       if (switched) measurements.switched();
+      if (explicitOff) await moved(session.dropExplicit());
+      else if (continues) queueChanged();
     };
     yield* Effect.promise(() => run(player.setVolume(muted ? 0 : volume)).catch(failed));
     yield* Effect.promise(() => sendSettings().catch(failed));
+    const picked = readOutput(db);
+    if (picked !== undefined)
+      yield* Effect.promise(() => run(player.setOutput(picked.id)).catch(failed));
     queueChanged();
     let queueFed = session.snapshot().queue;
     let playingFed = false;
@@ -284,6 +367,58 @@ export const playbackLayer = Layer.effect(
         ...song,
         unavailable: song.path !== null && library.unavailable(song.path),
       }));
+    /**
+     * What the tags of files outside the Library say, read the first time a row is asked for;
+     * undefined while the read runs or after it failed, and the row goes by the file's name.
+     */
+    const outsideTags = new Map<string, Partial<BrowseRow> | undefined>();
+    const outsideRow = (path: string): BrowseRow => {
+      if (!outsideTags.has(path)) {
+        if (outsideTags.size >= OUTSIDE_FILES_KEPT) outsideTags.clear();
+        outsideTags.set(path, undefined);
+        run(kotlin.readTags(path)).then(
+          (tags) => {
+            if (!outsideTags.has(path)) return;
+            outsideTags.set(path, {
+              ...(tags.title ? { title: tags.title } : {}),
+              artist: tags.artist ?? "",
+              album: tags.album ?? "",
+              durationMs: tags.durationMs,
+            });
+            revision++;
+          },
+          () => undefined,
+        );
+      }
+      return {
+        id: 0,
+        outside: true,
+        title: openedFileTitle(path),
+        artist: "",
+        album: "",
+        artworkHash: null,
+        durationMs: 0,
+        count: 0,
+        year: null,
+        genre: null,
+        trackNumber: null,
+        favorite: false,
+        path,
+        unavailable: false,
+        ...outsideTags.get(path),
+      };
+    };
+    /** The Library song whose file is [path] (as `scanPath` spells it), when it can play. */
+    const librarySong = (path: string): number | null => {
+      let row = db.get<{ id: number }>(sql`SELECT id FROM tracks WHERE path = ${path}`);
+      if (row === undefined && process.platform === "win32") {
+        const key = scanPathKey(path, process.platform);
+        row = db.get<{ id: number }>(
+          sql`SELECT id FROM tracks WHERE wave_scan_path_key(path) = ${key} LIMIT 1`,
+        );
+      }
+      return row !== undefined && browseSongs(db, [row.id])[0]?.path != null ? row.id : null;
+    };
     /** Each entry's row, Library songs read in one go; songs nothing knows are left out. */
     const rowsOf = (trackIds: readonly string[]): (BrowseRow | undefined)[] => {
       const refs = trackIds.map(parseTrackId);
@@ -293,8 +428,10 @@ export const playbackLayer = Layer.effect(
           song,
         ]),
       );
-      return refs.map((ref) => {
+      return refs.map((ref, at) => {
         if (ref?.kind === "library") return songs.get(ref.id);
+        const file = openedFilePath(trackIds[at]!);
+        if (file !== null) return outsideRow(file);
         const song = ref?.kind === "yt" ? yt.song(ref.videoId) : undefined;
         return song === undefined
           ? undefined
@@ -487,16 +624,65 @@ export const playbackLayer = Layer.effect(
       };
     };
 
+    /** The open Recap: each story's song, the one playing, and the queue it borrowed. */
+    let recapOpen:
+      | {
+          readonly songs: readonly (number | null)[];
+          readonly silent: boolean;
+          playing: number | null;
+          loan: QueueLoan | undefined;
+        }
+      | undefined;
+    const recapClosed = async () => {
+      const loan = recapOpen?.loan;
+      recapOpen = undefined;
+      if (loan !== undefined) await moved(loan.giveBack());
+    };
+
     return {
+      recap: {
+        opened: async (songs) => {
+          await recapClosed().catch(failed);
+          recapOpen = {
+            songs,
+            silent: session.snapshot().status.state === "playing",
+            playing: null,
+            loan: undefined,
+          };
+        },
+        story: async (index) => {
+          const open = recapOpen;
+          if (open === undefined || !(index in open.songs)) return false;
+          const song = open.songs[index] ?? null;
+          // The same song goes on playing; a story with no song of its own keeps the last one.
+          if (open.silent || song === null || song === open.playing) return true;
+          open.playing = song;
+          open.loan ??= await session.borrow();
+          // A song that won't load leaves the Recap silent.
+          await moved(open.loan.play(String(song))).catch(() => undefined);
+          return true;
+        },
+        closed: recapClosed,
+      },
       fileFailed: (id) => failedFiles.has(id),
       view,
       activate,
+      playEntries: (songs, index, context) => {
+        error = null;
+        const ids = songs.map((song) =>
+          "song" in song ? ytTrackId(song.song.videoId) : String(song.trackId),
+        );
+        const streams = songs.flatMap((entry) => ("song" in entry ? [entry.song] : []));
+        return yt.withSongs(streams, () =>
+          activate(ids, index, context, undefined, streams.length > 0 ? streams : undefined),
+        );
+      },
       start: async (scope, index, shuffle) => {
         error = null;
         // A playlist with YT Music songs plays them in their places, as its page lists them.
         const mixed =
           scope.kind === "playlist" && scope.id !== undefined
-            ? playlistSongs(db, scope.id)
+            ? playlistSongs(db, scope.id, scope.find)
             : undefined;
         const ids =
           mixed?.map((song) =>
@@ -520,7 +706,7 @@ export const playbackLayer = Layer.effect(
           );
         return streams ? yt.withSongs(streams, play) : play();
       },
-      startYt: async (videoIds, index) => {
+      startYt: async (videoIds, index, shuffle) => {
         pending = undefined;
         error = null;
         if (videoIds.some((videoId) => yt.song(videoId) === undefined))
@@ -528,8 +714,10 @@ export const playbackLayer = Layer.effect(
         const playing = session.dispatch({
           type: "play",
           trackIds: videoIds.map(ytTrackId),
-          startIndex: index,
+          // Shuffle starts anywhere among them, as a Library list's does.
+          startIndex: shuffle === true ? undefined : index,
           context: { kind: "search", id: null },
+          ...(shuffle === true ? { shuffle } : {}),
         });
         await moved(playing, true);
       },
@@ -552,11 +740,31 @@ export const playbackLayer = Layer.effect(
         pending = undefined;
         return moved(session.undo());
       },
+      openFiles: async (paths) => {
+        // The Library knows a file by its real path, as the scan read it.
+        const files = await Promise.all(
+          openedAudioFiles(paths, PLAYABLE_EXTENSIONS).map(async (path) =>
+            scanPath(await realpath(path).catch(() => path), process.platform),
+          ),
+        );
+        const trackIds = openedFilesQueue(files, librarySong).filter((id) => {
+          const file = openedFilePath(id);
+          return file === null || isFile(file);
+        });
+        if (trackIds.length === 0) return false;
+        pending = undefined;
+        error = null;
+        await moved(
+          session.dispatch({ type: "play", trackIds, context: { kind: "files", id: null } }),
+          true,
+        );
+        return true;
+      },
       dismissUndo: session.dismissUndo,
       favorite: () => {
         const current = view().current;
         // A YT Music song isn't the Library's; starring it comes with its own ticket.
-        if (current === null || current.videoId !== undefined) return;
+        if (current === null || current.videoId !== undefined || current.outside) return;
         setFavorites(db, [current.id], !current.favorite, Date.now());
         revision++;
         tell("starred");
@@ -608,6 +816,14 @@ export const playbackLayer = Layer.effect(
         return settings;
       },
       applySettings: () => playBySettings(readPlaybackSettings(db)),
+      outputs: () => outputSettings(player.outputs(), readOutput(db)),
+      setOutput: async (id) => {
+        const output = id === null ? undefined : player.outputs().find((it) => it.id === id);
+        if (id !== null && output === undefined) throw new Error("Refused: unknown output");
+        await run(player.setOutput(output?.id));
+        saveOutput(db, output);
+        return outputSettings(player.outputs(), output);
+      },
       queueState: () => session.snapshot().queue,
       playing: () => session.snapshot().status.state === "playing",
       dispatch: async (command) => {
