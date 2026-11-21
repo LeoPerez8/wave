@@ -15,6 +15,7 @@ import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { useHomeArrangement, homeTitleLongPress } from "@/home/homeArrangement";
 import { HomeSection, SECTION_GAP } from "@/home/HomeSection";
 import { HomeSectionSkeleton } from "@/home/HomeSectionSkeleton";
+import { useHomeWorkSight } from "@/home/useHomeWorkSight";
 import { afterHomeFrame, homeOpeningState, homePlaceholderSkeleton } from "@/home/homeOpening";
 import { useHomeContent } from "@/library/hooks";
 import { useRenderCount } from "@/perf/perf";
@@ -50,6 +51,8 @@ function HomeLine({ children, top }: { children: string; top: number }) {
 export default function HomeScreen() {
   const { strings } = useLocalisation();
   useRenderCount("HomeScreen");
+  // Home's mixes and sections build only while Home is in sight (#1351).
+  useHomeWorkSight();
   const [painted, setPainted] = useState(false);
   const newRecap = useRecapToAnnounce(painted);
   useEffect(

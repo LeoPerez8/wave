@@ -37,7 +37,8 @@ import { appRuntime } from "@/library/runtime";
 import { magicQueuePagesRead, type MagicQueuePagesPlan } from "./magicQueuePagesRead";
 import { magicQueuePopularity } from "./magicQueuePopularity";
 import { createPlaylistSeedIdsRead, readPlaylistSeedIds } from "./playlistSeedIds";
-import { recommendationSnapshot } from "./recommendationSnapshot";
+import { homeRecommendationSnapshot } from "./recommendationSnapshot";
+import { homeTurnOf } from "./homeWork";
 import { startFromLibraryMatch } from "./streamedMagicQueueStart";
 
 /** What the row draws (Core's `magicQueueShown`), its mixes' songs picked. */
@@ -55,7 +56,7 @@ export interface MagicQueueSection {
 /** The row's playlist entries, in one read on a free turn: it's waiting to be shown. */
 const seedIds = createPlaylistSeedIdsRead(
   Effect.andThen(
-    freeTurnEffect,
+    homeTurnOf(freeTurnEffect),
     Effect.flatMap(LibraryStore, (store) => readPlaylistSeedIds(store)),
   ).pipe(namedWork("Home Magic Queue seeds")),
 );
@@ -68,9 +69,9 @@ type Seed = MagicQueueSeed<PlayableSongRow>;
 
 /** How much of a hit each song of the pool is, kept per snapshot Library and catalog. */
 const popularity = magicQueuePopularity({
-  library: recommendationSnapshot.library,
-  catalog: recommendationSnapshot.catalog,
-  between: recommendationTurnEffect,
+  library: homeRecommendationSnapshot.library,
+  catalog: homeRecommendationSnapshot.catalog,
+  between: homeTurnOf(recommendationTurnEffect),
 });
 
 /** What each draw reads beside the store, Discover's levels as they are at that draw. */

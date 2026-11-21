@@ -111,8 +111,9 @@ const builds = await reactCompilerBuilds<Section>(
     ),
     "./recommendationSnapshot": stubModule(
       `import * as Effect from ${effect};
-       export const recommendationSnapshot = { library: Effect.die("unused"), catalog: Effect.die("unused") };`,
+       export const homeRecommendationSnapshot = { library: Effect.die("unused"), catalog: Effect.die("unused") };`,
     ),
+    "./homeWork": stubModule(`export const homeTurnOf = (turn) => turn;`),
     "@/library/libraryChanges": stubModule(`export const onLibraryChange = () => {};`),
     // No song is disliked here; the set is the store's, which isn't run.
     "@/library/dislikes": stubModule(

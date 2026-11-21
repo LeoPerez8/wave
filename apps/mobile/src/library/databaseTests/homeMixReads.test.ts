@@ -5,6 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { setImmediate } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import type { PlayEvent, YtAlbumSong } from "@wave/core";
@@ -24,6 +25,7 @@ import { readMixCatalog } from "../../home/readMixCatalog.ts";
 import { readMixBuildLibrary } from "../../home/mixBuildLibrary.ts";
 import { readKnownVideos } from "../../home/knownVideosRead.ts";
 import { readPlaylistSeedIds } from "../../home/playlistSeedIds.ts";
+import { createHomeWork } from "../../home/homeWork.ts";
 
 const root = fileURLToPath(new URL("../../../../../", import.meta.url));
 
@@ -139,4 +141,46 @@ test("a Home mix build reads as often for 12,000 songs as for 1,000", async () =
   // Rows a build looks at are never read one at a time.
   for (const name of ["matchingSong", "knownVideosPage", "mixSongsPage"])
     assert.ok(!small.reads.includes(name), `${name} is read per row or page`);
+});
+
+test("off Home, a mix build stops after the read or slice under way and finishes once Home is back", async () => {
+  const fixture = await createFastAgainFixture(1000);
+  try {
+    seed(fixture);
+    const raw = await loadLibraryStore(root, fixture.db);
+    const expected = Effect.runSync(readMixInputs(raw, Effect.void, fixture.now));
+    const { store, reads } = counting(raw);
+    const work = createHomeWork();
+    let visible = true;
+    const listeners = new Set<(visible: boolean) => void>();
+    work.follow({
+      visible: () => visible,
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    });
+    const show = (next: boolean) => {
+      visible = next;
+      for (const listener of listeners) listener(next);
+    };
+    const between = Effect.andThen(
+      Effect.promise(() => setImmediate()),
+      work.turn,
+    );
+    const built = Effect.runPromise(readMixInputs(store, between, fixture.now));
+    while (reads.length < 3) await setImmediate();
+    // Settings is shown.
+    show(false);
+    const left = reads.length;
+    for (let i = 0; i < 200; i++) await setImmediate();
+    assert.ok(reads.length <= left + 1, `${reads.length - left} reads off Home`);
+    show(true);
+    const inputs = await built;
+    assert.deepEqual(inputs.songs, expected.songs);
+    assert.deepEqual(inputs.plays, expected.plays);
+    assert.deepEqual(inputs.topArtists, expected.topArtists);
+  } finally {
+    fixture.close();
+  }
 });
