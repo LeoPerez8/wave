@@ -25,8 +25,8 @@ const read = (day: string, explicit: boolean) =>
   );
 
 /**
- * The carousel's Most listened recently page (`readMostListenedRecently`):
- * its songs, none when the page is left out, or undefined until the first
+ * In your orbit's most listened recent songs (`readMostListenedRecently`):
+ * its songs, none when too few rank, or undefined until the first
  * read answers (and while [enabled] is off). Read from the phone alone. It
  * keeps what it last read while Home is out of sight, so coming back from
  * another screen repaints the same songs, and it re-reads only when plays or

@@ -1,11 +1,9 @@
 /**
  * Home's Magic Queue carousel (docs/spec.md, "Discover's Magic Queue
  * carousel"): the Magic Queue row as pages that swipe sideways, up to nine
- * songs each, a tap on any song starting a Magic Queue seeded by it. Most
- * listened recently holds the songs with the most counted plays in Home's
- * recent window, streamed plays included; the Magic Queue page is the row's
- * random seeds (`magicQueueRow`); Discoveries holds songs never played
- * (`discoveries`).
+ * songs each, a tap on any song starting a Magic Queue seeded by it. Every
+ * page is drawn by the same rule (`magicQueuePages`), so the pages have no
+ * names of their own. The recent window's ranking here is In your orbit's.
  */
 
 import { en, type Catalogue } from "./catalogueEn.ts";
@@ -13,20 +11,6 @@ import { MAGIC_QUEUE_PICKS } from "./magicQueueSection.ts";
 import { recentWindowStart } from "./recentWindow.ts";
 import { rankSongPlays, type SongPlayTotals, type StatsWindow } from "./stats.ts";
 import type { TrackRef } from "./ytMusic.ts";
-
-/**
- * The carousel's pages, in the order they're swiped through. A new page is a
- * new id here, in its place, with its name in the catalogue's
- * `discover.pages`.
- */
-export const MAGIC_QUEUE_CAROUSEL_PAGES = [
-  "most-listened-recently",
-  "magic-queue",
-  "discoveries",
-] as const;
-
-/** A page of the carousel. */
-export type MagicQueueCarouselPageId = (typeof MAGIC_QUEUE_CAROUSEL_PAGES)[number];
 
 /** A page with fewer songs than this is left out of the carousel. */
 export const CAROUSEL_PAGE_MIN_SONGS = 3;
@@ -92,52 +76,16 @@ export const carouselPageSongs = <T>(songs: readonly T[]): T[] =>
   songs.length < CAROUSEL_PAGE_MIN_SONGS ? [] : songs.slice(0, MAGIC_QUEUE_PICKS);
 
 /**
- * The pages the carousel shows, in order, given how many songs (or
- * placeholder tiles) each has to show ([songs]). A page with fewer than three
- * is left out, except the Magic Queue page, which stays with whatever it has:
- * a Library of one song keeps its row.
+ * Where the carousel stands among its [count] pages: on the page that was
+ * showing ([kept], null before any was), or on the last one while that page
+ * is left out.
  */
-export const magicQueueCarouselPages = (
-  songs: Readonly<Record<MagicQueueCarouselPageId, number>>,
-): MagicQueueCarouselPageId[] =>
-  MAGIC_QUEUE_CAROUSEL_PAGES.filter(
-    (id) => songs[id] >= (id === "magic-queue" ? 1 : CAROUSEL_PAGE_MIN_SONGS),
-  );
+export const magicQueueCarouselPage = (count: number, kept: number | null): number =>
+  Math.max(0, Math.min(count - 1, kept ?? 0));
 
-/**
- * Where the carousel stands among its [pages]: on the page that was showing
- * ([kept], null before any was), or on the first one when that page is left out.
- */
-export const magicQueueCarouselPage = (
-  pages: readonly MagicQueueCarouselPageId[],
-  kept: MagicQueueCarouselPageId | null,
-): number => Math.max(0, kept === null ? 0 : pages.indexOf(kept));
-
-/**
- * The page the row remembers: [kept] once there is one (also while that page
- * is missing, so the row returns to it), else the first page drawn. A page
- * that joins before it then moves the row, not the page in sight.
- */
-export const magicQueueCarouselKeptPage = (
-  pages: readonly MagicQueueCarouselPageId[],
-  kept: MagicQueueCarouselPageId | null,
-): MagicQueueCarouselPageId | null => kept ?? pages[0] ?? null;
-
-/** The name of the carousel's page [id], in [strings]' language. */
-export const magicQueueCarouselPageTitle = (
-  id: MagicQueueCarouselPageId,
-  strings: Catalogue = en,
-): string =>
-  id === "magic-queue" ? strings.discover.rows["magic-queue"] : strings.discover.pages[id];
-
-/** What a screen reader hears for the page at [index] of [pages]: its name and its place. */
+/** What a screen reader hears for the page at [index] of [count]: the row's name and the page's place. */
 export const magicQueueCarouselPageLabel = (
-  pages: readonly MagicQueueCarouselPageId[],
   index: number,
+  count: number,
   strings: Catalogue = en,
-): string =>
-  strings.discover.pageOf(
-    magicQueueCarouselPageTitle(pages[index]!, strings),
-    index + 1,
-    pages.length,
-  );
+): string => strings.discover.pageOf(strings.discover.rows["magic-queue"], index + 1, count);

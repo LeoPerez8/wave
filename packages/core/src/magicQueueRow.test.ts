@@ -65,49 +65,52 @@ const FAILED: DiscoverMixesSection = { kind: "empty", failed: true };
 const chartMixes = [mix("a", 10), mix("b", 10), mix("c", 10)];
 
 test("with YT Music off the row is hidden, Library songs or mixes alike", () => {
-  for (const seeds of [[file(1), entry("x")], []])
-    assert.deepEqual(magicQueueRow({ ytMusic: false, seeds, artistMixes: mixes(chartMixes) }), {
+  for (const pages of [[[file(1), entry("x")]], []])
+    assert.deepEqual(magicQueueRow({ ytMusic: false, pages, artistMixes: mixes(chartMixes) }), {
       kind: "hidden",
     });
 });
 
 test("the row waits hidden until the Library has been read", () => {
-  assert.deepEqual(magicQueueRow({ ytMusic: true, seeds: null, artistMixes: mixes(chartMixes) }), {
+  assert.deepEqual(magicQueueRow({ ytMusic: true, pages: null, artistMixes: mixes(chartMixes) }), {
     kind: "hidden",
   });
 });
 
 test("a Library with songs to show fills the row, whatever mixes exist", () => {
-  const seeds = [file(1), file(2), file(3)];
-  assert.deepEqual(magicQueueRow({ ytMusic: true, seeds, artistMixes: mixes(chartMixes) }), {
-    kind: "seeds",
-    seeds,
+  const pages = [
+    [file(1), file(2), file(3)],
+    [file(4), file(5), file(6)],
+  ];
+  assert.deepEqual(magicQueueRow({ ytMusic: true, pages, artistMixes: mixes(chartMixes) }), {
+    kind: "pages",
+    pages,
   });
-  assert.deepEqual(magicQueueRow({ ytMusic: true, seeds: [file(7)], artistMixes: SKELETON }), {
-    kind: "seeds",
-    seeds: [file(7)],
+  assert.deepEqual(magicQueueRow({ ytMusic: true, pages: [[file(7)]], artistMixes: SKELETON }), {
+    kind: "pages",
+    pages: [[file(7)]],
   });
 });
 
 test("with no Library song with a file, the playlists' YT Music entries fill the row", () => {
-  const seeds = [entry("x"), entry("y")];
+  const pages = [[entry("x"), entry("y")]];
   for (const artistMixes of [mixes(chartMixes), SKELETON, HIDDEN])
-    assert.deepEqual(magicQueueRow({ ytMusic: true, seeds, artistMixes }), {
-      kind: "seeds",
-      seeds,
+    assert.deepEqual(magicQueueRow({ ytMusic: true, pages, artistMixes }), {
+      kind: "pages",
+      pages,
     });
 });
 
 test("files and entries share the row", () => {
-  const seeds = [entry("x"), file(1), entry("y")];
-  assert.deepEqual(magicQueueRow({ ytMusic: true, seeds, artistMixes: mixes(chartMixes) }), {
-    kind: "seeds",
-    seeds,
+  const pages = [[entry("x"), file(1), entry("y")]];
+  assert.deepEqual(magicQueueRow({ ytMusic: true, pages, artistMixes: mixes(chartMixes) }), {
+    kind: "pages",
+    pages,
   });
 });
 
 test("with no files and no playlist entries, the row takes its songs from the Artist mixes", () => {
-  assert.deepEqual(magicQueueRow({ ytMusic: true, seeds: [], artistMixes: mixes(chartMixes) }), {
+  assert.deepEqual(magicQueueRow({ ytMusic: true, pages: [], artistMixes: mixes(chartMixes) }), {
     kind: "mixes",
     mixes: chartMixes,
   });
@@ -122,7 +125,7 @@ test("an empty Library takes the row's songs only from the mixes seeded from the
   assert.deepEqual(
     magicQueueRow({
       ytMusic: true,
-      seeds: [],
+      pages: [],
       artistMixes: mixes([played, chartMixes[0]!, saved, chartMixes[1]!]),
     }),
     { kind: "mixes", mixes: [chartMixes[0], chartMixes[1]] },
@@ -134,27 +137,27 @@ test("an empty Library with no mix seeded from the chart hides the row", () => {
     ...mix("s", 10),
     seed: { kind: "artist", name: "s", from: "similar" },
   };
-  assert.deepEqual(magicQueueRow({ ytMusic: true, seeds: [], artistMixes: mixes([similar]) }), {
+  assert.deepEqual(magicQueueRow({ ytMusic: true, pages: [], artistMixes: mixes([similar]) }), {
     kind: "hidden",
   });
 });
 
 test("an empty Library shows skeletons while the first mixes build", () => {
-  assert.deepEqual(magicQueueRow({ ytMusic: true, seeds: [], artistMixes: SKELETON }), {
+  assert.deepEqual(magicQueueRow({ ytMusic: true, pages: [], artistMixes: SKELETON }), {
     kind: "skeleton",
   });
 });
 
 test("an empty Library without mixes hides the row", () => {
   for (const artistMixes of [HIDDEN, FAILED])
-    assert.deepEqual(magicQueueRow({ ytMusic: true, seeds: [], artistMixes }), {
+    assert.deepEqual(magicQueueRow({ ytMusic: true, pages: [], artistMixes }), {
       kind: "hidden",
     });
 });
 
 test("mixes with no streamed song to start from leave the row hidden", () => {
   const onlyLibrary: BlendedDiscoverMix = { ...mix("a", 0), songs: [kept(1)] };
-  assert.deepEqual(magicQueueRow({ ytMusic: true, seeds: [], artistMixes: mixes([onlyLibrary]) }), {
+  assert.deepEqual(magicQueueRow({ ytMusic: true, pages: [], artistMixes: mixes([onlyLibrary]) }), {
     kind: "hidden",
   });
 });
@@ -226,7 +229,7 @@ test("no mixes, no picks", () => {
 
 describe("the row as drawn, its mixes' songs picked", () => {
   const row = (shown: readonly BlendedDiscoverMix[]) =>
-    magicQueueRow<number>({ ytMusic: true, seeds: [], artistMixes: mixes(shown) });
+    magicQueueRow<number>({ ytMusic: true, pages: [], artistMixes: mixes(shown) });
 
   test("a fresh draw picks nine of the mixes' songs", () => {
     const { shown, picks } = magicQueueShown(row(chartMixes), null, () => 0);
@@ -270,11 +273,11 @@ describe("the row as drawn, its mixes' songs picked", () => {
   test("the pool's seeds, a skeleton or nothing are drawn as the row says", () => {
     const pool = magicQueueRow({
       ytMusic: true,
-      seeds: [file(1), entry("x")],
+      pages: [[file(1), entry("x")]],
       artistMixes: SKELETON,
     });
     assert.deepEqual(magicQueueShown(pool, null, () => 0).shown, pool);
-    const skeleton = magicQueueRow<number>({ ytMusic: true, seeds: [], artistMixes: SKELETON });
+    const skeleton = magicQueueRow<number>({ ytMusic: true, pages: [], artistMixes: SKELETON });
     assert.deepEqual(magicQueueShown(skeleton, null, () => 0).shown, { kind: "skeleton" });
   });
 });
