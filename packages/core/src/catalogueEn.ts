@@ -25,6 +25,7 @@ import { downloadsEn } from "./catalogue/downloadsEn.ts";
 import { itemActionsEn } from "./catalogue/itemActionsEn.ts";
 import { songDeletionEn } from "./catalogue/songDeletionEn.ts";
 import { appUpdatesEn } from "./catalogue/appUpdatesEn.ts";
+import { inviteJoinEn } from "./catalogue/inviteJoinEn.ts";
 import { whatsNewEn } from "./catalogue/whatsNewEn.ts";
 import { versionHistoryEn } from "./catalogue/versionHistoryEn.ts";
 /**
@@ -188,6 +189,8 @@ export const en = {
     heading: "This is a Wave invite",
     body: "Open this link on your phone with an up-to-date Wave.",
   },
+  /** Opening an invite link in Wave: the join screen and why it can't join. */
+  inviteJoin: inviteJoinEn,
   settings: settingsEn,
   downloadStatus: downloadStatusEn,
   alert: alertEn,

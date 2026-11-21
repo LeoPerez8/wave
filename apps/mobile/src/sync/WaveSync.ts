@@ -43,6 +43,8 @@ export class WaveSync extends Context.Service<
     readonly changed: (what: { readonly songs: boolean }) => Effect.Effect<void>;
     /** A play started or ended here: its play goes up in the next batch of play ends. */
     readonly played: (step: "started" | "ended") => Effect.Effect<void>;
+    /** Syncs now, signed in (an invite was just joined, so its playlist arrives). */
+    readonly now: Effect.Effect<void>;
   }
 >()("@wave/mobile/sync/WaveSync") {}
 

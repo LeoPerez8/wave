@@ -97,3 +97,10 @@ const startSyncing = (): void => {
     )
     .catch((error: unknown) => console.warn("[wave] Couldn't start syncing", error));
 };
+
+/** Syncs now, while signed in (an invite was just joined, so its playlist arrives). */
+export const syncNow = (): void => {
+  if (!syncing) return;
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+  void appRuntime.runPromise(WaveSync.use((sync) => sync.now)).catch(() => {});
+};
