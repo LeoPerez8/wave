@@ -1,7 +1,9 @@
 import { useLocalisation } from "@/localisation/localisation";
 import { activeTiming, beginTiming, timingSurfaceCommitted } from "@/lib/timing";
-import { IconChevronDown, IconDotsVertical, IconListNumbers } from "@tabler/icons-react-native";
+import { IconChevronDown, IconDotsVertical } from "@tabler/icons-react-native";
 import {
+  NOW_PLAYING_FOOTER_SLOTS,
+  NOW_PLAYING_TRANSPORT_SLOTS,
   isUnsearchedTrackId,
   nowPlayingSlotShow,
   nowPlayingSongMenuShow,
@@ -67,7 +69,7 @@ import {
   useNowPlayingSettled,
 } from "./sheet";
 import { onRelatedOpened } from "./openRelated";
-import { SlotButton, ViewToggle, type SlotContext } from "./SlotButtons";
+import { SlotButton, type SlotContext } from "./SlotButtons";
 import { Transport } from "./Transport";
 import {
   nowPlayingSongLookup,
@@ -268,7 +270,7 @@ export function NowPlayingSheet() {
     transform: [{ translateY: sheetOffset.get() }],
   }));
 
-  // The row's button and the edge mark open the Queue screen.
+  // The Queue slot's button and the edge mark open the Queue screen.
   const openQueue = () => {
     if (item === null) return;
     if (screen !== "queue") beginTiming("queue", "Queue");
@@ -298,6 +300,8 @@ export function NowPlayingSheet() {
     title: item?.title ?? strings.playbackText.unknownTitle,
     lyricsShown: view === "lyrics",
     toggleLyrics,
+    queueShown: screen === "queue",
+    openQueue,
     share,
   };
   const slotSong: NowPlayingSlotSong =
@@ -306,11 +310,17 @@ export function NowPlayingSheet() {
       : trackId !== null && isUnsearchedTrackId(trackId)
         ? "unsearched"
         : "song";
-  // The slots that aren't None and show for what's on, spread evenly left of Queue.
-  const slots = useNowPlayingButtons().flatMap((action, slot) => {
-    if (action === null) return [];
-    return nowPlayingSlotShow(action, slotSong) === "hidden" ? [] : [{ action, slot }];
-  });
+  const buttons = useNowPlayingButtons();
+  // A slot's button; null while the slot is None or its action hides for what's on.
+  const slotButton = (slot: number) => {
+    const action = buttons[slot] ?? null;
+    if (action === null || nowPlayingSlotShow(action, slotSong) === "hidden") return null;
+    return <SlotButton key={slot} slot={slot} action={action} context={slotContext} />;
+  };
+  // The footer's buttons, spread evenly; an empty slot leaves the row.
+  const footer = Array.from({ length: NOW_PLAYING_FOOTER_SLOTS }, (_, slot) =>
+    slotButton(slot),
+  ).filter((button) => button !== null);
   const songMenu = nowPlayingSongMenuShow(slotSong);
 
   return (
@@ -411,23 +421,20 @@ export function NowPlayingSheet() {
 
             <DismissArea style={{ paddingTop: CELL * 3, gap: CELL * 2 }}>
               <Scrubber />
-              <Transport />
+              <Transport
+                left={slotButton(NOW_PLAYING_TRANSPORT_SLOTS.left)}
+                right={slotButton(NOW_PLAYING_TRANSPORT_SLOTS.right)}
+              />
               {/*
-               * The four slots (Settings › Layout › Now Playing), then Queue on the right. The
-               * song controls share one lookup after settlement or their own early tap.
+               * The five footer slots (Settings › Layout › Now Playing). Empty, the row keeps
+               * its height, so the transport stays put. The song controls share one lookup
+               * after settlement or their own early tap.
                */}
               <View
-                className={`flex-row items-center ${slots.length === 0 ? "justify-end" : "justify-between"}`}
+                className={`flex-row items-center ${footer.length === 1 ? "justify-center" : "justify-between"}`}
+                style={{ minHeight: CELL * 6 }}
               >
-                {slots.map(({ action, slot }) => (
-                  <SlotButton key={slot} slot={slot} action={action} context={slotContext} />
-                ))}
-                <ViewToggle
-                  icon={IconListNumbers}
-                  label={strings.playbackText.queue}
-                  on={screen === "queue"}
-                  onPress={openQueue}
-                />
+                {footer}
               </View>
             </DismissArea>
             {item !== null && <QueueEdgeMark onPress={openQueue} />}

@@ -20,6 +20,7 @@ const PHONE_UI_PREFERENCES: ReadonlySet<string> = new Set([
   "settings.longPressDelayMs",
   "settings.glass",
   "settings.nowPlayingRow",
+  "settings.nowPlayingSlots",
   "settings.bounceAmount",
 ]);
 

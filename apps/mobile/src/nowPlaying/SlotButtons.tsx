@@ -1,5 +1,11 @@
 import { useLocalisation } from "@/localisation/localisation";
-import { IconQuote, IconRepeat, IconRepeatOnce, IconShare3 } from "@tabler/icons-react-native";
+import {
+  IconListNumbers,
+  IconQuote,
+  IconRepeat,
+  IconRepeatOnce,
+  IconShare3,
+} from "@tabler/icons-react-native";
 import type { NowPlayingAction } from "@wave/core";
 import type { ComponentType } from "react";
 
@@ -46,7 +52,7 @@ export function ViewToggle({
   );
 }
 
-/** What the slots' buttons act on: the song playing and the sheet's Lyrics view. */
+/** What the slots' buttons act on: the song playing, the sheet's Lyrics view and its Queue screen. */
 export interface SlotContext {
   readonly trackId: string | null;
   readonly ytSong: NativeYtSong | null;
@@ -54,6 +60,9 @@ export interface SlotContext {
   readonly title: string;
   readonly lyricsShown: boolean;
   readonly toggleLyrics: () => void;
+  readonly queueShown: boolean;
+  /** Opens the Queue screen, as the swipe and the edge mark do. */
+  readonly openQueue: () => void;
   /** Shares the song playing, as its menu's Share does. */
   readonly share: () => void;
 }
@@ -89,8 +98,9 @@ function RepeatSlot({ change }: { change: SlotChange }) {
 }
 
 /**
- * The button slot [slot] of Now Playing's bottom row holds (0 for the first),
- * for [action]. A tap runs it; a long press opens the card that changes it.
+ * The button slot [slot] of Now Playing holds (0 to 4 for the footer's, then
+ * the transport's left and right), for [action]. A tap runs it; a long press
+ * opens the card that changes it.
  */
 export function SlotButton({
   slot,
@@ -111,6 +121,16 @@ export function SlotButton({
           label={strings.playbackText.lyrics}
           on={context.lyricsShown}
           onPress={context.toggleLyrics}
+          change={change}
+        />
+      );
+    case "queue":
+      return (
+        <ViewToggle
+          icon={IconListNumbers}
+          label={strings.playbackText.queue}
+          on={context.queueShown}
+          onPress={context.openQueue}
           change={change}
         />
       );
