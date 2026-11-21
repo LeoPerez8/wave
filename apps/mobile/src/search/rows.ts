@@ -253,7 +253,8 @@ const communityPlaylistRows = (
  * shows as the Library's song in its row (and [results] leave it out), and
  * one shown as an earlier row's Library file plays from that row.
  * [topArtist] is the top-hit Library artist's merged song count, for their rows.
- * The community playlists YT Music found come last, as a shelf of their own.
+ * The community playlists YT Music found come last, as a shelf of their own,
+ * under Online's quiet line when it has one (`ytFooterRows` then leaves it out).
  */
 export const resultRows = (
   results: SearchResults<SearchHit>,
@@ -395,7 +396,8 @@ export const resultRows = (
   }
   if (!lyricsFirst && !groups.some((group) => group.kind === "song"))
     rows.splice(afterTopResult, 0, ...lyricSection());
-  rows.push(...communityPlaylistRows(yt?.playlists ?? [], language));
+  if (yt !== null && yt.playlists.length > 0)
+    rows.push(...ytNoteRows(yt, language), ...communityPlaylistRows(yt.playlists, language));
   return rows;
 };
 
@@ -414,9 +416,14 @@ const ytNotes = (language: AppLanguage): Readonly<Record<YtSectionNote, string>>
   failed: catalogueOf(language).playbackText.couldntSearchOnlineTapOnlineToTryAgain,
 });
 
+/** Online's quiet line, if it has one. */
+const ytNoteRows = (view: YtSectionView<NativeYtSong>, language: AppLanguage): ResultRow[] =>
+  view.note === null ? [] : [{ type: "note", key: "note:yt", text: ytNotes(language)[view.note] }];
+
 /**
  * What follows the Library's results for Online: skeleton rows while the
- * query loads (where its results will go), else its quiet line, if any.
+ * query loads (where its results will go), else its quiet line, if any. With
+ * a Community playlists shelf the line is already above it (`resultRows`).
  */
 export const ytFooterRows = (
   view: YtSectionView<NativeYtSong> | null,
@@ -424,7 +431,5 @@ export const ytFooterRows = (
 ): ResultRow[] => {
   if (view === null) return [];
   if (view.loading) return [{ type: "skeleton", key: "skeleton:yt" }];
-  return view.note === null
-    ? []
-    : [{ type: "note", key: "note:yt", text: ytNotes(language)[view.note] }];
+  return view.playlists.length > 0 ? [] : ytNoteRows(view, language);
 };
