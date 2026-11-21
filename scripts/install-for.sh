@@ -44,8 +44,6 @@ case "$app" in
     ;;
 esac
 
-if [ "$app" = desktop ]; then
-  pnpm install --frozen-lockfile --filter wave --filter "@wave/desktop..." --filter "@wave/sync..."
-else
-  pnpm install --frozen-lockfile --filter wave --filter "@wave/mobile..."
-fi
+# The root workspace brings the repo-wide tools check-guards.sh runs (oxlint, react-doctor).
+# Both apps have tests that import apps/sync sources, so both also install the sync Worker.
+pnpm install --frozen-lockfile --filter wave --filter "@wave/$app..." --filter "@wave/sync..."
