@@ -1522,6 +1522,8 @@ CREATE INDEX dislikes_pushed_idx ON dislikes (pushed);`;
 // that makes a table sync does the same.
 const m0064 = `UPDATE sync_state SET cursor = NULL;`;
 
+const m0067 = `ALTER TABLE playlist_items ADD COLUMN restored_at integer;`;
+
 export default {
   journal: {
     entries: [
@@ -1617,6 +1619,12 @@ export default {
       { idx: 64, when: 1_797_336_000_000, tag: "0064_pull_dislikes", breakpoints: true },
       { idx: 65, when: 1_797_422_400_000, tag: "0065_dj_mood_features", breakpoints: true },
       { idx: 66, when: 1_797_508_800_000, tag: "0066_dj_library_mood_features", breakpoints: true },
+      {
+        idx: 67,
+        when: 1_797_595_200_000,
+        tag: "0067_playlist_entry_restores",
+        breakpoints: true,
+      },
     ],
   },
   migrations: {
@@ -1687,5 +1695,6 @@ export default {
     m0064,
     m0065,
     m0066,
+    m0067,
   },
 };

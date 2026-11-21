@@ -489,9 +489,10 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
       session.accountId,
       parsePush(await readJson(request)),
       limits,
+      now(),
     );
     if ("overLimit" in result) throw overLimit(result.overLimit);
-    return json({ accepted: result.accepted });
+    return json({ accepted: result.accepted, corrected: result.corrected });
   });
 
   const pullChanges = withSession(async ({ url }, session) => {

@@ -6,7 +6,7 @@
  * this drives it through the service. Kept free of Expo and React Native so
  * the store tests run it against a fake service (`testSyncService.ts`).
  */
-import { pushBatches, pushBody, readPullPage, type SyncTables } from "@wave/core";
+import { pushBatches, pushBody, readPullPage, readPushAnswer, type SyncTables } from "@wave/core";
 
 import type { CreditSplits } from "../db/credits.ts";
 import type { LibraryDatabase } from "../db/database.ts";
@@ -23,6 +23,7 @@ import {
   selectSyncCursor,
   selectUnpushed,
   type PulledChanges,
+  type PushMark,
 } from "../db/syncRows.ts";
 
 /** Sends a push or a pull with the session (`WaveAccount.request`). */
@@ -199,7 +200,7 @@ const settle = (
     seen.library ||= syncMissingSongs(db, input.splits, input.now());
   }
   if (pulled || songs) {
-    const changes = applyPending(db, selectAccountTrackIds(db));
+    const changes = applyPending(db, selectAccountTrackIds(db), input.now());
     take(seen, changes);
     if (changes.plays) input.historyChanged?.();
   }
@@ -208,7 +209,11 @@ const settle = (
 const rowCount = (rows: SyncTables): number =>
   Object.values(rows).reduce((sum: number, table: readonly unknown[]) => sum + table.length, 0);
 
-/** Pushes every row that waits, in batches; each batch is marked as soon as the service has it. */
+/**
+ * Pushes every row that waits, in batches; each batch is marked as soon as
+ * the service has it, with the change time the service stored for a row
+ * whose own was ahead of its clock.
+ */
 const pushAll = async (input: SyncCycleInput): Promise<number> => {
   const { db } = input;
   let pushed = 0;
@@ -217,13 +222,20 @@ const pushAll = async (input: SyncCycleInput): Promise<number> => {
     const unpushed = selectUnpushed(db, READ_AT_ONCE, input.preferences.value);
     if (rowCount(unpushed.rows) === 0) break;
     for (const batch of pushBatches(unpushed.rows)) {
-      await send(input, "POST", "/v1/push", pushBody(batch));
+      const answer = readPushAnswer(await send(input, "POST", "/v1/push", pushBody(batch)));
       await freeTurn(input);
+      const storedAt = new Map<PushMark, number>();
+      for (const { table, id, changedAt } of answer.corrected) {
+        for (const mark of unpushed.marks.get(pushMarkKey(table, id)) ?? []) {
+          storedAt.set(mark, changedAt);
+        }
+      }
       markPushed(
         db,
         (Object.keys(batch) as (keyof SyncTables)[]).flatMap((table) =>
           batch[table].flatMap((row) => unpushed.marks.get(pushMarkKey(table, row.id)) ?? []),
         ),
+        storedAt,
       );
       pushed += rowCount(batch);
     }

@@ -294,6 +294,11 @@ const MIGRATIONS: readonly Migration[] = [
     id: "0014_play_context_playlist",
     statements: ["ALTER TABLE plays ADD COLUMN context_playlist_id TEXT"],
   },
+  {
+    // When Restore or Undo last brought an entry back (Core's `mergePlaylistEntries`).
+    id: "0015_playlist_entry_restores",
+    statements: ["ALTER TABLE playlist_entries ADD COLUMN restored_at INTEGER"],
+  },
 ];
 
 /**

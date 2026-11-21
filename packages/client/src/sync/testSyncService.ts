@@ -2,14 +2,16 @@
  * A Wave sync service for tests, run by plain Node: one account's rows in
  * memory, merged by Core's rules as `apps/sync` merges them, numbered by
  * change and paged by pulls as the service pages them, with its body limit
- * and, when set, its retained-row limits.
+ * and, when set, its retained-row limits. A change time ahead of its clock
+ * is stored as its own time, and the push answer names those rows.
  * It answers what `WaveAccount.request` would.
  */
 import {
   EMPTY_SYNC_TABLES,
   mergePlays,
-  mergeRows,
+  mergeTableRows,
   SYNC_TABLE_NAMES,
+  withinServiceClock,
   type SyncPlayRow,
   type SyncTables,
 } from "@wave/core";
@@ -60,8 +62,15 @@ const LIMIT_NAMES: Record<Table, string> = {
   dislikes: "maxDislikes",
 };
 
-export const testSyncService = (options: { readonly pageSize?: number } = {}): TestSyncService => {
+export const testSyncService = (
+  options: {
+    readonly pageSize?: number;
+    /** The service's clock (the real time when absent, which no test phone's clock is ahead of). */
+    readonly now?: () => number;
+  } = {},
+): TestSyncService => {
   const pageSize = options.pageSize ?? 1_000;
+  const now = options.now ?? Date.now;
   const held = new Map<string, Held>();
   let changeSeq = 0;
 
@@ -70,17 +79,32 @@ export const testSyncService = (options: { readonly pageSize?: number } = {}): T
 
   const push = (body: Partial<SyncTables>) => {
     const accepted: Record<string, number> = {};
+    const corrected: Record<string, { id: string; changedAt: number }[]> = {};
     const won = new Map<Table, readonly SyncTables[Table][number][]>();
     for (const table of TABLES) {
-      const incoming = body[table] ?? [];
+      const pushed = body[table] ?? [];
       const current = rowsOf(table);
+      const incoming =
+        table === "plays"
+          ? pushed
+          : withinServiceClock(pushed as SyncTables["songs"][number][], now());
       const merged =
         table === "plays"
           ? mergePlays(current as SyncPlayRow[], incoming as SyncPlayRow[]).added
-          : mergeRows(
+          : mergeTableRows(
+              table,
               current as SyncTables["songs"][number][],
               incoming as SyncTables["songs"][number][],
             ).accepted;
+      const stored = merged.filter(
+        (row) => "changedAt" in row && !(pushed as readonly unknown[]).includes(row),
+      );
+      if (stored.length > 0) {
+        corrected[table] = stored.map((row) => ({
+          id: row.id,
+          changedAt: (row as { changedAt: number }).changedAt,
+        }));
+      }
       const ids = new Set(current.map((row) => row.id));
       const limit = service.rowLimits[table];
       const added = new Set(merged.map((row) => row.id).filter((id) => !ids.has(id))).size;
@@ -95,7 +119,7 @@ export const testSyncService = (options: { readonly pageSize?: number } = {}): T
       }
       accepted[table] = rows.length;
     }
-    return { accepted };
+    return { accepted, corrected };
   };
 
   const pull = (since: number) => {
@@ -109,7 +133,10 @@ export const testSyncService = (options: { readonly pageSize?: number } = {}): T
       tables[table] = page
         .filter((entry) => entry.table === table)
         .map((entry) =>
-          "deleted" in entry.row && entry.row.deleted
+          // As the service: a tombstone carries no fields, a Graveyard one keeps them.
+          "deleted" in entry.row &&
+          entry.row.deleted &&
+          !("removedAt" in entry.row && typeof entry.row.removedAt === "number")
             ? {
                 id: entry.row.id,
                 changedAt: entry.row.changedAt,

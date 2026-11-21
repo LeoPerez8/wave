@@ -492,6 +492,8 @@ export const playlistItems = sqliteTable(
     trackId: integer("track_id").references(() => tracks.id),
     ytSong: text("yt_song"),
     removedAt: integer("removed_at"),
+    /** When Restore or Undo last brought the entry back (Core's `SyncEntryRow`). */
+    restoredAt: integer("restored_at"),
     orderKey: text("order_key").notNull(),
     addedAt: integer("added_at").notNull(),
     ...changeStamp(),

@@ -1684,11 +1684,14 @@ export {
   findRecording,
   joinLibraries,
   mergePlays,
+  mergePlaylistEntries,
   mergeRows,
+  mergeTableRows,
   recordingKey,
   signOutPlan,
   syncsPreference,
   vanishedFile,
+  withinServiceClock,
 } from "./sync.ts";
 export type {
   FilledSong,
@@ -1704,6 +1707,7 @@ export type {
   RecordingTags,
   SignOutPlan,
   StreamedEntry,
+  SyncEntryRow,
   SyncPlay,
   SyncRow,
   TrackEntry,
@@ -1734,11 +1738,13 @@ export {
   pushBatches,
   pushBody,
   readPullPage,
+  readPushAnswer,
   syncFieldFits,
 } from "./syncWire.ts";
 export { settleMarks } from "./syncMarks.ts";
 export type { MarkStamp, SettledMarks } from "./syncMarks.ts";
 export type {
+  CorrectedChangeTime,
   SyncDislike,
   SyncDismissedSuggestion,
   SyncFavorite,
@@ -1747,6 +1753,7 @@ export type {
   SyncHiddenRelease,
   SyncNotifiedShow,
   SyncPullPage,
+  SyncPushAnswer,
   SyncPlayEnd,
   SyncPlayRow,
   SyncPlaylist,
@@ -3089,6 +3096,8 @@ export {
   type LanguageChoice,
 } from "./languageChoice.ts";
 export { displayTag } from "./displayTag.ts";
+export { duplicatePlaylistEntries, playlistEntrySong, sameEntrySong } from "./oneEntryPerSong.ts";
+export type { DuplicateCandidate, EntrySong } from "./oneEntryPerSong.ts";
 export {
   openedAudioFiles,
   openedFilePath,

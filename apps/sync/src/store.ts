@@ -1,21 +1,32 @@
 /**
  * Reading and writing an account's synced rows. A push merges by Core's
- * rules (`mergeRows`, `mergePlays`), so the service and the app can't
+ * rules (`mergeTableRows`, `mergePlays`), so the service and the app can't
  * disagree, and numbers each accepted change in the same transaction that
  * writes it: a pull reads in one snapshot and pages by those numbers, so it
  * never misses a change pushed while it runs.
  */
 
 import type { Client, InStatement, InValue, Transaction } from "@libsql/client";
-import { mergePlays, mergeRows } from "@wave/core";
+import { mergePlays, mergeTableRows, withinServiceClock } from "@wave/core";
 import type { SyncLimitName, SyncLimits } from "./limits.ts";
 import { type IncomingRow, type SyncTable, SYNC_TABLES, column, wireRow } from "./tables.ts";
 
 /** A checked push: the rows for each table it names. */
 export type PushBatch = ReadonlyMap<SyncTable, readonly IncomingRow[]>;
 
+/** A row stored with the service's time, and that time. */
+export interface CorrectedRow {
+  readonly id: string;
+  readonly changedAt: number;
+}
+
 export type PushResult =
-  { readonly accepted: Readonly<Record<string, number>> } | { readonly overLimit: SyncLimitName };
+  | {
+      readonly accepted: Readonly<Record<string, number>>;
+      /** By table name, the rows stored with another change time than the one pushed. */
+      readonly corrected: Readonly<Record<string, readonly CorrectedRow[]>>;
+    }
+  | { readonly overLimit: SyncLimitName };
 
 /** How many ids go in one `IN (…)`. */
 const IDS_PER_QUERY = 200;
@@ -34,7 +45,11 @@ const heldRows = async (
   ids: readonly string[],
 ): Promise<IncomingRow[]> => {
   const held: IncomingRow[] = [];
-  const merged = table.kind === "rows" ? "id, changed_at, phone_id, deleted" : "id";
+  const restores = table.name === "playlistEntries";
+  const merged =
+    table.kind === "rows"
+      ? `id, changed_at, phone_id, deleted${restores ? ", restored_at" : ""}`
+      : "id";
   for (const chunk of chunks(ids, IDS_PER_QUERY)) {
     const result = await tx.execute({
       sql: `SELECT ${merged} FROM ${table.sqlName}
@@ -47,11 +62,36 @@ const heldRows = async (
         changedAt: Number(row.changed_at ?? 0),
         phoneId: String(row.phone_id ?? ""),
         deleted: Number(row.deleted ?? 0) === 1,
+        ...(restores && row.restored_at !== null && row.restored_at !== undefined
+          ? { restoredAt: Number(row.restored_at) }
+          : {}),
         values: null,
       });
     }
   }
   return held;
+};
+
+/**
+ * [incoming] as the merge reads it: a live entry from a Wave that sends no restore time
+ * carries the one [held] for it, which is also what stays stored (`keptWhenOmitted`).
+ */
+const withKeptRestores = (
+  held: readonly IncomingRow[],
+  incoming: readonly IncomingRow[],
+): readonly IncomingRow[] => {
+  const restored = new Map(
+    held.flatMap((row) =>
+      row.deleted || row.restoredAt === undefined ? [] : [[row.id, row.restoredAt] as const],
+    ),
+  );
+  if (restored.size === 0) return incoming;
+  return incoming.map((row) => {
+    const kept = restored.get(row.id);
+    return kept !== undefined && !row.deleted && row.omitted?.includes("restoredAt") === true
+      ? { ...row, restoredAt: kept }
+      : row;
+  });
 };
 
 /** The statement that stores accepted [row] of [table] as change number [changeNo]. */
@@ -133,27 +173,36 @@ const inWriteTransaction = async <T>(
  * is stored when a category that gains an ID would then retain more rows,
  * deletion records included, than [limits] allow. A category already past
  * its limit keeps its rows and still takes changes to the IDs it holds.
+ * A change time ahead of [now], the service's clock, is stored as [now]
+ * (Core's `withinServiceClock`), and the result names those rows.
  */
 export const pushRows = (
   db: Client,
   accountId: string,
   batch: PushBatch,
   limits: SyncLimits,
+  now: number,
 ): Promise<PushResult> =>
   inWriteTransaction(db, async (tx) => {
     const accepted = new Map<SyncTable, readonly IncomingRow[]>();
     // Categories where the merge adds an ID: only these can go past a limit.
     const growing = new Set<SyncTable>();
-    for (const [table, incoming] of batch) {
-      if (incoming.length === 0) continue;
-      const held = await heldRows(tx, table, accountId, [
-        ...new Set(incoming.map((row) => row.id)),
-      ]);
+    const corrected: Record<string, CorrectedRow[]> = {};
+    for (const [table, pushed] of batch) {
+      if (pushed.length === 0) continue;
+      const held = await heldRows(tx, table, accountId, [...new Set(pushed.map((row) => row.id))]);
+      const sent = withKeptRestores(held, pushed);
+      const incoming = table.kind === "rows" ? withinServiceClock(sent, now) : sent;
+      const ahead = new Set(incoming.filter((row, i) => row !== sent[i]));
       const merged =
         table.kind === "rows"
-          ? mergeRows(held, incoming).accepted
+          ? mergeTableRows(table.name, held, incoming).accepted
           : mergePlays(held, incoming).added;
       accepted.set(table, merged);
+      const stored = merged.filter((row) => ahead.has(row));
+      if (stored.length > 0) {
+        corrected[table.name] = stored.map(({ id, changedAt }) => ({ id, changedAt }));
+      }
       const heldIds = new Set(held.map((row) => row.id));
       if (merged.some((row) => !heldIds.has(row.id))) growing.add(table);
     }
@@ -162,7 +211,7 @@ export const pushRows = (
     const counts = Object.fromEntries(
       SYNC_TABLES.map((table) => [table.name, accepted.get(table)?.length ?? 0]),
     );
-    if (total === 0) return { accepted: counts };
+    if (total === 0) return { accepted: counts, corrected };
 
     const numbered = await tx.execute({
       sql: "UPDATE accounts SET change_seq = change_seq + ? WHERE id = ? RETURNING change_seq",
@@ -181,7 +230,7 @@ export const pushRows = (
         return { overLimit: table.limit };
       }
     }
-    return { accepted: counts };
+    return { accepted: counts, corrected };
   });
 
 /** One page of a pull. */
