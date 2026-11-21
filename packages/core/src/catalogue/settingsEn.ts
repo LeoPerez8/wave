@@ -159,7 +159,7 @@ export const settingsEn = {
   tint: "Tint",
   rim: "Rim",
   howTheTabBarMiniPlayerMenus:
-    "How the tab bar, mini player, menus and dialogs show what's behind them. Blur softens it, refraction bends it at the edges (off leaves blur, tint and rim), tint lays the surface colour over it so text stays legible, and the rim is the bright edge. The sample shows each change; the app's glass takes it once you leave Appearance.",
+    "How the tab bar, mini player, menus and dialogs show what's behind them. Blur softens it, refraction bends it at the edges (off leaves blur, tint and rim), tint lays the surface colour over it so text stays legible, and the rim is the bright edge (off removes it). The sample shows each change; the app's glass takes it once you leave Appearance.",
   resetToDefaults: "Reset to defaults",
   sampleSong: "Sample song",
   sampleSongRow: "Sample song row",
@@ -432,7 +432,7 @@ export const settingsEn = {
     "One of Home's sections, shown under the Library's rows while it has something to show.",
   everyShuffleUsesItALongPress:
     "Every shuffle uses it. A long press on a shuffle button picks it too, but in a Now Playing slot it changes the button.",
-  pressBackAgainWithin2SecondsTo: "Press Back again within 2 seconds to exit",
+  backAgainToExit: "Back again to exit",
   dismisses: "Dismisses",
   close: "Close",
   selectionActions: "Selection actions",

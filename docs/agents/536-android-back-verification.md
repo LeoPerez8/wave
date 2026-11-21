@@ -3,7 +3,7 @@
 Back dismisses the top card, including consuming presses during its closing
 animation, before screen handlers. Now Playing closes before the underlying
 screen leaves. Pushed screens retain normal navigator Back behavior. At the
-navigation root, the first Back says “Press Back again within 2 seconds to exit”.
+navigation root, the first Back says “Back again to exit”.
 A second press strictly less than 2,000 ms later uses Android's existing default
 exit behavior. Expiry, navigation, app activity changes, cards, selection changes
 and Now Playing phase changes cancel the earlier attempt. Playback services and

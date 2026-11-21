@@ -52,7 +52,7 @@ class WaveGlassModule : Module() {
       Prop("tintColor") { view: WaveGlassView, color: Color? ->
         view.tintColor = color?.toArgb() ?: Color.TRANSPARENT
       }
-      Prop("rim") { view: WaveGlassView, enabled: Boolean -> view.rimEnabled = enabled }
+      Prop("rim") { view: WaveGlassView, strength: Float -> view.rimStrength = strength }
       Prop("coalesce") { view: WaveGlassView, enabled: Boolean -> view.coalesce = enabled }
     }
 

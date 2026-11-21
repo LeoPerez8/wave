@@ -182,7 +182,7 @@ export default function GlassSpikeScreen() {
           refraction={technique === "native" ? REFRACTION : 0}
           cornerRadius={TAB_BAR_HEIGHT / 2}
           tintColor={tint}
-          rim
+          rim={100}
         />
       ) : null}
       {technique === "skia" ? (

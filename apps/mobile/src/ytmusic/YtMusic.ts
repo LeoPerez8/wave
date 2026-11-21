@@ -1,5 +1,6 @@
 import {
   type YtArtistAlbum,
+  type YtCommunityPlaylist,
   type YtArtistCandidate,
   type YtLibraryFailure,
   type YtLibraryPlaylist,
@@ -81,6 +82,10 @@ export class YtMusic extends Context.Service<
     ) => Effect.Effect<readonly YtArtistCandidate[], YtMusicError>;
     /** Albums, singles and EPs on YT Music for [query]. */
     readonly searchAlbums: (query: string) => Effect.Effect<readonly YtArtistAlbum[], YtMusicError>;
+    /** Community playlists on YT Music for [query]. */
+    readonly searchCommunityPlaylists: (
+      query: string,
+    ) => Effect.Effect<readonly YtCommunityPlaylist[], YtMusicError>;
     /** The artist page [browseId] (`UC…`): their top songs, albums, singles and songs playlist. */
     readonly artist: (browseId: string) => Effect.Effect<NativeYtArtistPage, YtMusicError>;
     /**
@@ -182,6 +187,11 @@ export const layer = Layer.succeed(YtMusic, {
   searchArtists: (query) => metered((meter) => WaveYtMusic.searchArtists(query, meter)),
   searchAlbums: (query) =>
     Effect.tryPromise({ try: () => WaveYtMusic.searchAlbums(query), catch: fromNative }),
+  searchCommunityPlaylists: (query) =>
+    Effect.tryPromise({
+      try: () => WaveYtMusic.searchCommunityPlaylists(query),
+      catch: fromNative,
+    }),
   artist: (browseId) => metered((meter) => WaveYtMusic.artist(browseId, meter)),
   chartArtists: metered((meter) => WaveYtMusic.chartArtists(meter)),
   // Album pages are read by the downloads module (a download's tags come from them), once a session.

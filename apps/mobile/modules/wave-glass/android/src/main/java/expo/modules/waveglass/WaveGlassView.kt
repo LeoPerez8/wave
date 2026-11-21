@@ -82,9 +82,13 @@ class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context
       field = value
       invalidate()
     }
-  var rimEnabled = true
+
+  /** How strong the rim stroke is, in percent of the shipped one ([GlassRim]); 0 draws none. */
+  var rimStrength = GlassRim.SHIPPED
     set(value) {
+      if (field == value) return
       field = value
+      updateRimShader()
       invalidate()
     }
 
@@ -139,13 +143,18 @@ class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context
   override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
     super.onSizeChanged(w, h, oldw, oldh)
     effectDirty = true
+    updateRimShader()
+  }
+
+  /** The rim's gradient, brighter at the top, at [rimStrength] down this view's height. */
+  private fun updateRimShader() {
     rimPaint.shader = LinearGradient(
       0f,
       0f,
       0f,
-      h.toFloat(),
-      Color.argb(150, 255, 255, 255),
-      Color.argb(30, 255, 255, 255),
+      height.toFloat(),
+      Color.argb(GlassRim.alpha(GlassRim.TOP_ALPHA, rimStrength), 255, 255, 255),
+      Color.argb(GlassRim.alpha(GlassRim.BOTTOM_ALPHA, rimStrength), 255, 255, 255),
       Shader.TileMode.CLAMP,
     )
   }
@@ -265,8 +274,8 @@ class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context
     canvas.drawRect(bounds, tintPaint)
     canvas.restore()
 
-    if (rimEnabled) {
-      val stroke = density
+    if (rimStrength > 0f) {
+      val stroke = GlassRim.widthDp(rimStrength) * density
       rimPaint.strokeWidth = stroke
       bounds.inset(stroke / 2, stroke / 2)
       canvas.drawRoundRect(bounds, radius, radius, rimPaint)

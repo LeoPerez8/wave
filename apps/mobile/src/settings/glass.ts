@@ -1,4 +1,9 @@
-import { DEFAULT_GLASS_SETTINGS, readGlassSettings, type GlassSettings } from "@wave/core";
+import {
+  DEFAULT_GLASS_SETTINGS,
+  readGlassSettings,
+  writeGlassSettings,
+  type GlassSettings,
+} from "@wave/core";
 import { useSyncExternalStore } from "react";
 
 import { holdable } from "@/lib/holdable";
@@ -8,7 +13,7 @@ const glass = persistedSetting<GlassSettings>({
   key: "settings.glass",
   synced: true,
   read: readGlassSettings,
-  write: (settings) => JSON.stringify(settings),
+  write: writeGlassSettings,
   equals: sameFields,
   // Writes wait until a drag settles, so a slider doesn't hit storage every frame.
   persistDelayMs: 300,
@@ -23,7 +28,7 @@ export const setGlassSetting = <K extends keyof GlassSettings>(
   value: GlassSettings[K],
 ): void =>
   // Read back through Core so the value lands on one of the setting's levels.
-  glass.set(readGlassSettings(JSON.stringify({ ...glass.get(), [key]: value })));
+  glass.set(readGlassSettings(writeGlassSettings({ ...glass.get(), [key]: value })));
 
 /** Puts the glass back as it was before it could be tuned. */
 export const resetGlassSettings = (): void => glass.set(DEFAULT_GLASS_SETTINGS);

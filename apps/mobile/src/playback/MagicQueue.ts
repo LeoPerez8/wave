@@ -126,7 +126,11 @@ const labelNow = (): string | null => {
 
 const subscribeLabel = subscribeAll(queueState, magicSession);
 
-/** "Magic Queue · from <seed>" while the queue is a Magic Queue, else null; re-renders on change. */
+/**
+ * "Magic Queue · from <seed>" while the queue is a Magic Queue ("Related ·
+ * from <song>" over one a Search tap or a song link began), else null;
+ * re-renders on change.
+ */
 export const useMagicQueueLabel = (): string | null => {
   useLocalisation();
   return useSyncExternalStore(subscribeLabel, labelNow);
@@ -230,6 +234,14 @@ const continuationSeedNow = (state: QueueState) =>
       })
     : null;
 
+/** How a session starts, beyond its seed (Core's `MagicSession`). */
+export interface MagicStart {
+  /** It keeps to its seed's genres, whatever Discover's sliders say. */
+  readonly faithful?: boolean;
+  /** A plain play of the song began it (a Search tap, a song link): Up Next says Related. */
+  readonly plainPlay?: boolean;
+}
+
 /**
  * Starts a Magic Queue from [seed], whose songs are [seedSongs] (the song
  * itself for a song seed) and, for a playlist, its [streamedSongs]: it
@@ -248,7 +260,7 @@ export const startMagicQueue = (
   seedSongs: readonly SongRow[],
   streamedSongs: readonly YtSong[] = [],
   continuation?: QueueState,
-  faithful = false,
+  { faithful = false, plainPlay = false }: MagicStart = {},
 ) =>
   Effect.gen(function* () {
     if (continuation === undefined && !ytMusicEnabled()) return;
@@ -349,6 +361,7 @@ export const startMagicQueue = (
       },
       ytShare: magicQueueShare(discoverLevel.get()),
       faithful: faithful || continuation !== undefined,
+      plainPlay,
     });
     if (started === null) return;
     if (continuation !== undefined) {
@@ -383,7 +396,11 @@ export const startMagicQueue = (
  * supplies the audio (Core's
  * `startStreamedMagicQueue`).
  */
-export const startStreamedMagicQueue = (song: YtSong, faithful = false, libraryTrack?: SongRow) =>
+export const startStreamedMagicQueue = (
+  song: YtSong,
+  { faithful = false, plainPlay = false }: MagicStart = {},
+  libraryTrack?: SongRow,
+) =>
   Effect.gen(function* () {
     if (!ytMusicEnabled()) return;
     const startedAt = Date.now();
@@ -391,6 +408,7 @@ export const startStreamedMagicQueue = (song: YtSong, faithful = false, libraryT
       id: String(Date.now()),
       ytShare: magicQueueShare(discoverLevel.get()),
       faithful,
+      plainPlay,
       ...(libraryTrack?.path === null || libraryTrack === undefined
         ? {}
         : { firstTrackId: String(libraryTrack.id) }),

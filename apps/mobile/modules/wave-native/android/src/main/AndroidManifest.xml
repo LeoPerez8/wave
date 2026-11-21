@@ -78,6 +78,10 @@
       android:name="expo.modules.wavenative.recognize.RecognizeListeningService"
       android:exported="false"
       android:foregroundServiceType="microphone" />
+    <!-- The match notification's star button: holds JS while it stars, without opening Wave. -->
+    <service
+      android:name="expo.modules.wavenative.recognize.RecognizeFavoriteService"
+      android:exported="false" />
     <!-- Transparent: a tile tap's visible activity, which Android asks for before the microphone. -->
     <activity
       android:name="expo.modules.wavenative.recognize.RecognizeTileActivity"
