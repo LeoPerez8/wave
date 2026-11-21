@@ -352,10 +352,14 @@ export function VirtualTable({
   };
   useEffect(() => stopEdgeScroll, []);
   /** Scrolls while a drag is held near the list's top or bottom, faster nearer the edge. */
-  const edgeScroll = (y: number, height: number) => {
+  const edgeScroll = (y: number, span: number) => {
     const zone = HEIGHT * 1.5;
     const speed =
-      y < zone ? -Math.ceil((zone - y) / 4) : y > height - zone ? Math.ceil((y - height + zone) / 4) : 0;
+      y < zone
+        ? -Math.ceil((zone - y) / 4)
+        : y > span - zone
+          ? Math.ceil((y - span + zone) / 4)
+          : 0;
     edge.current.speed = speed;
     if (speed === 0) return stopEdgeScroll();
     if (edge.current.timer !== undefined) return;
@@ -388,16 +392,20 @@ export function VirtualTable({
       return false;
     }
   };
+  /** The gap between rows a drag at [event] is over, from 0 (above the first) to [total]. */
+  const gapAt = (event: DragEvent) => {
+    const element = viewport.current!;
+    const y = event.clientY - element.getBoundingClientRect().top;
+    return Math.max(0, Math.min(total, Math.round((y + element.scrollTop) / HEIGHT)));
+  };
   const placeDrag = {
     onDragOver: (event: DragEvent) => {
       if (placing === undefined) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = "move";
-      const element = viewport.current!;
-      const rect = element.getBoundingClientRect();
-      const y = event.clientY - rect.top;
-      setDropAt(Math.max(0, Math.min(total, Math.round((y + element.scrollTop) / HEIGHT))));
-      edgeScroll(y, rect.height);
+      const rect = viewport.current!.getBoundingClientRect();
+      setDropAt(gapAt(event));
+      edgeScroll(event.clientY - rect.top, rect.height);
     },
     onDragLeave: (event: DragEvent) => {
       const into = event.relatedTarget;
@@ -410,11 +418,11 @@ export function VirtualTable({
       event.preventDefault();
       event.stopPropagation();
       const { target, from } = placing;
-      const at = dropAt;
+      const at = gapAt(event);
       endPlacing();
       // A row dropped next to itself stays where it is.
       const alone = "ids" in target && target.ids.length === 1;
-      if (at === undefined || (alone && (at === from || at === from + 1))) return;
+      if (alone && (at === from || at === from + 1)) return;
       void placeAt(target, at);
     },
   };

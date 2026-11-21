@@ -193,17 +193,47 @@ test("dragging songs places them before a row, or at the end, in the playlist's 
     );
     const scope = { kind: "playlist", id } as const;
     playlists.place(id, { scope, ids: [parasite!] }, road!);
-    assert.deepEqual(pageTitles(db, id), ["Parasite", "Road", "Pink Moon", "River Man", "Place to Be"]);
+    assert.deepEqual(pageTitles(db, id), [
+      "Parasite",
+      "Road",
+      "Pink Moon",
+      "River Man",
+      "Place to Be",
+    ]);
     playlists.place(id, { scope, ids: [parasite!] }, null);
-    assert.deepEqual(pageTitles(db, id), ["Road", "Pink Moon", "River Man", "Place to Be", "Parasite"]);
+    assert.deepEqual(pageTitles(db, id), [
+      "Road",
+      "Pink Moon",
+      "River Man",
+      "Place to Be",
+      "Parasite",
+    ]);
     // A selection moves together, in the order the playlist had it.
     playlists.place(id, { scope, ids: [parasite!, pink!] }, river!);
-    assert.deepEqual(pageTitles(db, id), ["Road", "Pink Moon", "Parasite", "River Man", "Place to Be"]);
+    assert.deepEqual(pageTitles(db, id), [
+      "Road",
+      "Pink Moon",
+      "Parasite",
+      "River Man",
+      "Place to Be",
+    ]);
     // Dropped on one of its own rows, it lands before the next row it doesn't hold.
     playlists.place(id, { scope, ids: [road!, parasite!] }, parasite!);
-    assert.deepEqual(pageTitles(db, id), ["Pink Moon", "Road", "Parasite", "River Man", "Place to Be"]);
+    assert.deepEqual(pageTitles(db, id), [
+      "Pink Moon",
+      "Road",
+      "Parasite",
+      "River Man",
+      "Place to Be",
+    ]);
     playlists.place(id, { scope, all: true, except: [pink!, river!] }, null);
-    assert.deepEqual(pageTitles(db, id), ["Pink Moon", "River Man", "Road", "Parasite", "Place to Be"]);
+    assert.deepEqual(pageTitles(db, id), [
+      "Pink Moon",
+      "River Man",
+      "Road",
+      "Parasite",
+      "Place to Be",
+    ]);
     assert.equal(changes(), 5);
   });
 });

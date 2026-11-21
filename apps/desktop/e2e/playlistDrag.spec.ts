@@ -112,11 +112,18 @@ test("a playlist's songs drag to a new place, and the order stays after a restar
     const box = (await viewport.boundingBox())!;
     await row("Song 04").hover();
     await page.mouse.down();
-    for (const x of [200, 204, 208])
-      await viewport.hover({ position: { x, y: box.height - 6 } });
+    for (const x of [200, 204, 208]) await viewport.hover({ position: { x, y: box.height - 6 } });
     await expect
       .poll(() => viewport.evaluate((element) => element.scrollTop), { timeout: 10_000 })
       .toBeGreaterThan(200);
+    // At the bottom the rows stop changing under the pointer; a synthetic drag needs a move there.
+    await expect
+      .poll(() =>
+        viewport.evaluate(
+          (element) => element.scrollHeight - element.clientHeight - element.scrollTop,
+        ),
+      )
+      .toBeLessThan(1);
     await viewport.hover({ position: { x: 212, y: box.height - 6 } });
     await page.mouse.up();
     await expect
