@@ -46,6 +46,7 @@ import { DesktopLibrary } from "../library/library.ts";
 import { lookupsEnabled } from "../lookupSettings.ts";
 
 import type { SongLyrics } from "../../shared/lyrics.ts";
+import { createKaraokeSwitch, type KaraokeSwitchShape } from "./karaoke.ts";
 import {
   createLyricsTranslation,
   TRANSLATION_TIMEOUT_MS,
@@ -80,6 +81,8 @@ export interface SongLyricsShape {
 export interface LyricsShape extends SongLyricsShape {
   /** The Translate button and what it shows under the lines. */
   readonly translation: LyricsTranslationShape;
+  /** The Karaoke button's switch. */
+  readonly karaoke: KaraokeSwitchShape;
 }
 
 const NONE: SongLyrics = { kind: "none" };
@@ -268,6 +271,7 @@ export const lyricsLayer = (options: { readonly fetch?: typeof globalThis.fetch 
         options.fetch ?? ((input, init) => globalThis.fetch(input, init));
       return {
         ...lyrics,
+        karaoke: createKaraokeSwitch(db),
         translation: createLyricsTranslation({
           db,
           song: lyrics.song,

@@ -509,6 +509,14 @@ const createHandlers = (
             });
           })
         : refuse("lyrics.translation", "invalid request"),
+    "lyrics.karaokeOn": () => Effect.map(Lyrics, ({ karaoke }) => karaoke.on()),
+    "lyrics.setKaraokeOn": ([on]) =>
+      typeof on === "boolean"
+        ? Effect.map(Lyrics, ({ karaoke }) => {
+            karaoke.setOn(on);
+            return karaoke.on();
+          })
+        : refuse("lyrics.setKaraokeOn", "invalid switch"),
     "settings.appearance": () =>
       Effect.gen(function* () {
         return appearance(yield* Database);
