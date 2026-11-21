@@ -565,7 +565,7 @@ export function NowPlayingSheet() {
                   editing={editing}
                 />
                 {/*
-                 * The five footer slots (Settings › Layout › Now Playing). Empty, the row keeps
+                 * The five footer slots (Settings › Layout's Now Playing editor). Empty, the row keeps
                  * its height, so the transport stays put. The song controls share one lookup
                  * after settlement or their own early tap.
                  */}

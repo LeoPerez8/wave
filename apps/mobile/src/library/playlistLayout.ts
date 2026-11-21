@@ -45,6 +45,7 @@ export const playlistLayoutChoice: ChoiceSetting<PlaylistLayout> = {
  * at once and keeps it across restarts.
  */
 export const playlistLayoutTitleLongPress: TitleLongPress = {
+  requestId: "layout-playlists",
   get label() {
     return currentLocalisation().strings.playlists.chooseLayout;
   },

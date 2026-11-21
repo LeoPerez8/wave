@@ -17,6 +17,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useEffect,
   type ReactNode,
 } from "react";
 import { View, useWindowDimensions, type StyleProp, type ViewStyle } from "react-native";
@@ -37,7 +38,7 @@ import { useListScrollable } from "@/motion/heldTouch";
 import { Press } from "@/motion/Press";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-import { isNowPlayingShown } from "./sheet";
+import { isNowPlayingShown, takeNowPlayingLayoutEditRequest, useNowPlayingShown } from "./sheet";
 
 /**
  * Now Playing's screens: the player and the Queue side by side, one swipe
@@ -96,6 +97,7 @@ export type ScreenPages = {
  * once, with no slide.
  */
 export const useScreenPages = (): ScreenPages => {
+  const shown = useNowPlayingShown();
   const { width, height } = useWindowDimensions();
   const still = useReducedMotion();
   const [screens, setScreens] = useState(NOW_PLAYING_OPENS_ON);
@@ -185,6 +187,10 @@ export const useScreenPages = (): ScreenPages => {
     },
     [turnTo, movePanel, still, relatedHere],
   );
+
+  useEffect(() => {
+    if (shown && takeNowPlayingLayoutEditRequest()) send({ type: "edit" });
+  }, [shown, send]);
 
   const swipeBegan = useCallback(() => {
     setTurning(true);

@@ -50,6 +50,7 @@ let motionDone = false;
 let motionGeneration = 0;
 let contentDrawn = false;
 let sheetTimingId: number | undefined;
+let editOnNextOpen = false;
 const linkReveal = createLinkRevealCompletion({
   committed: (id) => timingSurfaceCommitted(id, false),
   end: timingTransitionEnd,
@@ -203,6 +204,19 @@ export const openNowPlaying = (): void => {
     sheetSettled.set(false);
   }
   step({ type: "tap" });
+};
+
+/** Opens the full player and asks its screen state machine to enter edit mode. */
+export const openNowPlayingForLayout = (): void => {
+  editOnNextOpen = true;
+  openNowPlaying();
+};
+
+/** The mounted player consumes the Layout edit request once it is visible. */
+export const takeNowPlayingLayoutEditRequest = (): boolean => {
+  const requested = editOnNextOpen;
+  editOnNextOpen = false;
+  return requested;
 };
 
 /** A swipe up on the mini player has started: the sheet follows the finger. */

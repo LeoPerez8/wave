@@ -4,21 +4,17 @@ import { describe, test } from "node:test";
 import {
   NOW_PLAYING_ACTIONS,
   NOW_PLAYING_BUTTONS_KEY,
-  NOW_PLAYING_FOOTER_SLOTS,
   NOW_PLAYING_PREVIOUS_ROW_KEY,
-  NOW_PLAYING_TRANSPORT_SLOTS,
   editNowPlayingButtons,
   nowPlayingButtonsAreDefault,
   moveNowPlayingButton,
   nowPlayingRelatedChevronShown,
   nowPlayingSlotChoices,
   nowPlayingSlotChoiceHolder,
-  nowPlayingSlotRoute,
   nowPlayingSlotRunsSongMenu,
   nowPlayingSlotShow,
   nowPlayingSongMenuShow,
   readNowPlayingButtons,
-  readNowPlayingSlotRoute,
   storedNowPlayingButtons,
 } from "./index.ts";
 import type { NowPlayingAction } from "./index.ts";
@@ -539,41 +535,5 @@ describe("the Related chevron beside the title", () => {
   test("it is absent with nothing playing", () => {
     assert.equal(nowPlayingRelatedChevronShown("nothing", true), false);
     assert.equal(nowPlayingRelatedChevronShown("nothing", false), false);
-  });
-});
-
-describe("a slot picker's route", () => {
-  test("1 to 5 are the footer's slots, left to right, then left and right are the transport's", () => {
-    assert.deepEqual(
-      ["1", "2", "3", "4", "5", "left", "right"].map(readNowPlayingSlotRoute),
-      [0, 1, 2, 3, 4, 5, 6],
-    );
-    assert.equal(NOW_PLAYING_FOOTER_SLOTS, 5);
-    assert.deepEqual(NOW_PLAYING_TRANSPORT_SLOTS, { left: 5, right: 6 });
-  });
-
-  test("each slot's route reads back as that slot", () => {
-    for (const slot of [0, 1, 2, 3, 4, 5, 6])
-      assert.equal(readNowPlayingSlotRoute(nowPlayingSlotRoute(slot) ?? undefined), slot);
-    assert.equal(nowPlayingSlotRoute(7), null);
-    assert.equal(nowPlayingSlotRoute(-1), null);
-  });
-
-  test("anything else names no slot", () => {
-    for (const param of [
-      "0",
-      "6",
-      "7",
-      "01",
-      " 1",
-      "1.0",
-      "one",
-      "Left",
-      "",
-      undefined,
-      ["1"],
-      ["1", "2"],
-    ])
-      assert.equal(readNowPlayingSlotRoute(param), null, String(param));
   });
 });
