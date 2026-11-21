@@ -159,31 +159,66 @@ export interface FollowRelease {
   readonly libraryAlbumId?: number | null;
 }
 const DAY = 86_400_000;
-/** Whether the owner can play [release]: it's in the Library, or matched on YT Music while it's on. */
-const playable = (release: FollowRelease, ytMusic: boolean): boolean =>
-  Boolean(release.libraryAlbumId) || (ytMusic && release.browseId !== null);
-/**
- * Played and hidden releases never return; show notification receipts survive country changes.
- * Only a release the owner can play is a card (`ytMusic`, on unless false, is YT Music's switch);
- * `followReleasesToSearch` names the others a check looks for.
- */
-export const followFeed = (input: {
+/** What decides whether a release is in the feed at all, matched or not. */
+interface FeedInput {
   readonly follows: readonly FollowedArtist[];
   readonly releases: readonly FollowRelease[];
   readonly hidden: readonly string[];
   readonly countedPlays: readonly string[];
   readonly now: number;
-  readonly enabled?: boolean;
-  readonly ytMusic?: boolean;
   readonly blockExplicit?: boolean;
-  readonly shows?: readonly FollowShow[];
-  readonly country?: string;
-  readonly notified?: readonly string[];
-}) => {
+}
+/**
+ * The releases inside a follow's window (from 30 days before the follow's day to [now]), neither
+ * hidden, played nor blocked as explicit, in the feed's order: newest first.
+ */
+const feedReleases = (input: FeedInput): FollowRelease[] => {
   const follows = new Map(input.follows.map((f) => [f.key, f]));
   const hidden = new Set(input.hidden);
   const played = new Set(input.countedPlays);
+  return input.releases
+    .filter((r) => {
+      const follow = follows.get(r.artistKey);
+      const date = Date.parse(r.releaseDate);
+      return (
+        follow !== undefined &&
+        Number.isFinite(date) &&
+        date <= input.now &&
+        date >= Math.floor(follow.followedAt / DAY) * DAY - 30 * DAY &&
+        !hidden.has(r.key) &&
+        !(input.blockExplicit && r.explicit) &&
+        ![...r.videoIds, ...r.recordingKeys].some((id) => played.has(id))
+      );
+    })
+    .sort((a, b) => b.releaseDate.localeCompare(a.releaseDate) || a.key.localeCompare(b.key));
+};
+/** Whether the owner can play [release]: it's in the Library, or matched on YT Music while it's on. */
+const playable = (release: FollowRelease, ytMusic: boolean): boolean =>
+  Boolean(release.libraryAlbumId) || (ytMusic && release.browseId !== null);
+/** [releases] with one release per key: a collaboration followed through two artists is one. */
+const oncePerKey = (releases: readonly FollowRelease[]): FollowRelease[] => {
   const seen = new Set<string>();
+  return releases.filter((r) => {
+    if (seen.has(r.key)) return false;
+    seen.add(r.key);
+    return true;
+  });
+};
+/**
+ * Played and hidden releases never return; show notification receipts survive country changes.
+ * Only a release the owner can play is a card (`ytMusic`, on unless false, is YT Music's switch);
+ * `followReleasesToSearch` names the others a check looks for.
+ */
+export const followFeed = (
+  input: FeedInput & {
+    readonly enabled?: boolean;
+    readonly ytMusic?: boolean;
+    readonly shows?: readonly FollowShow[];
+    readonly country?: string;
+    readonly notified?: readonly string[];
+  },
+) => {
+  const follows = new Map(input.follows.map((f) => [f.key, f]));
   const showIds = new Set<string>();
   const eligibleShows =
     input.enabled === false
@@ -220,28 +255,22 @@ export const followFeed = (input: {
     releaseCards:
       input.enabled === false
         ? []
-        : input.releases
-            .filter((r) => {
-              if (seen.has(r.key)) return false;
-              const follow = follows.get(r.artistKey);
-              const date = Date.parse(r.releaseDate);
-              const shown =
-                follow !== undefined &&
-                Number.isFinite(date) &&
-                date <= input.now &&
-                date >= Math.floor(follow.followedAt / DAY) * DAY - 30 * DAY &&
-                !hidden.has(r.key) &&
-                !(input.blockExplicit && r.explicit) &&
-                ![...r.videoIds, ...r.recordingKeys].some((id) => played.has(id)) &&
-                playable(r, ytMusic);
-              if (shown) seen.add(r.key);
-              return shown;
-            })
-            .sort(
-              (a, b) => b.releaseDate.localeCompare(a.releaseDate) || a.key.localeCompare(b.key),
-            ),
+        : oncePerKey(feedReleases(input).filter((r) => playable(r, ytMusic))),
   };
 };
+/**
+ * The releases a Follows check looks for on YT Music, in the order it asks: each in the feed
+ * (`followFeed`'s rule, whatever the switches) with no YT Music match and no Library album,
+ * newest first. One already playable through another followed artist isn't asked for.
+ */
+export const followReleasesToSearch = (input: FeedInput): FollowRelease[] => {
+  const feed = feedReleases(input);
+  const playableKeys = new Set(feed.filter((r) => playable(r, true)).map((r) => r.key));
+  return oncePerKey(feed.filter((r) => !playableKeys.has(r.key)));
+};
+/** The Albums search that looks for [release] by [artist] on YT Music. */
+export const followReleaseQuery = (release: FollowRelease, artist: string): string =>
+  `${artist} ${release.title}`;
 
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;

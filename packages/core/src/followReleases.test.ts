@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { followFeed, followReleaseOpening, type FollowRelease } from "./index.ts";
+import {
+  followFeed,
+  followReleaseOpening,
+  followReleaseQuery,
+  followReleasesToSearch,
+  type FollowRelease,
+} from "./index.ts";
 const now = Date.UTC(2026, 9, 29);
 const follow = {
   key: "abba",
@@ -118,4 +124,34 @@ test("only a release the owner can play shows: in the Library, or matched on YT 
     followFeed({ ...input, ytMusic: false }).releaseCards.map((card) => card.key),
     ["owned"],
   );
+});
+
+test("a check searches each eligible release without a match or Library album, newest first", () => {
+  const other = { ...follow, key: "other", name: "Other" };
+  const releases = [
+    release("older", 5),
+    { ...release("matched", 1), browseId: "MPREb_matched" },
+    { ...release("owned", 2), libraryAlbumId: 4 },
+    release("hidden", 2),
+    release("outside window", 40),
+    { ...release("played", 3), videoIds: ["video"] },
+    release("newest", 0),
+    { ...release("by other", 4), artistKey: "other" },
+    { ...release("newest", 0), artistKey: "other" },
+    { ...release("unfollowed", 1), artistKey: "nobody" },
+  ];
+  assert.deepEqual(
+    followReleasesToSearch({
+      follows: [follow, other],
+      releases,
+      hidden: ["hidden"],
+      countedPlays: ["video"],
+      now,
+    }).map((r) => r.key),
+    ["newest", "by other", "older"],
+  );
+});
+
+test("a release's search asks for its artist and title", () => {
+  assert.equal(followReleaseQuery(release("Voyage", 1), "ABBA"), "ABBA Voyage");
 });
