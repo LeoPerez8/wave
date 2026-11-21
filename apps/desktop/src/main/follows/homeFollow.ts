@@ -19,6 +19,7 @@ import {
   FOLLOWED_ARTISTS_SETTING as FOLLOWED_ARTISTS,
   SHOW_CHECKS_TODAY_SETTING as CHECKS_TODAY,
   homeFollowCards,
+  type FollowAlbumRead,
   type FollowRelease,
 } from "@wave/core";
 import * as Context from "effect/Context";
@@ -27,6 +28,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import type { HomeFollowView, HomeReleaseOpening } from "../../shared/homeFollow.ts";
+import { ytRow } from "../../shared/yt.ts";
+import type { YtAlbumView } from "../../shared/ytPages.ts";
 import { preference, savePreference } from "../preferences.ts";
 import { syncedPreference } from "../sync/desktopSync.ts";
 import type { YtPagesShape } from "../yt/ytPages.ts";
@@ -225,6 +228,8 @@ export const createHomeFollow = (deps: HomeFollowDeps): HomeFollowShape => {
       const release: FollowRelease | undefined = releaseCards.find((r) => r.key === key);
       if (release === undefined) return { kind: "notFound" };
       if (release.libraryAlbumId) return { kind: "album", id: release.libraryAlbumId };
+      // The album read here is the one its page shows, so the page doesn't ask again.
+      let shown: YtAlbumView | undefined;
       const opening = await Effect.runPromise(
         openFollowRelease(store, release, artist(release.artistKey), {
           ytMusic,
@@ -233,18 +238,24 @@ export const createHomeFollow = (deps: HomeFollowDeps): HomeFollowShape => {
             const found = await pages.catalog(query);
             return found.status === "ok" ? found.albums : null;
           },
-          album: async (browseId) => {
+          album: async (browseId): Promise<FollowAlbumRead> => {
             const found = await pages.album(browseId);
-            if (found.status === "ok" && found.album !== null)
-              return { videoIds: found.album.songs.map((song) => song.videoId) };
-            // Only a page YT Music answered without the album is gone.
-            return found.status === "ok" || found.status === "failed" ? "failed" : "offline";
+            if (found.status !== "ok") return "noAnswer";
+            if (found.album === null) return "missing";
+            const songs = found.album.songs.map(ytRow);
+            shown = {
+              status: "ok",
+              album: { ...found.album, songs: { items: songs, offset: 0, total: songs.length } },
+            };
+            return { videoIds: found.album.songs.map((song) => song.videoId) };
           },
         }),
       );
       // "search" and "gone" never leave `openFollowRelease`.
       return opening.kind === "open"
-        ? { kind: "ytAlbum", browseId: opening.browseId }
+        ? shown === undefined
+          ? { kind: "ytAlbum", browseId: opening.browseId }
+          : { kind: "ytAlbum", browseId: opening.browseId, album: shown }
         : {
             kind:
               opening.kind === "search"

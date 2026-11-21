@@ -93,7 +93,10 @@ test("a matched release whose album YT Music answers without says so and loses i
 test("no answer from a matched release's album still opens its page and keeps the match", async () => {
   const matched = { ...voyage, browseId: "MPRE9", videoIds: ["v9"] };
   const offline = await opened({ album: async () => "noAnswer" }, matched);
-  assert.deepEqual([offline.opening, offline.saved.browseId], [{ kind: "open", browseId: "MPRE9" }, "MPRE9"]);
+  assert.deepEqual(
+    [offline.opening, offline.saved.browseId],
+    [{ kind: "open", browseId: "MPRE9" }, "MPRE9"],
+  );
   const rejected = await opened(
     { album: () => Promise.reject(new Error("passing error")) },
     matched,
