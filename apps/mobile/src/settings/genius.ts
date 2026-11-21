@@ -1,11 +1,12 @@
 import { persistedSetting } from "@/lib/persistedSetting";
+import { GENIUS_INSIGHTS_SETTING, readGeniusInsights, writeGeniusInsights } from "@wave/core";
 
 /** Whether Wave may ask Genius about songs (on unless the owner turned it off). */
 const insights = persistedSetting<boolean>({
-  key: "settings.geniusInsights",
+  key: GENIUS_INSIGHTS_SETTING,
   synced: true,
-  read: (stored) => stored !== "off",
-  write: (on) => (on ? null : "off"),
+  read: readGeniusInsights,
+  write: writeGeniusInsights,
 });
 
 export const geniusInsightsEnabled = insights.get;
