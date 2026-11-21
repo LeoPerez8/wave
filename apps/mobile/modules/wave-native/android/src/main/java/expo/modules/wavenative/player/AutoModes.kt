@@ -90,8 +90,12 @@ class PlaybackModesState {
   /** The star the last press on Favorite asked for, while JS hasn't answered every press. */
   private var pressed: Boolean? = null
 
-  /** Presses on Favorite JS hasn't answered yet. */
+  /** Presses on Favorite JS hasn't answered yet, all on the playing song. */
   private var unanswered = 0
+
+  /** The playing song's media id, and how many times the song has changed. */
+  private var song: String? = null
+  private var songChanges = 0
 
   /** What the buttons show: [current], with a pressed star ahead of JS's answer. */
   val shown: PlaybackModes
@@ -100,21 +104,44 @@ class PlaybackModesState {
   /** Records [modes] and tells the listeners when what the buttons show changed. */
   fun publish(modes: PlaybackModes) = change { current = modes }
 
-  /** A press on Favorite: the star flips at once, before JS toggles and saves it. */
-  fun pressStar() = change {
-    pressed = !shown.starred
-    unanswered++
+  /**
+   * The player is on the song [mediaId], or on none. A pressed star belongs to the song it
+   * was pressed on, so once another song plays the buttons show what JS reports, and the
+   * answers still due for the last song count for nothing ([starAnswered]).
+   */
+  fun playing(mediaId: String?) = change {
+    if (mediaId != song) {
+      song = mediaId
+      songChanges++
+      pressed = null
+      unanswered = 0
+    }
   }
 
   /**
-   * JS answered a press, or never did. Once it has answered them all the buttons show what
-   * JS reports again. It reports a toggled star before it answers, so a press that worked
-   * changes nothing here; one that failed, and a star whose write fails later, go back to
-   * the star JS holds.
+   * A press on Favorite: the star flips at once, before JS toggles and saves it. Returns the
+   * press, to hand to [starAnswered] with JS's answer.
    */
-  fun starAnswered() = change {
-    if (unanswered > 0) unanswered--
-    if (unanswered == 0) pressed = null
+  fun pressStar(): Int {
+    change {
+      pressed = !shown.starred
+      unanswered++
+    }
+    return songChanges
+  }
+
+  /**
+   * JS answered [press], or never did. Once it has answered every press on the playing song
+   * the buttons show what JS reports again. It reports a toggled star before it answers, so
+   * a press that worked changes nothing here; one that failed, and a star whose write fails
+   * later, go back to the star JS holds. An answer to a press on a song that has since
+   * changed is ignored.
+   */
+  fun starAnswered(press: Int) = change {
+    if (press == songChanges) {
+      if (unanswered > 0) unanswered--
+      if (unanswered == 0) pressed = null
+    }
   }
 
   private inline fun change(block: () -> Unit) {
