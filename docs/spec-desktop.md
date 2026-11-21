@@ -362,9 +362,20 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   arrangement: shelves of tiles, Most played as a table.
 - Home's New from Artists You Follow and Upcoming Shows use the phone's rules and the account's
   follows, hidden releases and switches. Each computer runs its own checks, looks shows up in the
-  system's region and posts no show notification. A release opens its Library album or its
-  YT Music page; a show opens its ticket page in the browser. Following, unfollowing and hiding a
-  release stay on the phone.
+  country chosen in Settings › Followed artists (the system's region until one is chosen) and
+  posts no show notification. A release opens its Library album or its YT Music page; a show
+  opens its ticket page in the browser. Hiding a release stays on the phone.
+- A Library artist's page and a YT Music artist's page have a Follow button in the hero's
+  actions. It reads Follow or Following and opens a card with the levels (Core's
+  `followLevelEntries`): New music, New music and shows while a Wave account is signed in, and
+  Unfollow once followed. Settings › Followed artists has the account's switch, the Country for
+  shows (kept on this computer, as each phone keeps its own), Find artists to follow, and the
+  artists followed A to Z, each with its level in a menu and Unfollow. Unfollow shows the toast
+  "Unfollowed <artist>" with Undo. The search lists the Library's matches and Deezer's, and
+  its one line is Core's `followSearchLine`: searching, no answer from Deezer, or no artists
+  found. With the switch off no artist page has the button, the search is disabled and the
+  follows are listed but can't change. Follows sync with the Wave account as any change does.
+  The phone's level icons, their legend and Suggested aren't on the desktop.
 - Album, artist and playlist pages have a hero: artwork, a light title, and the kind in the line
   under it ("Album · Indie Folk · 1995 · 7 songs · 33 min", or "36 h 43 min" from an hour up, Core's `listDuration`; a table's Time
   column reads "36:43:09"), with no label above the title. Play

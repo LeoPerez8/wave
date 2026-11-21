@@ -51,6 +51,12 @@ import {
 import type { LibrarySearchView } from "./search.ts";
 import type { HomeView } from "./home.ts";
 import type { HomeFollowView, HomeReleaseOpening } from "./homeFollow.ts";
+import {
+  FOLLOWS_CALLS,
+  followsBridge,
+  type FollowsBridge,
+  type FollowsContract,
+} from "./follows.ts";
 import type { StatsPeriod, StatsRanking } from "@wave/core";
 import type { ArtistStatsPage, StatsOverview, StatsRow } from "./stats.ts";
 import type {
@@ -121,6 +127,7 @@ export interface BridgeContract
     ArtistPageContract,
     StreamedContract,
     LyricsAndTagsContract,
+    FollowsContract,
     YtAccountContract,
     SpotifyAccountContract,
     HistoryContract,
@@ -600,6 +607,7 @@ export const BRIDGE_CALLS = [
   "home.followCheck",
   "home.openRelease",
   "home.releaseArtwork",
+  ...FOLLOWS_CALLS,
   ...LINK_CALLS,
   ...ARTIST_PAGE_CALLS,
   ...STREAMED_CALLS,
@@ -664,6 +672,8 @@ export interface WaveBridge {
     /** A release card's cover as a data URL, or null. */
     readonly releaseArtwork: (key: string) => Promise<string | null>;
   };
+  /** An artist page's Follow button and Settings › Followed artists. */
+  readonly follows: FollowsBridge;
   readonly playback: PlaybackTransport & {
     readonly view: () => Promise<PlayerView>;
     readonly start: (scope: BrowseScope, index?: number, shuffle?: boolean) => Promise<PlayStart>;
@@ -986,6 +996,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     openRelease: (key) => invoke("home.openRelease", key),
     releaseArtwork: (key) => invoke("home.releaseArtwork", key),
   },
+  follows: followsBridge(invoke),
   links: linkBridge(invoke),
   artistPage: artistPageBridge(invoke),
   streamed: streamedBridge(invoke),

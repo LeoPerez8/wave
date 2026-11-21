@@ -61,6 +61,8 @@ import { applyLanguage, labels, text, useLanguage, tagTitle, artistName } from "
 import { LanguageSettings } from "./LanguageSettings.tsx";
 import { ThemeSettings } from "./ThemeSettings.tsx";
 import { LyricsAndTagsSettings } from "./LyricsAndTagsSettings.tsx";
+import { FollowButton } from "./FollowButton.tsx";
+import { FollowedArtistsSettings } from "./FollowedArtistsSettings.tsx";
 import { geniusAccess } from "./useSongGenius.ts";
 import { Home } from "./Home.tsx";
 import { Stats } from "./Stats.tsx";
@@ -105,6 +107,7 @@ const settings = [
   "window",
   "playback",
   "lyricsAndTags",
+  "followedArtists",
   "downloads",
   "accounts",
   "versionHistory",
@@ -822,6 +825,13 @@ export function App() {
                   {labels.shuffle}
                 </button>
                 {route.kind === "artist" && <ArtistToggle section={artistSection} />}
+                {route.kind === "artist" && (
+                  <FollowButton
+                    artist={{ name: hero.title }}
+                    revision={account?.revision}
+                    onError={setError}
+                  />
+                )}
                 {missingList !== undefined && (
                   <ListDownloadButton
                     list={missingList}
@@ -922,7 +932,11 @@ export function App() {
                   aria-current={setting === key ? "page" : undefined}
                   onClick={() => setSetting(key)}
                 >
-                  {key === "appearance" ? text.settings.appearance : labels[key]}
+                  {key === "appearance"
+                    ? text.settings.appearance
+                    : key === "followedArtists"
+                      ? text.settings.followedArtists
+                      : labels[key]}
                 </button>
               ))}
               <button onClick={() => go({ kind: "history" })}>{text.settings.pages.history}</button>
@@ -1006,6 +1020,20 @@ export function App() {
                 <VersionHistory />
               ) : setting === "downloads" ? (
                 <DownloadSettings onError={failed} />
+              ) : setting === "followedArtists" ? (
+                <FollowedArtistsSettings
+                  revision={account?.revision}
+                  notify={notify}
+                  onError={(message) => setError(message ?? text.desktopLibrary.actionFailed)}
+                  online={ytMusic}
+                  onOpen={(artist) =>
+                    artist.artistId !== null
+                      ? go({ kind: "artist", id: artist.artistId })
+                      : artist.ytBrowseId !== null
+                        ? go({ kind: "ytArtist", id: artist.ytBrowseId })
+                        : ytLinks.onArtist(artist.name)
+                  }
+                />
               ) : setting === "lyricsAndTags" ? (
                 <LyricsAndTagsSettings
                   onError={failed}
@@ -1028,6 +1056,7 @@ export function App() {
             revision={playback.view?.revision ?? 0}
             go={go}
             onSongMenu={ytSongMenu}
+            onError={setError}
           />
         ) : route.kind === "graveyard" ? (
           <Graveyard
