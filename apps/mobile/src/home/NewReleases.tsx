@@ -5,7 +5,6 @@ import { IconPlayerPlay } from "@tabler/icons-react-native";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import {
-  FOLLOW_PLAY_CONTEXT,
   releaseDateLine,
   type FollowAlbumRead,
   type FollowRelease,
@@ -24,7 +23,6 @@ import { TitledSection } from "@/catalog/TitledSection";
 import { openAlbum } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
 import { LibraryStore } from "@/library/LibraryStore";
-import { queueState } from "@/playback/Queue";
 
 import { openYtAlbum, openYtArtistNamed } from "@/ytmusic/routes";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
@@ -194,19 +192,13 @@ function PlayReleases({ title, cards }: { title: string; cards: readonly FollowR
       shown = true;
       setBusy(false);
     };
-    // The button frees once the first release plays; the rest keep joining the queue.
-    const stop = queueState.subscribe(() => {
-      if (queueState.get().context?.kind === FOLLOW_PLAY_CONTEXT) done();
-    });
-    void playNewReleases(cards)
+    // The button frees once this play's first release plays; the rest keep joining the queue.
+    void playNewReleases(cards, done)
       .then((played) => {
         if (!played) void showMessage(title, strings.newReleases.noAnswer);
       })
       .catch(() => showMessage(title, strings.newReleases.noAnswer))
-      .finally(() => {
-        stop();
-        done();
-      });
+      .finally(done);
   };
   return (
     <IconButton
