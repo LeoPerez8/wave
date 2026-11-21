@@ -85,7 +85,7 @@ const openFavorites = async () => {
       root,
       "apps/mobile/src/library/favorites.ts",
     );
-    return { store, LibraryStoreError, track, provide: runtime.provide, favorites, close };
+    return { root, store, LibraryStoreError, track, provide: runtime.provide, favorites, close };
   } catch (error) {
     close();
     throw error;
@@ -93,7 +93,8 @@ const openFavorites = async () => {
 };
 
 test("cold scoped stars follow optimistic gestures and restore the saved star after a failed write without loading global lists", async () => {
-  const { store, LibraryStoreError, track, provide, favorites, close } = await openFavorites();
+  const { root, store, LibraryStoreError, track, provide, favorites, close } =
+    await openFavorites();
   try {
     Effect.runSync(store.setFavorites([track.id], true));
     let globalReads = 0;
