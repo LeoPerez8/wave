@@ -3,7 +3,7 @@
 //   node scripts/perf/perf.ts doctor [--serial <s>] [--dry-run]
 //   node scripts/perf/perf.ts run [--scenario all|<a,b>] [--variant idle|import|idle,import]
 //        [--label <l>] [--iterations <n>] [--commit <sha>] [--apk <file>] [--import-link <url>]
-//        [--artist <name>] [--playlist <name>] [--compile <filter>] [--glass <probe>] [--perfetto] [--meta key=value]...
+//        [--artist <name>] [--playlist <name>] [--album <name>] [--yt-artist <name>] [--compile <filter>] [--glass <probe>] [--perfetto] [--meta key=value]...
 //        [--out <file>] [--serial <s>] [--dry-run]
 //        (--scenario glass runs the glass comparison's scenarios; --glass needs a perf build)
 //   node scripts/perf/perf.ts summary <results.jsonl>
@@ -62,6 +62,10 @@ interface Fixture {
   readonly artist: string | null;
   /** The playlist push-playlist opens (`ScenarioConfig.playlist`). */
   readonly playlist: string | null;
+  /** The album reference-taps opens (`ScenarioConfig.album`). */
+  readonly album?: string | null;
+  /** The YT Music artist reference-taps opens (`ScenarioConfig.ytArtist`). */
+  readonly ytArtist?: string | null;
   readonly settleMs: number;
   readonly windowMs: number;
   readonly launchSettleMs: number;
@@ -84,6 +88,8 @@ const { values, positionals } = parseArgs({
     "import-link": { type: "string" },
     artist: { type: "string" },
     playlist: { type: "string" },
+    album: { type: "string" },
+    "yt-artist": { type: "string" },
     compile: { type: "string" },
     glass: { type: "string" },
     perfetto: { type: "boolean", default: false },
@@ -479,7 +485,13 @@ const commands: Record<string, () => Promise<void>> = {
       scenarios,
       variants,
       ...(values.iterations === undefined ? {} : { iterations: Number(values.iterations) }),
-      config: { tabs: fixture.tabs, artist: artist(), playlist: playlist() },
+      config: {
+        tabs: fixture.tabs,
+        artist: artist(),
+        playlist: playlist(),
+        album: values.album ?? fixture.album ?? null,
+        ytArtist: values["yt-artist"] ?? fixture.ytArtist ?? null,
+      },
       importLink: values["import-link"] ?? fixture.importLink,
       settleMs: fixture.settleMs,
       windowMs: fixture.windowMs,
