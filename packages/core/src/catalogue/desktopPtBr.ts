@@ -12,6 +12,8 @@ export const desktopPtBr = {
     thisPhone: "Este computador",
   },
   settings: {
+    openingLyricsOnASongWithLyrics:
+      "Ao abrir Letras em uma música que tem letra, o Wave mostra a descrição do Genius e destaca os trechos anotados. Desative para interromper todas as consultas ao Genius.",
     missingSongs: {
       missing: (n: number) =>
         `${formatNumber("pt-BR", n)} ${plural("pt-BR", n, { one: "música não está", other: "músicas não estão" })} neste computador`,

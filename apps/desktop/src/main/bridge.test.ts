@@ -70,6 +70,7 @@ test("Lyrics and tags keeps the account's switches, refuses other keys and runs 
       assert.deepEqual(await wave.lyricsAndTags.view(), {
         fixSongsOnline: true,
         downloadArtistPhotos: true,
+        geniusInsights: true,
         fixRun: null,
         artistPhotos: 0,
       });

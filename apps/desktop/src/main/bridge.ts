@@ -19,9 +19,15 @@ import { Account } from "./account/accountLayer.ts";
 import type { Page } from "../shared/bridge.ts";
 import { BROWSE_KINDS, type BrowseScope } from "../shared/browse.ts";
 import { browseLetter } from "./library/browse.ts";
+import { toggleBrowseSort } from "./library/browseSort.ts";
 import { readArtwork } from "./library/artwork.ts";
 import { appearance, preference, savePreference } from "./preferences.ts";
-import { SEARCH_ONLINE_SETTING, readSearchOnline, writeSearchOnline } from "@wave/core";
+import {
+  SEARCH_ONLINE_SETTING,
+  libraryTableSortsFor,
+  readSearchOnline,
+  writeSearchOnline,
+} from "@wave/core";
 import {
   MAX_TARGET_IDS,
   SONG_RUN_ACTIONS,
@@ -118,6 +124,11 @@ const validTarget = (value: unknown): value is SongTarget => {
 const searchQuery = (value: unknown): value is string =>
   typeof value === "string" && value.length <= 500;
 
+const lyricTrackId = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0 && value.length <= 200;
+
+const geniusRequestId = (value: unknown): value is string =>
+  typeof value === "string" && /^[0-9a-f-]{36}$/.test(value);
 const validCollectionOptions = (value: unknown): value is CollectionActionOptions => {
   if (typeof value !== "object" || value === null) return false;
   const { here, selectable, surface } = value as CollectionActionOptions;
@@ -382,12 +393,28 @@ const createHandlers = (
         ? playbackCall((p) => p.setSleepTimer(choice))
         : refuse("playback.setSleepTimer", "invalid sleep timer"),
     "lyrics.song": ([trackId]) =>
-      typeof trackId === "string" && trackId.length > 0 && trackId.length <= 200
+      lyricTrackId(trackId)
         ? Effect.gen(function* () {
             const lyrics = yield* Lyrics;
             return yield* Effect.tryPromise({ try: () => lyrics.song(trackId), catch: (e) => e });
           })
         : refuse("lyrics.song", "invalid track id"),
+    "lyrics.genius": ([trackId, requestId, phase]) =>
+      lyricTrackId(trackId) &&
+      geniusRequestId(requestId) &&
+      (phase === "read" || phase === "translate")
+        ? Effect.gen(function* () {
+            const { genius } = yield* Account;
+            return yield* Effect.tryPromise({
+              try: () => genius.song(trackId, requestId, phase),
+              catch: (error) => error,
+            });
+          })
+        : refuse("lyrics.genius", "invalid request"),
+    "lyrics.cancelGenius": ([requestId]) =>
+      geniusRequestId(requestId)
+        ? Effect.map(Account, (account) => account.genius.cancel(requestId))
+        : refuse("lyrics.cancelGenius", "invalid request id"),
     "settings.appearance": () =>
       Effect.gen(function* () {
         return appearance(yield* Database);
@@ -521,6 +548,12 @@ const createHandlers = (
             return browseLetter(yield* Database, scope, letter);
           })
         : refuse("library.letter", "invalid letter or scope"),
+    "library.sortBy": ([kind, key]) =>
+      typeof kind === "string" &&
+      typeof key === "string" &&
+      libraryTableSortsFor(kind).some((sort) => sort.key === key)
+        ? Effect.map(Database, (db) => toggleBrowseSort(db, kind, key))
+        : refuse("library.sortBy", "sort is not offered for this list"),
     "library.counts": () =>
       Effect.gen(function* () {
         return libraryCounts(yield* Database);

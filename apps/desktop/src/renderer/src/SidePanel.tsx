@@ -14,6 +14,7 @@ import { panelTabs, shownPanelTab, stepPanelTab, type PanelTab } from "../../sha
 import { QueuePanel } from "./QueuePanel.tsx";
 import { RelatedPanel } from "./RelatedPanel.tsx";
 import { labels, text } from "./text.ts";
+import type { GeniusAccess } from "./useSongGenius.ts";
 import "./panel.css";
 
 export type { PanelTab };
@@ -40,6 +41,8 @@ export function SidePanel({
   onError,
   hidden,
   onClose,
+  geniusAccess,
+  onGeniusSignIn,
 }: {
   readonly tab: PanelTab;
   readonly onTab: (tab: PanelTab) => void;
@@ -56,6 +59,8 @@ export function SidePanel({
   readonly hidden: boolean;
   /** The panel's own close control, on every tab. */
   readonly onClose: () => void;
+  readonly geniusAccess: GeniusAccess;
+  readonly onGeniusSignIn: () => void;
 }) {
   const tab = shownPanelTab(asked, ytMusic);
   const command = (next: PlaybackCommand) => run(window.wave.playback.command(next));
@@ -105,6 +110,9 @@ export function SidePanel({
             song={view?.current ?? null}
             positionMs={view?.status.positionMs ?? 0}
             onSeek={(positionMs) => run(window.wave.playback.seek(positionMs))}
+            geniusAccess={geniusAccess}
+            onGeniusSignIn={onGeniusSignIn}
+            foreground={!hidden}
           />
         ) : tab === "related" ? (
           <RelatedPanel
