@@ -8,6 +8,12 @@
 
 import type { Client, InStatement, InValue, Transaction } from "@libsql/client";
 import { mergePlays, mergeRows } from "@wave/core";
+import {
+  type Membership,
+  forgetAccountStatements,
+  membershipStatements,
+  readMembership,
+} from "./collaborations.ts";
 import type { SyncLimitName, SyncLimits } from "./limits.ts";
 import { type IncomingRow, type SyncTable, SYNC_TABLES, column, wireRow } from "./tables.ts";
 
@@ -184,8 +190,11 @@ export const pushRows = (
     return { accepted: counts };
   });
 
-/** One page of a pull. */
-export interface PulledPage {
+/**
+ * One page of a pull. Every page also says which collaborative playlists the
+ * account is in now and which ended for it, whatever the cursor.
+ */
+export interface PulledPage extends Membership {
   /** The rows changed after the cursor asked for, by table name. */
   readonly rows: Readonly<Record<string, readonly Readonly<Record<string, unknown>>[]>>;
   /** The change number of the page's last row: the next pull's cursor. */
@@ -203,11 +212,14 @@ export const pullRows = async (
 ): Promise<PulledPage> => {
   // One read transaction: every table is read in the same snapshot.
   const results = await db.batch(
-    SYNC_TABLES.map((table) => ({
-      sql: `SELECT * FROM ${table.sqlName}
-            WHERE account_id = ? AND change_no > ? ORDER BY change_no LIMIT ?`,
-      args: [accountId, since, pageSize + 1],
-    })),
+    [
+      ...SYNC_TABLES.map((table) => ({
+        sql: `SELECT * FROM ${table.sqlName}
+              WHERE account_id = ? AND change_no > ? ORDER BY change_no LIMIT ?`,
+        args: [accountId, since, pageSize + 1],
+      })),
+      ...membershipStatements(accountId),
+    ],
     "read",
   );
   const changed = SYNC_TABLES.flatMap((table, i) =>
@@ -222,11 +234,19 @@ export const pullRows = async (
       page.filter((change) => change.table === table).map((change) => wireRow(table, change.row)),
     ]),
   );
-  return { rows, cursor: page.at(-1)?.changeNo ?? since, more: changed.length > pageSize };
+  return {
+    rows,
+    cursor: page.at(-1)?.changeNo ?? since,
+    more: changed.length > pageSize,
+    ...readMembership(results.slice(SYNC_TABLES.length), accountId),
+  };
 };
 
-/** Deletes every row and session of [accountId], and the account. */
-export const deleteAccount = async (db: Client, accountId: string): Promise<void> => {
+/**
+ * Deletes every row and session of [accountId], and the account, at [at]. It
+ * leaves the collaborative playlists it is in, and the ones it owns end.
+ */
+export const deleteAccount = async (db: Client, accountId: string, at: number): Promise<void> => {
   await db.batch(
     [
       ...SYNC_TABLES.map((table) => ({
@@ -236,6 +256,7 @@ export const deleteAccount = async (db: Client, accountId: string): Promise<void
       { sql: "DELETE FROM soulseek_accounts WHERE account_id = ?", args: [accountId] },
       { sql: "DELETE FROM sessions WHERE account_id = ?", args: [accountId] },
       { sql: "DELETE FROM upstream_usage WHERE account_id = ?", args: [accountId] },
+      ...forgetAccountStatements(accountId, at),
       {
         sql: `DELETE FROM sign_in_windows
               WHERE key = (SELECT 'sub:' || google_sub FROM accounts WHERE id = ?)`,

@@ -6,22 +6,23 @@
 account, asks Genius and Ticketmaster for signed-in phones and deletes accounts. See "Wave
 account and sync", "Genius About" and "Followed artists" in `docs/spec.md`.
 
-| File                   | What it holds                                                           |
-| ---------------------- | ----------------------------------------------------------------------- |
-| `src/worker.ts`        | The Worker entry: builds the service from the Worker's secrets and vars |
-| `src/service.ts`       | The routes, sessions, the rate limits and the allowlist                 |
-| `src/google.ts`        | Checking a Google ID token (RS256 against Google's JWKS)                |
-| `src/store.ts`         | Push (merge and number changes), pull (pages) and account deletion      |
-| `src/soulseek.ts`      | The account's Soulseek account, its password encrypted (`SOULSEEK_KEY`) |
-| `src/proxy.ts`         | A provider's fixed requests: the cache, the provider call, its failures |
-| `src/tables.ts`        | The synced tables: wire fields, checks and columns                      |
-| `src/migrations.ts`    | The schema, as ordered migrations                                       |
-| `src/limits.ts`        | `SYNC_LIMITS` and `USAGE_WARNINGS`                                      |
-| `src/sessions.ts`      | Session expiry and the hourly deletion of expired sessions              |
-| `src/maintenance.ts`   | The hourly maintenance (the Cron Trigger): expired sessions, usage      |
-| `src/usage.ts`         | The hourly usage watch                                                  |
-| `src/compatibility.ts` | The compatibility report: current use against the selected limits       |
-| `scripts/migrate.ts`   | Runs pending migrations against `TURSO_DATABASE_URL`                    |
+| File                    | What it holds                                                           |
+| ----------------------- | ----------------------------------------------------------------------- |
+| `src/worker.ts`         | The Worker entry: builds the service from the Worker's secrets and vars |
+| `src/service.ts`        | The routes, sessions, the rate limits and the allowlist                 |
+| `src/google.ts`         | Checking a Google ID token (RS256 against Google's JWKS)                |
+| `src/store.ts`          | Push (merge and number changes), pull (pages) and account deletion      |
+| `src/collaborations.ts` | A collaborative playlist's record: owner, members, leaving and removal  |
+| `src/soulseek.ts`       | The account's Soulseek account, its password encrypted (`SOULSEEK_KEY`) |
+| `src/proxy.ts`          | A provider's fixed requests: the cache, the provider call, its failures |
+| `src/tables.ts`         | The synced tables: wire fields, checks and columns                      |
+| `src/migrations.ts`     | The schema, as ordered migrations                                       |
+| `src/limits.ts`         | `SYNC_LIMITS` and `USAGE_WARNINGS`                                      |
+| `src/sessions.ts`       | Session expiry and the hourly deletion of expired sessions              |
+| `src/maintenance.ts`    | The hourly maintenance (the Cron Trigger): expired sessions, usage      |
+| `src/usage.ts`          | The hourly usage watch                                                  |
+| `src/compatibility.ts`  | The compatibility report: current use against the selected limits       |
+| `scripts/migrate.ts`    | Runs pending migrations against `TURSO_DATABASE_URL`                    |
 
 ## API
 
@@ -228,7 +229,9 @@ The rows changed after `since`, oldest change first, at most 1,000 a page. Leave
   "notifiedShows": [NotifiedShow],
   "dismissedSuggestions": [DismissedSuggestion],
   "cursor": "1234",
-  "more": false
+  "more": false,
+  "collaborations": [Collaboration],
+  "endedCollaborations": [{ "playlistId": "…", "reason": "left", "endedAt": 1760443200000 }]
 }
 ```
 
@@ -239,6 +242,73 @@ Keep `cursor` for the next pull (it's opaque: send it back as is), and pull agai
 Each accepted change gets the account's next change number in the transaction that writes
 it, and a pull reads every table in one snapshot, so a pull never misses a change pushed
 while it runs.
+
+`collaborations` and `endedCollaborations` are not rows and have no cursor: every page states
+them whole, as they are when the pull is answered (see
+[Collaborative playlists](#collaborative-playlists)). `collaborations` lists each
+collaborative playlist the account is in. `endedCollaborations` lists the playlists the
+account was in and isn't any more, each with `reason`: `left` when the account left, `ended`
+when the owner removed it, ended the collaboration or deleted their account (the answer
+doesn't say which). An end stays in every pull until the account joins that playlist again.
+A playlist the account owned and ended is in neither list. An app from before these two keys
+reads the rest of the page as before (Core's `readPullPage` takes the tables it knows).
+
+### Collaborative playlists
+
+A playlist's collaboration record (`docs/spec.md`, Collaborative playlists; `docs/adr/0005`):
+the playlist's rows stay in the owner's account, and the record names the owner and the
+members with when each joined. The owner is a member too. A playlist id names one
+collaboration in the whole service. All five routes need the session.
+
+A `Collaboration`, with the owner first and the others in the order they joined:
+
+```json
+{
+  "playlistId": "5f0c…",
+  "members": [
+    {
+      "accountId": "0b6e…",
+      "name": "Ana Souza",
+      "joinedAt": 1760443200000,
+      "owner": true,
+      "self": true
+    }
+  ]
+}
+```
+
+`name` is the account's Google account name, `null` when the service has none; no email is
+ever given. `self` marks the account that asked. `accountId` is the service's id of the
+account, the one `DELETE /v1/collaboration/members` takes.
+
+| Route                                                         | Who                          | What it does                                                                                                  |
+| ------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `POST /v1/collaboration`, body `{ "playlistId": "…" }`        | holder                       | Makes a playlist of the session's account collaborative, with the account as owner. `200` the `Collaboration` |
+| `DELETE /v1/collaboration?playlist=<id>`                      | owner                        | Ends it: the record goes, the playlist's rows stay as they are. `204`                                         |
+| `GET /v1/collaboration/members?playlist=<id>`                 | a member                     | `200` the `Collaboration`                                                                                     |
+| `DELETE /v1/collaboration/members?playlist=<id>&account=<id>` | owner                        | Removes that member. `204`                                                                                    |
+| `DELETE /v1/collaboration/membership?playlist=<id>`           | a member who isn't the owner | Leaves. `204`                                                                                                 |
+
+Making a playlist collaborative again answers the collaboration as it is. Nothing here
+changes a synced row or a cursor: the owner's and the members' devices learn of a make, a
+removal, a leave and an end from their next pull.
+
+Refusals:
+
+- `404 { "error": "not_found" }`: `POST` for a playlist the account doesn't hold (unknown,
+  deleted or another account's); removing an account that isn't in the playlist.
+- `409 { "error": "taken" }`: `POST` for an id that names another account's collaboration.
+- `403 { "error": "not_member" }`: the playlist isn't collaborative or the account isn't in
+  it. The two answer the same.
+- `403 { "error": "not_owner" }`: ending or removing a member as a member who isn't the owner.
+- `403 { "error": "owner_cannot_leave" }`: the owner leaving, or removing itself.
+- `400 { "error": "bad_request" }`: no `playlistId`, `playlist` or `account`.
+
+Deleting an account takes it out of the playlists it is in and ends the ones it owns.
+
+Migration `0015_collaborations` adds `collaborations`, `collaboration_members` and
+`collaboration_ends`, and changes no table there was. Deploy it before an app that calls
+these routes.
 
 ### `PUT /v1/soulseek`
 
@@ -275,6 +345,7 @@ and the log names the secret; the other routes still work.
 ### `DELETE /v1/account`
 
 Deletes every row and every session of the account, its Soulseek account, and the account.
+It leaves the collaborative playlists it is in, and the ones it owns end.
 The session isn't enough: the body holds a Google ID token from a fresh sign-in.
 
 ```json
@@ -481,15 +552,18 @@ and still reads the figures. There's no route that runs it.
 
 The rows the service keeps for itself, apart from the synced Library, and what bounds each:
 
-| Table               | Bound                                                                                      |
-| ------------------- | ------------------------------------------------------------------------------------------ |
-| `usage_warnings`    | today and the 29 UTC days before, deleted by the usage watch                               |
-| `upstream_usage`    | one row per account and provider count (three today), reset by the next UTC day's request  |
-| `sign_in_windows`   | `maxSignInKeysPerMinute` keys of the current minute; a sign-in deletes older minutes' rows |
-| `sessions`          | ended by sign-out, 90 idle days or account deletion (`POST /v1/session`)                   |
-| `accounts`          | `maxAccounts`                                                                              |
-| `soulseek_accounts` | one row per account                                                                        |
-| `migrations`        | one row per migration                                                                      |
+| Table                   | Bound                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------ |
+| `usage_warnings`        | today and the 29 UTC days before, deleted by the usage watch                               |
+| `upstream_usage`        | one row per account and provider count (three today), reset by the next UTC day's request  |
+| `sign_in_windows`       | `maxSignInKeysPerMinute` keys of the current minute; a sign-in deletes older minutes' rows |
+| `sessions`              | ended by sign-out, 90 idle days or account deletion (`POST /v1/session`)                   |
+| `accounts`              | `maxAccounts`                                                                              |
+| `soulseek_accounts`     | one row per account                                                                        |
+| `migrations`            | one row per migration                                                                      |
+| `collaborations`        | one row per collaborative playlist, a live playlist of its owner when made                 |
+| `collaboration_members` | one row per collaborative playlist and account in it, so at most `maxAccounts` a playlist  |
+| `collaboration_ends`    | one row per account and playlist it was in and isn't any more; deleted with the account    |
 
 The usage watch deletes `usage_warnings` rows and nothing else. Sessions, sign-in counts,
 tombstones and synced rows are bounded by the session, sign-in and table limits above, never by

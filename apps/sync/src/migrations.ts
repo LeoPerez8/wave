@@ -273,6 +273,34 @@ const MIGRATIONS: readonly Migration[] = [
     id: "0014_account_name",
     statements: ["ALTER TABLE accounts ADD COLUMN name TEXT"],
   },
+  {
+    // A collaborative playlist's record (src/collaborations.ts): its owner, in whose account
+    // the playlist's rows stay, its members with when each joined (the owner is one), and, for
+    // an account that left or for which it ended, why and when.
+    id: "0015_collaborations",
+    statements: [
+      `CREATE TABLE collaborations (
+        playlist_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )`,
+      `CREATE INDEX collaborations_owner_idx ON collaborations (owner_id)`,
+      `CREATE TABLE collaboration_members (
+        playlist_id TEXT NOT NULL,
+        account_id TEXT NOT NULL,
+        joined_at INTEGER NOT NULL,
+        PRIMARY KEY (playlist_id, account_id)
+      )`,
+      `CREATE INDEX collaboration_members_account_idx ON collaboration_members (account_id)`,
+      `CREATE TABLE collaboration_ends (
+        account_id TEXT NOT NULL,
+        playlist_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        ended_at INTEGER NOT NULL,
+        PRIMARY KEY (account_id, playlist_id)
+      )`,
+    ],
+  },
 ];
 
 /**
