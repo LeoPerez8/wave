@@ -49,7 +49,7 @@ const list = () =>
     Array.from({ length: ROWS }, (_, i) =>
       createElement(
         SwipeableRow,
-        { key: i, swipe } as RowProps,
+        { key: i, swipe } as unknown as RowProps,
         createElement("text", null, `Song ${i}`),
       ),
     ),
@@ -94,7 +94,7 @@ test("a demo swipe draws what it uncovers", async () => {
   const row = (demo: number) =>
     createElement(
       SwipeableRow,
-      { swipe, sample: true, demo } as RowProps,
+      { swipe, sample: true, demo } as unknown as RowProps,
       createElement("text", null, "x"),
     );
   await act(() => {

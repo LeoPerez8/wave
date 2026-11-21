@@ -48,6 +48,7 @@ import { settleFirstRun, startFirstRun } from "@/sync/signInInvitation";
 import { startSync } from "@/sync/startSync";
 import { startWhatsNew } from "@/updates/whatsNew";
 import { useThemeColor } from "@/theme/useThemeColor";
+import { useStackScreenOptions } from "@/chrome/tabScreens";
 
 /** Every touch holds background work; a perf build also notes its native timestamp. */
 const onRootTouchStart = (event: GestureResponderEvent): void => {
@@ -71,6 +72,7 @@ export default function RootLayout() {
   useRenderCount("RootLayout");
   useEffect(startTimingFrameCollection, []);
   const background = useThemeColor("background");
+  const screenOptions = useStackScreenOptions();
   // The status bar follows `useColorScheme` (style "auto"); the navigation bar follows here.
   useNavigationBarScheme();
   const { granted } = useAllFilesAccess();
@@ -263,13 +265,7 @@ export default function RootLayout() {
           <StatusBar style="auto" />
           <OverlayHost>
             <UnderNowPlaying>
-              <Stack
-                screenListeners={timingStackListeners}
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: background },
-                }}
-              >
+              <Stack screenListeners={timingStackListeners} screenOptions={screenOptions}>
                 <Stack.Protected guard={granted}>
                   <Stack.Screen name="(tabs)" />
                   {/* A Recap's stories cover the whole screen, mini player and tab bar too. */}

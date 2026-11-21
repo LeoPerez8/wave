@@ -35,7 +35,7 @@ const shelf = () =>
               label: `Album ${i}`,
               onPress: noop,
               onLongPress: noop,
-            } as Parameters<typeof CardTile>[0],
+            } as unknown as Parameters<typeof CardTile>[0],
             createElement("text", null, `Album ${i}`),
           )
         : createElement(CardRow, {
@@ -89,7 +89,7 @@ test("a press shown highlighted animates from its first frame", async () => {
     renderer = create(
       createElement(
         Press,
-        { highlighted: true, onPress: noop } as Parameters<typeof Press>[0],
+        { highlighted: true, onPress: noop } as unknown as Parameters<typeof Press>[0],
         createElement("text", null, "x"),
       ),
     );
