@@ -1,5 +1,6 @@
 import {
   PLAYLIST_LAYOUTS,
+  PLAYLIST_LAYOUT_SETTING,
   parsePlaylistLayout,
   storedPlaylistLayout,
   type PlaylistLayout,
@@ -14,7 +15,7 @@ import type { ChoiceSetting } from "@/settings/ChoiceRow";
 import { playlistSortChoice } from "./playlistSort";
 
 const playlistLayout = persistedSetting<PlaylistLayout>({
-  key: "settings.playlistLayout",
+  key: PLAYLIST_LAYOUT_SETTING,
   read: parsePlaylistLayout,
   write: storedPlaylistLayout,
 });

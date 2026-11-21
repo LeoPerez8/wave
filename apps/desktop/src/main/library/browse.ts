@@ -21,6 +21,7 @@ import type { Page } from "../../shared/bridge.ts";
 import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import { ytRow } from "../../shared/yt.ts";
 import { searchSongIds } from "./search.ts";
+import { playlistListSort, sortedPlaylistIds } from "./playlistList.ts";
 import {
   playlistSongSort,
   readBrowseSort,
@@ -335,7 +336,12 @@ export const browseLibrary = (
     scope.kind === "artist" && scope.id !== undefined ? popularSongs(db, scope.id) : null;
   let total: number;
   let items: BrowseRow[];
-  if (playlist !== undefined && ownSort !== undefined && ownSort.key !== "custom") {
+  if (scope.kind === "playlists") {
+    // The Playlists list's order is Core's (`sortPlaylists`), not one SQLite has.
+    const ids = sortedPlaylistIds(db);
+    total = ids.length;
+    items = rowsById(db, source, ids.slice(offset, offset + limit));
+  } else if (playlist !== undefined && ownSort !== undefined && ownSort.key !== "custom") {
     const sorted = sortedEntries(db, playlist, ownSort);
     total = sorted.length;
     items = playlistRows(db, sorted.slice(offset, offset + limit), keepStreams);
@@ -417,6 +423,7 @@ export const browseLibrary = (
     ...(hero ? { hero } : {}),
     ...(shown ? { sort: shown } : {}),
     ...(discs.length > 0 ? { discs } : {}),
+    ...(scope.kind === "playlists" ? { listSort: playlistListSort(db) } : {}),
   };
 };
 
@@ -425,6 +432,8 @@ export const browseLetter = (
   scope: BrowseScope,
   letter: string,
 ): number | null => {
+  // The Playlists list files under its names only while it's sorted by them.
+  if (scope.kind === "playlists" && playlistListSort(db) !== "name") return null;
   const sort = readBrowseSort(db, scope.kind);
   const spine =
     // A song list files under what it's sorted by; Popular and the dates have no letters.
@@ -474,11 +483,12 @@ export const browseRowIds = (
 };
 
 /**
- * The row ids of a page whose order SQLite can't give (a sorted playlist, an artist's Popular),
- * as the page shows them: a streamed entry's is its entry id negated. Undefined when the list's
- * own query orders it.
+ * The row ids of a page whose order SQLite can't give (a sorted playlist, an artist's Popular,
+ * the Playlists list), as the page shows them: a streamed entry's is its entry id negated.
+ * Undefined when the list's own query orders it.
  */
 export const arrangedRowIds = (db: LibraryDatabase, scope: BrowseScope): number[] | undefined => {
+  if (scope.kind === "playlists") return sortedPlaylistIds(db);
   if (scope.id === undefined) return undefined;
   if (scope.kind === "playlist") {
     const sort = chosenSort(db, scope.id);

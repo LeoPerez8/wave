@@ -334,6 +334,12 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   percentage); the user's playlists with New Playlist; Settings pinned at the bottom. Back and
   forward arrows sit in the title bar. Every entry has its own icon. The sidebar scrolls as one
   when the window is short, keeping the Search field and Settings in view.
+- The Playlists page counts its playlists and has the phone's Sort by (Name, Recently Added,
+  Recently Played, Custom) and a switch between its table and a grid of covers. In Custom a row
+  or a cover drags into another's place, and a playlist's menu has Move Up and Move Down. The
+  sidebar lists playlists in the same order. As on the phone, the sort, the arranged order and
+  the layout stay on the computer (Core's `PLAYLIST_ORDER_SETTING`, `PLAYLIST_LAYOUT_SETTING`)
+  and don't sync. Large Cards reads as the grid.
 - Lyrics and the Queue share the side panel, toggled from the player bar and closed by the
   panel's own control on every tab. Now Playing (artwork,
   title, lyrics) opens from the bar's artwork or title and closes with Esc. Focus lands on Now
