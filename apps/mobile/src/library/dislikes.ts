@@ -3,7 +3,7 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@wave/client/externalStore";
 
-import { publishDisliked, publishUndisliked } from "./libraryChanges";
+import { onSavedStars, publishDisliked, publishUndisliked } from "./libraryChanges";
 import { LibraryStore } from "./LibraryStore";
 import { appRuntime } from "./runtime";
 
@@ -107,6 +107,26 @@ export const onDislikesChanged = (listener: (disliked: DislikedSongs) => void): 
     listener(keys);
   });
 };
+
+/**
+ * The store removed the dislikes kept under [keys] itself, with the stars that replace them
+ * (`setFavorites`, whoever set the star): the set loses them, with nothing left to write, and
+ * what follows the dislikes hears of it. A read on its way may have read before the store
+ * changed: it reads again.
+ */
+export const dislikesRemovedByStars = (keys: readonly string[]): void => {
+  if (keys.length === 0) return;
+  dislikes.update((state) => {
+    const next = new Set(state.keys);
+    for (const key of keys) next.delete(key);
+    return { ...state, keys: next, edits: state.edits + 1 };
+  });
+  publishUndisliked(keys);
+};
+
+// A download or scan that starred a pending favorite as it saved the song removed its dislike
+// with the star: the set is read again.
+onSavedStars(() => void reloadDislikes());
 
 /**
  * Changes the set at once ([keys] in or out of it), then runs [write]; should

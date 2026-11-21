@@ -27,7 +27,7 @@ import {
   selectTrackIdentities,
   stampPreference,
 } from "./sync.ts";
-import { selectJoinedAccount, selectUnpushed } from "./syncRows.ts";
+import { joinAccount, selectJoinedAccount, selectSyncCursor, selectUnpushed } from "./syncRows.ts";
 import {
   addTrack,
   migrateTestDatabase,
@@ -310,6 +310,27 @@ const playKeys = (db: TestDatabase) =>
     .select({ trackId: schema.playEvents.trackId, key: schema.playEvents.recordingKey })
     .from(schema.playEvents)
     .all();
+
+describe("migration 0064", () => {
+  test("a Library joined with an account pulls it from the start again, still joined", async () => {
+    const db = await openTestDatabase({ through: "0063_dislike_sync" });
+    joinAccount(db, "ana@example.com");
+    // Where a Wave from before dislikes left it, past dislikes it never read.
+    db.update(schema.syncState).set({ cursor: "42" }).run();
+
+    await migrateTestDatabase(db);
+
+    assert.equal(selectSyncCursor(db), null);
+    assert.equal(selectJoinedAccount(db), "ana@example.com");
+  });
+
+  test("a Library with no account stays without one", async () => {
+    const db = await openTestDatabase({ through: "0063_dislike_sync" });
+    await migrateTestDatabase(db);
+    assert.equal(selectJoinedAccount(db), null);
+    assert.equal(selectSyncCursor(db), null);
+  });
+});
 
 describe("migration 0019", () => {
   test("every play with a song goes up once, imported ones by BlackPlayer's ids; the latest goes on", async () => {
