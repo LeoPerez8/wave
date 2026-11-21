@@ -163,7 +163,7 @@ export const startDjMoodLookup = (): (() => void) => {
         dirty = false;
         let after = "";
         while (enabled()) {
-          await freeTurn();
+          await freeTurn("DJ mood lookup: pending songs");
           if (!enabled()) break;
           const pending = await appRuntime.runPromise(store.pendingDjMoodSongs(after, Date.now()));
           if (pending.last === null) break;
@@ -172,7 +172,7 @@ export const startDjMoodLookup = (): (() => void) => {
           const isrcs = new Map<string, string>();
           const unavailable = new Set<string>();
           for (const song of page) {
-            await freeTurn();
+            await freeTurn("DJ mood lookup: ISRCs");
             if (!enabled()) break;
             try {
               const isrc = await deezerIsrc(song);
@@ -203,7 +203,7 @@ export const startDjMoodLookup = (): (() => void) => {
           const fallbackIds = new Map<string, string>();
           const fallbackIsrcs = new Map<string, string>();
           for (const song of misses) {
-            await freeTurn();
+            await freeTurn("DJ mood lookup: search fallback");
             if (!enabled()) break;
             try {
               const id = await searchFallback(song);

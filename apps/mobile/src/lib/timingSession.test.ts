@@ -117,7 +117,10 @@ test("slow tap and screen record different milestones and summary retains thrott
   assert.equal(lines.length, 3);
   assert.match(lines[0]!, /response 120 ms, first frame 180 ms, settled 1.5 s/);
   assert.match(lines[1]!, /content 1.4 s/);
-  assert.match(lines[2]!, /1 taps; push 1 median 120 ms p90 120 ms/);
+  assert.match(
+    lines[2]!,
+    /1 taps; push 1 first frame median 180 ms p90 180 ms, response median 120 ms p90 120 ms/,
+  );
   at(2000);
   const second = session.begin("tab", "/songs");
   at(2020);
@@ -132,7 +135,10 @@ test("slow tap and screen record different milestones and summary retains thrott
   wallAt(base + 300000);
   session.leave();
   assert.equal(lines.length, 4);
-  assert.match(lines[3]!, /tab 1 median 20 ms p90 20 ms/);
+  assert.match(
+    lines[3]!,
+    /tab 1 first frame median 20 ms p90 20 ms, response median 20 ms p90 20 ms/,
+  );
   wallAt(base + 600000);
   session.leave();
   assert.equal(lines.length, 4);
@@ -149,7 +155,7 @@ test("cold-launch screens settle without a fake tap or summary", () => {
   assert.equal(session.isSettled(), true);
   session.leave();
   assert.deepEqual(lines, [
-    "Slow screen /: first frame 20 ms, content 401 ms (budget 150 ms / 400 ms); reads: none",
+    "Slow screen /: first frame 20 ms, content 401 ms (budget 50 ms / 400 ms); reads: none",
   ]);
 });
 
@@ -262,7 +268,10 @@ test("rapidly superseded taps still count without inventing response timestamps"
   session.leave();
   assert.match(lines[0]!, /2 taps/);
   assert.match(lines[0]!, /push 1 response not observed/);
-  assert.match(lines[0]!, /tab 1 median 20 ms p90 20 ms/);
+  assert.match(
+    lines[0]!,
+    /tab 1 first frame median 20 ms p90 20 ms, response median 20 ms p90 20 ms/,
+  );
 });
 
 test("a measured response survives cancellation even when the screen never finished", () => {
@@ -278,7 +287,7 @@ test("a measured response survives cancellation even when the screen never finis
   session.content(last);
   session.end(last);
   session.leave();
-  assert.match(lines[0]!, /push 1 median 101 ms p90 101 ms/);
+  assert.match(lines[0]!, /push 1 response median 101 ms p90 101 ms/);
   assert.match(lines[0]!, /slow 1/);
 });
 
@@ -391,6 +400,18 @@ test("a press whose JS was blocked counts from its touch, however late JS heard 
   assert.match(h.lines[0]!, /^Slow pop to \/playlists from \/: response 820 ms/);
 });
 
+test("a touch delayed over a minute behind blocked JS still counts from its native timestamp", () => {
+  const h = setup();
+  h.at(70_000);
+  h.session.touch(10);
+  h.at(70_005);
+  h.session.touchEnded();
+  h.at(70_010);
+  const id = h.session.beginTouched("pop", "/playlists");
+  finishPop(h, id, 70_010);
+  assert.match(h.lines[0]!, /response 70\.0 s, first frame 70\.0 s/);
+});
+
 test("a press handled before the root hears the lift leaves no touch behind", () => {
   const h = setup();
   h.at(100);
@@ -436,13 +457,24 @@ test("an on-screen press counts from its touch, which it uses up", () => {
   assert.deepEqual(h.lines, []);
 });
 
-test("a touch stamped in another clock or a minute ago counts as now", () => {
-  for (const stamp of [1_700_000_000_000, 1000]) {
-    const h = setup();
-    h.at(100_000);
-    h.session.touch(stamp);
-    const id = h.session.beginTouched("pop", "/playlists");
-    finishPop(h, id, 100_000);
-    assert.deepEqual(h.lines, []);
-  }
+test("a future timestamp from another clock counts from the JS event", () => {
+  const h = setup();
+  h.at(100_000);
+  h.session.touch(1_700_000_000_000);
+  const id = h.session.beginTouched("pop", "/playlists");
+  finishPop(h, id, 100_000);
+  assert.deepEqual(h.lines, []);
+});
+
+test("a touch JS heard over a minute ago, still held, makes nothing that begins now", () => {
+  const h = setup();
+  h.at(100);
+  h.session.touch(100);
+  h.at(60_099);
+  assert.equal(h.session.hasTouch(), true);
+  h.at(60_100);
+  assert.equal(h.session.hasTouch(), false);
+  const id = h.session.beginTouched("pop", "/playlists");
+  finishPop(h, id, 60_100);
+  assert.deepEqual(h.lines, []);
 });

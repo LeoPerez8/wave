@@ -20,6 +20,7 @@ import { songHasFile, type SongRow } from "@wave/client";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
+import { freeTurn } from "@/lib/backgroundWork";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { appendDiscoverSongs, playDiscoverSongs } from "@/playback/actions";
@@ -101,6 +102,8 @@ const addReleases = async (
   for (const source of sources) {
     const title = cards.find((r) => r.key === source.key)?.title ?? "";
     const songs = await songsOf(source, title);
+    // Once the first release plays, the rest are added in the background, each on a free turn.
+    if (started) await freeTurn("new-release play");
     const step = followPlayStep(
       { started, context: queueState.get().context, id },
       playableCount(songs),

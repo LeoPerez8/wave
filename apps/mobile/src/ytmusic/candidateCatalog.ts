@@ -25,19 +25,21 @@ const noteCandidates = (page: CatalogPage): Effect.Effect<void, never, LibrarySt
     if (page.songs.length === 0) return;
     const store = yield* LibraryStore;
     const at = Date.now();
-    whenFree(() =>
-      Effect.runFork(
-        store
-          .addCandidates(page, at)
-          .pipe(
-            Effect.andThen(
-              Effect.promise(() =>
-                import("@/dj/djMoodLookup").then((module) => module.requestDjMoodFill()),
+    whenFree(
+      () =>
+        Effect.runFork(
+          store
+            .addCandidates(page, at)
+            .pipe(
+              Effect.andThen(
+                Effect.promise(() =>
+                  import("@/dj/djMoodLookup").then((module) => module.requestDjMoodFill()),
+                ),
               ),
+              Effect.ignore,
             ),
-            Effect.ignore,
-          ),
-      ),
+        ),
+      "candidate catalog",
     );
   });
 

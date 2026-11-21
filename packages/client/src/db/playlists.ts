@@ -47,6 +47,7 @@ import {
   countPageRead,
   countSummarized,
 } from "./playlistWork.ts";
+import { keptPlaylistPlays } from "./keptPlayTotals.ts";
 import * as schema from "./schema.ts";
 import { stamped } from "./sync.ts";
 import { filePath, hasFile, inScope, songColumns, type TrackScope } from "./tracks.ts";
@@ -959,6 +960,7 @@ export const selectUnsearchedEntries = (db: LibraryDatabase): PlaylistUnsearched
 export const selectPlaylistEntryVideoIdsPage = (
   db: LibraryDatabase,
   after: number,
+  whole = false,
 ): VideoPage<number> => {
   const { playlists, playlistItems, tracks } = schema;
   const rows = db.all<{ id: number; videoId: unknown }>(sql`
@@ -969,12 +971,17 @@ export const selectPlaylistEntryVideoIdsPage = (
       THEN ${storedVideoId} END AS videoId
     FROM ${playlistItems} JOIN ${playlists} ON ${playlists.id} = ${playlistItems.playlistId}
     WHERE ${playlistItems.id} > ${after}
-    ORDER BY ${playlistItems.id} LIMIT ${VIDEO_PAGE_ROWS}`);
+    ORDER BY ${playlistItems.id} ${whole ? sql`` : sql`LIMIT ${VIDEO_PAGE_ROWS}`}`);
   return {
     videos: videoIdsOf(rows),
-    next: rows.at(-1)?.id ?? null,
+    next: whole ? null : (rows.at(-1)?.id ?? null),
   };
 };
+
+/** Every page of `selectPlaylistEntryVideoIdsPage` in one statement, each video once (#1351). */
+export const selectPlaylistEntryVideoIds = (db: LibraryDatabase): string[] => [
+  ...new Set(selectPlaylistEntryVideoIdsPage(db, 0, true).videos),
+];
 
 /**
  * The YT Music songs the owner's playlists hold as [videoIds], one per video
@@ -1393,6 +1400,12 @@ const entriesTotals = (entries: readonly PlaylistEntry[]): PlaylistTotals => {
 /** Playlists the owner has: not deleted (tombstones). */
 const livePlaylist = eq(schema.playlists.deleted, false);
 
+/** Plays whose context is a playlist. */
+const playedFromPlaylist = and(
+  eq(schema.playEvents.contextType, "playlist"),
+  isNotNull(schema.playEvents.contextId),
+);
+
 /**
  * When a song last started playing from each playlist (a play whose context
  * is the playlist, streamed songs' included), by playlist id, for sorting the Playlists list by Recently
@@ -1403,7 +1416,7 @@ export const selectPlaylistsLastPlayed = (db: LibraryDatabase): Map<number, numb
   const rows = db
     .select({ id: playEvents.contextId, at: sql<number>`max(${playEvents.startedAt})` })
     .from(playEvents)
-    .where(and(eq(playEvents.contextType, "playlist"), isNotNull(playEvents.contextId)))
+    .where(playedFromPlaylist)
     .groupBy(playEvents.contextId)
     .all();
   const lastPlayed = new Map<number, number>();
@@ -1425,19 +1438,22 @@ export const selectPlaylistsLastPlayed = (db: LibraryDatabase): Map<number, numb
 export const selectPlaylistPlays = (db: LibraryDatabase, now: number): PlaylistPlays[] => {
   const { playEvents } = schema;
   const recent = sql`${playEvents.startedAt} >= ${recentWindowStart(now)} AND ${playEvents.startedAt} <= ${now}`;
-  const rows = db
-    .select({
-      contextId: playEvents.contextId,
-      recentPlays: sql<number>`coalesce(sum(CASE WHEN ${playEvents.counted} AND ${recent} THEN 1 ELSE 0 END), 0)`,
-      plays: sql<number>`coalesce(sum(${playEvents.counted}), 0)`,
-      latestPlayAt: sql<
-        number | null
-      >`max(CASE WHEN ${playEvents.counted} THEN ${playEvents.startedAt} END)`,
-    })
-    .from(playEvents)
-    .where(and(eq(playEvents.contextType, "playlist"), isNotNull(playEvents.contextId)))
-    .groupBy(playEvents.contextId)
-    .all();
+  // The kept counts (#1349), or summed from the plays until an upgrade seeds them.
+  const rows =
+    keptPlaylistPlays(db, { from: recentWindowStart(now), to: now }) ??
+    db
+      .select({
+        contextId: playEvents.contextId,
+        recentPlays: sql<number>`coalesce(sum(CASE WHEN ${playEvents.counted} AND ${recent} THEN 1 ELSE 0 END), 0)`,
+        plays: sql<number>`coalesce(sum(${playEvents.counted}), 0)`,
+        latestPlayAt: sql<
+          number | null
+        >`max(CASE WHEN ${playEvents.counted} THEN ${playEvents.startedAt} END)`,
+      })
+      .from(playEvents)
+      .where(playedFromPlaylist)
+      .groupBy(playEvents.contextId)
+      .all();
   // Two spellings of one number ("7", "07") are one playlist.
   const byPlaylist = new Map<number, PlaylistPlays>();
   for (const { contextId, recentPlays, plays, latestPlayAt } of rows) {

@@ -20,6 +20,7 @@ import {
 import { and, desc, eq, gt, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
 
 import type { AlbumRow, SongRow } from "../types.ts";
+import { settlePlayWrite } from "./keptPlayTotals.ts";
 import type { LibraryDatabase } from "./database.ts";
 import { removeDislikes } from "./dislikes.ts";
 import * as schema from "./schema.ts";
@@ -110,7 +111,7 @@ export const recordPlay = (
             .where(eq(tracks.id, Number(play.trackId)))
             .get()
         : undefined;
-    return tx
+    const id = tx
       .insert(playEvents)
       .values({
         trackId: videoId === null ? Number(play.trackId) : null,
@@ -152,20 +153,27 @@ export const recordPlay = (
       })
       .returning({ id: playEvents.id })
       .get().id;
+    // The kept totals (#1349) count and credit the play's song within the write when they can.
+    settlePlayWrite(tx);
+    return id;
   });
 
 /** Brings a recorded play up to date: listened time, length, how it ended (so far), counted. */
-export const updatePlay = (db: LibraryDatabase, id: number, play: PlayEvent): void => {
-  db.update(schema.playEvents).set(progress(play)).where(eq(schema.playEvents.id, id)).run();
-};
+export const updatePlay = (db: LibraryDatabase, id: number, play: PlayEvent): void =>
+  db.transaction((tx) => {
+    tx.update(schema.playEvents).set(progress(play)).where(eq(schema.playEvents.id, id)).run();
+    settlePlayWrite(tx);
+  });
 
 /** Records how a play ended: it no longer changes, so it can go to the Wave account. */
-export const endPlay = (db: LibraryDatabase, id: number, play: PlayEvent): void => {
-  db.update(schema.playEvents)
-    .set({ ...progress(play), ongoing: false })
-    .where(eq(schema.playEvents.id, id))
-    .run();
-};
+export const endPlay = (db: LibraryDatabase, id: number, play: PlayEvent): void =>
+  db.transaction((tx) => {
+    tx.update(schema.playEvents)
+      .set({ ...progress(play), ongoing: false })
+      .where(eq(schema.playEvents.id, id))
+      .run();
+    settlePlayWrite(tx);
+  });
 
 /** A recorded play with its row id. */
 export interface RecordedPlay {

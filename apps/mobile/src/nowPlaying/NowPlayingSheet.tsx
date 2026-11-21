@@ -84,6 +84,7 @@ import {
 import { onRelatedOpened } from "./openRelated";
 import { EditSlot, SlotButton, SlotDragPreview, type SlotContext } from "./SlotButtons";
 import { useNowPlayingSlotDrag } from "./slotDrag";
+import { useWarmPanes } from "./useWarmPanes";
 import { usePlayingSongMenu } from "./songMenuSlots";
 import { EDITING_OPACITY, Transport } from "./Transport";
 import {
@@ -243,7 +244,7 @@ export function NowPlayingSheet() {
   const [view, setView] = useState<NowPlayingView>("player");
   const ytMusic = useYtMusicEnabled();
   const showPlayer = useCallback(() => setView("player"), []);
-  // The player and the Queue, side by side; the Queue stays mounted once shown (`QueuePane`).
+  // The player and the Queue, side by side; the Queue mounts as `useWarmPanes` says.
   // Related rises over them.
   const pages = useScreenPages();
   const { screen, editing, page, turning, send } = pages;
@@ -268,6 +269,20 @@ export function NowPlayingSheet() {
     [riseEnabled, related, relatedRiseBegan, relatedRiseEnded],
   );
   const { videoId, findAgain } = usePlayingVideoId(relatedMounted ? trackId : null, ytSong);
+  // Once Now Playing has settled open, the Queue and Related's panel mount hidden (`Activity`,
+  // drawn at low priority), so a first swipe or rise finds them drawn (#1380). Closed, they
+  // unmount a few seconds later, or at a memory warning, so track changes don't re-render them.
+  const warm = useWarmPanes(shown, settled);
+  // Before then, only a Queue that is showing, or a swipe toward it, mounts it.
+  const queueMounted = warm || (shown && (screen === "queue" || page === "queue" || turning));
+  // Related opens fresh each time, as when it mounted on opening: a panel that has left is
+  // replaced, hidden, by a new one.
+  const [relatedGeneration, setRelatedGeneration] = useState(0);
+  const [relatedWasMounted, setRelatedWasMounted] = useState(relatedMounted);
+  if (relatedWasMounted !== relatedMounted) {
+    setRelatedWasMounted(relatedMounted);
+    if (!relatedMounted) setRelatedGeneration((generation) => generation + 1);
+  }
   const playerPageInSight = (page === "player" || turning) && !covered;
   const leaveQueue = useCallback(() => void send({ type: "headerTap" }), [send]);
   // Where the pages sit on the sheet, for the Queue's sticky bar.
@@ -281,6 +296,15 @@ export function NowPlayingSheet() {
     if (screen !== "queue") return;
     const active = activeTiming();
     if (active?.kind === "queue") timingSurfaceCommitted(active.id);
+  }, [screen]);
+  useLayoutEffect(() => {
+    const active = activeTiming();
+    if (
+      active !== null &&
+      ((screen === "related" && active.kind === "relatedOpen") ||
+        (screen !== "related" && active.kind === "relatedClose"))
+    )
+      timingSurfaceCommitted(active.id);
   }, [screen]);
   // A streamed song downloaded since it was queued: Lyrics reads its file, as for a Library song.
   const downloaded = useDownloadedFile(ytSong);
@@ -470,7 +494,7 @@ export function NowPlayingSheet() {
         </DismissArea>
 
         <View className="flex-1" onLayout={(event) => setPagesTop(event.nativeEvent.layout.y)}>
-          {item !== null && pages.queueMounted && (
+          {item !== null && queueMounted && (
             <ScreenPage screen="queue" pages={pages} swipes={pageSwipesEnabled}>
               <Activity
                 mode={(page === "queue" || turning) && !covered ? "visible" : "hidden"}
@@ -569,11 +593,20 @@ export function NowPlayingSheet() {
           </ScreenPage>
         </View>
       </View>
-      {/* Related, over the header, the pages and the controls; mounted while it shows or moves. */}
-      {item !== null && relatedMounted && (
-        <RelatedPanel pages={pages} ground={ground}>
-          <RelatedView item={item} videoId={videoId} findAgain={findAgain} pages={pages} />
-        </RelatedPanel>
+      {/*
+       * Related, over the header, the pages and the controls; drawn while it shows or moves,
+       * hidden otherwise once Now Playing has settled.
+       */}
+      {item !== null && ytMusic && (relatedMounted || warm) && (
+        <Activity
+          key={relatedGeneration}
+          mode={relatedMounted ? "visible" : "hidden"}
+          name={strings.playbackText.related}
+        >
+          <RelatedPanel pages={pages} ground={ground}>
+            <RelatedView item={item} videoId={videoId} findAgain={findAgain} pages={pages} />
+          </RelatedPanel>
+        </Activity>
       )}
       {/* The lyrics card's preview, over the whole sheet (Share in the Lyrics view). */}
       <LyricCardLayer />

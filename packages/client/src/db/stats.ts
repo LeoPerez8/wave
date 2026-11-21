@@ -27,6 +27,7 @@ import { and, eq, gte, inArray, isNotNull, lte, sql, type SQL } from "drizzle-or
 
 import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
+import { keptCreditedPlayTotals, keptSongPlayTotals } from "./keptPlayTotals.ts";
 import * as schema from "./schema.ts";
 
 /** Counted plays, streamed ones too, that started within `window`. */
@@ -63,6 +64,10 @@ const playSong = sql`coalesce(play_events.track_id,
  * it. Songs that left the Library drop out, as in `trackPlayTotals`.
  */
 export const songPlayTotals = (db: LibraryDatabase, window: StatsWindow): SongPlayTotals[] =>
+  keptSongPlayTotals(db, window) ?? summedSongPlayTotals(db, window);
+
+/** `songPlayTotals` summed from the plays: what the kept totals are checked against and read while they settle. */
+export const summedSongPlayTotals = (db: LibraryDatabase, window: StatsWindow): SongPlayTotals[] =>
   db
     .all<{
       trackId: number | null;
@@ -172,6 +177,13 @@ const playsUpTo = (to: number): SQL => sql`
  * those are in the library.
  */
 export const creditedPlayTotals = (
+  db: LibraryDatabase,
+  window: StatsWindow,
+): CreditedPlayTotals[] =>
+  keptCreditedPlayTotals(db, window) ?? summedCreditedPlayTotals(db, window);
+
+/** `creditedPlayTotals` summed from the plays: what the kept totals are checked against and read while they settle. */
+export const summedCreditedPlayTotals = (
   db: LibraryDatabase,
   window: StatsWindow,
 ): CreditedPlayTotals[] =>

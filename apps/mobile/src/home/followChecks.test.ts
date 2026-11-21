@@ -51,6 +51,8 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
   export const WaveNative = {};
   export const currentLocalisation = () => ({});
   export const settledTurnEffect = Effect.void;
+  export const freeTurnEffect = Effect.void;
+  export const namedWork = () => (effect) => effect;
   export const withSearchTurn = (_kind, _query, read) => read;
   export const appRuntime = {};
 `)}`;

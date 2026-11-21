@@ -11,6 +11,7 @@ import { migrateDatabase } from "../database.ts";
 import initSqlJs from "sql.js";
 
 import { configureConnection } from "./connection.ts";
+import type { AsyncSqlite } from "./offThreadReads.ts";
 import { creditSplits, relinkCreditsIfUnlinked } from "./credits.ts";
 import migrations from "./migrations.ts";
 import { setFavorites, writeFavorites, type MostPlayedRow } from "./playHistory.ts";
@@ -20,6 +21,7 @@ import { keyRecordings } from "./sync.ts";
 export type TestDatabase = Awaited<ReturnType<typeof openTestDatabase>>;
 
 type SqlJsClient = InstanceType<Awaited<ReturnType<typeof initSqlJs>>["Database"]>;
+type SqlJsStatement = ReturnType<SqlJsClient["prepare"]>;
 
 /** Each test database's sql.js client, for `traceQueries`. */
 const clients = new WeakMap<object, SqlJsClient>();
@@ -673,4 +675,50 @@ const hasCredits = (db: TestDatabase): boolean =>
 export const libraryRow = (row: MostPlayedRow) => {
   if (row.source !== "library") throw new Error(`streamed ${row.song.videoId} in Most Played`);
   return { ...row.track, playCount: row.playCount };
+};
+
+/** [run]'s result a turn later, as a native call settles. */
+const later = <A>(run: () => A): Promise<A> =>
+  new Promise((resolve, reject) =>
+    setImmediate(() => {
+      try {
+        resolve(run());
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    }),
+  );
+
+/**
+ * [db]'s sql.js client behind expo-sqlite's asynchronous API, as a read
+ * connection opens it on the phone (`readConnections`). Every call settles a
+ * turn later, so replayed reads really wait; the rows are [db]'s own.
+ */
+export const asyncReadClient = (db: TestDatabase): AsyncSqlite => {
+  const client = clients.get(db);
+  if (client === undefined) throw new Error("not a test database");
+  const rows = <Row>(sql: string, params: unknown[], row: (s: SqlJsStatement) => Row) =>
+    later(() => {
+      const statement = client.prepare(sql);
+      try {
+        statement.bind(params as Parameters<SqlJsStatement["bind"]>[0]);
+        const all: Row[] = [];
+        while (statement.step()) all.push(row(statement));
+        return { getAllAsync: () => Promise.resolve(all) };
+      } finally {
+        statement.free();
+      }
+    });
+  return {
+    // The sql.js database is the main connection too: a read connection's
+    // transaction control and settings (`query_only`) would change the test's
+    // own connection, so they stay out.
+    execAsync: () => later(() => {}),
+    prepareAsync: (sql) =>
+      later(() => ({
+        executeAsync: (params) => rows(sql, params, (s) => s.getAsObject()),
+        executeForRawResultAsync: (params) => rows(sql, params, (s) => s.get()),
+        finalizeAsync: () => Promise.resolve(),
+      })),
+  };
 };

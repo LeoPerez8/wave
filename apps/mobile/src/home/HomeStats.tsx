@@ -5,7 +5,7 @@ import { Text, View } from "react-native";
 import { Hairline } from "@/catalog/Hairline";
 import { TitledSection } from "@/catalog/TitledSection";
 import { useStatsFacts } from "@/library/hooks";
-import { HomeSectionSkeleton } from "./HomeSectionSkeleton";
+import { HomeSectionSpace } from "./HomeSectionSpace";
 import { StatsFactRow } from "./StatsFactRow";
 import { statsSeeAllAction } from "./statsSeeAllAction";
 
@@ -13,7 +13,7 @@ import { statsSeeAllAction } from "./statsSeeAllAction";
 export function HomeStats() {
   const { strings } = useLocalisation();
   const facts = useStatsFacts();
-  if (facts === undefined) return <HomeSectionSkeleton id="stats" />;
+  if (facts === undefined) return <HomeSectionSpace id="stats" />;
   return (
     <TitledSection title={strings.home.sections.stats} action={statsSeeAllAction(strings)}>
       <View>

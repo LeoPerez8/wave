@@ -42,11 +42,11 @@ describe("tabs kept mounted", () => {
 });
 
 describe("how hidden tabs are kept (chosen at bundle time, for the comparison)", () => {
-  test("by default, as before: out of the window, display none, not frozen, the whole bar kept", () => {
+  test("by default a hidden tab is out of the window, display none and frozen, the whole bar kept (#1358)", () => {
     assert.deepEqual(parseTabScreens(undefined), {
       detach: true,
       keepLayout: false,
-      freeze: false,
+      freeze: true,
       followHidden: false,
       retain: 5,
     });
@@ -61,6 +61,7 @@ describe("how hidden tabs are kept (chosen at bundle time, for the comparison)",
       followHidden: false,
       retain: 3,
     });
+    assert.deepEqual(parseTabScreens("thaw"), { ...parseTabScreens(undefined), freeze: false });
     assert.deepEqual(parseTabScreens("attach"), {
       detach: false,
       keepLayout: false,
@@ -82,6 +83,12 @@ describe("how hidden tabs are kept (chosen at bundle time, for the comparison)",
 
   test("only a detached tab can freeze (react-native-screens freezes only the screens it manages)", () => {
     assert.equal(parseTabScreens("attach,freeze").freeze, false);
+    assert.equal(parseTabScreens("attach").freeze, false);
+  });
+
+  test("a later choice wins: thaw then freeze freezes", () => {
+    assert.equal(parseTabScreens("thaw freeze").freeze, true);
+    assert.equal(parseTabScreens("freeze,thaw").freeze, false);
   });
 
   test("anything unknown or out of range is left at its default", () => {
@@ -94,9 +101,15 @@ describe("how hidden tabs are kept (chosen at bundle time, for the comparison)",
     assert.deepEqual(parseTabScreens(describeTabScreens(screens)), screens);
     const attached = parseTabScreens("attach");
     assert.deepEqual(parseTabScreens(describeTabScreens(attached)), attached);
-    assert.equal(describeTabScreens(parseTabScreens(undefined)), "detach,display-none,retain=5");
+    assert.equal(
+      describeTabScreens(parseTabScreens(undefined)),
+      "detach,display-none,freeze,retain=5",
+    );
+    const thawed = parseTabScreens("thaw");
+    assert.equal(describeTabScreens(thawed), "detach,display-none,thaw,retain=5");
+    assert.deepEqual(parseTabScreens(describeTabScreens(thawed)), thawed);
     const following = parseTabScreens("follow");
-    assert.equal(describeTabScreens(following), "detach,display-none,follow,retain=5");
+    assert.equal(describeTabScreens(following), "detach,display-none,freeze,follow,retain=5");
     assert.deepEqual(parseTabScreens(describeTabScreens(following)), following);
   });
 });

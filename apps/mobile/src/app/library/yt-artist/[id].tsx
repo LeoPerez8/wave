@@ -66,7 +66,7 @@ import { SongList } from "@/songs/SongList";
 import { occurrenceKeys } from "@/songs/songRowState";
 import { ytArtistNote, YtReleaseTile } from "@/ytmusic/YtArtistSection";
 import { useLocalisation } from "@/localisation/localisation";
-import { YT_ARTIST_BY_NAME } from "@/ytmusic/routes";
+import { useOpenedArtistCover, YT_ARTIST_BY_NAME } from "@/ytmusic/routes";
 
 type Song = DiscoverSong<NativeYtSong, SongRow>;
 type Release = YtArtistRelease<AlbumRow>;
@@ -133,7 +133,7 @@ function ReleaseRow({
   const releases = useMemo(() => ytAlbumSelectionOf(selection), [selection]);
   return (
     <View style={{ height: SHELF_ROW }}>
-      <CoverRow>
+      <CoverRow staged>
         {covers.map(({ kind, release: { album, library } }) =>
           library === null ? (
             <YtReleaseTile
@@ -163,7 +163,18 @@ function ReleaseRow({
 }
 
 /** The artist's image from YouTube Music as a large circle, else their initial. */
-function YtArtistImage({ name, uri, size }: { name: string; uri: string | null; size: number }) {
+function YtArtistImage({
+  name,
+  uri,
+  held,
+  size,
+}: {
+  name: string;
+  uri: string | null;
+  /** The cover drawn before [uri], held until it decodes so the head never blanks. */
+  held: string | null;
+  size: number;
+}) {
   const secondary = useThemeColor("secondary");
   const fill = useThemeColor("fill");
   const circle = { width: size, height: size, borderRadius: size / 2 };
@@ -171,6 +182,8 @@ function YtArtistImage({ name, uri, size }: { name: string; uri: string | null; 
     return (
       <Image
         source={{ uri }}
+        placeholder={held === null || held === uri ? undefined : { uri: held }}
+        placeholderContentFit="cover"
         style={[circle, { backgroundColor: fill }]}
         contentFit="cover"
         accessibilityIgnoresInvertColors
@@ -204,12 +217,14 @@ function Head({
   browseId,
   name,
   artworkUrl,
+  cover,
   loading,
   onPlay,
 }: {
   browseId: string | null;
   name: string | null;
   artworkUrl: string | null;
+  cover: string | null;
   loading: boolean;
   onPlay: ((shuffle: boolean) => void) | null;
 }) {
@@ -223,7 +238,7 @@ function Head({
         {loading && artworkUrl === null ? (
           <HiddenSkeletonBox width={size} height={size} radius={size / 2} />
         ) : (
-          <YtArtistImage name={name ?? ""} uri={artworkUrl} size={size} />
+          <YtArtistImage name={name ?? ""} uri={artworkUrl} held={cover} size={size} />
         )}
         {name === null ? (
           // A title line (global.css's title1), its bar centred under the circle.
@@ -285,8 +300,10 @@ function QuietLine({
 /** The page's list, inside the screen's `CompactTitleFrame`. */
 function YtArtistList({
   page: { view, similar, retry, browseId, name, contextId },
+  cover,
 }: {
   page: ReturnType<typeof useYtArtistPage>;
+  cover: string | null;
 }) {
   const { strings } = useLocalisation();
   const scrollable = useListScrollable();
@@ -338,7 +355,8 @@ function YtArtistList({
   );
   // Until the artist's page is in, skeletons hold its place (the view waits on the Library first).
   const loading = view === null || view.note === "loading";
-  const artworkUrl = view?.artworkUrl ?? null;
+  // The page's own image once it's read, else the cover the tapped tile drew.
+  const artworkUrl = view?.artworkUrl ?? cover;
   const header = useMemo(
     () =>
       name === null && !loading ? null : (
@@ -346,11 +364,12 @@ function YtArtistList({
           name={name}
           browseId={browseId}
           artworkUrl={artworkUrl}
+          cover={cover}
           loading={loading}
           onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
         />
       ),
-    [name, browseId, artworkUrl, loading, songs.length, play],
+    [name, browseId, artworkUrl, cover, loading, songs.length, play],
   );
   const footer = useMemo(
     () =>
@@ -451,11 +470,12 @@ export default function YtArtistScreen() {
   const browseId = params.id === YT_ARTIST_BY_NAME ? null : (params.id ?? "");
   const knownName = params.name === undefined || params.name === "" ? null : params.name;
   const page = useYtArtistPage(browseId, knownName, params.offline === "1");
+  const cover = useOpenedArtistCover(browseId);
   return (
     <CompactTitleFrame title={page.name ?? undefined}>
       <View className="flex-1 bg-background">
         <ScreenHeader />
-        <YtArtistList page={page} />
+        <YtArtistList page={page} cover={cover} />
       </View>
     </CompactTitleFrame>
   );

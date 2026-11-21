@@ -72,6 +72,10 @@ export interface DragCells {
 /** What a cell calls as its item is dragged. */
 export interface DragHandlers {
   readonly onDragBegin: (index: number) => void;
+  /**
+   * A worklet, on the UI thread: finds where the item would land and calls JS
+   * only when that changes (Performance rule 7).
+   */
   readonly onDragMove: (dx: number, dy: number) => void;
   readonly onDrop: (canceled: boolean) => void;
 }
@@ -111,9 +115,13 @@ export const useListDrag = ({
   const rowCount = Math.ceil(count / columns);
   const countRef = useRef(count);
   const moveRef = useRef(move);
+  // The item count as the UI thread reads it, and the place it last told JS of (-1 between drags).
+  const itemCount = useSharedValue(count);
+  const told = useSharedValue(-1);
   useLayoutEffect(() => {
     countRef.current = count;
     moveRef.current = move;
+    itemCount.set(count);
   });
 
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
@@ -171,6 +179,7 @@ export const useListDrag = ({
   const resetAfterRender = useRef(false);
 
   const endDrag = () => {
+    told.set(-1);
     drag.active.set(-1);
     drag.hover.set(-1);
     drag.dragX.set(0);
@@ -184,29 +193,38 @@ export const useListDrag = ({
     endDrag();
   });
 
-  const onDragMove = (dx: number, dy: number) => {
+  // Where an item dragged from [start] by (dx, dy) lands: the same choice on the UI thread and here.
+  const targetOf = (start: number, dx: number, dy: number, count: number): number => {
+    "worklet";
+    return columns === 1
+      ? reorderTarget({ from: start, distance: dy, rowHeight, count })
+      : reorderGridTarget({
+          from: start,
+          dx,
+          dy,
+          cellWidth: cells.width,
+          cellHeight: rowHeight,
+          columns,
+          count,
+        });
+  };
+
+  const landOn = (dx: number, dy: number) => {
     if (from.current < 0) return;
-    const next =
-      columns === 1
-        ? reorderTarget({
-            from: from.current,
-            distance: dy,
-            rowHeight,
-            count: countRef.current,
-          })
-        : reorderGridTarget({
-            from: from.current,
-            dx,
-            dy,
-            cellWidth: cells.width,
-            cellHeight: rowHeight,
-            columns,
-            count: countRef.current,
-          });
+    const next = targetOf(from.current, dx, dy, countRef.current);
     if (next === target.current) return;
     target.current = next;
     drag.hover.set(next);
     void Haptics.selectionAsync();
+  };
+  const onDragMove = (dx: number, dy: number) => {
+    "worklet";
+    const start = drag.active.get();
+    if (start === -1) return;
+    const next = targetOf(start, dx, dy, itemCount.get());
+    if (next === (told.get() === -1 ? start : told.get())) return;
+    told.set(next);
+    scheduleOnRN(landOn, dx, dy);
   };
 
   // Near the top or bottom edge, the dragged item scrolls the list, faster the
@@ -230,7 +248,7 @@ export const useListDrag = ({
     scrollTo(scrollRef, 0, next, false);
     drag.scroll.set(next);
     drag.dragY.set(drag.translation.get() + next - drag.startScroll.get());
-    scheduleOnRN(onDragMove, drag.dragX.get(), drag.dragY.get());
+    onDragMove(drag.dragX.get(), drag.dragY.get());
   }, false);
 
   const onDragBegin = (index: number) => {
@@ -346,7 +364,7 @@ export const useDragCell = ({
       fingerY.set(event.absoluteY);
       dragX.set(columns > 1 ? event.translationX : 0);
       dragY.set(event.translationY + scroll.get() - startScroll.get());
-      scheduleOnRN(onDragMove, dragX.get(), dragY.get());
+      onDragMove(dragX.get(), dragY.get());
     },
     onDeactivate: (event) => {
       "worklet";

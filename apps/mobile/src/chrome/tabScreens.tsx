@@ -14,11 +14,13 @@ import { Screen } from "react-native-screens";
 import { PERF_ENABLED, perfMark, registerPerfMeta } from "@/perf/perf";
 
 /**
- * How hidden tabs are kept (#304). As before by default: taken out of the
- * window and hidden with `display: none`, not frozen. A bundle built with
- * `EXPO_PUBLIC_WAVE_TABS` (e.g. `keep-layout`, `attach`, `freeze`,
- * `retain=3`) picks another, for the phone comparison in
- * docs/performance/304-warmed-tabs.md.
+ * How hidden tabs are kept (#304). By default: taken out of the window, hidden
+ * with `display: none` and frozen (#1358), so a hidden tab renders nothing; the
+ * updates it missed render once when it shows again, and its stores already
+ * paused (`useSightedStore`) catch up then. A bundle built with
+ * `EXPO_PUBLIC_WAVE_TABS` (e.g. `keep-layout`, `attach`, `thaw`, `retain=3`)
+ * picks another, for the phone comparison in docs/performance/304-warmed-tabs.md.
+ * `perf/memoryGuards.test.ts` keeps the default frozen.
  */
 export const TAB_SCREENS = parseTabScreens(process.env.EXPO_PUBLIC_WAVE_TABS);
 
@@ -66,7 +68,7 @@ function TabCommitMark({
 /**
  * Renders the tab screens for `TabSlot` as expo-router's default does, with
  * `TAB_SCREENS`' choices: a tab not [kept] isn't rendered while hidden, a
- * hidden tab can keep its layout or freeze. Perf builds mark each tab's commit
+ * hidden tab freezes and can keep its layout. Perf builds mark each tab's commit
  * and layout (`tab.commit`, `tab.layout`).
  */
 export const renderTabScreens =

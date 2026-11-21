@@ -16,17 +16,20 @@ export type GraphPlayCursor = readonly [number, number];
 /**
  * The plays after [after] in (started_at, id) order, at most a page: [columns] read from
  * `play_events pe` and what [joins] adds, each row with its id and start for the next cursor.
+ * [whole] reads every play in one statement instead, in the same order (#1351).
  */
 export const playEventsPage = <R extends { readonly id: number; readonly startedAt: number }>(
   db: LibraryDatabase,
   after: GraphPlayCursor,
   columns: SQL,
   joins: SQL,
+  whole = false,
 ): GraphPage<R, GraphPlayCursor> => {
   const read = (where: SQL, limit: number) =>
     db.all<R>(sql`SELECT ${columns}
     FROM play_events pe INDEXED BY play_events_started_at_idx ${joins}
     WHERE ${where} ORDER BY pe.started_at, pe.id LIMIT ${limit}`);
+  if (whole) return { rows: read(sql`1`, -1), next: null };
   // A row-value predicate only seeks started_at in SQLite, rescanning equal-time prefixes.
   // Equality on the first key makes the implicit rowid a real second seek key.
   const rows = read(sql`pe.started_at = ${after[0]} AND pe.id > ${after[1]}`, GRAPH_PAGE_SIZE);
@@ -47,6 +50,7 @@ export type GraphPlay = ArtistGraphPlay & { readonly streamed?: boolean };
 export const graphPlayPage = (
   db: LibraryDatabase,
   after: GraphPlayCursor,
+  whole = false,
 ): GraphPage<GraphPlay, GraphPlayCursor> => {
   const { rows, next } = playEventsPage<{
     id: number;
@@ -76,6 +80,7 @@ export const graphPlayPage = (
         ${streamedTrack(sql`pe.video_id`, sql`pe.recording_key`)} END)
       LEFT JOIN artists a ON a.id = t.artist_id
       LEFT JOIN albums al ON al.id = t.album_id`,
+    whole,
   );
   return {
     rows: rows.flatMap((row) => {
@@ -97,9 +102,17 @@ export const graphPlayPage = (
   };
 };
 
+/** Every play as the graph reads it, in one statement (Home's mix build, #1351). */
+export const graphPlays = (db: LibraryDatabase): readonly GraphPlay[] =>
+  graphPlayPage(db, [-Number.MAX_VALUE, 0], true).rows;
+
+/** A page's limit for a page reader; null reads past the cursor to the end, as one page. */
+const pageLimit = (limit: number | null): SQL => (limit === null ? sql`` : sql`LIMIT ${limit}`);
+
 export const mixCatalogPage = (
   db: LibraryDatabase,
   after: number,
+  limit: number | null = GRAPH_PAGE_SIZE,
 ): GraphPage<CatalogSong & { readonly videoId: string }, number> => {
   // Rowid preserves the original unordered table scan's insertion order.
   const rows = db.all<{
@@ -110,7 +123,7 @@ export const mixCatalogPage = (
     lastSeenAt: number;
   }>(sql`
     SELECT rowid AS cursor, video_id AS videoId, song, first_seen_at AS firstSeenAt, last_seen_at AS lastSeenAt
-    FROM candidate_songs WHERE rowid > ${after} ORDER BY rowid LIMIT ${GRAPH_PAGE_SIZE}`);
+    FROM candidate_songs WHERE rowid > ${after} ORDER BY rowid ${pageLimit(limit)}`);
   const result: (CatalogSong & { readonly videoId: string })[] = [];
   for (const row of rows) {
     const song = readPlaylistYtSong(row.song);
@@ -123,8 +136,10 @@ export const mixCatalogPage = (
       radios: [],
     });
   }
-  return { rows: result, next: rows.at(-1)?.cursor ?? null };
+  return { rows: result, next: limit === null ? null : (rows.at(-1)?.cursor ?? null) };
 };
+/** The whole candidate catalog as one page of `mixCatalogPage` (Home's mix build, #1351). */
+export const mixCatalog = (db: LibraryDatabase) => mixCatalogPage(db, 0, null);
 
 export const graphSimilarPage = (
   db: LibraryDatabase,
@@ -134,6 +149,7 @@ export const graphSimilarPage = (
 export const graphRadioPage = (
   db: LibraryDatabase,
   after: number,
+  limit: number | null = GRAPH_PAGE_SIZE,
 ): GraphPage<CatalogSong["radios"][number] & { readonly videoId: string }, number> => {
   const rows = db.all<{
     cursor: number;
@@ -143,9 +159,11 @@ export const graphRadioPage = (
     lastSeenAt: number;
   }>(sql`
     SELECT rowid AS cursor, video_id AS videoId, seed_key AS seed, seed_name AS seedName, last_seen_at AS lastSeenAt
-    FROM candidate_radios WHERE rowid > ${after} ORDER BY rowid LIMIT ${GRAPH_PAGE_SIZE}`);
-  return { rows, next: rows.at(-1)?.cursor ?? null };
+    FROM candidate_radios WHERE rowid > ${after} ORDER BY rowid ${pageLimit(limit)}`);
+  return { rows, next: limit === null ? null : (rows.at(-1)?.cursor ?? null) };
 };
+/** Every candidate radio as one page of `graphRadioPage` (Home's mix build, #1351). */
+export const graphRadios = (db: LibraryDatabase) => graphRadioPage(db, 0, null);
 
 /** Validate the historical song format in SQL, returning only artist names and the radio lookup id. */
 export const graphCatalogPage = (

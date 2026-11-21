@@ -1,13 +1,20 @@
-import { createLibraryQueries, type LibraryQueryTraits, type LibraryReads } from "@wave/core";
+import {
+  createLibraryQueries,
+  createRecentKeeps,
+  type LibraryQueryTraits,
+  type LibraryReads,
+} from "@wave/core";
 import type * as Effect from "effect/Effect";
 import { useCallback, useContext, useEffect, useSyncExternalStore } from "react";
 
-import { firstContentShown } from "@/lib/backgroundWork";
+import { firstContentShown, inSlice } from "@/lib/backgroundWork";
 import { CoveredByNowPlaying, useScreenSight } from "@/lib/screenSight";
 import { attachInSight } from "@/lib/sight";
 import { registerPerfMeta } from "@/perf/perf";
 
 import { onLibraryChange } from "./libraryChanges";
+import type { Stats } from "@/stats/Stats";
+
 import type { LibraryStore, LibraryStoreError } from "./LibraryStore";
 
 import { appRuntime } from "./runtime";
@@ -18,10 +25,13 @@ import { appRuntime } from "./runtime";
  * `createLibraryQueries`). The same key must always read the same thing:
  * put every parameter in it (`album:12`).
  */
+/** What a query may read: the Library, or Stats over it (`stats/hooks.ts`). */
+export type LibraryQueryServices = LibraryStore | Stats;
+
 export interface LibraryQuery<A> {
   readonly key: string;
   readonly reads: LibraryReads;
-  readonly read: Effect.Effect<A, LibraryStoreError, LibraryStore>;
+  readonly read: Effect.Effect<A, LibraryStoreError, LibraryQueryServices>;
   readonly traits: LibraryQueryTraits<A>;
 }
 
@@ -29,7 +39,7 @@ export interface LibraryQuery<A> {
 export const libraryQuery = <A>(
   key: string,
   reads: LibraryReads,
-  read: Effect.Effect<A, LibraryStoreError, LibraryStore>,
+  read: Effect.Effect<A, LibraryStoreError, LibraryQueryServices>,
   traits: LibraryQueryTraits<A> = {},
 ): LibraryQuery<A> => ({ key, reads, read, traits });
 
@@ -55,7 +65,8 @@ const registry = createLibraryQueries<unknown>({
         return;
       }
       appRuntime.runPromise(definition.read).then(
-        (value) => settle({ ok: true, value }),
+        // The screens' listeners run here, after the read's await: a named slice (#1359).
+        (value) => inSlice("Library query", () => settle({ ok: true, value })),
         // Keep showing the last good result; scan errors surface in the banner.
         () => settle({ ok: false }),
       );
@@ -116,6 +127,74 @@ export const useLibraryQuery = <A>(query: LibraryQuery<A> | null, initial: A): A
 
   return current === undefined ? initial : (current.value as A);
 };
+
+/**
+ * Holds [query] ready in memory for the screens that will show it (#1352,
+ * Core's `keep`): read now, re-read as the Library changes whether or not a
+ * screen shows it, so opening one draws its result and reads nothing.
+ * Returns the release. What's kept, and its bound, is `readyScreens.ts`'s.
+ */
+export const keepLibraryQuery = <A>(query: LibraryQuery<A>): (() => void) => {
+  const definition: AnyQuery = query as AnyQuery;
+  definitions.set(definition.key, definition);
+  stopFollowing ??= onLibraryChange(registry.change);
+  return registry.keep(definition.key, definition.reads, definition.traits);
+};
+
+/** How many pushed screens opened last stay kept for a quick return (`keepRecentlyOpened`). */
+const RECENT_SCREENS_KEPT = 8;
+
+const recentQueries = new Map<string, AnyQuery>();
+const recentKeeps = createRecentKeeps<string>({
+  max: RECENT_SCREENS_KEPT,
+  keep: (key) => {
+    const query = recentQueries.get(key);
+    const release = query === undefined ? () => {} : keepLibraryQuery(query);
+    return () => {
+      recentQueries.delete(key);
+      release();
+    };
+  },
+});
+
+/**
+ * A pushed screen showing [query] was opened: its data stays kept (`keepLibraryQuery`)
+ * for a quick return, among the `RECENT_SCREENS_KEPT` opened last.
+ */
+export const keepRecentlyOpened = <A>(query: LibraryQuery<A>): void => {
+  if (!recentQueries.has(query.key)) recentQueries.set(query.key, query as AnyQuery);
+  recentKeeps.touch(query.key);
+};
+
+/**
+ * [query]'s result once it is read, without showing it: what a kept query
+ * that others are picked from (Library › Playlists) holds. Undefined when its
+ * read failed.
+ */
+export const libraryQueryResult = <A>(query: LibraryQuery<A>): Promise<A | undefined> =>
+  new Promise((resolve) => {
+    const definition: AnyQuery = query as AnyQuery;
+    definitions.set(definition.key, definition);
+    stopFollowing ??= onLibraryChange(registry.change);
+    let consumer: { readonly detach: () => void } | null = null;
+    let done = false;
+    const finish = (): void => {
+      if (done) return;
+      const state = registry.state(definition.key);
+      if (state === "loading") return;
+      done = true;
+      resolve(registry.current(definition.key)?.value as A | undefined);
+      // Outside the registry's own call.
+      void Promise.resolve().then(() => consumer?.detach());
+    };
+    consumer = registry.attach(definition.key, definition.reads, {
+      ...definition.traits,
+      visible: false,
+      onChange: finish,
+      onStateChange: finish,
+    });
+    finish();
+  });
 
 /** Readiness of a main screen query that initially returns an empty-list placeholder. */
 export const libraryQueryHasContent = (key: string): boolean => registry.current(key) !== undefined;

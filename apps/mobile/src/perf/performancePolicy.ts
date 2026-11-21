@@ -19,6 +19,9 @@ export const LIBRARY_SEEDS = [
   "library/playlistRecommendationInputs.ts#observePlaylistRecommendationInputs",
   "library/LibraryStore.ts#listSongs",
   "library/LibraryStore.ts#matchingSong",
+  "library/LibraryStore.ts#matchingSongs",
+  "library/LibraryStore.ts#mixSongs",
+  "library/LibraryStore.ts#mixArtists",
   "library/LibraryStore.ts#listSortedSongs",
   "library/LibraryStore.ts#listArtists",
   "library/LibraryStore.ts#tasteHistory",
@@ -196,10 +199,21 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   },
   "home/mixBuildLibrary.ts#readMixBuildLibrary": {
     howOften:
-      "Once per returned streamed radio song in a cold Home mix build; each indexed query finds one match.",
+      "Once per cold Home mix build (before the recommendation snapshot completes), and one radio-song match read per build's radios.",
     reason:
-      "The cold mix build resolves each chosen radio song against its Library recording so the mix picks the file; its inputs are read in bounded pages after Home settlement. Covered by home/mixBuildLibrary.test.ts.",
-    capabilities: ["library/LibraryStore.ts#matchingSong"],
+      "The cold mix build reads the Library's songs and artists whole, one read each off the JS thread (#1348, #1351), and matches all of a build's radio songs to their Library recordings in one indexed read; its steps take Home-only turns. Covered by library/databaseTests/homeMixReads.test.ts and home/mixBuildLibrary.test.ts.",
+    capabilities: [
+      "library/LibraryStore.ts#mixSongs",
+      "library/LibraryStore.ts#mixArtists",
+      "library/LibraryStore.ts#matchingSongs",
+    ],
+  },
+  "home/mixInputs.ts#readMixInputs": {
+    howOften:
+      "Once per recommendation snapshot version: after a Library change reaches Home's mixes, a playlist's suggestions or a Magic Queue.",
+    reason:
+      "Home's mix inputs read each source whole, one read off the JS thread (#1348, #1351), so a build's read count doesn't grow with the Library; sorting and summing run in 8 ms steps. Covered by library/databaseTests/homeMixReads.test.ts and db/mixInputs.test.ts.",
+    capabilities: ["library/LibraryStore.ts#mixSongs", "library/LibraryStore.ts#mixArtists"],
   },
   "playback/hooks.ts#playingIds": {
     howOften:
@@ -331,21 +345,18 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
   },
 
   "search/searchIndex.ts#releasesOf": {
-    howOften: "Once per artist/album snapshot version used to rebuild the background search index.",
+    howOften:
+      "Once per artist/album rows the kept search index shows, built on first use; never per keystroke.",
     reason:
       "Search deliberately shares the lists and lazily builds lookups; its index is built in yielding background steps.",
     capabilities: ["../../../packages/core/src/ytArtist.ts#libraryArtistFinder"],
   },
-  "search/searchIndex.ts#useSearchIndex": {
+  "search/searchIndex.ts#SOURCES": {
     howOften:
-      "Once per shared Library query version while Search needs its index; unchanged renders reuse it.",
+      "Each source once per session, then once per edit that reaches it; a scan batch or download patches its songs by id, and the other sources follow bursts at most once per 1.5 s throttle. Never per Search open, focus or keystroke.",
     reason:
-      "Search deliberately shares the lists and lazily builds lookups; its index is built in yielding background steps.",
-    capabilities: [
-      "library/hooks.ts#artists",
-      "library/hooks.ts#songs",
-      "ytmusic/libraryFinder.ts#useLoadedLibraryFinder",
-    ],
+      "Search's index is kept in memory for the session (#1354): Core's createSearchIndexFollower decides each read, reads run off the JS thread (#1348), and preparing only re-prepares rows whose text changed, in background slices.",
+    capabilities: ["library/hooks.ts#artists", "library/hooks.ts#songs"],
   },
   "ytmusic/albumSection.ts#useYtAlbumSection": {
     howOften: FOLLOWED_FINDER,
@@ -807,11 +818,6 @@ export const TASTE_SOURCE_SEEDS = [
   "tasteRevision",
 ].map((name) => `library/LibraryStore.ts#${name}`);
 export const TASTE_SOURCES: Record<string, Exception> = {
-  "home/mixBuildLibrary.ts#readMixBuildLibrary": {
-    reason:
-      "Cold Discover builds seek song and artist seed metadata in 128-row pages after Home settlement, yielding between pages. Stored play totals supply weights; only returned radio songs need indexed SQL recording matches. No history walk or derived matcher is awaited. Covered by home/mixBuildLibrary.test.ts.",
-    capabilities: ["library/LibraryStore.ts#mixSongsPage"],
-  },
   "playback/tasteDerivation.ts#tasteLibraryRows": {
     reason:
       "Due picks/shared taste seek at most 128 songs and identity-only artists per turn; sorting/mapping of the copy uses canonical runSteps. Due Home is screen-settled; taste-source stamps discard writes. Covered by tasteDerivation.test.ts and magicQueueJob.test.ts.",
@@ -838,11 +844,6 @@ export const TASTE_SOURCES: Record<string, Exception> = {
     reason:
       "The same constant-size stamps keep due picks current at publication, at most three attempts. Covered by tasteSnapshot.test.ts and magicQueueJob.test.ts.",
     capabilities: ["library/LibraryStore.ts#tasteRevision"],
-  },
-  "home/mixInputs.ts#readMixInputs": {
-    reason:
-      "Existing #594 daily mix background reader shares the bounded songs page; its multi-genre projection and cancellation remain owned by the mix build. Covered by db/mixInputs.test.ts.",
-    capabilities: ["library/LibraryStore.ts#mixSongsPage"],
   },
 };
 
@@ -1105,5 +1106,165 @@ export const OWN_PRESS: Record<string, Exception> = {
   },
   "preview/KindCards.tsx#SchemeSwitch": {
     reason: "Developer Design preview's light and dark switch.",
+  },
+};
+
+/**
+ * #1350: background work takes its turns from the one scheduler (`lib/backgroundWork.ts`, with
+ * `lib/stepped.ts`'s slices and `lib/recommendationWork.ts`'s frame-paced turns over it), which
+ * keeps slices within 8 ms and holds them while a tap's transition runs. These modules defer work
+ * on their own, by file, and say why that isn't background work or why it can't move yet.
+ */
+export const OWN_DEFERRALS: Record<string, { readonly reason: string }> = {
+  "lib/recommendationWork.ts": {
+    reason:
+      "The recommendation scheduler's own frame request: with Wave in the background, Android stops frames, so a zero timer stands in for the next one.",
+  },
+  "library/artistLookup.ts": {
+    reason:
+      "A tapped artist link's or menu's own lookup: the owner waits for it, so it yields between pages without queuing behind background work.",
+  },
+  "nowPlaying/SleepTimer.tsx": {
+    reason: "The sleep timer card's label clock: a UI timer reading the time, not work.",
+  },
+  "ytmusic/listDownloadProgressStore.ts": {
+    reason:
+      "Coalesces a list's download progress into one update per microtask for its rows: UI state, no work of its own.",
+  },
+  "@wave/client/db/matchingSong.ts": {
+    reason:
+      "The one-time recording-title backfill the Library store starts; its turn moves to the scheduler with the store's asynchronous reads (#1348), which own that file's caller.",
+  },
+};
+
+/**
+ * The background jobs the ticket names (#1350), each of which must take its turns from the
+ * scheduler: these modules import it, or are handed its turns by a caller that does.
+ */
+export const BACKGROUND_JOBS: Record<string, { readonly turns: string }> = {
+  "playback/MagicQueue.ts": { turns: "lib/backgroundWork" },
+  "playback/magicQueueRadio.ts": { turns: "lib/backgroundWork" },
+  "library/LibraryScan.ts": { turns: "lib/backgroundWork" },
+  "library/runtime.ts": { turns: "lib/backgroundWork" },
+  "sync/waveSyncLive.ts": { turns: "lib/backgroundWork" },
+  "home/communityPlaylists.ts": { turns: "lib/backgroundWork" },
+  "home/followReleases.ts": { turns: "lib/backgroundWork" },
+  "home/playNewReleases.ts": { turns: "lib/backgroundWork" },
+  "home/magicQueueSection.ts": { turns: "lib/backgroundWork" },
+  "home/discoverMixes.ts": { turns: "lib/recommendationWork" },
+  "home/recommendationSnapshot.ts": { turns: "lib/recommendationWork" },
+  "playback/TasteProfile.ts": { turns: "lib/recommendationWork" },
+  "updates/appUpdates.ts": { turns: "lib/backgroundWork" },
+  "search/searchIndex.ts": { turns: "lib/backgroundWork" },
+  "library/readyScreens.ts": { turns: "lib/backgroundWork" },
+  "library/ytLibraryImport.ts": { turns: "lib/backgroundWork" },
+  "library/playlistImports.ts": { turns: "lib/backgroundWork" },
+  "library/lyricsSearchIndex.ts": { turns: "lib/backgroundWork" },
+};
+
+/**
+ * What bounds each collection a module keeps for the session (Performance
+ * rules, 12; #1358), checked by `memoryGuards.test.ts`. A cache of pages or
+ * answers is bounded by count (`knownPages` or an LRU); the rest are bounded by
+ * what they mirror (the Library, the bar, the jobs going on). The heavy caches
+ * that open screens from memory (#1352's kept queries, #1353's Home snapshot,
+ * Search's index) are bounded in their own modules and documented in
+ * docs/performance/1358-frozen-tabs-memory.md.
+ */
+export const MODULE_COLLECTIONS: Record<string, { readonly bound: string }> = {
+  "home/mixPreDownload.ts#shown": { bound: "one entry per Home mix section, a fixed few" },
+  "lib/networkMeter.ts#timingRuns": { bound: "runs being metered now, removed when each ends" },
+  "lib/persistedSetting.ts#syncedSettings": {
+    bound: "one per synced setting declared in code, a fixed few dozen",
+  },
+  "lib/persistedSetting.ts#pendingWrites": {
+    bound: "writes waiting for their delay, one per setting at most",
+  },
+  "lib/radioDeadline.ts#checks": { bound: "radio deadlines running now, removed as each settles" },
+  "stats/hooks.ts#statsQueries": {
+    bound:
+      "query descriptors, not rows: each ranking for the 4 periods at Stats' top 10 and See all, plus genres per period",
+  },
+  "lib/timing.ts#background": { bound: "one per named background kind registered in code" },
+  "lib/timing.ts#nativeTransitions": {
+    bound: "native stack transitions in flight, removed at their end",
+  },
+  "library/backgroundFill.ts#opened": {
+    bound: "one timestamp per playlist opened this run, at most the Library's playlists",
+  },
+  "library/collaborativePlaylists.tsx#EMPTY": { bound: "an empty map that is never written" },
+  "library/collaborativePlaylists.tsx#shownMembers": {
+    bound: "one per collaborative playlist here; pruned on each read",
+  },
+  "library/favorites.ts#writing": { bound: "stars with writes in flight, removed when written" },
+  "library/favorites.ts#knownStars": {
+    bound: "a boolean per song starred or unstarred this run, at most the Library's songs",
+  },
+  "library/favorites.ts#knownPending": {
+    bound: "a boolean per pending song starred this run, at most the songs touched",
+  },
+  "library/follows.ts#artists": {
+    bound: "a store of one follow row per artist page opened this run, tiny each",
+  },
+  "library/genreOpening.ts#made": { bound: "MADE_KEPT (64) query declarations, oldest let go" },
+  "library/pagedSongs.ts#orderQueries": {
+    bound: "one query declaration per song sort, a fixed dozen",
+  },
+  "library/playlistImports.ts#finishing": { bound: "imports running now, removed when done" },
+  "library/releaseDates.ts#sortedIds": { bound: "the playlists sorted by Release date" },
+  "library/releaseDates.ts#sortChosen": {
+    bound: "playlists put on Release date since, removed once looked up",
+  },
+  "library/releaseDates.ts#playlistInputs": {
+    bound: "the playlists on Release date; cleared or trimmed on each playlist change",
+  },
+  "library/sharedQueries.ts#definitions": {
+    bound: "the queries the registry holds: kept screens, RECENT_SCREENS_KEPT (8) pushed ones",
+  },
+  "library/sharedQueries.ts#recentQueries": {
+    bound: "RECENT_SCREENS_KEPT (8) pushed screens' queries, the oldest let go",
+  },
+  "library/songSort.ts#settings": { bound: "one setting per song list kind, a fixed few" },
+  "library/ytExportRun.ts#queued": { bound: "exports pending or running, removed as they send" },
+  "library/ytLibraryImport.ts#queuedAt": {
+    bound: "playlists queued this import run, removed as each is read",
+  },
+  "log/slowLibraryReads.ts#namedHere": {
+    bound: "one name per read kind written in code that stays on the JS thread",
+  },
+  "perf/perf.ts#metaSources": { bound: "one per perf metadata source registered in code" },
+  "playback/playingSearches.ts#asking": {
+    bound: "searches going on for the queue's songs, removed as each settles",
+  },
+  "playback/playingSearches.ts#failedAt": {
+    bound: "one timestamp per queued song whose search failed, at most the queue",
+  },
+  "playback/queueTracks.ts#requested": {
+    bound: "the queue's track ids looked up once, cleared with a new queue",
+  },
+  "playback/trackLyrics.ts#cache": { bound: "CACHE_SIZE (16) tracks' lyrics, the oldest let go" },
+  "search/knownYtSearches.ts#SEARCHES": { bound: "knownPages(24) online Search answers" },
+  "settings/followCountry.ts#countries": {
+    bound: "one country list per app language, two languages",
+  },
+  "stats/PlayedEntityViews.tsx#artistImages": {
+    bound: "knownPages(64) artist photo lookups (#1358: was unbounded)",
+  },
+  "sync/bringYourMusic.tsx#importing": { bound: "the two Library services, Spotify and YT Music" },
+  "ytmusic/albumPages.ts#pages": {
+    bound: "knownPages(YT_ALBUM_PAGES_KEPT = 24) YT Music album pages (#1358: was unbounded)",
+  },
+  "ytmusic/knownYtArtists.ts#ANSWERS": { bound: "knownPages(16) YT Music artist answers" },
+  "ytmusic/knownYtPages.ts#LISTS": { bound: "knownPages(12) YT Music album and playlist pages" },
+  "ytmusic/searchAllowance.ts#turns": { bound: "searches waiting their turn, removed as granted" },
+  "ytmusic/YtDownloads.ts#awaitingFillIn": {
+    bound: "imported files waiting for their fill-in, removed when answered",
+  },
+  "ytmusic/YtDownloads.ts#answering": { bound: "download decisions being answered now" },
+  "ytmusic/YtDownloads.ts#recordedNoBetterCopyJobs": {
+    bound: "replacement jobs with no better copy this launch, at most the downloads journal",
+  },
+  "ytmusic/YtDownloads.ts#removedReplacementFiles": {
+    bound: "failed replacements' files this launch, at most the downloads journal",
   },
 };

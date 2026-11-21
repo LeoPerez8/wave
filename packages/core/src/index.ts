@@ -14,12 +14,29 @@
   storedGenres,
 } from "./library.ts";
 export type { LibraryTrack, RawTrack } from "./library.ts";
-export { creditSplitter, respreadDeletedSongs, splitCredit } from "./credits.ts";
+export {
+  creditSplitter,
+  creditSplitterSteps,
+  respreadDeletedSongs,
+  splitCredit,
+} from "./credits.ts";
 export type { PrunedArtist } from "./credits.ts";
-export { pickStreamedAlbum, streamedCredits } from "./streamedCredits.ts";
-export type { PlayedAlbumKey, PlayedArtistKey } from "./streamedCredits.ts";
+export {
+  pickStreamedAlbum,
+  streamedCreditResolverSteps,
+  streamedCredits,
+} from "./streamedCredits.ts";
+export type {
+  PlayedAlbumKey,
+  PlayedArtistKey,
+  StreamedCreditResolver,
+  StreamedRelease,
+  StreamedSongCredits,
+} from "./streamedCredits.ts";
 export { rankEntityPlays, rankEntityPlaysSteps } from "./stats.ts";
 export type { EntityPlayTotals } from "./stats.ts";
+export { KEPT_BLOCK_DAYS, KEPT_DAY_MS, keptTotalsPlan, playBuckets } from "./keptPlayTotals.ts";
+export type { KeptRange, KeptTotalsPlan } from "./keptPlayTotals.ts";
 export { mergeCountedPlays } from "./countedPlays.ts";
 export type {
   CountedPlays,
@@ -120,6 +137,19 @@ export {
 export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
 export { alphabetIndex, artistAlbums, indexLetter } from "./browse.ts";
 export type { ArtistAlbum, IndexEntry } from "./browse.ts";
+export { createLibraryDetails } from "./libraryDetails.ts";
+export { createRecentKeeps } from "./recentKeeps.ts";
+export type { RecentKeeps } from "./recentKeeps.ts";
+export type {
+  AlbumPage,
+  ArtistPage,
+  DetailAlbum,
+  DetailArtist,
+  DetailGenre,
+  DetailSong,
+  LibraryDetailRows,
+  LibraryDetails,
+} from "./libraryDetails.ts";
 export { spineEntries, spineLayout, spineSection, spineSlotAt, spineStep } from "./spine.ts";
 export type { SpineLayout, SpineSlot, SpineSpace } from "./spine.ts";
 export { SCAN_SAVE_SLICE, reconcileScan, scanEnd, scanSaveSlices } from "./scanReconcile.ts";
@@ -213,6 +243,13 @@ export {
 } from "./keepFindVisible.ts";
 export type { FindFieldPlacement } from "./keepFindVisible.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
+export {
+  compareSongReadOrder,
+  createSearchIndexFollower,
+  type SongReadKeys,
+  type SearchIndexFollower,
+  type SearchIndexJob,
+} from "./searchIndexFollow.ts";
 export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
 export { SEARCH_FOCUS_LIMITS, startSearchFocus, stepSearchFocus } from "./searchFocus.ts";
 export type {
@@ -682,6 +719,24 @@ export {
 } from "./glassProbe.ts";
 export type { GlassLayers, GlassProbe } from "./glassProbe.ts";
 export {
+  EMPTY_FRAME_TALLY,
+  effectsVerdict,
+  judgeFrames,
+  phoneEffectsLine,
+  readEffectsVerdict,
+  sessionEffects,
+  tallyFrames,
+  WEAK_PHONE_RULE,
+  writeEffectsVerdict,
+} from "./phoneEffects.ts";
+export type {
+  EffectsVerdict,
+  FrameTally,
+  FrameWindow,
+  PhoneEffects,
+  SessionEffects,
+} from "./phoneEffects.ts";
+export {
   STATS_FACT_LABELS,
   counted,
   statsFacts,
@@ -828,6 +883,15 @@ export {
   type YtAccountHome,
   type YtPlaylistShelf,
 } from "./homeCommunityPlaylists.ts";
+export {
+  HOME_SNAPSHOT_MAX_LENGTH,
+  HOME_SNAPSHOT_VERSION,
+  homeSnapshotList,
+  homeSnapshotRecord,
+  parseHomeSnapshot,
+  storedHomeSnapshot,
+} from "./homeSnapshot.ts";
+export type { HomeSnapshot, HomeSnapshotChecks, HomeSnapshotField } from "./homeSnapshot.ts";
 export { rowWindow, windowRows } from "./rowWindow.ts";
 export type { RowView, RowWindow } from "./rowWindow.ts";
 export {
@@ -872,18 +936,23 @@ export type {
   LibraryQueryTraits,
   LibraryReads,
 } from "./libraryQueries.ts";
-export { BACKGROUND_WORK_LIMITS, createBackgroundWork } from "./backgroundWork.ts";
+export { BACKGROUND_WORK_LIMITS, createBackgroundWork, runStepSlice } from "./backgroundWork.ts";
+export { JS_BLOCK_MS, TURN_WORK_MS, createJsBlockLog, jsBlockLine } from "./jsBlocks.ts";
+export type { JsBlockLog, JsBlockLogPorts } from "./jsBlocks.ts";
 export type {
   BackgroundWork,
   BackgroundWorkLimits,
   BackgroundWorkOptions,
   BackgroundWorkStats,
+  SliceLimits,
+  SliceResult,
 } from "./backgroundWork.ts";
 export { pendingWriteDelay } from "./writePacing.ts";
 export type { WritePacing } from "./writePacing.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
 export {
   NOW_PLAYING_OPENS_ON,
+  relatedTimingKind,
   nowPlayingPageSwipesEnabled,
   nowPlayingRelatedSwipeEnabled,
   settleRelatedRise,
@@ -2784,6 +2853,7 @@ export {
 } from "./magicRadioLearning.ts";
 export {
   rankRadioSongs,
+  rankRadioSongsSteps,
   radioRankingBatch,
   type RadioRankingPage,
   type RadioRankingSeed,
@@ -3303,3 +3373,11 @@ export type { DjCell, DjPageRead, DjRow, DjSavedPage } from "./dj.ts";
 export { djSearchTiles } from "./djSearch.ts";
 export { djSeedFull } from "./dj.ts";
 export type { DjSearchFound } from "./djSearch.ts";
+
+export {
+  pagerMounts,
+  stagedMounts,
+  type PagerMountsInput,
+  type StagedMountsInput,
+} from "./stagedMounts.ts";
+export { knownPages, type KnownPages } from "./knownPages.ts";

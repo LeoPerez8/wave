@@ -12,13 +12,7 @@
  *
  *   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON apps/mobile/bench/scanBatch.ts [--quick]
  */
-import {
-  SCAN_SAVE_SLICE,
-  normalizeTrack,
-  reconcileScan,
-  scanSaveSlices,
-  type PlaylistSong,
-} from "@wave/core";
+import { SCAN_SAVE_SLICE, reconcileScan, scanSaveSlices, type PlaylistSong } from "@wave/core";
 import { performance } from "node:perf_hooks";
 
 import type { IndexedTrack } from "@wave/client";
@@ -33,6 +27,7 @@ import * as schema from "@wave/client/db/schema";
 import { openTestDatabase } from "@wave/client/testing";
 import { selectKnownFiles } from "@wave/client/db/tracks";
 import { median } from "./measure.ts";
+import { ROOT, scannedFile } from "./scannedFile.ts";
 
 const quick = process.argv.includes("--quick");
 /** The Library already indexed. */
@@ -42,34 +37,11 @@ const BATCH = 500;
 /** Streamed entries in playlists, which the end-of-scan link decodes. */
 const STREAMED = quick ? 500 : 2_500;
 const RUNS = quick ? 3 : 5;
-const ROOT = "/storage/emulated/0/Music";
 
 const splits = creditSplits();
 let nextFile = 0;
 /** A new file as the scanner reads it. */
-const file = (): IndexedTrack => {
-  const n = nextFile++;
-  return {
-    ...normalizeTrack({
-      path: `${ROOT}/Artist ${n % 300}/Album ${n % 900}/${n} Song ${n}.flac`,
-      title: `Song ${n}`,
-      artist: `Artist ${n % 300}`,
-      album: `Album ${n % 900}`,
-      albumArtist: `Artist ${n % 300}`,
-      trackNumber: String((n % 12) + 1),
-      genre: `Genre ${n % 25}`,
-      year: String(1970 + (n % 50)),
-      durationMs: 180_000 + (n % 120_000),
-    }),
-    sizeBytes: 20_000_000 + n,
-    modifiedAt: 1_700_000_000_000 + n,
-    sampleRate: 44_100,
-    bitrateKbps: 900,
-    artworkHash: null,
-    hasLyrics: false,
-    explicit: "unknown",
-  };
-};
+const file = (): IndexedTrack => scannedFile(nextFile++);
 const files = (count: number): IndexedTrack[] => Array.from({ length: count }, file);
 
 const time = (run: () => unknown): number => {

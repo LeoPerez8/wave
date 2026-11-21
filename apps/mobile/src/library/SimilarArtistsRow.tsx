@@ -23,7 +23,8 @@ const ignore = (): void => {};
  * Library's artist page and the YT Music artist page alike, laid out as
  * Home's artists are: a similar artist the Library has is its artist and
  * opens the Library's page; the others open their YouTube Music page. While
- * the page selects, they hold still. The tiles have no long-press menu.
+ * the page selects, they hold still. The tiles have no long-press menu. Only
+ * the tiles on screen mount in the row's first frame.
  */
 export function SimilarArtistsRow({
   artists,
@@ -37,7 +38,7 @@ export function SimilarArtistsRow({
 }) {
   return (
     <View style={{ height }}>
-      <CoverRow>
+      <CoverRow staged>
         {artists.map(({ artist, library }) =>
           library === null ? (
             <ArtistCard
@@ -50,7 +51,11 @@ export function SimilarArtistsRow({
                 imageUrl: artist.artworkUrl,
               }}
               size={COVER_ROW_TILE}
-              onPress={selecting ? ignore : () => openYtArtist(artist.browseId, artist.name)}
+              onPress={
+                selecting
+                  ? ignore
+                  : () => openYtArtist(artist.browseId, artist.name, artist.artworkUrl)
+              }
             />
           ) : (
             <ArtistCard

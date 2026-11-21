@@ -1,0 +1,1009 @@
+/**
+ * Kept play totals (#1349): what Stats, Home's sections and the Magic Queue
+ * rank by, read from the per-day and per-block sums that migration
+ * `0069_kept_play_totals` keeps (`keptTotalsMigration.ts`) rather than summed
+ * from the history on every read. Core plans which rows a window reads
+ * (`keptTotalsPlan`) and credits streamed songs (`streamedCredits`); this
+ * module settles what the triggers leave owed and reads the totals. Kept free
+ * of Expo so the store tests run it against a real SQLite (`testDatabase.ts`).
+ */
+import {
+  finishSteps,
+  KEPT_BLOCK_DAYS,
+  keptTotalsPlan,
+  rankEntityPlays,
+  releaseTitle,
+  sortKey,
+  streamedCreditResolverSteps,
+  type CreditedPlayTotals,
+  type KeptTotalsPlan,
+  type SongPlayTotals,
+  type StatsWindow,
+  type StreamedCreditResolver,
+  type YtAlbumSong,
+} from "@wave/core";
+import { sql, type SQL } from "drizzle-orm";
+
+import type { AlbumRow, ArtistRow } from "../types.ts";
+import { selectAlbums } from "./albums.ts";
+import { selectArtists } from "./artists.ts";
+import type { LibraryDatabase } from "./database.ts";
+import { BLOCK_MS, DAY_MS, songKeySql } from "./keptTotalsMigration.ts";
+import type {
+  OnlineAlbum,
+  OnlineArtist,
+  PlayedAlbum,
+  PlayedArtist,
+  PlayedEntityTotal,
+  PlayedEntityTotals,
+} from "./playedEntities.ts";
+import { playedLibraryRowsSteps } from "./playedLibrary.ts";
+import * as schema from "./schema.ts";
+import { streamedSongsOf } from "./streamedSongs.ts";
+
+/** What a song's plays count for: an album, an artist, a Stats credit row or a ranked song. */
+export type CreditKind = "album" | "artist" | "credit" | "song";
+
+interface Credit {
+  readonly kind: CreditKind;
+  readonly entity: string;
+  readonly weight: number;
+  readonly albumId: number | null;
+  readonly artistId: number | null;
+}
+
+interface KeptState {
+  readonly generation: number;
+  readonly seededThrough: number;
+  readonly seedUntil: number;
+}
+
+const keptState = (db: LibraryDatabase): KeptState =>
+  db.get<KeptState>(sql`SELECT generation, seeded_through AS "seededThrough",
+    seed_until AS "seedUntil" FROM kept_totals_state WHERE id = 1`);
+
+const owedSongs = (db: LibraryDatabase, state: 0 | 1, limit: number): string[] =>
+  db
+    .all<{ song: string }>(
+      sql`SELECT song FROM played_songs WHERE state = ${state} ORDER BY song LIMIT ${limit}`,
+    )
+    .map((row) => row.song);
+
+/**
+ * Whether the kept totals hold every play: seeded, summed and credited. While
+ * they don't, readers sum from the history and the startup job settles them.
+ */
+export const keptTotalsSettled = (db: LibraryDatabase): boolean =>
+  db.get<{ settled: number }>(sql`SELECT seeded_through >= seed_until
+      AND NOT EXISTS (SELECT 1 FROM played_songs WHERE state < 2)
+      AND NOT EXISTS (SELECT 1 FROM owed_days) AS settled
+    FROM kept_totals_state WHERE id = 1`).settled === 1;
+
+/** Names the songs of the plays after the last one seeded, up to [rows] plays (an upgrade's history). */
+const seed = (db: LibraryDatabase, kept: KeptState, rows: number) => {
+  const to = Math.min(kept.seedUntil, kept.seededThrough + rows);
+  db.transaction((tx) => {
+    tx.run(sql`INSERT INTO played_songs (song, track_id, video_id, recording_key, state)
+      SELECT DISTINCT ${sql.raw(songKeySql("e"))}, e.track_id, e.video_id, e.recording_key, 0
+      FROM play_events AS e WHERE e.id > ${kept.seededThrough} AND e.id <= ${to}
+      ON CONFLICT (song) DO UPDATE SET state = 0`);
+    tx.run(sql`INSERT INTO played_recordings (recording_key, counted_plays)
+      SELECT recording_key, count(*) FROM play_events
+      WHERE id > ${kept.seededThrough} AND id <= ${to} AND counted AND recording_key IS NOT NULL
+      GROUP BY recording_key
+      ON CONFLICT (recording_key) DO UPDATE SET counted_plays = counted_plays + excluded.counted_plays`);
+    tx.run(sql`INSERT INTO playlist_play_buckets (context_id, span, bucket, counted_plays, latest_play_at)
+      SELECT * FROM (
+        SELECT context_id, 0, started_at / ${sql.raw(String(DAY_MS))} AS bucket, count(*), max(started_at)
+        FROM play_events WHERE id > ${kept.seededThrough} AND id <= ${to} AND counted
+          AND context_type = 'playlist' AND context_id IS NOT NULL GROUP BY context_id, bucket
+        UNION ALL
+        SELECT context_id, 1, started_at / ${sql.raw(String(BLOCK_MS))} AS bucket, count(*), max(started_at)
+        FROM play_events WHERE id > ${kept.seededThrough} AND id <= ${to} AND counted
+          AND context_type = 'playlist' AND context_id IS NOT NULL GROUP BY context_id, bucket
+      ) WHERE true
+      ON CONFLICT (context_id, span, bucket) DO UPDATE SET
+        counted_plays = counted_plays + excluded.counted_plays,
+        latest_play_at = max(latest_play_at, excluded.latest_play_at)`);
+    tx.run(sql`UPDATE kept_totals_state SET seeded_through = ${to} WHERE id = 1`);
+  });
+};
+
+/**
+ * The plays of the song [key], through the index its kind has. A `r:` song
+ * has none of its own: with [inTime], a read bounded by start time, it goes
+ * through the starts instead of every play without a Library song.
+ */
+const playsOf = (key: string, inTime = false): SQL => {
+  const rest = key.slice(2);
+  if (key.startsWith("t:")) return sql`e.track_id = ${Number(rest)}`;
+  if (key.startsWith("v:")) {
+    const bar = rest.indexOf("|");
+    return sql`e.video_id = ${rest.slice(0, bar)}
+      AND coalesce(e.recording_key, '') = ${rest.slice(bar + 1)}`;
+  }
+  return inTime
+    ? sql`+e.track_id IS NULL AND +e.video_id IS NULL AND e.recording_key = ${rest}`
+    : sql`e.track_id IS NULL AND e.video_id IS NULL AND e.recording_key = ${rest}`;
+};
+
+/** Sums each of [songs]' days and blocks again from their counted plays. */
+const sumSongs = (db: LibraryDatabase, songs: readonly string[]) => {
+  db.transaction((tx) => {
+    for (const song of songs) {
+      tx.run(sql`DELETE FROM play_buckets WHERE song = ${song}`);
+      tx.run(sql`DELETE FROM owed_days WHERE song = ${song}`);
+      tx.run(sql`INSERT INTO play_buckets (song, span, bucket, counted_plays, listened_ms, latest_play_at)
+        SELECT ${song}, 0, e.started_at / ${sql.raw(String(DAY_MS))}, count(*), sum(e.listened_ms), max(e.started_at)
+        FROM play_events AS e WHERE e.counted AND ${playsOf(song)} GROUP BY 3
+        UNION ALL
+        SELECT ${song}, 1, e.started_at / ${sql.raw(String(BLOCK_MS))}, count(*), sum(e.listened_ms), max(e.started_at)
+        FROM play_events AS e WHERE e.counted AND ${playsOf(song)} GROUP BY 3`);
+    }
+    tx.run(sql`UPDATE played_songs SET state = 1 WHERE state = 0
+      AND song IN (SELECT value FROM json_each(${JSON.stringify(songs)}))`);
+  });
+};
+
+interface Sums {
+  readonly song: string;
+  readonly bucket: number;
+  readonly plays: number;
+  readonly listened: number;
+  readonly latest: number;
+}
+
+/**
+ * Writes [sums] as `play_buckets` rows of [span] in one statement, and drops
+ * that span's rows of [gone]: a statement whatever their number, since each
+ * one compiles the credit triggers. An unchanged row isn't written, so its
+ * credits aren't summed again.
+ */
+const writeBuckets = (
+  tx: LibraryDatabase,
+  span: 0 | 1,
+  sums: readonly Sums[],
+  gone: readonly { song: string; bucket: number }[],
+) => {
+  if (sums.length > 0)
+    tx.run(sql`INSERT INTO play_buckets (song, span, bucket, counted_plays, listened_ms, latest_play_at)
+      SELECT json_extract(value, '$.song'), ${span}, json_extract(value, '$.bucket'), json_extract(value, '$.plays'), json_extract(value, '$.listened'),
+        json_extract(value, '$.latest')
+      FROM json_each(${JSON.stringify(sums)}) WHERE true
+      ON CONFLICT (song, span, bucket) DO UPDATE SET counted_plays = excluded.counted_plays,
+        listened_ms = excluded.listened_ms, latest_play_at = excluded.latest_play_at
+      WHERE counted_plays <> excluded.counted_plays OR listened_ms <> excluded.listened_ms
+        OR latest_play_at <> excluded.latest_play_at`);
+  if (gone.length > 0)
+    tx.run(sql`DELETE FROM play_buckets WHERE span = ${span} AND (song, bucket) IN
+      (SELECT json_extract(value, '$.song'), json_extract(value, '$.bucket') FROM json_each(${JSON.stringify(gone)}))`);
+};
+
+/**
+ * Counts up to [limit] of the days the history's triggers marked owed again
+ * from their counted plays, then their blocks from their days, in one
+ * transaction; returns how many days.
+ */
+const recountDays = (db: LibraryDatabase, limit: number): number => {
+  const owed = db.all<{ song: string; day: number }>(
+    sql`SELECT song, day FROM owed_days LIMIT ${limit}`,
+  );
+  if (owed.length === 0) return 0;
+  db.transaction((tx) => {
+    const sums = (
+      rows: readonly { song: string; bucket: number }[],
+      read: (row: { song: string; bucket: number }) => SQL,
+    ) => {
+      const kept: Sums[] = [];
+      const gone: { song: string; bucket: number }[] = [];
+      for (const row of rows) {
+        const sum = tx.get<{ plays: number; listened: number | null; latest: number | null }>(
+          read(row),
+        );
+        if (sum.plays > 0)
+          kept.push({
+            ...row,
+            plays: sum.plays,
+            listened: sum.listened ?? 0,
+            latest: sum.latest ?? 0,
+          });
+        else gone.push(row);
+      }
+      return { kept, gone };
+    };
+    const days = sums(
+      owed.map(({ song, day }) => ({ song, bucket: day })),
+      ({ song, bucket }) => sql`SELECT count(*) AS plays, sum(e.listened_ms) AS listened,
+        max(e.started_at) AS latest FROM play_events AS e WHERE e.counted AND ${playsOf(song, true)}
+        AND e.started_at BETWEEN ${bucket * DAY_MS} AND ${bucket * DAY_MS + DAY_MS - 1}`,
+    );
+    writeBuckets(tx, 0, days.kept, days.gone);
+    const blocks = new Map<string, { song: string; bucket: number }>();
+    for (const { song, day } of owed) {
+      const bucket = Math.floor(day / KEPT_BLOCK_DAYS);
+      blocks.set(`${bucket}|${song}`, { song, bucket });
+    }
+    const sum = sums(
+      [...blocks.values()],
+      ({ song, bucket }) => sql`SELECT
+        coalesce(sum(counted_plays), 0) AS plays, sum(listened_ms) AS listened,
+        max(latest_play_at) AS latest FROM play_buckets
+      WHERE song = ${song} AND span = 0
+        AND bucket BETWEEN ${bucket * KEPT_BLOCK_DAYS} AND ${bucket * KEPT_BLOCK_DAYS + KEPT_BLOCK_DAYS - 1}`,
+    );
+    writeBuckets(tx, 1, sum.kept, sum.gone);
+    tx.run(sql`DELETE FROM owed_days WHERE (song, day) IN
+      (SELECT json_extract(value, '$.song'), json_extract(value, '$.day') FROM json_each(${JSON.stringify(owed)}))`);
+  });
+  return owed.length;
+};
+
+/** Core's resolver as the Library stood at a generation, knowing every streamed song's release. */
+interface Resolver extends StreamedCreditResolver {
+  readonly generation: number;
+  readonly known: Set<string>;
+}
+
+const resolvers = new WeakMap<object, Resolver>();
+
+/** The connection [db] runs on: a transaction shares its database's, so both find one resolver. */
+const connectionOf = (db: LibraryDatabase): object =>
+  (db as unknown as { readonly session?: object }).session ?? db;
+
+const releaseOf = (song: YtAlbumSong): string | null =>
+  song.album === null || song.albumId == null
+    ? null
+    : `${releaseTitle(song.album)}|${song.albumId}`;
+
+/** How many played videos' streamed songs one step of `resolverSteps` reads. */
+const VIDEOS_STEP = 100;
+
+/**
+ * Builds the resolver of [generation] (a whole-Library read) in steps: each
+ * read on its own, then Core's resolver a credit, artist, album or release
+ * at a time. Kept between settles until the Library changes.
+ */
+function* resolverSteps(db: LibraryDatabase, generation: number): Generator<void, Resolver> {
+  const videos = db
+    .all<{ videoId: string }>(
+      sql`SELECT DISTINCT video_id AS "videoId" FROM played_songs WHERE video_id IS NOT NULL`,
+    )
+    .map((row) => row.videoId);
+  yield;
+  const releases: YtAlbumSong[] = [];
+  for (let from = 0; from < videos.length; from += VIDEOS_STEP) {
+    for (const song of streamedSongsOf(db, videos.slice(from, from + VIDEOS_STEP)).values())
+      if (releaseOf(song) !== null) releases.push(song);
+    yield;
+  }
+  const rows = yield* playedLibraryRowsSteps(db);
+  const resolver: Resolver = {
+    ...(yield* streamedCreditResolverSteps({ ...rows, releases })),
+    generation,
+    known: new Set(releases.map((song) => releaseOf(song)!)),
+  };
+  resolvers.set(connectionOf(db), resolver);
+  return resolver;
+}
+
+/** The resolver of [generation], when it was built and the Library hasn't changed since. */
+const builtResolver = (db: LibraryDatabase, generation: number): Resolver | undefined => {
+  const cached = resolvers.get(connectionOf(db));
+  return cached?.generation === generation ? cached : undefined;
+};
+
+/** An online album, artist or song as the latest played song crediting it names it. */
+interface OnlineEntity {
+  readonly kind: CreditKind;
+  readonly entity: string;
+  readonly sortKey: string;
+  readonly item: unknown;
+  readonly playedAt: number;
+}
+
+interface Settled {
+  readonly credits: Credit[];
+  readonly songTrack: number | null;
+  readonly online: boolean;
+  readonly albumHint: string | null;
+}
+
+const count = (credits: Map<string, Credit>, credit: Omit<Credit, "weight">) => {
+  const key = `${credit.kind}\u0000${credit.entity}`;
+  const previous = credits.get(key);
+  credits.set(key, { ...credit, weight: (previous?.weight ?? 0) + 1 });
+};
+
+/**
+ * A Library song's plays count, as `creditedPlayTotals` sums them, for each
+ * artist its credit names (kept when it left the Library), for its album once
+ * per primary credit, for each such Stats row, and for the song.
+ */
+const libraryCredits = (db: LibraryDatabase, tracks: readonly number[]) => {
+  const settled = new Map<number, Map<string, Credit>>(
+    tracks.map((id) => [
+      id,
+      new Map([
+        [
+          `song\u0000t:${id}`,
+          { kind: "song", entity: `t:${id}`, weight: 1, albumId: null, artistId: null },
+        ],
+      ]),
+    ]),
+  );
+  for (const row of db.all<{ trackId: number; albumId: number; artistId: number; primary: number }>(
+    sql`WITH wanted AS (SELECT value AS track_id FROM json_each(${JSON.stringify(tracks)})),
+      links AS (
+        SELECT track_id, artist_id, position FROM track_artists
+          WHERE track_id IN (SELECT track_id FROM wanted)
+        UNION ALL
+        SELECT track_id, artist_id, position FROM deleted_track_artists
+          WHERE track_id IN (SELECT track_id FROM wanted)
+      ),
+      firsts AS (SELECT track_id, min(position) AS position FROM links GROUP BY track_id),
+      kept AS (
+        SELECT wanted.track_id, coalesce(tracks.album_id, play_totals.album_id) AS album_id
+        FROM wanted LEFT JOIN tracks ON tracks.id = wanted.track_id
+        LEFT JOIN play_totals ON play_totals.track_id = wanted.track_id
+      )
+      SELECT links.track_id AS "trackId", albums.id AS "albumId", artists.id AS "artistId",
+        links.position = firsts.position AS "primary"
+      FROM links JOIN firsts ON firsts.track_id = links.track_id
+      JOIN kept ON kept.track_id = links.track_id
+      JOIN albums ON albums.id = kept.album_id
+      JOIN artists ON artists.id = links.artist_id`,
+  )) {
+    const credits = settled.get(row.trackId)!;
+    const ids = { albumId: row.albumId, artistId: row.artistId };
+    count(credits, { kind: "artist", entity: String(row.artistId), ...ids });
+    if (row.primary === 1) count(credits, { kind: "album", entity: String(row.albumId), ...ids });
+    count(credits, {
+      kind: "credit",
+      entity: `${row.albumId}:${row.artistId}:${row.primary}`,
+      ...ids,
+    });
+  }
+  return settled;
+};
+
+/** The Library song each streamed song of [keys] is now (`streamedTrack`), by its key. */
+const streamedTracks = (
+  db: LibraryDatabase,
+  keys: readonly { readonly song: string; readonly videoId: string | null; readonly key: string }[],
+): Map<string, number> =>
+  new Map(
+    keys.length === 0
+      ? []
+      : db
+          .all<{ song: string; trackId: number | null }>(
+            sql`SELECT json_extract(value, '$[0]') AS song, coalesce(
+            (SELECT min(id) FROM tracks WHERE tracks.video_id = json_extract(value, '$[1]')),
+            (SELECT min(id) FROM tracks WHERE tracks.recording_key = nullif(json_extract(value, '$[2]'), '')))
+            AS "trackId"
+          FROM json_each(${JSON.stringify(keys.map((k) => [k.song, k.videoId, k.key]))})`,
+          )
+          .flatMap((row) => (row.trackId === null ? [] : [[row.song, row.trackId] as const])),
+  );
+
+/**
+ * Credits [songs] owe, writes them and marks them settled. False, with
+ * nothing written, when a streamed song the Library hasn't needs Core's
+ * resolver and [resolver] is not given: build it first (`resolverSteps`).
+ */
+const creditSongs = (
+  db: LibraryDatabase,
+  songs: readonly string[],
+  resolver: Resolver | undefined,
+): boolean => {
+  const settled = new Map<string, Settled>();
+  const online: OnlineEntity[] = [];
+  const library = songs.filter((song) => song.startsWith("t:"));
+  for (const [id, credits] of libraryCredits(
+    db,
+    library.map((song) => Number(song.slice(2))),
+  ))
+    settled.set(`t:${id}`, {
+      credits: [...credits.values()],
+      songTrack: id,
+      online: false,
+      albumHint: null,
+    });
+  const others = songs
+    .filter((song) => !song.startsWith("t:"))
+    .map((song) => {
+      if (song.startsWith("r:")) return { song, videoId: null, key: song.slice(2) };
+      const bar = song.indexOf("|");
+      return { song, videoId: song.slice(2, bar), key: song.slice(bar + 1) };
+    });
+  const mapped = streamedTracks(db, others);
+  const mappedLinks = new Map<number, { artistIds: number[]; albumId: number }>();
+  const tracks = [...new Set(mapped.values())];
+  if (tracks.length > 0)
+    for (const link of db.all<{ trackId: number; artistId: number; albumId: number }>(
+      sql`SELECT track_artists.track_id AS "trackId", track_artists.artist_id AS "artistId",
+        tracks.album_id AS "albumId"
+      FROM track_artists JOIN tracks ON tracks.id = track_artists.track_id
+      WHERE track_artists.track_id IN (SELECT value FROM json_each(${JSON.stringify(tracks)}))`,
+    )) {
+      const links = mappedLinks.get(link.trackId) ?? { artistIds: [], albumId: link.albumId };
+      links.artistIds.push(link.artistId);
+      mappedLinks.set(link.trackId, links);
+    }
+  const unmapped = others.filter((entry) => entry.videoId !== null && !mapped.has(entry.song)) as {
+    song: string;
+    videoId: string;
+    key: string;
+  }[];
+  if (unmapped.length > 0 && resolver === undefined) return false;
+  const metadata = streamedSongsOf(
+    db,
+    unmapped.map((entry) => entry.videoId),
+  );
+  const playedAt = new Map(
+    unmapped.length === 0
+      ? []
+      : db
+          .all<{ videoId: string; playedAt: number }>(
+            sql`SELECT video_id AS "videoId", max(started_at) AS "playedAt" FROM play_events
+            WHERE video_id IN (SELECT value FROM json_each(${JSON.stringify(unmapped.map((entry) => entry.videoId))}))
+            GROUP BY video_id`,
+          )
+          .map((row) => [row.videoId, row.playedAt]),
+  );
+  const hinted: string[] = [];
+  if (resolver !== undefined) {
+    // A song naming its release can give another song of that album its id: theirs owe again.
+    const fresh = [...metadata.values()].filter((song) => {
+      const release = releaseOf(song);
+      return release !== null && !resolver.known.has(release);
+    });
+    for (const song of fresh) {
+      resolver.known.add(releaseOf(song)!);
+      hinted.push(releaseTitle(song.album!));
+    }
+    resolver.learn(fresh);
+  }
+  for (const entry of others) {
+    const credits = new Map<string, Credit>();
+    const track = mapped.get(entry.song);
+    if (track !== undefined) {
+      count(credits, { kind: "song", entity: `t:${track}`, albumId: null, artistId: null });
+      const links = mappedLinks.get(track);
+      if (entry.videoId !== null && links !== undefined) {
+        for (const artistId of links.artistIds)
+          count(credits, { kind: "artist", entity: String(artistId), albumId: null, artistId });
+        count(credits, {
+          kind: "album",
+          entity: String(links.albumId),
+          albumId: links.albumId,
+          artistId: null,
+        });
+      }
+      settled.set(entry.song, {
+        credits: [...credits.values()],
+        songTrack: track,
+        online: false,
+        albumHint: null,
+      });
+      continue;
+    }
+    if (entry.videoId === null) {
+      settled.set(entry.song, { credits: [], songTrack: null, online: false, albumHint: null });
+      continue;
+    }
+    const song = metadata.get(entry.videoId);
+    const songEntity = `yt:${entry.videoId}`;
+    const at = playedAt.get(entry.videoId) ?? 0;
+    count(credits, { kind: "song", entity: songEntity, albumId: null, artistId: null });
+    online.push({
+      kind: "song",
+      entity: songEntity,
+      sortKey: sortKey(song?.title ?? ""),
+      item: {},
+      playedAt: at,
+    });
+    if (song !== undefined) {
+      const resolved = resolver!.resolve(song);
+      for (const artist of resolved.artists) {
+        if (typeof artist.id === "number") {
+          count(credits, {
+            kind: "artist",
+            entity: String(artist.id),
+            albumId: null,
+            artistId: artist.id,
+          });
+          continue;
+        }
+        count(credits, { kind: "artist", entity: artist.id, albumId: null, artistId: null });
+        const item: OnlineArtist = {
+          ...artist,
+          id: artist.id,
+          online: true,
+          thumbPath: null,
+          artworkPath: null,
+        };
+        online.push({
+          kind: "artist",
+          entity: artist.id,
+          sortKey: sortKey(artist.name),
+          item,
+          playedAt: at,
+        });
+      }
+      const album = resolved.album;
+      if (album !== null) {
+        if (typeof album.id === "number")
+          count(credits, {
+            kind: "album",
+            entity: String(album.id),
+            albumId: album.id,
+            artistId: null,
+          });
+        else {
+          count(credits, { kind: "album", entity: album.id, albumId: null, artistId: null });
+          const item: OnlineAlbum = {
+            ...album,
+            id: album.id,
+            online: true,
+            albumArtist: album.artists.join(", "),
+          };
+          online.push({
+            kind: "album",
+            entity: album.id,
+            sortKey: sortKey(album.title),
+            item,
+            playedAt: at,
+          });
+        }
+      }
+    }
+    settled.set(entry.song, {
+      credits: [...credits.values()],
+      songTrack: null,
+      online: true,
+      albumHint:
+        song !== undefined && song.album !== null && song.albumId == null
+          ? releaseTitle(song.album)
+          : null,
+    });
+  }
+  writeCredits(db, settled, online, hinted);
+  return true;
+};
+
+const sameCredit = (a: Credit, b: Credit) =>
+  a.weight === b.weight && a.albumId === b.albumId && a.artistId === b.artistId;
+
+/** Writes what changed of [settled]'s credits (the triggers move their sums), and marks them settled. */
+const writeCredits = (
+  db: LibraryDatabase,
+  settled: ReadonlyMap<string, Settled>,
+  online: readonly OnlineEntity[],
+  hinted: readonly string[],
+) => {
+  db.transaction((tx) => {
+    for (const [song, { credits, songTrack, online: isOnline, albumHint }] of settled) {
+      const kept = new Map(
+        tx
+          .all<Credit>(
+            sql`SELECT kind, entity, weight, album_id AS "albumId", artist_id AS "artistId"
+            FROM play_credits WHERE song = ${song}`,
+          )
+          .map((credit) => [`${credit.kind}\u0000${credit.entity}`, credit]),
+      );
+      const wanted = new Map(
+        credits.map((credit) => [`${credit.kind}\u0000${credit.entity}`, credit]),
+      );
+      for (const [key, credit] of kept) {
+        const next = wanted.get(key);
+        if (next !== undefined && sameCredit(next, credit)) continue;
+        tx.run(sql`DELETE FROM play_credits WHERE song = ${song} AND kind = ${credit.kind}
+          AND entity = ${credit.entity}`);
+      }
+      for (const [key, credit] of wanted) {
+        const previous = kept.get(key);
+        if (previous !== undefined && sameCredit(previous, credit)) continue;
+        tx.run(sql`INSERT INTO play_credits (song, kind, entity, weight, album_id, artist_id)
+          VALUES (${song}, ${credit.kind}, ${credit.entity}, ${credit.weight}, ${credit.albumId},
+            ${credit.artistId})`);
+      }
+      tx.run(sql`UPDATE played_songs SET state = 2, song_track = ${songTrack},
+        online = ${isOnline ? 1 : 0}, album_hint = ${albumHint}
+        WHERE song = ${song} AND state = 1`);
+    }
+    for (const entity of online)
+      // The latest played song crediting it names it, as Home's Recently played does.
+      tx.run(sql`INSERT INTO played_entities (kind, entity, sort_key, item, played_at)
+        VALUES (${entity.kind}, ${entity.entity}, ${entity.sortKey}, ${JSON.stringify(entity.item)},
+          ${entity.playedAt})
+        ON CONFLICT (kind, entity) DO UPDATE SET sort_key = excluded.sort_key, item = excluded.item,
+          played_at = excluded.played_at
+        WHERE excluded.played_at >= played_entities.played_at`);
+    for (const hint of new Set(hinted))
+      tx.run(sql`UPDATE played_songs SET state = 1 WHERE album_hint = ${hint} AND +state = 2`);
+  });
+};
+
+export interface SettleStep {
+  /** At most this many songs are summed or credited in one step. */
+  readonly songs?: number;
+  /** At most this many plays are seeded in one step. */
+  readonly plays?: number;
+  /** At most this many owed days (and their blocks) are counted again in one step. */
+  readonly days?: number;
+}
+
+/**
+ * One bounded piece of what the kept totals owe, as steps for work that runs
+ * in slices: seed the next plays of an upgrade's history, sum a few songs'
+ * days and blocks, count again the days a write to the history marked
+ * owed and their blocks, or credit a few songs. When the Library changed since
+ * Core's resolver was built, it builds it again first, a read or a few
+ * hundred credits, artists or albums per step, and credits on the next
+ * piece. Each step is one transaction at most. Returns true once nothing is
+ * owed. What the startup job runs on settled turns.
+ */
+export function* settleKeptTotalsSteps(
+  db: LibraryDatabase,
+  { songs = 50, plays = 2_000, days = 200 }: SettleStep = {},
+): Generator<void, boolean> {
+  const kept = keptState(db);
+  if (kept.seededThrough < kept.seedUntil) {
+    seed(db, kept, plays);
+    return false;
+  }
+  const unsummed = owedSongs(db, 0, songs);
+  if (unsummed.length > 0) {
+    sumSongs(db, unsummed);
+    return false;
+  }
+  if (recountDays(db, days) > 0) return false;
+  const uncredited = owedSongs(db, 1, songs);
+  if (uncredited.length > 0 && !creditSongs(db, uncredited, builtResolver(db, kept.generation))) {
+    yield;
+    // Built under the generation read before it: a change meanwhile builds it again.
+    yield* resolverSteps(db, kept.generation);
+    return false;
+  }
+  return keptTotalsSettled(db);
+}
+
+/**
+ * Every piece `settleKeptTotalsSteps` owes, one after another, until nothing
+ * is: what the app's job runs in the scheduler's slices. Each step is one
+ * transaction at most, so the app's other writes come between them; a piece
+ * reads what's owed again when it starts.
+ */
+export function* keptTotalsSteps(
+  db: LibraryDatabase,
+  step: SettleStep = {},
+): Generator<void, true> {
+  while (!(yield* settleKeptTotalsSteps(db, step))) yield;
+  return true;
+}
+
+/** `settleKeptTotalsSteps` run whole: for tests and desktop benches. */
+export const settleKeptTotals = (db: LibraryDatabase, step: SettleStep = {}): boolean =>
+  finishSteps(settleKeptTotalsSteps(db, step));
+
+const keeping = new WeakSet<object>();
+
+/** Whether [db] has the kept totals' tables: a database from before 0069 (in tests) writes plays without. */
+const keepsTotals = (db: LibraryDatabase): boolean => {
+  if (keeping.has(connectionOf(db))) return true;
+  const found =
+    db.get<{ found: number }>(
+      sql`SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE name = 'kept_totals_state') AS found`,
+    ).found === 1;
+  if (found) keeping.add(connectionOf(db));
+  return found;
+};
+
+/** How many songs a play's write credits itself: the rest wait for the job's slices. */
+const WRITE_SONGS = 8;
+/** How many owed days a play's write counts itself (its own is one). */
+const WRITE_DAYS = 8;
+
+/**
+ * Counts the days a play's write marked owed (and their blocks) and credits a few of
+ * the songs owed (the play's among them, as a play owes little), within its
+ * write, when that needs no whole-Library read. What's left, past
+ * [WRITE_DAYS] and [WRITE_SONGS] or a streamed song that needs Core's
+ * resolver built again, the startup job settles in its slices: the play's
+ * Library change wakes it.
+ */
+export const settlePlayWrite = (db: LibraryDatabase): void => {
+  if (!keepsTotals(db)) return;
+  const kept = keptState(db);
+  if (kept.seededThrough < kept.seedUntil) return;
+  recountDays(db, WRITE_DAYS);
+  const resolver = builtResolver(db, kept.generation);
+  const songs = db
+    .all<{ song: string }>(
+      resolver === undefined
+        ? // Without the resolver, a streamed song may need it: those wait.
+          sql`SELECT song FROM played_songs WHERE state = 1 AND song NOT LIKE 'v:%' LIMIT ${WRITE_SONGS}`
+        : sql`SELECT song FROM played_songs WHERE state = 1 LIMIT ${WRITE_SONGS}`,
+    )
+    .map((row) => row.song);
+  if (songs.length > 0) creditSongs(db, songs, resolver);
+};
+
+/**
+ * Which of [keys] have a counted play, from the kept counts per recording:
+ * null until an upgrade's history is seeded.
+ */
+export const countedRecordings = (
+  db: LibraryDatabase,
+  keys: readonly string[],
+): string[] | null => {
+  if (!keepsTotals(db)) return null;
+  const kept = keptState(db);
+  if (kept.seededThrough < kept.seedUntil) return null;
+  if (keys.length === 0) return [];
+  return db
+    .all<{ key: string }>(
+      sql`SELECT recording_key AS key FROM played_recordings WHERE counted_plays > 0
+      AND recording_key IN (SELECT value FROM json_each(${JSON.stringify(keys)}))`,
+    )
+    .map((row) => row.key);
+};
+
+/** A playlist's counted plays by play context id: in a window, of all time, and the latest. */
+export interface KeptPlaylistPlays {
+  readonly contextId: string;
+  readonly recentPlays: number;
+  readonly plays: number;
+  readonly latestPlayAt: number | null;
+}
+
+/**
+ * Each playlist play context's counted plays within [window] and of all
+ * time, from the kept counts: null until an upgrade's history is seeded.
+ */
+export const keptPlaylistPlays = (
+  db: LibraryDatabase,
+  window: StatsWindow,
+): KeptPlaylistPlays[] | null => {
+  if (!keepsTotals(db)) return null;
+  const kept = keptState(db);
+  if (kept.seededThrough < kept.seedUntil) return null;
+  const plan = keptTotalsPlan(window);
+  const recent: SQL[] = [];
+  const buckets = (span: number, from: number, to: number) =>
+    sql`SELECT context_id, counted_plays FROM playlist_play_buckets
+      WHERE span = ${span} AND bucket BETWEEN ${from} AND ${to}`;
+  if (plan.blocks !== null) recent.push(buckets(1, plan.blocks.from, plan.blocks.to));
+  for (const days of plan.days) recent.push(buckets(0, days.from, days.to));
+  for (const plays of plan.plays)
+    // The partial days' plays, through their start (not every playlist play through the context's index).
+    recent.push(sql`SELECT context_id, 1 FROM play_events
+      WHERE started_at BETWEEN ${plays.from} AND ${plays.to} AND counted
+        AND +context_type = 'playlist' AND context_id IS NOT NULL`);
+  const inWindow =
+    recent.length === 0 ? sql`SELECT NULL, 0 WHERE false` : sql.join(recent, sql` UNION ALL `);
+  return db.all<KeptPlaylistPlays>(sql`WITH
+    total AS (
+      SELECT context_id, sum(counted_plays) AS plays, max(latest_play_at) AS latest
+      FROM playlist_play_buckets WHERE span = 1 GROUP BY context_id
+    ),
+    recent (context_id, plays) AS (${inWindow}),
+    recent_total AS (SELECT context_id, sum(plays) AS plays FROM recent GROUP BY context_id)
+    SELECT total.context_id AS "contextId", coalesce(recent_total.plays, 0) AS "recentPlays",
+      total.plays AS plays, total.latest AS "latestPlayAt"
+    FROM total LEFT JOIN recent_total ON recent_total.context_id = total.context_id`);
+};
+
+interface KeptTotal {
+  readonly entity: string;
+  readonly countedPlays: number;
+  readonly listenedMs: number;
+  readonly latestPlayAt: number;
+}
+
+/** The sums [plan] reads of every [kind] entity: its kept blocks and days, and its partial days' plays. */
+export const creditedTotals = (
+  db: LibraryDatabase,
+  kind: CreditKind,
+  plan: KeptTotalsPlan,
+): KeptTotal[] => {
+  const totals = creditedTotalsSql(kind, plan);
+  return totals === null ? [] : db.all<KeptTotal>(totals);
+};
+
+/** `creditedTotals`' statement, for a reader that joins more to it; null when [plan] reads nothing. */
+const creditedTotalsSql = (kind: CreditKind, plan: KeptTotalsPlan): SQL | null => {
+  const parts: SQL[] = [];
+  const kept = (span: number, from: number, to: number) =>
+    sql`SELECT entity, counted_plays, listened_ms, latest_play_at FROM credited_buckets
+      WHERE kind = ${kind} AND span = ${span} AND bucket BETWEEN ${from} AND ${to}`;
+  if (plan.blocks !== null) parts.push(kept(1, plan.blocks.from, plan.blocks.to));
+  for (const days of plan.days) parts.push(kept(0, days.from, days.to));
+  for (const plays of plan.plays)
+    parts.push(sql`SELECT c.entity, c.weight, c.weight * e.listened_ms, e.started_at
+      FROM play_events AS e
+      -- The partial days' plays lead: each finds its song's credits by key.
+      CROSS JOIN play_credits AS c ON c.song = ${sql.raw(songKeySql("e"))} AND c.kind = ${kind}
+      WHERE e.counted AND e.started_at BETWEEN ${plays.from} AND ${plays.to}`);
+  if (parts.length === 0) return null;
+  return sql`WITH totals (entity, plays, listened, latest) AS (
+      ${sql.join(parts, sql` UNION ALL `)})
+    SELECT entity, sum(plays) AS "countedPlays", sum(listened) AS "listenedMs",
+      max(latest) AS "latestPlayAt"
+    FROM totals GROUP BY entity HAVING sum(plays) > 0`;
+};
+
+const LIBRARY_ID = /^\d+$/u;
+
+/** The online entities of [kind] among [totals], by id: their kept sort key and item. */
+const onlineEntities = <A>(db: LibraryDatabase, kind: CreditKind, totals: readonly KeptTotal[]) => {
+  const ids = totals.flatMap((total) => (LIBRARY_ID.test(total.entity) ? [] : [total.entity]));
+  return new Map(
+    ids.length === 0
+      ? []
+      : db
+          .all<{ entity: string; sortKey: string; item: string }>(
+            sql`SELECT entity, sort_key AS "sortKey", item FROM played_entities
+            WHERE kind = ${kind} AND entity IN (SELECT value FROM json_each(${JSON.stringify(ids)}))`,
+          )
+          .map((row) => [row.entity, { sortKey: row.sortKey, item: JSON.parse(row.item) as A }]),
+  );
+};
+
+const libraryIds = (totals: readonly KeptTotal[]) =>
+  totals.flatMap((total) => (LIBRARY_ID.test(total.entity) ? [Number(total.entity)] : []));
+
+/** [totals] with their items: a Library row (only while it lists), or an online one. */
+const withItems = <A extends { readonly id: number | string }>(
+  totals: readonly KeptTotal[],
+  rows: ReadonlyMap<number, A>,
+  rowSort: (row: A) => string,
+  online: ReadonlyMap<string, { sortKey: string; item: A }>,
+): PlayedEntityTotal<A>[] =>
+  totals.flatMap((total): PlayedEntityTotal<A>[] => {
+    const sums = {
+      countedPlays: total.countedPlays,
+      listenedMs: total.listenedMs,
+      latestPlayAt: total.latestPlayAt,
+    };
+    if (LIBRARY_ID.test(total.entity)) {
+      const row = rows.get(Number(total.entity));
+      return row === undefined ? [] : [{ ...sums, id: row.id, item: row, sortKey: rowSort(row) }];
+    }
+    const entity = online.get(total.entity);
+    return entity === undefined
+      ? []
+      : [{ ...sums, id: total.entity, item: entity.item, sortKey: entity.sortKey }];
+  });
+
+/**
+ * Each album's and artist's counted plays over [window], ranked, as
+ * `summedPlayedTotals` sums them from the history; without [withAlbums], no
+ * albums. Null while the kept totals owe anything (`keptTotalsSettled`).
+ */
+export const keptPlayedTotals = (
+  db: LibraryDatabase,
+  window: StatsWindow,
+  withAlbums: boolean,
+): PlayedEntityTotals | null => {
+  if (!keptTotalsSettled(db)) return null;
+  const plan = keptTotalsPlan(window);
+  const artistTotals = creditedTotals(db, "artist", plan);
+  const artistIds = libraryIds(artistTotals);
+  const artists = withItems<PlayedArtist>(
+    artistTotals,
+    new Map(
+      (artistIds.length === 0 ? [] : selectArtists(db, { ids: artistIds })).map((row) => [
+        row.id,
+        row,
+      ]),
+    ),
+    (row) => (row as ArtistRow).sort,
+    onlineEntities<PlayedArtist>(db, "artist", artistTotals),
+  );
+  if (!withAlbums) return { albums: [], artists: rankEntityPlays(artists, Infinity) };
+  const albumTotals = creditedTotals(db, "album", plan);
+  const albumIds = libraryIds(albumTotals);
+  const albums = withItems<PlayedAlbum>(
+    albumTotals,
+    new Map(
+      (albumIds.length === 0
+        ? []
+        : selectAlbums(
+            db,
+            sql`${schema.albums.id} IN (SELECT value FROM json_each(${JSON.stringify(albumIds)}))`,
+          )
+      ).map((row) => [row.id, row]),
+    ),
+    (row) => (row as AlbumRow).titleSort,
+    onlineEntities<PlayedAlbum>(db, "album", albumTotals),
+  );
+  return {
+    albums: rankEntityPlays(albums, Infinity),
+    artists: rankEntityPlays(artists, Infinity),
+  };
+};
+
+/**
+ * Each song's counted plays over [window], in no order, as `songPlayTotals`
+ * sums them: a Library song's (streamed plays that are its own included), a
+ * streamed song's the Library hasn't. Null while the kept totals owe anything.
+ */
+export const keptSongPlayTotals = (
+  db: LibraryDatabase,
+  window: StatsWindow,
+): SongPlayTotals[] | null => {
+  if (!keptTotalsSettled(db)) return null;
+  const totals = creditedTotalsSql("song", keptTotalsPlan(window));
+  if (totals === null) return [];
+  // A Library song is listed while it is in the Library, with its title's sort key.
+  return db
+    .all<{
+      trackId: number | null;
+      entity: string;
+      sortKey: string | null;
+      countedPlays: number;
+      listenedMs: number;
+      latestPlayAt: number;
+    }>(
+      sql`WITH song_totals AS (${totals})
+      SELECT tracks.id AS "trackId", song_totals.entity,
+        coalesce(tracks.title_sort, played_entities.sort_key) AS "sortKey",
+        song_totals."countedPlays", song_totals."listenedMs", song_totals."latestPlayAt"
+      FROM song_totals
+      LEFT JOIN tracks ON song_totals.entity LIKE 't:%'
+        AND tracks.id = CAST(substr(song_totals.entity, 3) AS integer)
+      LEFT JOIN played_entities ON played_entities.kind = 'song'
+        AND played_entities.entity = song_totals.entity
+      WHERE tracks.id IS NOT NULL OR song_totals.entity LIKE 'yt:%'`,
+    )
+    .map(({ trackId, entity, sortKey, ...sums }) => ({
+      song:
+        trackId === null
+          ? { kind: "yt" as const, videoId: entity.slice(3) }
+          : { kind: "library" as const, id: trackId },
+      sortKey: sortKey ?? "",
+      ...sums,
+    }));
+};
+
+/**
+ * Stats' rows of counted plays over [window] per album and credited artist,
+ * in no order, as `creditedPlayTotals` sums them. Null while the kept totals
+ * owe anything.
+ */
+export const keptCreditedPlayTotals = (
+  db: LibraryDatabase,
+  window: StatsWindow,
+): CreditedPlayTotals[] | null => {
+  if (!keptTotalsSettled(db)) return null;
+  const totals = creditedTotals(db, "credit", keptTotalsPlan(window));
+  if (totals.length === 0) return [];
+  return db
+    .all<Omit<CreditedPlayTotals, "primary"> & { primary: number }>(
+      sql`WITH totals AS (
+        SELECT json_extract(value, '$[0]') AS entity, json_extract(value, '$[1]') AS plays,
+          json_extract(value, '$[2]') AS listened, json_extract(value, '$[3]') AS latest
+        FROM json_each(${JSON.stringify(
+          totals.map((total) => [
+            total.entity,
+            total.countedPlays,
+            total.listenedMs,
+            total.latestPlayAt,
+          ]),
+        )})
+      ), rows AS (
+        SELECT totals.*, CAST(substr(entity, 1, instr(entity, ':') - 1) AS integer) AS album_id,
+          substr(entity, instr(entity, ':') + 1) AS rest
+        FROM totals
+      )
+      SELECT albums.id AS "albumId", albums.title_sort AS "albumSort",
+        artists.id AS "artistId", artists.sort AS "artistSort",
+        CAST(substr(rows.rest, instr(rows.rest, ':') + 1) AS integer) AS "primary",
+        rows.plays AS "countedPlays", rows.listened AS "listenedMs", rows.latest AS "latestPlayAt"
+      FROM rows
+      JOIN albums ON albums.id = rows.album_id
+      JOIN artists ON artists.id = CAST(substr(rows.rest, 1, instr(rows.rest, ':') - 1) AS integer)`,
+    )
+    .map((row) => ({ ...row, primary: row.primary === 1 }));
+};

@@ -3,7 +3,7 @@ import { useScreenSight } from "@/lib/screenSight";
 import { isScreenSettled } from "@/lib/timing";
 import { online } from "@/native/waveNative";
 import { loadPlayedArtistImage, openPlayedRelease } from "./playedEntityOpening";
-import { artistPhotoName } from "@wave/core";
+import { artistPhotoName, knownPages } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { View } from "react-native";
@@ -47,7 +47,8 @@ const openOnlineAlbum = async (album: OnlineAlbum): Promise<void> => {
   }
 };
 
-const artistImages = new Map<string, Promise<string | null>>();
+/** Artist photos looked up this session, by artist: a screen or two of Stats' rankings (Performance rules, 12). */
+const artistImages = knownPages<Promise<string | null>>(64);
 
 /** Artist photos are requested only while online entries are visible and YT Music is enabled. */
 export const usePlayedArtist = (artist: PlayedArtist) => {
@@ -69,7 +70,7 @@ export const usePlayedArtist = (artist: PlayedArtist) => {
         (name) => appRuntime.runPromise(Effect.flatMap(YtMusic, (yt) => yt.searchArtists(name))),
       );
       artistImages.set(key, pending);
-      void pending.catch(() => artistImages.delete(key));
+      void pending.catch(() => artistImages.forget(key));
     }
     void pending
       .then((url) => {

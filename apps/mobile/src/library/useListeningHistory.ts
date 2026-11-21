@@ -11,17 +11,41 @@ import { appRuntime } from "./runtime";
 
 const EMPTY: ListeningHistoryPage = { rows: [], next: null, newer: null };
 
+/** At most this many plays of the history's head are kept for its next opening. */
+const HISTORY_KEPT_ROWS = 100;
+
+/**
+ * The whole history's head as last read, kept for the session so Settings ›
+ * History opens on it (#1352) and reads again in place; `readyScreens.ts`
+ * reads it at startup. Only a head page (nothing newer) of at most
+ * `HISTORY_KEPT_ROWS` plays is kept.
+ */
+let keptHead: ListeningHistoryPage = EMPTY;
+
+const keepHead = (page: ListeningHistoryPage): void => {
+  if (page.newer === null && page.rows.length <= HISTORY_KEPT_ROWS) keptHead = page;
+};
+
+/** Reads the history's newest page into what its next opening draws. */
+export const readListeningHistoryHead = (): Promise<void> =>
+  appRuntime
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+    .runPromise(LibraryStore.use((store) => store.listeningHistory(undefined, "")))
+    .then(keepHead);
+
 /**
  * Pages history only while shown. Play progress refreshes its head; Library
  * edits refresh loaded rows. Opened at the play [around] (Go to This Moment),
  * the full history starts with the plays around it; a search starts at the newest.
  */
 export const useListeningHistory = (query = "", around?: number) => {
-  const [result, setResult] = useState({ query, page: EMPTY });
+  // Opened on the newest plays, it starts from the head kept for the session.
+  const opening = query === "" && around === undefined ? keptHead : EMPTY;
+  const [result, setResult] = useState({ query, page: opening });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const whole = useRef(EMPTY);
-  const shown = useRef({ query, page: EMPTY });
+  const whole = useRef(opening);
+  const shown = useRef({ query, page: opening });
   const request = useRef<(read: ListeningHistoryRead) => void>(() => {});
 
   useFocusEffect(
@@ -44,7 +68,10 @@ export const useListeningHistory = (query = "", around?: number) => {
           ),
         onPage: (result) => {
           shown.current = { query, page: result };
-          if (query === "") whole.current = result;
+          if (query === "") {
+            whole.current = result;
+            if (around === undefined) keepHead(result);
+          }
           setResult({ query, page: result });
         },
         onLoading: setLoading,

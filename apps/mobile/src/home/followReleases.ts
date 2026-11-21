@@ -7,7 +7,8 @@ import { waveSignedIn } from "@/sync/waveSignedIn";
 import { LibraryStore } from "@/library/LibraryStore";
 
 import { appRuntime } from "@/library/runtime";
-import { settledTurnEffect } from "@/lib/backgroundWork";
+import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
+import { namedWork } from "@/lib/stepped";
 import { dontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { followedArtistsEnabled } from "@/settings/followedArtists";
 import { currentFollowCountry } from "@/settings/followCountry";
@@ -26,6 +27,7 @@ const check = followReleasesCheck<YtMusicError, LibraryStore>({
   showsCheckable: async () => showsConfigured && (await waveSignedIn()),
   checkShows: (context) => checkFollowShows(context, false),
   settle: settledTurnEffect,
+  answered: freeTurnEffect,
   // Its Albums searches and album pages share the search allowance, last in line.
   ytTurn: (query, read) => withSearchTurn("newReleases", query, read),
 });
@@ -49,6 +51,7 @@ export const checkFollowReleases = (
         ? Effect.tryPromise(readHomeFollow).pipe(Effect.ignore)
         : Effect.void,
     ),
+    namedWork("new-release check"),
   );
 
 export const hideRelease = (key: string) =>

@@ -22,7 +22,7 @@ const root = fileURLToPath(new URL("../../../../", import.meta.url));
 type Store = Awaited<ReturnType<typeof loadLibraryStore>>;
 
 /** The pool's entries, read at once. */
-const sources = (store: Store) => ({ entryVideoIds: readPlaylistSeedIds(store, Effect.void) });
+const sources = (store: Store) => ({ entryVideoIds: readPlaylistSeedIds(store) });
 
 /** What the pages show: a Library song's id, or a streamed entry's video id. */
 const seedIds = (pages: readonly (readonly MagicQueueSeed<PlayableSongRow>[])[]) =>

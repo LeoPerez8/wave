@@ -29,8 +29,8 @@ export interface LyricsSearchIndexerDeps {
   readonly readLyrics: (path: string) => Promise<Lyrics>;
   /** Tells Search the index changed. */
   readonly changed: () => void;
-  /** Waits for a free turn before each file. */
-  readonly freeTurn: () => Promise<void>;
+  /** Waits for a free turn before each file, for the work [name] says. */
+  readonly freeTurn: (name: string) => Promise<void>;
 }
 
 export interface LyricsSearchIndexer {
@@ -82,7 +82,7 @@ export const createLyricsSearchIndexer = ({
       while (pending.size > 0 && !stopped) {
         const [id] = pending;
         pending.delete(id!);
-        await freeTurn();
+        await freeTurn("lyrics search index: changed songs");
         await refreshTrack(id!);
       }
       if (stopped) break;
@@ -93,7 +93,7 @@ export const createLyricsSearchIndexer = ({
       for (const saved of savedPage) {
         if (stopped) break;
         savedCursor = saved.videoId;
-        await freeTurn();
+        await freeTurn("lyrics search index: saved lyrics");
         await withStore((store) => store.indexSavedLyricsSearchText(saved));
         changed();
       }
@@ -110,7 +110,7 @@ export const createLyricsSearchIndexer = ({
           for (const track of stale) {
             if (stopped) break;
             staleCursor = track.id;
-            await freeTurn();
+            await freeTurn("lyrics search index: removed songs");
             await refreshTrack(track.id);
           }
           runAgain ||= stale.length === PAGE_SIZE;
@@ -126,7 +126,7 @@ export const createLyricsSearchIndexer = ({
       for (const track of page) {
         if (stopped) break;
         cursor = track.id;
-        await freeTurn();
+        await freeTurn("lyrics search index: songs");
         // Re-read the target before touching disk; the scan may have moved or removed it.
         await refreshTrack(track.id);
       }

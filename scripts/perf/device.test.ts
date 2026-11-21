@@ -369,6 +369,11 @@ describe("findNode", () => {
     assert.deepEqual(findNode(xml, { descPrefix: "Now playing:" }), { x: 720, y: 2780 });
   });
 
+  it("finds a node by the end of its label", () => {
+    assert.deepEqual(findNode(xml, { descSuffix: ", Radiohead" }), { x: 720, y: 2780 });
+    assert.equal(findNode(xml, { descSuffix: "Now playing:" }), null);
+  });
+
   it("matches text with XML entities decoded", () => {
     assert.deepEqual(findNode(xml, { text: "Rock & Roll" }), { x: 250, y: 1040 });
   });

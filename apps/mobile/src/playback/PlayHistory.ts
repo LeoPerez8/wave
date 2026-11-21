@@ -20,6 +20,7 @@ import { AppState } from "react-native";
 import { makeExternalStore } from "@wave/client/externalStore";
 import { publishLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
+import { withSyncLibraryReads } from "@/library/syncLibraryReads";
 
 import { Player, playbackState, positionState } from "./Player";
 import { observePlayCheckpoints } from "@wave/client/playCheckpoints";
@@ -107,10 +108,11 @@ const trackFor = (key: string): PlayTrack | null => {
 
 /**
  * Runs a store call. Calls are synchronous (expo-sqlite), which keeps them in
- * signal order. Recording is best effort: a failed call must never disturb playback.
+ * signal order; the one read here (the latest play) stays on the JS thread for
+ * that (#1348). Recording is best effort: a failed call must never disturb playback.
  */
 const write = <A>(effect: Effect.Effect<A, unknown>): A | null => {
-  const exit = Effect.runSyncExit(effect);
+  const exit = Effect.runSyncExit(withSyncLibraryReads(effect));
   return Exit.isSuccess(exit) ? exit.value : null;
 };
 

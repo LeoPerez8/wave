@@ -30,6 +30,7 @@ node scripts/perf/perf.ts run --scenario now-playing,queue --label 304-after
 node scripts/perf/perf.ts run --scenario push-playlist --playlist "Alternative pop" --label playlist
 node scripts/perf/perf.ts run --scenario soak-routes,soak-player --label 318-soak
 node scripts/perf/perf.ts run --scenario screen-off,screen-off-lyrics --label 712-screen-off
+node scripts/perf/perf.ts emulator-check --artist <a> --playlist <p>  # #1359, exits 1 on a block (docs/agents/emulator-checks.md)
 node scripts/perf/perf.ts summary perf-results/<file>.jsonl
 node scripts/perf/perf.ts compare <before.jsonl> <after.jsonl>
 node scripts/perf/perf.ts run --dry-run             # the whole pipeline on a simulated phone
@@ -53,6 +54,9 @@ node scripts/perf/perf.ts run --dry-run             # the whole pipeline on a si
   profiles (#317).
 - `--import-link <url>`: overrides the fixture's playlist link.
 - `--artist <name>`: overrides the fixture's artist (`push-artist`).
+- `--album <name>`, `--yt-artist <name>`: the album on Library › Albums' first screen and the
+  artist outside the Library on the fixture artist's Similar artists row that `reference-taps`
+  opens (fixture `album` and `ytArtist`). Unset, it skips those pages.
 - `--playlist <name>`: overrides the fixture's playlist (`push-playlist`). Use a playlist visible
   on Library › Playlists without scrolling, and the same playlist for comparable runs. The run
   header records its name; `compare` warns when the names differ.
@@ -177,6 +181,7 @@ JavaScript saw that key, not when it was pressed.
 | `soak-player`       | a cycle: open Now Playing, Queue, Queue again, Close (`open`, `queue-open`, …, `close`)      | as `now-playing`, `queue` |         30 |
 | `screen-off`        | music playing, Now Playing closed: the screen off for 5 minutes (`screen-off`); by name      | -                         |          3 |
 | `screen-off-lyrics` | the same with Now Playing open on lyrics and a 60-minute sleep timer; by name                | -                         |          3 |
+| `reference-taps`    | #1347's baseline: tabs, Settings pages, DJ, Magic Queue, Library, Now Playing; by name       | `route`, `visible`        |          5 |
 
 `rescan-return` (#315) isn't part of `all` either: each iteration waits past Wave's 60 s rescan
 interval, so ask for it by name. Its return starts the rescan, a sync and any import's next

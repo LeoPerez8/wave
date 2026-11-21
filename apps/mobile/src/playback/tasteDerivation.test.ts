@@ -192,6 +192,8 @@ test("SQL bench observation covers actual taste statements and cleans up indepen
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
+    // The startup job sets up the taste write stamp once the first screen settles.
+    await Effect.runPromise(store.startupUpkeep);
     const samples: { sql: string; ms: number }[] = [];
     const stop = observeSqlTasks(fixture.db, (statement, ms) =>
       samples.push({ sql: statement, ms }),

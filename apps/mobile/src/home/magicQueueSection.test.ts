@@ -41,6 +41,10 @@ const harness = {
   /** Whether the pool has songs: without them the row shows the mixes' songs. */
   pool: true,
   answers: new Map<string, readonly (readonly MagicQueueSeed<never>[])[]>(),
+  /** Whether pool reads are still on their way (the first frame of a cold start). */
+  pending: false,
+  /** The cold-start snapshot's pages, or undefined for none. */
+  snapshot: undefined as readonly (readonly MagicQueueSeed<never>[])[] | undefined,
   toasts: 0,
 };
 Object.assign(globalThis, { __magicQueueSectionTest: harness });
@@ -80,7 +84,7 @@ const builds = await reactCompilerBuilds<Section>(
       `const test = globalThis.__magicQueueSectionTest;
        export const libraryQuery = (key, reads, read) => ({ key, reads, read });
        export const useLibraryQuery = (query, initial) => {
-         if (query === null) return initial;
+         if (query === null || test.pending) return initial;
          if (!test.answers.has(query.key)) {
            test.loads.push(query.key);
            test.answers.set(
@@ -111,8 +115,9 @@ const builds = await reactCompilerBuilds<Section>(
     ),
     "./recommendationSnapshot": stubModule(
       `import * as Effect from ${effect};
-       export const recommendationSnapshot = { library: Effect.die("unused"), catalog: Effect.die("unused") };`,
+       export const homeRecommendationSnapshot = { library: Effect.die("unused"), catalog: Effect.die("unused") };`,
     ),
+    "./homeWork": stubModule(`export const homeTurnOf = (turn) => turn;`),
     "@/library/libraryChanges": stubModule(`export const onLibraryChange = () => {};`),
     // No song is disliked here; the set is the store's, which isn't run.
     "@/library/dislikes": stubModule(
@@ -129,6 +134,11 @@ const builds = await reactCompilerBuilds<Section>(
     "@/playback/MagicQueue": unused("startMagicQueue"),
     "@/playback/magicQueueStart": unused("runMagicQueueStart", "startMagicQueueFromStream"),
     "./streamedMagicQueueStart": unused("startFromLibraryMatch"),
+    // The cold-start snapshot is the harness's.
+    "./homeSnapshot": stubModule(
+      `export const snapshotSection = () => globalThis.__magicQueueSectionTest.snapshot;
+       export const useSnapshotted = (_name, value) => value;`,
+    ),
     "./playlistSeedIds": stubModule(
       `import * as Effect from ${effect};
        export const readPlaylistSeedIds = () => Effect.succeed([]);
@@ -174,6 +184,23 @@ const open = (hooks: Section, artistMixes: DiscoverMixesSection) => {
 };
 
 for (const [build, hooks] of Object.entries(builds)) {
+  // First: the pages a session has shown come before the snapshot's.
+  test(`${build}: a cold start draws the snapshot's pages before the pool's read answers`, () => {
+    const pages = [[{ source: "stream", song: song("kept") }]] as never;
+    harness.snapshot = pages;
+    harness.pending = true;
+    const row = open(hooks, NO_MIXES);
+    try {
+      const shown = row.section().shown;
+      assert.equal(shown.kind, "pages");
+      assert.deepEqual(shown.kind === "pages" && shown.pages, pages);
+    } finally {
+      row.close();
+      harness.snapshot = undefined;
+      harness.pending = false;
+    }
+  });
+
   test(`${build}: coming back to Home keeps the pool's songs and starts no new read`, () => {
     harness.pool = true;
     harness.loads.length = 0;

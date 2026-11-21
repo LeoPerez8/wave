@@ -10,6 +10,7 @@ export interface SliderRange {
 
 /** The value nearest `value` the slider can hold: clamped to the range and on a step. */
 export const snapSliderValue = (value: number, range: SliderRange): number => {
+  "worklet";
   if (!Number.isFinite(value)) return range.min;
   const clamped = Math.min(range.max, Math.max(range.min, value));
   const stepped = range.min + Math.round((clamped - range.min) / range.step) * range.step;
@@ -41,8 +42,12 @@ export const sliderFraction = (value: number, range: SliderRange): number => {
   return Math.min(1, Math.max(0, (value - range.min) / span));
 };
 
-/** The value under a finger `x` dp from the start of a track `width` dp long. */
+/**
+ * The value under a finger `x` dp from the start of a track `width` dp long. A
+ * worklet, so a drag finds it on the UI thread and calls JS only on a new step.
+ */
 export const sliderValueAt = (x: number, width: number, range: SliderRange): number => {
+  "worklet";
   if (!(width > 0)) return range.min;
   return snapSliderValue(range.min + (x / width) * (range.max - range.min), range);
 };

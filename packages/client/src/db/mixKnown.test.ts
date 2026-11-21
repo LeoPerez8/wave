@@ -153,7 +153,7 @@ describe("The videos the owner knows now, for re-blending mixes", () => {
 });
 
 describe("The videos the owner knows, in pages", () => {
-  test("a thousand-entry playlist reads whole, no page over 512 rows", () => {
+  test("a thousand-entry playlist reads whole, one statement a source (#1351)", () => {
     createPlaylist(
       db,
       "Long",
@@ -164,6 +164,6 @@ describe("The videos the owner knows, in pages", () => {
     const traced = traceQueries(db, () => selectKnownVideos(db));
     assert.equal(traced.result.length, 1_001);
     assert.equal(new Set(traced.result).size, 1_001);
-    assert.ok(traced.queries.every((query) => query.rows <= 512));
+    assert.equal(traced.queries.length, 4);
   });
 });

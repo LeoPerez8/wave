@@ -2,6 +2,8 @@ import { type Href } from "expo-router";
 import { router } from "@/lib/timingRouter";
 import { useState } from "react";
 
+import { openingArtist, openedArtistCover } from "./openedArtist";
+
 /** What the opener knew about the album or playlist it opens, for that screen's first frame. */
 export interface YtListHead {
   readonly title: string;
@@ -54,12 +56,19 @@ export const useYtListHead = (screen: YtListScreen, id: string): YtListHead | un
 
 /**
  * Opens the YouTube Music artist page [browseId] (`UC…`), for an artist the
- * Library doesn't have, on the Library stack. [name], when the opener knows
- * it, heads the page until the artist's page has been read.
+ * Library doesn't have, on the Library stack. [name] and [cover], when the
+ * opener drew them, head the page until the artist's page has been read.
  */
-export const openYtArtist = (browseId: string, name?: string): void => {
+export const openYtArtist = (browseId: string, name?: string, cover?: string | null): void => {
+  openingArtist(browseId, cover);
   const query = name === undefined || name === "" ? "" : `?name=${encodeURIComponent(name)}`;
   router.push(`/library/yt-artist/${encodeURIComponent(browseId)}${query}` as Href);
+};
+
+/** The cover the opener drew for the artist page [browseId], read once as it mounts. */
+export const useOpenedArtistCover = (browseId: string | null): string | null => {
+  const [cover] = useState(() => (browseId === null ? null : openedArtistCover(browseId)));
+  return cover;
 };
 
 /** The YouTube Music artist page's id segment when it's opened by name, not by browse id. */

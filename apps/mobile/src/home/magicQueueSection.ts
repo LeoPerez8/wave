@@ -5,6 +5,7 @@ import { currentLocalisation } from "@/localisation/localisation";
  * Discover's New music and Popularity (Core's `magicQueuePages`); with
  * neither, nine streamed songs of the Artist mixes (Core's `magicQueueRow`).
  */
+import { namedWork } from "@/lib/stepped";
 import {
   magicQueueMixPicks,
   magicQueueRow,
@@ -18,7 +19,7 @@ import {
   type YtAlbumSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { freeTurnEffect } from "@/lib/backgroundWork";
 import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
@@ -35,8 +36,10 @@ import { appRuntime } from "@/library/runtime";
 
 import { magicQueuePagesRead, type MagicQueuePagesPlan } from "./magicQueuePagesRead";
 import { magicQueuePopularity } from "./magicQueuePopularity";
+import { snapshotSection, useSnapshotted } from "./homeSnapshot";
 import { createPlaylistSeedIdsRead, readPlaylistSeedIds } from "./playlistSeedIds";
-import { recommendationSnapshot } from "./recommendationSnapshot";
+import { homeRecommendationSnapshot } from "./recommendationSnapshot";
+import { homeTurnOf } from "./homeWork";
 import { startFromLibraryMatch } from "./streamedMagicQueueStart";
 
 /** What the row draws (Core's `magicQueueShown`), its mixes' songs picked. */
@@ -51,9 +54,12 @@ export interface MagicQueueSection {
   readonly refresh: (index: number) => void;
 }
 
-/** The row's playlist entries, read in pages between free turns: it's waiting to be shown. */
+/** The row's playlist entries, in one read on a free turn: it's waiting to be shown. */
 const seedIds = createPlaylistSeedIdsRead(
-  Effect.flatMap(LibraryStore, (store) => readPlaylistSeedIds(store, freeTurnEffect)),
+  Effect.andThen(
+    homeTurnOf(freeTurnEffect),
+    Effect.flatMap(LibraryStore, (store) => readPlaylistSeedIds(store)),
+  ).pipe(namedWork("Home Magic Queue seeds")),
 );
 onLibraryChange(seedIds.change);
 
@@ -64,9 +70,9 @@ type Seed = MagicQueueSeed<PlayableSongRow>;
 
 /** How much of a hit each song of the pool is, kept per snapshot Library and catalog. */
 const popularity = magicQueuePopularity({
-  library: recommendationSnapshot.library,
-  catalog: recommendationSnapshot.catalog,
-  between: recommendationTurnEffect,
+  library: homeRecommendationSnapshot.library,
+  catalog: homeRecommendationSnapshot.catalog,
+  between: homeTurnOf(recommendationTurnEffect),
 });
 
 /** What each draw reads beside the store, Discover's levels as they are at that draw. */
@@ -78,14 +84,30 @@ const sources = {
 };
 
 /**
+ * The pages the row last showed this session: Home mounting again finds
+ * them. Null before the first draw, when a cold start draws the snapshot's
+ * (#1353).
+ */
+let keptPages: readonly (readonly Seed[])[] | null = null;
+
+/** The first draw keeps the pages Home showed last (this session's, or the snapshot's) in place. */
+const firstPlan = (): MagicQueuePagesPlan => {
+  const pages = keptPages ?? snapshotSection("magicQueue") ?? null;
+  return pages === null
+    ? { kind: "fresh" }
+    : { kind: "keep", pages: pages.map((page) => page.map(magicQueueSeedId)) };
+};
+
+/**
  * The row's pages (Core's `magicQueuePages`) through Home's local-query path:
  * no saved picks or taste profile. Null until they're first read. Only the
  * owner's refresh draws again: re-renders, Now Playing covering the screen,
  * and leaving Home for another screen and coming back keep the pages
- * (#1251).
+ * (#1251). Home's first frame draws the pages it showed last, which the
+ * first read keeps in their places.
  */
 const usePoolPages = (enabled: boolean) => {
-  const [read, setRead] = useState(() => magicQueuePagesRead(Math.random, { kind: "fresh" }));
+  const [read, setRead] = useState(() => magicQueuePagesRead(Math.random, firstPlan()));
   const query = useMemo(
     () =>
       libraryQuery(
@@ -96,8 +118,15 @@ const usePoolPages = (enabled: boolean) => {
     [read],
   );
   const answer = useLibraryQuery<readonly (readonly Seed[])[] | null>(enabled ? query : null, null);
-  const [shown, setShown] = useState<readonly (readonly Seed[])[] | null>(null);
+  const [shown, setShown] = useState<readonly (readonly Seed[])[] | null>(
+    () => keptPages ?? snapshotSection("magicQueue") ?? null,
+  );
   if (answer !== null && answer !== shown) setShown(answer);
+  // Kept for the session, and noted for the next snapshot once read.
+  useSnapshotted("magicQueue", answer ?? undefined);
+  useEffect(() => {
+    if (answer !== null) keptPages = answer;
+  }, [answer]);
   // A seed disliked while the row shows leaves it at once; the next draw fills its place.
   const disliked = useDislikedSongs(enabled);
   const drawn = answer ?? shown;

@@ -11,6 +11,7 @@
  *   keeps it whole until one of its artists has a song credited to them alone
  *   (or featuring someone).
  */
+import { finishSteps } from "./buildSteps.ts";
 import { UNKNOWN_ARTIST, identityKey } from "./library.ts";
 
 /** A bracketed credit, "(feat. X)" or "[with X]": the brackets go, the credit stays. */
@@ -41,7 +42,13 @@ const pieces = (segment: string): string[] => segment.split(SEPARATOR);
  */
 export const creditSplitter = (
   knownCredits: Iterable<string>,
-): ((credit: string | readonly string[]) => string[]) => {
+): ((credit: string | readonly string[]) => string[]) =>
+  finishSteps(creditSplitterSteps(knownCredits));
+
+/** `creditSplitter` built a step per known credit, for work that runs in slices. */
+export function* creditSplitterSteps(
+  knownCredits: Iterable<string>,
+): Generator<void, (credit: string | readonly string[]) => string[]> {
   const known = new Set<string>();
   // Names credited on their own somewhere: a part between featured credits with no other mark.
   const standing = new Set<string>();
@@ -54,6 +61,7 @@ export const creditSplitter = (
       const name = tidy(segment);
       if (name !== "" && pieces(segment).length === 1) standing.add(identityKey(name));
     }
+    yield;
   }
 
   /** The names of [segment], where a run of them the Library knows as one artist stays whole. */
@@ -91,7 +99,7 @@ export const creditSplitter = (
     }
     return names.size === 0 ? [UNKNOWN_ARTIST] : [...names.values()];
   };
-};
+}
 
 /** The artists [credit] names, the primary artist first (see `creditSplitter`). */
 export const splitCredit = (credit: string, knownCredits: Iterable<string> = []): string[] =>

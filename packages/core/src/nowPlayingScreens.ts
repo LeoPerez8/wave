@@ -139,3 +139,19 @@ export const stepNowPlayingScreens = (
       return screens.screen === "player" ? { screens, close: true } : show("player");
   }
 };
+
+/**
+ * The tap timing [event] starts on [screens], if any: Related rising or leaving because of
+ * something the user did. Now Playing closing or YouTube Music turning off isn't a tap, and
+ * starting a timing for it would cancel the tap being timed (#1347).
+ */
+export const relatedTimingKind = (
+  screens: NowPlayingScreens,
+  event: NowPlayingScreensEvent,
+): "relatedOpen" | "relatedClose" | null => {
+  if (event.type === "closed" || event.type === "ytMusicOff") return null;
+  const was = screens.screen === "related";
+  const is = stepNowPlayingScreens(screens, event).screens.screen === "related";
+  if (was === is) return null;
+  return is ? "relatedOpen" : "relatedClose";
+};

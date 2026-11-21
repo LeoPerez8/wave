@@ -32,7 +32,7 @@ test("Home's returns read no entries; a playlist or track change reads them agai
     const seedIds = createPlaylistSeedIdsRead(
       Effect.suspend(() => {
         reads++;
-        return readPlaylistSeedIds(store, Effect.void);
+        return readPlaylistSeedIds(store);
       }),
     );
     assert.deepEqual(await Effect.runPromise(seedIds.get), ["a", "b"]);
@@ -53,7 +53,7 @@ test("Home's returns read no entries; a playlist or track change reads them agai
   }
 });
 
-test("each page holds at most 512 rows whatever the entries are, with a turn between pages", async () => {
+test("the entries come in one statement however many there are (#1351)", async () => {
   const db = await openTestDatabase();
   try {
     const store = await loadLibraryStore(root, db);
@@ -63,20 +63,9 @@ test("each page holds at most 512 rows whatever the entries are, with a turn bet
         Array.from({ length: 1_200 }, (_, i) => streamed(`v${i}`)),
       ),
     );
-    let turns = 0;
-    const measured = traceQueries(db, () =>
-      Effect.runSync(
-        readPlaylistSeedIds(
-          store,
-          Effect.sync(() => {
-            turns++;
-          }),
-        ),
-      ),
-    );
+    const measured = traceQueries(db, () => Effect.runSync(readPlaylistSeedIds(store)));
     assert.equal(measured.result.length, 1_200);
-    assert.ok(measured.queries.every((query) => query.rows <= 512));
-    assert.equal(turns, 3);
+    assert.equal(measured.queries.length, 1);
   } finally {
     closeTestDatabase(db);
   }

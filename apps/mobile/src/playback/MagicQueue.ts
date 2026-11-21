@@ -57,6 +57,8 @@ import { recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
 import { makeExternalStore, subscribeAll } from "@wave/client/externalStore";
 import { oneAtATime } from "@/lib/oneAtATime";
+import { freeTurnEffect } from "@/lib/backgroundWork";
+import { namedWork } from "@/lib/stepped";
 import { dislikedSongsNow, onDislikesChanged } from "@/library/dislikes";
 import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
@@ -657,12 +659,14 @@ export const startDjMagicQueue = (
       profileOf: magicProfileOf(library),
       deadlineAt,
     });
+    yield* freeTurnEffect;
     const batch = completeMagicRadioBatch(
       drawn.session,
       yt.candidates,
       yt.likedCandidates,
       yt.fallback,
     );
+    yield* freeTurnEffect;
     const songs = batchQueueTracks(batch, library.songs);
     appLog(
       "info",
@@ -695,7 +699,7 @@ export const startDjMagicQueue = (
     );
     yield* cacheYtCoversInBackground(batchStreams(batch));
     return "started" satisfies DjStart;
-  });
+  }).pipe(namedWork("DJ batch"));
 
 /** Runs [effect] on its own; the Magic Queue is best effort and never disturbs playback. */
 const fork = (effect: Effect.Effect<void, unknown>): void => {
@@ -784,6 +788,8 @@ export const layer = Layer.effectDiscard(
           return { kind: "dropped" } satisfies MagicBatchOutcome;
         fork(warmInputs);
         const latest = recommendationSnapshot.peek();
+        // The batch's JS starts on a free turn, away from the owner's tap.
+        yield* freeTurnEffect;
         const library = latest.library ?? startingLibrary;
         const catalog = latest.catalog ?? [];
         const graph = latest.graph;
@@ -810,6 +816,8 @@ export const layer = Layer.effectDiscard(
           Effect.provideService(YtMusic, ytMusic),
         );
         yield* waitForSignals();
+        // The radios' answer is handled on a free turn: their network wait isn't a slice.
+        yield* freeTurnEffect;
         const session = activeMagicSession();
         if (
           session?.id !== wanted.id ||
@@ -841,7 +849,7 @@ export const layer = Layer.effectDiscard(
           Effect.provideService(Player, player),
         );
         return { kind: "appended", songs: songs.length } satisfies MagicBatchOutcome;
-      });
+      }).pipe(namedWork("Magic Queue batch"));
 
     /**
      * Picks a batch for the session under way if it wants one

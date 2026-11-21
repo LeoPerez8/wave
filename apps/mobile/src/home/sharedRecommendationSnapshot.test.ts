@@ -53,27 +53,23 @@ const fixture = (catalog: CatalogSong[] = [song("p1", "Portishead", "Massive Att
         reads.graphCatalog++;
         return { rows: [], next: null };
       }),
-    graphSimilarPage: () => Effect.succeed({ rows: [], next: null }),
-    mixCreditNamesPage: () => Effect.succeed({ rows: [], next: null }),
-    graphPlayPage: () =>
-      Effect.suspend(() => {
-        reads.graphPlays++;
-        const page = {
-          rows: [
-            {
-              startedAt: 0,
-              listenedMs: 180_000,
-              endReason: "completed" as const,
-              artists: ["Massive Attack"],
-            },
-          ],
-          next: null,
-        };
-        if (!hold) return Effect.succeed(page);
-        return Effect.callback<typeof page>((resume) => {
-          held = () => resume(Effect.succeed(page));
-        });
-      }),
+    ytArtistSimilar: Effect.succeed([]),
+    mixCreditNames: Effect.succeed([]),
+    graphPlays: Effect.suspend(() => {
+      reads.graphPlays++;
+      const plays = [
+        {
+          startedAt: 0,
+          listenedMs: 180_000,
+          endReason: "completed" as const,
+          artists: ["Massive Attack"],
+        },
+      ];
+      if (!hold) return Effect.succeed(plays);
+      return Effect.callback<typeof plays>((resume) => {
+        held = () => resume(Effect.succeed(plays));
+      });
+    }),
   };
   const snapshot = shareRecommendationSnapshot({
     library: Effect.sync(() => ({ read: ++reads.library })),
@@ -163,9 +159,9 @@ describe("the shared recommendation snapshot", () => {
     const store: ArtistGraphReads = {
       graphCatalogPage: () => Effect.succeed({ rows: [], next: null }),
       graphRadioPage: () => Effect.succeed({ rows: [], next: null }),
-      graphSimilarPage: () => Effect.succeed({ rows: [], next: null }),
-      mixCreditNamesPage: () => Effect.succeed({ rows: [], next: null }),
-      graphPlayPage: () => Effect.succeed({ rows: [], next: null }),
+      ytArtistSimilar: Effect.succeed([]),
+      mixCreditNames: Effect.succeed([]),
+      graphPlays: Effect.succeed([]),
     };
     const snapshot = shareRecommendationSnapshot({
       library: Effect.succeed({}),
@@ -211,9 +207,9 @@ test("peek returns cold inputs immediately and retains the last completed values
       store: Effect.succeed({
         graphCatalogPage: () => Effect.succeed({ rows: [], next: null }),
         graphRadioPage: () => Effect.succeed({ rows: [], next: null }),
-        graphSimilarPage: () => Effect.succeed({ rows: [], next: null }),
-        mixCreditNamesPage: () => Effect.succeed({ rows: [], next: null }),
-        graphPlayPage: () => Effect.succeed({ rows: [], next: null }),
+        ytArtistSimilar: Effect.succeed([]),
+        mixCreditNames: Effect.succeed([]),
+        graphPlays: Effect.succeed([]),
       }),
       start: Effect.void,
       between: Effect.void,
