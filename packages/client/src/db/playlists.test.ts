@@ -7,7 +7,9 @@ import {
   writePlaylistEntrySong,
   orderKeyBetween,
   playlistPlays,
+  EMPTY_SYNC_TABLES,
   RECENT_WINDOW_DAYS,
+  readPullPage,
   tryAgainSearches,
   type PlayContext,
   type PlayEvent,
@@ -51,8 +53,10 @@ import { playlistWork, resetPlaylistWork } from "./playlistWork.ts";
 import { saveBatch } from "./save.ts";
 import * as schema from "./schema.ts";
 import { selectChangesSince, selectPhoneId } from "./sync.ts";
+import { applyPulledPage, selectUnpushed } from "./syncRows.ts";
 import {
   addTrack,
+  closeTestDatabase,
   migrateTestDatabase,
   openTestDatabase,
   traceQueries,
@@ -1152,6 +1156,69 @@ describe("From your library's plays", () => {
     recorded.length = 0;
     play(NOW - DAY_MS, fromPlaylist(playlistId), { counted: false });
     assert.deepEqual(selectPlaylistPlays(db, NOW), []);
+  });
+
+  test("a play from another device counts for its playlist here, never for the one with its number", async () => {
+    recorded.length = 0;
+    const remote = await openTestDatabase();
+    try {
+      const senderPlaylist = newPlaylist("Sender playlist");
+      db.update(schema.playlists)
+        .set({ syncId: "playlist-stable-id" })
+        .where(eq(schema.playlists.id, senderPlaylist))
+        .run();
+      remote
+        .insert(schema.playlists)
+        .values({ name: "First local playlist", createdAt: 0, updatedAt: 0, changedAt: 0 })
+        .run();
+      const localCollision = remote
+        .insert(schema.playlists)
+        .values({ name: "Unrelated playlist", createdAt: 0, updatedAt: 0, changedAt: 0 })
+        .returning()
+        .get().id;
+      play(NOW - DAY_MS, fromPlaylist(senderPlaylist), { trackId: "yt:sync-play" });
+      // A play goes to the account once it's over: the next one ends it.
+      play(NOW, null);
+      assert.equal(senderPlaylist, localCollision);
+      const changes = selectUnpushed(db, 100, () => null).rows;
+      const syncedPlay = changes.plays[0];
+      assert.ok(syncedPlay);
+      const page = readPullPage(
+        JSON.stringify({ ...EMPTY_SYNC_TABLES, ...changes, cursor: "1", more: false }),
+      );
+      assert.ok(page);
+      applyPulledPage(remote, page, new Map(), NOW);
+      const receivedPlaylist = remote
+        .select({ id: schema.playlists.id })
+        .from(schema.playlists)
+        .where(eq(schema.playlists.syncId, "playlist-stable-id"))
+        .get()?.id;
+      assert.ok(receivedPlaylist);
+      assert.notEqual(receivedPlaylist, localCollision);
+      const legacy = readPullPage(
+        JSON.stringify({
+          ...EMPTY_SYNC_TABLES,
+          plays: [
+            {
+              ...syncedPlay,
+              id: "legacy-play-with-local-context",
+              contextPlaylistId: null,
+              contextId: String(localCollision),
+            },
+          ],
+          cursor: "2",
+          more: false,
+        }),
+      );
+      assert.ok(legacy);
+      applyPulledPage(remote, legacy, new Map(), NOW);
+      assert.deepEqual(
+        selectPlaylistPlays(remote, NOW).map(({ id }) => id),
+        [receivedPlaylist],
+      );
+    } finally {
+      closeTestDatabase(remote);
+    }
   });
 
   test("the plays are read from the play contexts' index, never the whole play history", () => {
