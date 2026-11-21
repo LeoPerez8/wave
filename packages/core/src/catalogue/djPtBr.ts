@@ -23,6 +23,8 @@ export const djPtBr: typeof djEn = {
   musicDiscovery: "Descoberta de música",
   discoverySteps: { familiar: "Conhecidas", blend: "Misturar", discover: "Descobrir" },
   filters: "Filtros",
+  mood: "Humor",
+  moodNames: { energetic: "Agitada", relaxing: "Relaxante", upbeat: "Animada" },
   filterNames: {
     trending: "Em alta",
     lesserKnown: "Músicas pouco conhecidas",

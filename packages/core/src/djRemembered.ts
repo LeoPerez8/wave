@@ -45,7 +45,8 @@ const sameSettings = (a: DjSettings, b: DjSettings): boolean =>
   a.variety === b.variety &&
   a.discovery === b.discovery &&
   a.popularity === b.popularity &&
-  a.newReleases === b.newReleases;
+  a.newReleases === b.newReleases &&
+  a.mood === b.mood;
 
 /** What to keep for [remembered]: null (nothing) with no selection and the default choices. */
 export const storedDjRemembered = ({ tiles, settings }: DjRemembered): string | null =>

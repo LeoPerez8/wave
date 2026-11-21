@@ -32,6 +32,8 @@ export const djEn = {
   discoverySteps: { familiar: "Familiar", blend: "Blend", discover: "Discover" },
   /** The group of chips under Adjust's sliders. */
   filters: "Filters",
+  mood: "Mood",
+  moodNames: { energetic: "Energetic", relaxing: "Relaxing", upbeat: "Upbeat" },
   /** Adjust's filters: Trending and Lesser-known songs lean the queue to hits or deep cuts, New releases to recent records. */
   filterNames: {
     trending: "Trending",

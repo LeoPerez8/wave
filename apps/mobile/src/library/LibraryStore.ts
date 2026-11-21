@@ -48,6 +48,13 @@ import type {
 import { saveReleaseDate, saveTypedReleaseDate } from "@wave/client/db/releaseDates";
 import { pendingStreamedGenres, keepStreamedGenre } from "@wave/client/db/streamedGenres";
 import {
+  pendingDjMoodSongs,
+  keepDjMoodFeatures,
+  selectDjMoodFeatures,
+  type DjMoodFeatureWrite,
+  type DjMoodLookupSong,
+} from "@wave/client/db/djMoodFeatures";
+import {
   readFollowShows,
   saveFollowShows,
   markShowNotified,
@@ -1217,6 +1224,22 @@ export class LibraryStore extends Context.Service<
       videoId: string,
       genre: string | null,
     ) => Effect.Effect<void, LibraryStoreError>;
+    /** Candidate catalog songs due for local mood feature lookup. */
+    readonly pendingDjMoodSongs: (
+      after: string,
+      now: number,
+    ) => Effect.Effect<readonly DjMoodLookupSong[], LibraryStoreError>;
+    /** Keeps feature matches permanently and misses for their retry window. */
+    readonly keepDjMoodFeatures: (
+      writes: readonly DjMoodFeatureWrite[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Cached ReccoBeats features by YouTube video id. */
+    readonly djMoodFeatures: (
+      videoIds: readonly string[],
+    ) => Effect.Effect<
+      ReadonlyMap<string, import("@wave/core").DjAudioFeatures>,
+      LibraryStoreError
+    >;
     /** Library tags and cached streamed answers by ranking id; pass the Fix songs online setting. */
     readonly songGenres: (
       ids: readonly (number | string)[],
@@ -2041,6 +2064,12 @@ const make = Effect.gen(function* () {
       attempt("read pending streamed genres", () => pendingStreamedGenres(db, after)),
     keepStreamedGenre: (videoId, genre) =>
       writeAttempt("save a streamed genre", () => keepStreamedGenre(db, videoId, genre)),
+    pendingDjMoodSongs: (after, now) =>
+      attempt("read pending DJ mood songs", () => pendingDjMoodSongs(db, after, now)),
+    keepDjMoodFeatures: (writes) =>
+      writeAttempt("save DJ mood features", () => keepDjMoodFeatures(db, writes)),
+    djMoodFeatures: (videoIds) =>
+      attempt("read DJ mood features", () => selectDjMoodFeatures(db, videoIds)),
     songGenres: (ids, includeStreamedGenres = true) =>
       attempt("read the songs' genres", () => songGenres(db, ids, includeStreamedGenres)),
 

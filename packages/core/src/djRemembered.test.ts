@@ -33,6 +33,7 @@ const chosen: DjSettings = {
   discovery: "familiar",
   popularity: "trending",
   newReleases: true,
+  mood: "energetic",
 };
 
 describe("what DJ remembers on the phone", () => {

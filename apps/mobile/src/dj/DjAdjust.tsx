@@ -1,9 +1,11 @@
 import {
   DJ_DISCOVERIES,
   DJ_FILTERS,
+  DJ_MOOD_FILTERS,
   DJ_VARIETIES,
   djDiscoveryLabel,
   djFilterOn,
+  djToggleMood,
   djToggleFilter,
   type DjSettings,
   type SliderRange,
@@ -94,6 +96,31 @@ export function DjAdjust({
               accessibilityRole="checkbox"
               accessibilityState={{ checked: on }}
               onPress={() => onChange(djToggleFilter(settings, filter))}
+              style={{ paddingHorizontal: CELL * 2 }}
+            />
+          );
+        })}
+      </View>
+      <Hairline />
+      <Text
+        accessibilityRole="header"
+        className="pt-3 font-sans text-title3 font-normal text-foreground"
+      >
+        {strings.dj.mood}
+      </Text>
+      <View className="flex-row flex-wrap" style={{ gap: CELL, paddingVertical: CELL * 1.5 }}>
+        {DJ_MOOD_FILTERS.map((mood) => {
+          const on = settings.mood === mood;
+          return (
+            <TextButton
+              key={mood}
+              variant="pill"
+              tone="secondary"
+              label={strings.dj.moodNames[mood]}
+              selected={on}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: on }}
+              onPress={() => onChange(djToggleMood(settings, mood))}
               style={{ paddingHorizontal: CELL * 2 }}
             />
           );

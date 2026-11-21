@@ -132,6 +132,22 @@ export default function RootLayout() {
     };
   }, [granted, genreLookups]);
 
+  useEffect(() => {
+    if (!granted) return;
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    const cancel = afterFirstSettled("djMoodFeatures", () => {
+      void import("@/dj/djMoodLookup").then(({ startDjMoodLookup }) => {
+        if (!disposed) stop = startDjMoodLookup();
+      });
+    });
+    return () => {
+      disposed = true;
+      cancel();
+      stop?.();
+    };
+  }, [granted]);
+
   // SQLite gathers the planner statistics the Library database lacks (src/library/db/connection.ts).
   useEffect(() => afterFirstSettled("optimize", optimizeLibraryDatabase), []);
 
