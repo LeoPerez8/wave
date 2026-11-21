@@ -1176,6 +1176,85 @@ describe("syncCycle", () => {
     assert.equal(service.rows().favorites.length, 2);
   });
 
+  test("a phone whose clock runs ahead takes the service's time for what it pushed, and a later change elsewhere wins", async () => {
+    let serviceClock = 100;
+    const service = testSyncService({ now: () => serviceClock });
+    const a = await phone(service);
+    const b = await phone(service);
+    // A's clock runs far ahead of B's and of the service's.
+    for (let tick = 0; tick < 500; tick++) a.now();
+    const { playlistId } = createPlaylist(a.db, "Drive", [], a.now());
+    await a.sync();
+
+    const held = () =>
+      a.db
+        .select({ changedAt: schema.playlists.changedAt, pushed: schema.playlists.pushed })
+        .from(schema.playlists)
+        .where(eq(schema.playlists.id, playlistId))
+        .get();
+    assert.deepEqual(held(), { changedAt: 100, pushed: true });
+    assert.equal(service.rows().playlists[0]?.changedAt, 100);
+    // It agrees with the service: nothing goes up again.
+    const before = service.requests.length;
+    assert.equal((await a.sync()).pushed, 0);
+    assert.ok(!service.requests.slice(before).includes("POST /v1/push"));
+
+    serviceClock = 200;
+    await b.sync();
+    renamePlaylist(b.db, selectPlaylists(b.db)[0]?.id ?? -1, "Road", b.now());
+    await b.sync();
+    await a.sync();
+    assert.deepEqual(
+      selectPlaylists(a.db).map((row) => row.name),
+      ["Road"],
+    );
+    assert.deepEqual(held(), { changedAt: 200, pushed: true });
+  });
+
+  test("a row changed again while its push was on its way keeps its own time and goes up again", async () => {
+    let serviceClock = 100;
+    const service = testSyncService({ now: () => ++serviceClock });
+    const a = await phone(service);
+    const { playlistId } = createPlaylist(a.db, "Drive", [], a.now());
+    let renamed = false;
+    await a.sync({
+      to: {
+        request: async (method, path, body) => {
+          const answer = await service.request(method, path, body);
+          if (method === "POST" && !renamed) {
+            renamed = true;
+            renamePlaylist(a.db, playlistId, "Road", a.now());
+          }
+          return answer;
+        },
+      },
+    });
+    assert.deepEqual(
+      service.rows().playlists.map((row) => (row.deleted ? null : row.name)),
+      ["Road"],
+    );
+    assert.equal((await a.sync()).pushed, 0);
+  });
+
+  test("a push answered by a service that names no corrected rows still succeeds", async () => {
+    const service = testSyncService({ now: () => 100 });
+    const a = await phone(service);
+    createPlaylist(a.db, "Drive", [], a.now());
+    const result = await a.sync({
+      to: {
+        request: async (method, path, body) => {
+          const answer = await service.request(method, path, body);
+          if (method !== "POST") return answer;
+          const { accepted } = JSON.parse(answer.body) as { accepted: unknown };
+          return { status: answer.status, body: JSON.stringify({ accepted }) };
+        },
+      },
+    });
+    assert.ok(result.pushed > 0);
+    assert.equal(service.rows().playlists[0]?.changedAt, 100);
+    assert.equal((await a.sync()).pushed, 0);
+  });
+
   test("changes made offline wait and go up in full once online", async () => {
     const service = testSyncService();
     const a = await phone(service);
