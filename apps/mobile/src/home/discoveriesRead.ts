@@ -48,8 +48,9 @@ export interface DiscoveriesInputs {
  * (the newest added first among those the profile weighs the same), as the
  * tiles the Magic Queue page draws, or none when fewer than three can show.
  * Built from the phone's database and [inputs] alone, with no network. A
- * catalog song the Library has a file of is passed over (it is that Library
- * song, which shows while unplayed), as is a Library song that can't play.
+ * catalog song the Library has is passed over, whether a file holds its
+ * video id or the Library has its recording (it is that Library song, which
+ * shows while unplayed), as is a Library song that can't play.
  *
  * Disliked songs: Core's `discoveries` takes them (`disliked`); nothing is
  * passed until the Dislike feature keeps them.
@@ -107,7 +108,10 @@ export const readDiscoveries = (store: LibraryStore["Service"], inputs: Discover
       );
       for (const seed of batch) {
         if (seed.source === "stream") {
-          if (owned?.has(seed.song.videoId) !== true) seeds.push(seed);
+          // A play of this song is credited to the Library song of its recording, so `played`
+          // can't tell it was heard: the Library having the recording is what passes it over.
+          if (owned?.has(seed.song.videoId) === true) continue;
+          if ((yield* store.matchingSong(seed.song)) === null) seeds.push(seed);
         } else {
           const file = files.get(seed.song.id);
           if (file !== undefined) seeds.push({ source: "library", song: file });
