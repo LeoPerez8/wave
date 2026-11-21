@@ -25,7 +25,7 @@ import {
 import { router } from "@/lib/timingRouter";
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { AccessibilityInfo, Text, View, useWindowDimensions } from "react-native";
-import { IconRefresh } from "@tabler/icons-react-native";
+import { IconChevronRight, IconDisc, IconRefresh } from "@tabler/icons-react-native";
 
 import { artworkUri } from "@wave/client/artworkUri";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
@@ -37,12 +37,15 @@ import { SkeletonGroup, SongCardSkeleton } from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
 import { IconButton } from "@/components/IconButton";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
+import { TextButton } from "@/components/TextButton";
+import { openDj } from "@/dj/routes";
 import { openPlaylist, openStatsSeeAll } from "@/library/routes";
 import { songCount } from "@/library/TrackList";
 import type { PlayableSongRow } from "@wave/client";
 import { Crossfade } from "@/motion/Crossfade";
 import { openPlaylistActions, openTrackActions } from "@/playback/ActionsMenu";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
+import { useThemeColor } from "@/theme/useThemeColor";
 import type { Ranked } from "@/stats/Stats";
 import { openDiscoverMix, openYtPlaylist } from "@/ytmusic/routes";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
@@ -116,13 +119,15 @@ function MostPlayedAlbums({ title }: SectionProps) {
 
 /**
  * Home's Discover section: one header, its adjustments icon opening the
- * settings card all three rows share (`DiscoverSettingsButton`), then the
- * rows in the owner's order, each under its label. A row with nothing to show isn't drawn: a mix row shows placeholder tiles
+ * settings card all three rows share (`DiscoverSettingsButton`), the DJ card
+ * while YT Music is on, then the rows in the owner's order, each under its label. A row with nothing to show isn't drawn: a mix row shows placeholder tiles
  * while its first mixes build and is gone with YT Music off (Core's
  * `discoverMixesSection`), the Magic Queue row is gone while none of its
  * carousel's pages has songs to show (Core's `magicQueueCarouselPages`), and
  * until Most listened recently is first read, so the row opens on its pages
- * as they are; Discoveries, the last page, joins once it's read. The section is gone when every arranged row is gone.
+ * as they are; Discoveries, the last page, joins once it's read. The section
+ * is gone when every arranged row is gone and YT Music is off, which hides
+ * the DJ card.
  */
 function Discover({ home, title }: SectionProps) {
   const ytMusic = useYtMusicEnabled();
@@ -156,10 +161,11 @@ function Discover({ home, title }: SectionProps) {
       ? pages.length > 0
       : (id === "artist-mixes" ? artistMixes : genreMixes).kind !== "hidden",
   );
-  if (rows.length === 0) return null;
+  if (rows.length === 0 && !ytMusic) return null;
   return (
     <TitledSection title={title} control={<DiscoverSettingsButton ytMusic={ytMusic} />}>
       <View style={{ gap: CELL * 3 }}>
+        {ytMusic && <DjCard />}
         {rows.map((id) =>
           id === "magic-queue" ? (
             <MagicQueueRow
@@ -175,6 +181,32 @@ function Discover({ home, title }: SectionProps) {
         )}
       </View>
     </TitledSection>
+  );
+}
+
+/**
+ * Discover's DJ card: it opens DJ, where the owner picks the artists a Magic
+ * Queue starts from. Hidden with YT Music off, as DJ's queue needs it.
+ */
+function DjCard() {
+  const { strings } = useLocalisation();
+  const [foreground, secondary] = useThemeColor(["foreground", "secondary"]);
+  return (
+    <TextButton
+      label={strings.dj.title}
+      accessibilityLabel={`${strings.dj.title}, ${strings.dj.cardDetail}`}
+      onPress={openDj}
+      depth={0.015}
+      className="flex-row items-center rounded-2xl bg-fill"
+      style={{ minHeight: CELL * 9, paddingHorizontal: CELL * 2, gap: CELL * 1.5 }}
+    >
+      <IconDisc size={28} color={foreground} strokeWidth={1.5} />
+      <View className="flex-1" style={{ paddingVertical: CELL * 1.5 }}>
+        <Text className="font-sans text-body font-medium text-foreground">{strings.dj.title}</Text>
+        <Text className="font-sans text-footnote text-secondary">{strings.dj.cardDetail}</Text>
+      </View>
+      <IconChevronRight size={20} color={secondary} strokeWidth={1.5} />
+    </TextButton>
   );
 }
 
