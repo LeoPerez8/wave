@@ -1,6 +1,6 @@
 import { useLocalisation } from "@/localisation/localisation";
 import { activeTiming, beginTiming, timingSurfaceCommitted } from "@/lib/timing";
-import { IconChevronDown, IconDots, IconListNumbers } from "@tabler/icons-react-native";
+import { IconChevronDown, IconDotsVertical, IconListNumbers } from "@tabler/icons-react-native";
 import {
   isUnsearchedTrackId,
   nowPlayingSlotShow,
@@ -320,7 +320,7 @@ export function NowPlayingSheet() {
             {/* The playing song's card, anchored here; off while an unsearched entry's search runs. */}
             {songMenu !== "hidden" && (
               <IconButton
-                icon={IconDots}
+                icon={IconDotsVertical}
                 label={strings.playbackText.songMenu}
                 disabled={songMenu === "off"}
                 opensMenu
