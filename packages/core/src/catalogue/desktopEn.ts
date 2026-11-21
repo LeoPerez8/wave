@@ -73,6 +73,15 @@ export const desktopEn = {
       share: "Copy Link",
     },
   },
+  recap: {
+    // Home's card is clicked, not tapped.
+    tapToWatch: "Click to watch",
+  },
+  share: {
+    // Buttons under a card, in the desktop's title case.
+    saveImage: "Save Image",
+    copyImage: "Copy Image",
+  },
   library: {
     // The artist page's quiet lines: Online is clicked, not tapped.
     offlineTapOnline: "You're offline. Click Online to try again when you're back online.",

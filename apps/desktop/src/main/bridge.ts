@@ -63,6 +63,7 @@ import { validWindowSettings } from "../shared/windowSettings.ts";
 import { readWindowSettings, changeWindowSettings } from "./system/windowSettings.ts";
 import { homeHandlers } from "./homeHandlers.ts";
 import { statsHandlers } from "./statsHandlers.ts";
+import { CardImages, cardImageHandlers } from "./cards/cardImages.ts";
 import { lyricsAndTagsHandlers } from "./lyricsAndTagsHandlers.ts";
 import { HomeFollow } from "./follows/homeFollow.ts";
 import { homeFollowHandlers } from "./follows/homeFollowHandlers.ts";
@@ -156,7 +157,8 @@ export type BridgeServices =
   | DesktopLinks
   | HomeFollow
   | YtAccount
-  | SpotifyAccount;
+  | SpotifyAccount
+  | CardImages;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -662,6 +664,7 @@ const createHandlers = (
     ...playlistHandlers(validTarget),
     ...homeHandlers,
     ...statsHandlers,
+    ...cardImageHandlers,
     ...lyricsAndTagsHandlers,
     ...homeFollowHandlers,
     "search.library": ([query]) =>

@@ -7,6 +7,7 @@ import { listeningSums } from "@wave/client/db/playTotals";
 import { parseHomeArrangement, STATS_TOP, statsWindow, summedListeningTotals } from "@wave/core";
 import type { HomeRow, HomeSectionView, HomeView, LocalHomeSectionId } from "../../shared/home.ts";
 import { browseRows, browseSongs } from "./browse.ts";
+import { recapToAnnounceNow } from "./recaps.ts";
 
 const page = <T>(items: readonly T[]) => ({ items, offset: 0, total: items.length });
 
@@ -75,6 +76,7 @@ export const readHome = (db: LibraryDatabase, stored: string | null): HomeView =
   return {
     ...page(items),
     discoverRows: arrangement.discoverRows,
+    recap: recapToAnnounceNow(db),
     ...(showStats && {
       stats: {
         library: { songs, albums, artists },

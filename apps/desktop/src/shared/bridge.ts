@@ -49,8 +49,8 @@ import {
 import type { LibrarySearchView } from "./search.ts";
 import type { HomeView } from "./home.ts";
 import type { HomeFollowView, HomeReleaseOpening } from "./homeFollow.ts";
-import type { StatsPeriod, StatsRanking } from "@wave/core";
-import type { StatsOverview, StatsRow } from "./stats.ts";
+import type { RecapPeriod, StatsPeriod, StatsRanking } from "@wave/core";
+import type { DesktopRecap, StatsOverview, StatsRow } from "./stats.ts";
 import type {
   ActionSurface,
   SongMenu,
@@ -404,6 +404,33 @@ export interface BridgeContract
     ];
     readonly result: string | null;
   };
+  /** Every period with a Recap now, newest first. */
+  readonly "stats.recaps": { readonly args: readonly []; readonly result: Page<RecapPeriod> };
+  /**
+   * Opens the Recap [id] (Core's `recapId`): Home stops announcing it. Null when the period has
+   * no Recap. Its music follows `stats.recapStory` until `stats.recapClosed`.
+   */
+  readonly "stats.recap": {
+    readonly args: readonly [id: string];
+    readonly result: DesktopRecap | null;
+  };
+  /** Story [index] of the open Recap shows: with nothing playing as it opened, its song plays. */
+  readonly "stats.recapStory": { readonly args: readonly [index: number]; readonly result: void };
+  /** The Recap closed: the queue comes back as it was. */
+  readonly "stats.recapClosed": { readonly args: readonly []; readonly result: void };
+  /**
+   * Saves a rendered card's PNG (base64, at most 1080 by 1920) through the system's save
+   * dialog, which opens at [fileName]. False when the dialog was cancelled.
+   */
+  readonly "cards.saveImage": {
+    readonly args: readonly [fileName: string, pngBase64: string];
+    readonly result: boolean;
+  };
+  /** Puts a rendered card's PNG (base64, at most 1080 by 1920) on the clipboard. */
+  readonly "cards.copyImage": {
+    readonly args: readonly [pngBase64: string];
+    readonly result: void;
+  };
 }
 
 export type BridgeCall = keyof BridgeContract;
@@ -524,6 +551,12 @@ export const BRIDGE_CALLS = [
   "stats.ranking",
   "stats.play",
   "stats.open",
+  "stats.recaps",
+  "stats.recap",
+  "stats.recapStory",
+  "stats.recapClosed",
+  "cards.saveImage",
+  "cards.copyImage",
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -551,6 +584,15 @@ export interface WaveBridge {
       key: string,
       full: boolean,
     ) => Promise<string | null>;
+    readonly recaps: () => Promise<Page<RecapPeriod>>;
+    readonly recap: (id: string) => Promise<DesktopRecap | null>;
+    readonly recapStory: (index: number) => Promise<void>;
+    readonly recapClosed: () => Promise<void>;
+  };
+  /** A rendered card's image (`renderer/src/cardImage.ts` draws it). */
+  readonly cards: {
+    readonly saveImage: (fileName: string, pngBase64: string) => Promise<boolean>;
+    readonly copyImage: (pngBase64: string) => Promise<void>;
   };
   readonly system: { readonly mediaBackend: () => Promise<"native" | "chromium"> };
   readonly home: {
@@ -855,5 +897,13 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     ranking: (ranking, period) => invoke("stats.ranking", ranking, period),
     play: (period, key, full) => invoke("stats.play", period, key, full),
     open: (ranking, period, key, full) => invoke("stats.open", ranking, period, key, full),
+    recaps: () => invoke("stats.recaps"),
+    recap: (id) => invoke("stats.recap", id),
+    recapStory: (index) => invoke("stats.recapStory", index),
+    recapClosed: () => invoke("stats.recapClosed"),
+  },
+  cards: {
+    saveImage: (fileName, pngBase64) => invoke("cards.saveImage", fileName, pngBase64),
+    copyImage: (pngBase64) => invoke("cards.copyImage", pngBase64),
   },
 });

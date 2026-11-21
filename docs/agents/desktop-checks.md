@@ -224,6 +224,24 @@ stay in memory. Rebuild the JAR with `pnpm --filter @wave/desktop build:jvm` aft
 JVM, and a live YouTube download with its tags read back and its Library entry visible. The live
 check stops after search on CI; inspect its annotations if YouTube refuses the machine.
 
+## Recap and card images
+
+`e2e/recap.spec.ts` seeds three months of counted plays, opens the Recap from Home's card and
+from Stats' Recaps row, moves with Right and Left, waits for a story to move on after six
+seconds and for the summary to stay, and closes with Esc. It reads the queue before and after,
+and counts `play_events` once the app has closed. Save Image runs with `dialog.showSaveDialog`
+replaced in main, so no dialog opens; the spec reads the file's size from its PNG header and
+the clipboard's image through Electron. Screenshots are `recap-<platform>-home.png`,
+`-songs.png`, `-summary.png`, `-stats.png`, and the saved story is `recap-<platform>-image.png`.
+
+`stats.recaps()` lists the periods with a Recap, `stats.recap(id)` opens one (Home stops
+announcing it), and `stats.recapStory(index)` and `stats.recapClosed()` drive its music.
+`cards.saveImage(fileName, pngBase64)` and `cards.copyImage(pngBase64)` take a PNG of at most
+1080 by 1920 and a file name of the form `Wave - <title> - <yyyyMMdd-HHmmss>.png`; main refuses
+anything else. The window draws the PNG from a card element at the size it is laid out at
+(`renderer/src/cardImage.ts`); a Recap story is 1080 by 1920.
+The native save dialog itself is an owner check.
+
 ## Links
 
 `e2e/links.spec.ts` pastes and drops each kind of link the phone opens (a YT Music song and

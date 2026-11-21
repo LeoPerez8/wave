@@ -1,8 +1,11 @@
 import {
+  recapId,
+  recapTitle,
   STATS_RANKINGS,
   statsGenrePodium,
   statsPeriods,
   type RecapGenre,
+  type RecapPeriod,
   type StatsPeriod,
   type StatsRanking,
 } from "@wave/core";
@@ -10,6 +13,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Page } from "../../shared/bridge.ts";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { StatsOverview, StatsRoute, StatsRow } from "../../shared/stats.ts";
+import { recapColour } from "./RecapViewer.tsx";
 import { text } from "./text.ts";
 import { VirtualTable } from "./VirtualTable.tsx";
 import type { YtRoute } from "./YtPages.tsx";
@@ -184,7 +188,13 @@ export function Stats({
   onError,
   onMenu,
   notify,
+  onRecap,
+  recapsOpened,
 }: {
+  /** Opens a Recap's stories. */
+  readonly onRecap: (period: RecapPeriod) => void;
+  /** Changes when a Recap was opened; the row reads its Recaps again. */
+  readonly recapsOpened: number;
   readonly route: StatsRoute;
   readonly revision: number;
   readonly ytMusic: boolean;
@@ -202,6 +212,20 @@ export function Stats({
     readonly view: StatsOverview | Page<StatsRow> | null;
   }>();
   const [attempt, setAttempt] = useState(0);
+  const [recaps, setRecaps] = useState<readonly RecapPeriod[]>([]);
+  useEffect(() => {
+    let current = true;
+    void window.wave.stats
+      .recaps()
+      .then((page) => {
+        if (current) setRecaps(page.items);
+      })
+      // The row is hidden while there's none to show.
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [revision, recapsOpened]);
   const pendingOpen = useRef(0);
   useEffect(() => {
     let current = true;
@@ -292,6 +316,27 @@ export function Stats({
   }
   return (
     <div className="stats-page">
+      {recaps.length > 0 && (
+        <section className="stats-recaps" aria-labelledby="stats-recaps-heading">
+          <div className="stats-section-heading">
+            <h2 id="stats-recaps-heading">{text.stats.recaps}</h2>
+          </div>
+          <div className="recap-tiles">
+            {recaps.map((recap) => (
+              <button
+                key={recapId(recap)}
+                className="recap-tile"
+                style={{ backgroundColor: `var(--color-recap-${recapColour(recap)})` }}
+                aria-label={text.recap.tileLabel(recap)}
+                onClick={() => onRecap(recap)}
+              >
+                <span>{text.recap.kinds[recap.kind]}</span>
+                <strong>{recapTitle(recap, text)}</strong>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
       <PeriodTabs period={period} onChange={onPeriod} />
       <div
         className="stats-period-panel"

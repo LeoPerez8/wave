@@ -7,6 +7,7 @@ import {
   EMPTY_PLAY_TRACKER,
   EMPTY_QUEUE,
   REAL_SHUFFLE,
+  RECAP_PLAY_CONTEXT,
   currentEntry,
   movedToFollowing,
   parseTrackId,
@@ -135,10 +136,29 @@ export interface PlaybackSession {
    * song waits paused at its start (the sleep timer's End of track).
    */
   readonly pauseAtTrackEnd: (on: boolean) => Promise<void>;
+  /**
+   * Borrows the player for a Recap's music: notes the queue as it is now and where the player
+   * is in its current song, for the loan to give back.
+   */
+  readonly borrow: () => Promise<QueueLoan>;
   /** Saves the position and the play so far, as before quitting. */
   readonly flush: () => Promise<void>;
   /** Pauses, saves, and ends the play open; the session does nothing more. */
   readonly close: () => Promise<void>;
+}
+
+/** The player borrowed from the queue (`PlaybackSession.borrow`). */
+export interface QueueLoan {
+  /**
+   * Plays the song [trackId] on its own, in place of the queue. It offers no Undo, its play is
+   * never recorded (Core's `RECAP_PLAY_CONTEXT`), and the saved queue stays the one borrowed.
+   */
+  readonly play: (trackId: string) => Promise<void>;
+  /**
+   * Puts the queue back as it was borrowed, paused where it was in its current song. A queue
+   * played meanwhile stays instead.
+   */
+  readonly giveBack: () => Promise<void>;
 }
 
 export interface PlaybackSessionDeps {
@@ -191,6 +211,14 @@ export const createPlaybackSession = async (
   let lane = Promise.resolve();
   let closed = false;
   let holdNext = false;
+  /** The queue a Recap's music borrowed the player from, until it is given back. */
+  let lent: {
+    readonly queue: QueueState;
+    readonly positionMs: number;
+    readonly takeBack: QueueUndo | null;
+  } | null = null;
+  /** Whether the player holds a Recap's song: the saved queue then stays the one lent. */
+  const onLoan = () => lent !== null && queue.context?.kind === RECAP_PLAY_CONTEXT.kind;
   const rowIds = new Map<string, number>();
 
   const identity = (play: PlayEvent) => `${play.trackId}:${play.startedAt}`;
@@ -216,7 +244,9 @@ export const createPlaybackSession = async (
     settled,
     positionMs: () => status.positionMs,
     saveQueue: (write) => savePlayback(db, write, now()),
-    savePosition: (positionMs) => savePlayback(db, { positionMs }, now()),
+    savePosition: (positionMs) => {
+      if (!onLoan()) savePlayback(db, { positionMs }, now());
+    },
   });
   const checkpoint = () => {
     const play = playSoFar(tracker, now());
@@ -243,6 +273,7 @@ export const createPlaybackSession = async (
     }
   };
   const save = () => {
+    if (onLoan()) return;
     const next = { state: queue, positionMs: status.positionMs };
     settled.set(queueWrite(lastSaved, next));
     lastSaved = next;
@@ -402,12 +433,15 @@ export const createPlaybackSession = async (
             : given;
         const result = reduce(command);
         if (command.type === "play") {
-          takeBack = queueUndo(
-            before,
-            command,
-            { key: previous?.key ?? null, positionMs: status.positionMs },
-            result,
-          );
+          // A queue played over a Recap's song has nothing to go back to.
+          takeBack = onLoan()
+            ? null
+            : queueUndo(
+                before,
+                command,
+                { key: previous?.key ?? null, positionMs: status.positionMs },
+                result,
+              );
         }
         const entry = currentEntry(result.state);
         const moved = entry?.key !== previous?.key || result.playback === "play";
@@ -536,6 +570,62 @@ export const createPlaybackSession = async (
       serial(async () => {
         if (planned !== null) await prepare();
       }),
+    borrow: async () => {
+      await serial(async () => {
+        if (lent !== null) return;
+        const latest = await audio.status();
+        if (latest.key === currentKey()) accept(latest);
+        save();
+        saves.savePositionNow();
+        lent = { queue, positionMs: status.positionMs, takeBack };
+      });
+      return {
+        play: (trackId) =>
+          serial(async () => {
+            if (lent === null) return;
+            const result = reduce({
+              type: "play",
+              trackIds: [trackId],
+              context: RECAP_PLAY_CONTEXT,
+              shuffle: false,
+            });
+            takeBack = null;
+            leave(result.state, "playlist");
+            queue = result.state;
+            try {
+              await loadMoved(0, true);
+            } finally {
+              deps.changed?.();
+            }
+          }),
+        giveBack: () =>
+          serial(async () => {
+            if (lent === null) return;
+            const back = lent;
+            const playedRecap = onLoan();
+            lent = null;
+            if (!playedRecap) return;
+            takeBack = back.takeBack;
+            leave(back.queue, "playlist");
+            queue = back.queue;
+            try {
+              if (currentEntry(queue) === null) {
+                await audio.pause();
+                await audio.preload();
+                planned = null;
+                accept({ state: "idle", positionMs: 0 });
+                save();
+              } else {
+                // Paused before the load, so the queue's song doesn't sound from its start.
+                accept(await audio.pause());
+                await loadMoved(back.positionMs, false);
+              }
+            } finally {
+              deps.changed?.();
+            }
+          }),
+      };
+    },
     flush: () =>
       serial(async () => {
         const latest = await audio.status();
