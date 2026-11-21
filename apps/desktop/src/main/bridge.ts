@@ -72,6 +72,8 @@ import { statsHandlers } from "./statsHandlers.ts";
 import { lyricsAndTagsHandlers } from "./lyricsAndTagsHandlers.ts";
 import { HomeFollow } from "./follows/homeFollow.ts";
 import { homeFollowHandlers } from "./follows/homeFollowHandlers.ts";
+import { FollowedArtists } from "./follows/followedArtists.ts";
+import { followsHandlers } from "./follows/followsHandlers.ts";
 import { streamedHandlers } from "./yt/streamedHandlers.ts";
 import {
   clearRecentSearches,
@@ -166,6 +168,7 @@ export type BridgeServices =
   | DesktopPlaylists
   | DesktopLinks
   | HomeFollow
+  | FollowedArtists
   | YtAccount
   | SpotifyAccount;
 
@@ -697,6 +700,7 @@ const createHandlers = (
     ...statsHandlers,
     ...lyricsAndTagsHandlers,
     ...homeFollowHandlers,
+    ...followsHandlers,
     "search.library": ([query]) =>
       searchQuery(query)
         ? Effect.gen(function* () {

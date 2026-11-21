@@ -129,6 +129,79 @@ test("a Lyrics and tags switch goes up to the account without waiting for the ti
   });
 });
 
+test("following an artist is asked through the bridge, which refuses what isn't a follow", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      // This build's account isn't signed in: New music only, and shows after signing in.
+      assert.deepEqual(await wave.follows.state("ABBA"), {
+        enabled: true,
+        level: null,
+        showsAvailable: false,
+        signInForShows: true,
+        country: "BR",
+      });
+      assert.equal((await wave.follows.set({ name: "ABBA" }, "releases")).level, "releases");
+      const view = await wave.follows.view();
+      assert.deepEqual(view.follows, [
+        { key: "abba", name: "ABBA", level: "releases", artistId: null, ytBrowseId: null },
+      ]);
+      assert.equal((await wave.follows.set({ name: "ABBA" }, null)).level, null);
+      assert.equal(await wave.follows.restore("abba"), true);
+      assert.equal((await wave.follows.state("ABBA")).level, "releases");
+      // The test's network answers nothing: no answer, which isn't "no matches".
+      assert.deepEqual(await wave.follows.search("abba"), { results: [], answered: false });
+      assert.equal((await wave.follows.setCountry("PT")).country, "PT");
+      assert.equal((await wave.follows.setEnabled(false)).enabled, false);
+      assert.equal((await wave.follows.state("ABBA")).level, null);
+      await assert.rejects(wave.follows.set({ name: "Moby" }, "releases"), /off/);
+
+      const call = (name: string, ...args: unknown[]) => handlers.get(name)!(trusted, ...args);
+      await assert.rejects(call("follows.state", ""), /refused/i);
+      await assert.rejects(call("follows.set", { name: "ABBA", path: "x" }, "shows"), /refused/i);
+      await assert.rejects(call("follows.set", { name: "ABBA" }, "all"), /refused/i);
+      await assert.rejects(call("follows.set", { name: "ABBA", deezerId: -1 }, null), /refused/i);
+      await assert.rejects(call("follows.restore", 7), /refused/i);
+      await assert.rejects(call("follows.setEnabled", "off"), /refused/i);
+      await assert.rejects(call("follows.setCountry", 55), /refused/i);
+      await assert.rejects(call("follows.setCountry", "Brazil"), /country/i);
+      await assert.rejects(call("follows.search", ""), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("an artist followed here goes up to the account, for the phones signed in to it", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const phone = await app.service.signIn();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed } = connect(file, undefined, { service: app.open(), clock });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await wave.account.signIn();
+      // The sync that signing in starts ends before the follow is made.
+      await pass(10_000);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      // Signed in, shows can be followed too.
+      assert.equal((await wave.follows.state("ABBA")).showsAvailable, true);
+      await wave.follows.set({ name: "ABBA", ytBrowseId: "UCabba" }, "shows");
+      await pass(10_000);
+      let pushed: readonly Record<string, unknown>[] = [];
+      for (let tries = 0; tries < 10 && pushed.length === 0; tries++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        pushed = (await pullAll(app.service, phone)).follows as readonly Record<string, unknown>[];
+      }
+      assert.equal(pushed.length, 1);
+      assert.equal(pushed[0]?.["id"], "abba");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("the language choice is validated, resolves once in main and survives reopening", async () => {
   await withFile(async (file) => {
     const first = connect(file);
