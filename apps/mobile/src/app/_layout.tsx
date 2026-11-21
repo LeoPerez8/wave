@@ -49,6 +49,7 @@ import { settleFirstRun, startFirstRun } from "@/sync/signInInvitation";
 import { startSync } from "@/sync/startSync";
 import { startWhatsNew } from "@/updates/whatsNew";
 import { useThemeColor } from "@/theme/useThemeColor";
+import { useStackScreenOptions } from "@/chrome/tabScreens";
 
 /** Every touch holds background work; a perf build also notes its native timestamp. */
 const onRootTouchStart = (event: GestureResponderEvent): void => {
@@ -72,6 +73,7 @@ export default function RootLayout() {
   useRenderCount("RootLayout");
   useEffect(startTimingFrameCollection, []);
   const background = useThemeColor("background");
+  const screenOptions = useStackScreenOptions();
   // The status bar follows `useColorScheme` (style "auto"); the navigation bar follows here.
   useNavigationBarScheme();
   const { granted } = useAllFilesAccess();
@@ -267,10 +269,7 @@ export default function RootLayout() {
               <Stack
                 screenListeners={timingStackListeners}
                 screenLayout={screenCostLayout}
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: background },
-                }}
+                screenOptions={screenOptions}
               >
                 <Stack.Protected guard={granted}>
                   <Stack.Screen name="(tabs)" />

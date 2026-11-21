@@ -16,6 +16,7 @@ import { queuedYtSong, queueTracks } from "./queueTracks";
 import * as Effect from "effect/Effect";
 import { subscribeAll } from "@wave/client/externalStore";
 import { useSightedStore } from "@/lib/screenSight";
+import { useStoreSelector } from "@/lib/storeSelector";
 import { LibraryStore } from "@/library/LibraryStore";
 
 import { appRuntime } from "@/library/runtime";
@@ -35,6 +36,20 @@ export const usePlayWhenReady = (): boolean =>
 
 export const useQueue = (): QueueState =>
   useSyncExternalStore(queueState.subscribe, queueState.get);
+
+const shuffleOf = (queue: QueueState): boolean => queue.shuffle;
+const repeatOf = (queue: QueueState): QueueState["repeat"] => queue.repeat;
+const upNextCountOf = (queue: QueueState): number => queue.entries.length - queue.index - 1;
+const contextOf = (queue: QueueState): QueueState["context"] => queue.context;
+
+/** Whether the queue shuffles; other queue changes don't re-render (#1423). */
+export const useQueueShuffle = (): boolean => useStoreSelector(queueState, shuffleOf);
+/** The queue's repeat mode; other queue changes don't re-render. */
+export const useQueueRepeat = (): QueueState["repeat"] => useStoreSelector(queueState, repeatOf);
+/** How many songs come after the current one; other queue changes don't re-render. */
+export const useUpNextCount = (): number => useStoreSelector(queueState, upNextCountOf);
+/** What the queue was started from; other queue changes don't re-render. */
+export const useQueueContext = (): QueueState["context"] => useStoreSelector(queueState, contextOf);
 
 /** How many times a shuffle toggle or a kind picked reordered Up Next (`upNextReshuffles`). */
 export const useUpNextReshuffles = (): number =>

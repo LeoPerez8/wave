@@ -23,7 +23,7 @@ import type { Measurable } from "@/motion/measureRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { ACTION_ICONS } from "@/playback/actionIcons";
 import { cycleRepeat, toggleShuffle } from "@/playback/actions";
-import { useQueue } from "@/playback/hooks";
+import { useQueueRepeat, useQueueShuffle } from "@/playback/hooks";
 import { nowPlayingSlotLabel, nowPlayingSlotTitle } from "@/settings/nowPlayingButtons";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -92,7 +92,7 @@ export interface SlotContext {
 /** Shuffle: teal while on, with the icon and name of the chosen kind of shuffle. */
 function ShuffleSlot({ change }: { change: SlotChange }) {
   const { icon, label } = useShuffleControl();
-  const on = useQueue().shuffle;
+  const on = useQueueShuffle();
   return (
     <ViewToggle
       icon={icon}
@@ -107,7 +107,7 @@ function ShuffleSlot({ change }: { change: SlotChange }) {
 /** Repeat: off → all → one, teal while on, with the repeat-one glyph on one. */
 function RepeatSlot({ change }: { change: SlotChange }) {
   const { strings } = useLocalisation();
-  const repeat = useQueue().repeat;
+  const repeat = useQueueRepeat();
   return (
     <ViewToggle
       change={change}

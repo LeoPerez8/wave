@@ -15,6 +15,6 @@ export const useHomeScreenContent = (): HomeContent => {
   const read = useHomeContent();
   const cold = snapshotSection("content");
   useSnapshotted("content", homeOpeningState(read).settled ? read : undefined);
-  // The same object while neither changes: Home's sections take it (#1423).
+  // One object per read, so the memoized sections it reaches keep their props (#1423).
   return useMemo(() => (cold === undefined ? read : { ...cold, ...read }), [cold, read]);
 };

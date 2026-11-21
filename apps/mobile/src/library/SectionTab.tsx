@@ -1,3 +1,4 @@
+import { useStackScreenOptions } from "@/chrome/tabScreens";
 import { timingStackListeners } from "@/lib/timing";
 import { screenCostLayout } from "@/lib/renderCost";
 import type { LibrarySectionSlug } from "@wave/core";
@@ -8,7 +9,6 @@ import { View } from "react-native";
 import { findSection } from "@/catalog/sections";
 import { LargeTitle, useLargeTitleTop } from "@/components/LargeTitleScreen";
 import { useLocalisation } from "@/localisation/localisation";
-import { useThemeColor } from "@/theme/useThemeColor";
 
 import { SectionList } from "./SectionList";
 import { sectionTitleLongPress } from "./sectionTitleLongPress";
@@ -20,12 +20,12 @@ import { openArmedAnchoredMenu } from "@/motion/menuRequest";
  * and stays open while you're on another tab.
  */
 export function SectionTabStack() {
-  const background = useThemeColor("background");
+  const screenOptions = useStackScreenOptions();
   return (
     <Stack
       screenListeners={timingStackListeners}
       screenLayout={screenCostLayout}
-      screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}
+      screenOptions={screenOptions}
     />
   );
 }

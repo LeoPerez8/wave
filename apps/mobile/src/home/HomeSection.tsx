@@ -982,10 +982,10 @@ const INERT_HOME_SELECTION: HomeSelection = {
  * The section [id] of Home's catalogue with its data, or nothing when it has
  * nothing to show. Every section leaves `SECTION_GAP` above itself, so it can
  * sit under any screen's content (Home, or the Library under its rows).
- * [home] is `useHome`'s answer. Memoized: Home renders on every push, pop and tab
- * switch, and a section renders again only when its own props change (#1423).
+ * [home] is `useHome`'s answer. Memoized: a Home render (its arrangement, the
+ * window, the opening state) leaves a section whose props kept their identity alone.
  */
-export const HomeSection = memo(function HomeSection({
+function HomeSectionShown({
   id,
   home,
   selection = INERT_HOME_SELECTION,
@@ -1009,4 +1009,7 @@ export const HomeSection = memo(function HomeSection({
       <Section home={home} title={homeSectionTitle(id, strings)} selection={selection} />
     </RenderCost>
   );
-});
+}
+
+// A declaration wrapped apart: the compiler can't build a memo's function that names itself.
+export const HomeSection = memo(HomeSectionShown);

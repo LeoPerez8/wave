@@ -106,7 +106,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { Storage } from "expo-sqlite/kv-store";
-import { useMemo, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 import { appLog } from "@/log/appLog";
 
@@ -140,6 +140,7 @@ import { settleUnsearchedSong } from "@/library/unsearchedEntries";
 import { missingSongCover } from "@wave/client/artworkLookup";
 import { makeExternalStore } from "@wave/client/externalStore";
 import { useSightedStore } from "@/lib/screenSight";
+import { equalToDepth, useStoreSelector } from "@/lib/storeSelector";
 import { WaveNative } from "@/native/waveNative";
 import {
   WaveSoulseek,
@@ -1517,6 +1518,12 @@ export const runYtDownloadAction = (
 };
 
 /**
+ * A list's download view, equal while it shows the same (its line, entries and songs): the
+ * journal changes with every bit of progress, which the list's page doesn't show (#1423).
+ */
+const sameListDownload = equalToDepth(3);
+
+/**
  * Where a YT Music album's download stands (Core's `ytAlbumDownload`), from
  * its [songs], the Library ([inLibrary]) and the journal, following both.
  */
@@ -1524,12 +1531,12 @@ export const useYtAlbumDownload = (
   songs: readonly NativeYtSong[],
   inLibrary: InLibrary,
 ): YtAlbumDownload<NativeYtSong> => {
-  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
   const { language } = useLocalisation();
-  return useMemo(
-    () => ytAlbumDownload(songs, { inLibrary, jobs, language }),
-    [songs, inLibrary, jobs, language],
+  const select = useCallback(
+    (jobs: readonly NativeDownloadJob[]) => ytAlbumDownload(songs, { inLibrary, jobs, language }),
+    [songs, inLibrary, language],
   );
+  return useStoreSelector(journal, select, sameListDownload);
 };
 
 /**
@@ -1581,12 +1588,13 @@ export const useYtPlaylistDownload = (
   entries: readonly PlaylistEntry[],
   inLibrary: InLibrary,
 ): YtPlaylistDownload<NativeYtSong> => {
-  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
   const { language } = useLocalisation();
-  return useMemo(
-    () => ytPlaylistDownload(entries, { inLibrary, jobs, language }),
-    [entries, inLibrary, jobs, language],
+  const select = useCallback(
+    (jobs: readonly NativeDownloadJob[]) =>
+      ytPlaylistDownload(entries, { inLibrary, jobs, language }),
+    [entries, inLibrary, language],
   );
+  return useStoreSelector(journal, select, sameListDownload);
 };
 
 /**
@@ -1822,10 +1830,13 @@ export const downloadJournal = (): readonly NativeDownloadJob[] => journal.get()
 /** Where downloading the missing songs stands (Core's `missingSongsDownload`), following both. */
 export const useMissingSongsDownload = (): MissingSongsDownload<MissingSongJob> => {
   const missing: readonly MissingTrack[] = useMissingSongs();
-  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
   const { strings } = useLocalisation();
   const songs = useMemo(() => missing.map(missingSongJob), [missing]);
-  return useMemo(() => missingSongsDownload(songs, jobs, strings), [songs, jobs, strings]);
+  const select = useCallback(
+    (jobs: readonly NativeDownloadJob[]) => missingSongsDownload(songs, jobs, strings),
+    [songs, strings],
+  );
+  return useStoreSelector(journal, select, sameListDownload);
 };
 
 /**

@@ -48,7 +48,7 @@ export function useHomeSelection() {
     lookup,
   });
 
-  // One object while nothing selected changes: every Home section takes it (#1423).
+  // One object per selection change, as `useListSelection` gives, so memoized sections keep it.
   return useMemo(() => ({ ...selection, show, hide, enabled: true }), [selection, show, hide]);
 }
 
