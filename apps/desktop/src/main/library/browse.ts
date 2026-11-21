@@ -424,30 +424,42 @@ export const browseLetter = (
 };
 
 /**
+ * The row ids of a page whose order SQLite can't give (a sorted playlist, an artist's Popular),
+ * as the page shows them: a streamed entry's is its entry id negated. Undefined when the list's
+ * own query orders it.
+ */
+export const arrangedRowIds = (db: LibraryDatabase, scope: BrowseScope): number[] | undefined => {
+  if (scope.id === undefined) return undefined;
+  if (scope.kind === "playlist") {
+    const sort = chosenSort(db, scope.id);
+    return sort === undefined
+      ? undefined
+      : sortedEntries(db, scope.id, sort).map((entry) =>
+          "trackId" in entry ? entry.trackId : -entry.itemId,
+        );
+  }
+  if (scope.kind !== "artist") return undefined;
+  const sort = readBrowseSort(db, "artist");
+  const popular = sort?.key === "popular" ? popularSongs(db, scope.id) : null;
+  if (popular === null) return undefined;
+  const { source, order } = listing(scope, sort);
+  return ranked(
+    db.all<BrowseRow>(sql`SELECT * FROM (${source}) ORDER BY ${order}`).map(row),
+    popular,
+  ).map((song) => song.id);
+};
+
+/**
  * The ids of [scope]'s Library songs, in the order its list shows them; none for a list of lists.
  * A playlist's YT Music songs aren't among them (`playlistSongs` has those).
  */
 export const browseTrackIds = (db: LibraryDatabase, scope: BrowseScope): string[] => {
   if (["albums", "artists", "playlists", "genres"].includes(scope.kind)) return [];
   if (scope.kind === "search") return searchSongIds(db, scope.query ?? "").map(String);
-  if (scope.kind === "playlist" && scope.id !== undefined) {
-    const sort = chosenSort(db, scope.id);
-    if (sort !== undefined)
-      return sortedEntries(db, scope.id, sort).flatMap((entry) =>
-        "trackId" in entry ? [String(entry.trackId)] : [],
-      );
-  }
-  const sort = readBrowseSort(db, scope.kind);
-  const { source, order } = listing(scope, sort);
-  const popular =
-    scope.kind === "artist" && scope.id !== undefined && sort?.key === "popular"
-      ? popularSongs(db, scope.id)
-      : null;
-  if (popular !== null)
-    return ranked(
-      db.all<BrowseRow>(sql`SELECT * FROM (${source}) ORDER BY ${order}`).map(row),
-      popular,
-    ).map((song) => String(song.id));
+  // A streamed entry (a negative row id) is no Library song.
+  const arranged = arrangedRowIds(db, scope);
+  if (arranged !== undefined) return arranged.filter((id) => id > 0).map(String);
+  const { source, order } = listing(scope, readBrowseSort(db, scope.kind));
   return db
     .all<{ id: number }>(sql`SELECT id FROM (${source}) ORDER BY ${order}`)
     .map((song) => String(song.id));

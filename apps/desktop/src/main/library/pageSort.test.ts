@@ -13,7 +13,7 @@ import { sql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { libraryLayer } from "../database.ts";
-import { browseLibrary, browseTrackIds, playlistSongs } from "./browse.ts";
+import { arrangedRowIds, browseLibrary, browseTrackIds, playlistSongs } from "./browse.ts";
 import { playlistSongSort, toggleBrowseSort, togglePlaylistSort } from "./browseSort.ts";
 
 const withLibrary = async (run: (db: LibraryDatabase) => void) => {
@@ -136,6 +136,12 @@ test("a playlist's YT Music songs sort among its files", async () => {
       playlistSongs(db, id)?.map((entry) => ("song" in entry ? entry.song.title : entry.trackId)),
       ["Parasite", road],
     );
+    // The rows' keys in the order shown: a streamed entry's is its row id, negative.
+    const keys = shown(db, scope).items.map((row) => row.id);
+    assert.deepEqual(arrangedRowIds(db, scope), keys);
+    assert.equal(keys[0]! < 0, true);
+    togglePlaylistSort(db, id, "custom");
+    assert.equal(arrangedRowIds(db, scope), undefined);
   });
 });
 
