@@ -134,4 +134,3 @@ test("nothing answers after dispose", async (t) => {
   assert.deepEqual(answers, []);
   assert.deepEqual(reads, ["love"]);
 });
-

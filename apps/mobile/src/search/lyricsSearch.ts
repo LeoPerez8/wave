@@ -29,7 +29,11 @@ export type LocalLyricsHit =
 
 /** One read's matches, before they meet the Library's rows and what Songs already shows. */
 type LyricsAnswer = {
-  readonly library: readonly { readonly trackId: number; readonly line: string; readonly ranges: Ranges }[];
+  readonly library: readonly {
+    readonly trackId: number;
+    readonly line: string;
+    readonly ranges: Ranges;
+  }[];
   readonly stream: readonly Extract<LocalLyricsHit, { source: "stream" }>[];
 };
 
@@ -106,7 +110,8 @@ export const useLocalLyricsSearch = (
     for (const hit of answer.library) {
       if (skipIds.has(hit.trackId)) continue;
       const song = songsById.get(hit.trackId);
-      if (song !== undefined) found.push({ source: "library", song, line: hit.line, ranges: hit.ranges });
+      if (song !== undefined)
+        found.push({ source: "library", song, line: hit.line, ranges: hit.ranges });
     }
     found.push(...answer.stream);
     return found;

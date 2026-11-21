@@ -18,11 +18,7 @@ import {
 import { sql } from "drizzle-orm";
 import { addCandidates } from "@wave/client/db/candidateCatalog";
 import { recordPlay } from "@wave/client/db/playHistory";
-import type {
-  GraphPlayCursor,
-  graphPlayPage,
-  graphSimilarPage,
-} from "@wave/client/db/artistGraph";
+import type { GraphPlayCursor, graphPlayPage, graphSimilarPage } from "@wave/client/db/artistGraph";
 import type { mixCreditNamesPage } from "@wave/client/db/mixInputs";
 import { traceQueries } from "@wave/client/testing";
 import {
@@ -112,20 +108,18 @@ const pagedArtistGraph = (store: Store, catalog: readonly ArtistGraphCatalogEntr
   Effect.gen(function* () {
     const build = createArtistGraphBuild();
     yield* runSteps(build.catalog(catalog), Effect.void);
-    for (let similar: string | null = null; ; ) {
-      const page: ReturnType<typeof graphSimilarPage> =
-        yield* store.graphSimilarPage(similar);
+    for (let similar: string | null = null; ;) {
+      const page: ReturnType<typeof graphSimilarPage> = yield* store.graphSimilarPage(similar);
       yield* runSteps(build.pages(page.rows), Effect.void);
       if (page.next === null) break;
       similar = page.next;
     }
     let split: ((credit: readonly string[]) => string[]) | null = null;
-    for (let plays: GraphPlayCursor = [-Number.MAX_VALUE, 0]; ; ) {
-      const page: ReturnType<typeof graphPlayPage> =
-        yield* store.graphPlayPage(plays);
+    for (let plays: GraphPlayCursor = [-Number.MAX_VALUE, 0]; ;) {
+      const page: ReturnType<typeof graphPlayPage> = yield* store.graphPlayPage(plays);
       if (split === null && page.rows.some((row) => row.streamed)) {
         const credits: string[] = [];
-        for (let after: number | null = 0; after !== null; ) {
+        for (let after: number | null = 0; after !== null;) {
           const names: ReturnType<typeof mixCreditNamesPage> =
             yield* store.mixCreditNamesPage(after);
           credits.push(...names.rows);

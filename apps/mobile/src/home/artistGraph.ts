@@ -13,11 +13,7 @@ import { runSteps } from "../lib/stepped.ts";
 
 export type ArtistGraphReads = Pick<
   LibraryStore["Service"],
-  | "graphRadioPage"
-  | "graphCatalogPage"
-  | "ytArtistSimilar"
-  | "graphPlays"
-  | "mixCreditNames"
+  "graphRadioPage" | "graphCatalogPage" | "ytArtistSimilar" | "graphPlays" | "mixCreditNames"
 >;
 /**
  * The graph from [store]'s sources, each read whole. Given the [catalog] already read (the
