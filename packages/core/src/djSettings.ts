@@ -4,6 +4,7 @@
  * own: a session started from DJ carries them and ranks with them, whatever
  * Discover's sliders say.
  */
+import { en, type Catalogue } from "./catalogueEn.ts";
 import { DEFAULT_MIX_SLIDERS, type MixSliders, type MixSliderStep } from "./mixSliders.ts";
 import { isRecord } from "./storedJson.ts";
 
