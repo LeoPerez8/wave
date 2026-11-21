@@ -175,6 +175,102 @@ test("Move Up and Move Down move a song one place among the songs its page shows
   });
 });
 
+test("dragging songs places them before a row, or at the end, in the playlist's own order", async () => {
+  await setUp(async ({ db, playlists, changes }) => {
+    const [road, pink, parasite, river, place] = songs(
+      db,
+      "Road",
+      "Pink Moon",
+      "Parasite",
+      "River Man",
+      "Place to Be",
+    );
+    const { playlistId: id } = storePlaylist(
+      db,
+      "Evening",
+      [road!, pink!, parasite!, river!, place!].map((trackId) => ({ source: "library", trackId })),
+      0,
+    );
+    const scope = { kind: "playlist", id } as const;
+    playlists.place(id, { scope, ids: [parasite!] }, road!);
+    assert.deepEqual(pageTitles(db, id), [
+      "Parasite",
+      "Road",
+      "Pink Moon",
+      "River Man",
+      "Place to Be",
+    ]);
+    playlists.place(id, { scope, ids: [parasite!] }, null);
+    assert.deepEqual(pageTitles(db, id), [
+      "Road",
+      "Pink Moon",
+      "River Man",
+      "Place to Be",
+      "Parasite",
+    ]);
+    // A selection moves together, in the order the playlist had it.
+    playlists.place(id, { scope, ids: [parasite!, pink!] }, river!);
+    assert.deepEqual(pageTitles(db, id), [
+      "Road",
+      "Pink Moon",
+      "Parasite",
+      "River Man",
+      "Place to Be",
+    ]);
+    // Dropped on one of its own rows, it lands before the next row it doesn't hold.
+    playlists.place(id, { scope, ids: [road!, parasite!] }, parasite!);
+    assert.deepEqual(pageTitles(db, id), [
+      "Pink Moon",
+      "Road",
+      "Parasite",
+      "River Man",
+      "Place to Be",
+    ]);
+    playlists.place(id, { scope, all: true, except: [pink!, river!] }, null);
+    assert.deepEqual(pageTitles(db, id), [
+      "Pink Moon",
+      "River Man",
+      "Road",
+      "Parasite",
+      "Place to Be",
+    ]);
+    assert.equal(changes(), 5);
+  });
+});
+
+test("dragging moves a streamed entry among the Library songs", async () => {
+  await setUp(async ({ db, playlists }) => {
+    const [road] = songs(db, "Road");
+    const stream = {
+      videoId: "abcdefghijk",
+      title: "Pink Moon",
+      artists: ["Nick Drake"],
+      album: "Pink Moon",
+      albumId: "MPREb_pinkmoon",
+      durationMs: 124_000,
+      artworkUrl: null,
+      explicit: false,
+    };
+    const { playlistId: id } = storePlaylist(
+      db,
+      "Mixed",
+      [
+        { source: "unsearched", song: { ...stream, title: "Still searching" } },
+        { source: "library", trackId: road! },
+        { source: "stream", song: stream },
+      ],
+      0,
+    );
+    const scope = { kind: "playlist", id } as const;
+    const streamed = browseLibrary(db, scope, 0, 50).items[1]!.id;
+    assert.ok(streamed < 0);
+    playlists.place(id, { scope, ids: [streamed] }, road!);
+    assert.deepEqual(pageTitles(db, id), ["Pink Moon", "Road"]);
+    playlists.place(id, { scope, ids: [road!] }, streamed);
+    assert.deepEqual(pageTitles(db, id), ["Road", "Pink Moon"]);
+  });
+});
+
 test("a sorted playlist can't be rearranged: its own order stays as it was", async () => {
   await setUp(async ({ db, playlists }) => {
     const [road, pink, parasite] = songs(db, "Road", "Pink Moon", "Parasite");
@@ -186,6 +282,7 @@ test("a sorted playlist can't be rearranged: its own order stays as it was", asy
     );
     togglePlaylistSort(db, id, "title");
     playlists.move(id, parasite!, "up");
+    playlists.place(id, { scope: { kind: "playlist", id }, ids: [parasite!] }, road!);
     assert.deepEqual(pageTitles(db, id), ["Parasite", "Pink Moon", "Road"]);
     togglePlaylistSort(db, id, "custom");
     assert.deepEqual(pageTitles(db, id), ["Road", "Pink Moon", "Parasite"]);

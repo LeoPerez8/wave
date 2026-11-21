@@ -386,6 +386,11 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   Streamed songs drag the same way. A target is highlighted only while it can take the drop,
   dragging over the Queue tab opens it, and the toasts are the menu entries' own. Add to
   Playlist and Add to Queue stay in the menus for the keyboard.
+- On a playlist's page in its own order (#1218), a row drags to a new place, with a line where it
+  will land; a checked row brings every checked song, together and in the playlist's order. The
+  list scrolls while a drag is held near its top or bottom. Alt+Up and Alt+Down move the focused
+  row, as in the Queue tab, and Move Up and Move Down stay in its menu. The order is the
+  playlist's synced one, so it reaches the phone. A sorted page moves nothing.
 - Home shows the phone's sections in the phone's order, following the account's synced
   arrangement: shelves of tiles, Most played as a table. Edit Home, on Home and under Settings ›
   Home, is the phone's editor: the sections shown, Discover's rows under Discover, then the ones
