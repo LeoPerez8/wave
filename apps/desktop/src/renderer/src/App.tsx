@@ -236,9 +236,15 @@ export function App() {
   const importFromYtMusic = () => {
     setSetting("accounts");
     if (route.kind !== "settings") go({ kind: "settings" });
-    const account = ytAccount?.account;
-    if (account?.kind === "signedOut" && account.action !== "signingIn")
-      void window.wave.ytAccount.signIn().catch(failed);
+    // Read now: the polled view is still empty right after Turn On YT Music.
+    void window.wave.ytAccount
+      .view()
+      .then(({ account }) =>
+        account?.kind === "signedOut" && account.action !== "signingIn"
+          ? window.wave.ytAccount.signIn()
+          : undefined,
+      )
+      .catch(failed);
   };
   const back = useCallback(() => {
     setSelecting(undefined);

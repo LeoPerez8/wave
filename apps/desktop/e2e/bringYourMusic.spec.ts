@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
 import { catalogueOf } from "@wave/core";
 
+import type { WaveBridge } from "../src/shared/bridge.ts";
+
 /**
  * First run's Bring your music card over the built app: it follows the invitation to sign in,
  * comes back on the next start while unanswered, turns YT Music on, opens From Spotify's picker
@@ -29,14 +31,7 @@ const launch = async (data: string) => {
     },
   });
   try {
-    await app.evaluate(({ shell, ipcMain }) => {
-      // YouTube's sign-in starts a browser: count the calls instead.
-      const counted = globalThis as unknown as { ytSignIns: number };
-      counted.ytSignIns = 0;
-      ipcMain.removeHandler("ytAccount.signIn");
-      ipcMain.handle("ytAccount.signIn", () => {
-        counted.ytSignIns += 1;
-      });
+    await app.evaluate(({ shell }) => {
       const realFetch = globalThis.fetch;
       shell.openExternal = async (url) => {
         const asked = new URL(url);
@@ -78,6 +73,17 @@ const launch = async (data: string) => {
   }
 };
 
+/** YouTube's sign-in starts a browser: once the window's bridge is up, count the calls instead. */
+const countYtSignIns = (app: ElectronApplication) =>
+  app.evaluate(({ ipcMain }) => {
+    const counted = globalThis as unknown as { ytSignIns: number };
+    counted.ytSignIns = 0;
+    ipcMain.removeHandler("ytAccount.signIn");
+    ipcMain.handle("ytAccount.signIn", () => {
+      counted.ytSignIns += 1;
+    });
+  });
+
 const withData = async (run: (data: string) => Promise<void>) => {
   const data = mkdtempSync(join(tmpdir(), "wave-e2e-bring-your-music-"));
   mkdirSync(join(data, "Music"));
@@ -105,6 +111,9 @@ test("Bring your music follows the invitation, comes back unanswered, and import
     let app = await launch(data);
     try {
       let page = await pastInvitation(app);
+      await page.evaluate(() =>
+        (window as unknown as { wave: WaveBridge }).wave.settings.setYtMusic(false),
+      );
       // Closed before it was answered: the next start shows the card, not the invitation.
       await app.close();
       app = await launch(data);
@@ -113,6 +122,7 @@ test("Bring your music follows the invitation, comes back unanswered, and import
       const bring = page.getByTestId("bring-your-music");
       await expect(bring).toBeVisible();
       await expect(page.getByTestId("invitation")).toHaveCount(0);
+      await countYtSignIns(main);
       await expect(bring.getByRole("heading", { name: card.title })).toBeVisible();
 
       // YT Music is off: the card says importing needs it, and turns it on.
@@ -131,9 +141,7 @@ test("Bring your music follows the invitation, comes back unanswered, and import
       await fromYtMusic.click();
       await expect(page.getByTestId("yt-account-settings")).toBeVisible();
       await expect
-        .poll(() =>
-          main.evaluate(() => (globalThis as unknown as { ytSignIns: number }).ytSignIns),
-        )
+        .poll(() => main.evaluate(() => (globalThis as unknown as { ytSignIns: number }).ytSignIns))
         .toBe(1);
 
       // From Spotify signs in and opens Import Playlists' picker; Import marks the source.
