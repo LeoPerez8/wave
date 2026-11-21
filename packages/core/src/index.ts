@@ -861,7 +861,11 @@ export type {
 export { pendingWriteDelay } from "./writePacing.ts";
 export type { WritePacing } from "./writePacing.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
-export { NOW_PLAYING_OPENS_ON, stepNowPlayingScreens } from "./nowPlayingScreens.ts";
+export {
+  NOW_PLAYING_OPENS_ON,
+  nowPlayingPageSwipesEnabled,
+  stepNowPlayingScreens,
+} from "./nowPlayingScreens.ts";
 export {
   nowPlayingEditHintDue,
   readNowPlayingEditHintShown,
@@ -2406,6 +2410,8 @@ export {
   magicQueueCarouselPageTitle,
   magicQueueCarouselPages,
   magicQueueCarouselRestarts,
+  inYourOrbitSongs,
+  IN_YOUR_ORBIT_SONGS,
   mostListenedRecently,
   recentPlaysWindow,
 } from "./magicQueueCarousel.ts";
@@ -2858,6 +2864,7 @@ export {
   NOW_PLAYING_PREVIOUS_ROW_KEY,
   NOW_PLAYING_TRANSPORT_SLOTS,
   editNowPlayingButtons,
+  moveNowPlayingButton,
   nowPlayingButtonsAreDefault,
   nowPlayingRelatedChevronShown,
   nowPlayingSlotRoute,

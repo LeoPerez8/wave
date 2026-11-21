@@ -464,6 +464,7 @@ export const settingsEn = {
   retryLine: (line: string) => `Retry ${line}`,
   removeFailure: (line: string) => `Remove ${line} from failed downloads`,
   slot: (n: number) => `Slot ${n}`,
+  moveButtonToSlot: (slot: string) => `Move button to ${slot}`,
   swapSlot: (label: string, title: string, holder: string) =>
     `${label}, ${title}, swaps with ${holder}`,
   swipeHint: (side: "left" | "right") => `Chooses what swiping ${side} runs`,

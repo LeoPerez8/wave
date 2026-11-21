@@ -5,6 +5,7 @@ import {
   NOW_PLAYING_FOOTER_SLOTS,
   NOW_PLAYING_TRANSPORT_SLOTS,
   isUnsearchedTrackId,
+  nowPlayingPageSwipesEnabled,
   nowPlayingSlotShow,
   nowPlayingSongMenuShow,
   type NowPlayingSlotSong,
@@ -38,7 +39,7 @@ import { LyricCardLayer } from "@/share/LyricCardLayer";
 import { useLyricCardShown } from "@/share/lyricCard";
 import { useSongShareShown } from "@/share/songShare";
 import { shareNowPlaying } from "@/share/songShare";
-import { useNowPlayingButtons } from "@/settings/nowPlayingButtons";
+import { moveSavedNowPlayingButton, useNowPlayingButtons } from "@/settings/nowPlayingButtons";
 import { showNowPlayingEditHint } from "@/settings/nowPlayingEditHint";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
@@ -71,7 +72,8 @@ import {
   useNowPlayingSettled,
 } from "./sheet";
 import { onRelatedOpened } from "./openRelated";
-import { EditSlot, SlotButton, type SlotContext } from "./SlotButtons";
+import { EditSlot, SlotButton, SlotDragPreview, type SlotContext } from "./SlotButtons";
+import { useNowPlayingSlotDrag } from "./slotDrag";
 import { EDITING_OPACITY, Transport } from "./Transport";
 import {
   nowPlayingSongLookup,
@@ -238,6 +240,8 @@ export function NowPlayingSheet() {
   const covered = ytMusic && screen === "related" && !pages.relatedMoving;
   // Related stays drawn, with its songs, while its panel leaves.
   const relatedMounted = ytMusic && (screen === "related" || pages.relatedMoving);
+  // The page gestures sit under Related's carousel, so they must stand down while it shows.
+  const pageSwipesEnabled = nowPlayingPageSwipesEnabled({ screen, editing }) && !relatedMounted;
   const { videoId, findAgain } = usePlayingVideoId(relatedMounted ? trackId : null, ytSong);
   const playerPageInSight = (page === "player" || turning) && !covered;
   const leaveQueue = useCallback(() => void send({ type: "headerTap" }), [send]);
@@ -340,11 +344,16 @@ export function NowPlayingSheet() {
         ? "unsearched"
         : "song";
   const buttons = useNowPlayingButtons();
+  const applySlotMove = useCallback(
+    (from: number, to: number) => moveSavedNowPlayingButton(from, to),
+    [],
+  );
+  const slotDrag = useNowPlayingSlotDrag(applySlotMove);
   // A slot's button; null while the slot is None or its action hides for what's on.
   // In edit mode every slot shows, outlined, and opens its card instead.
   const slotButton = (slot: number) => {
     const action = buttons[slot] ?? null;
-    if (editing) return <EditSlot key={slot} slot={slot} action={action} />;
+    if (editing) return <EditSlot key={slot} slot={slot} action={action} drag={slotDrag} />;
     const show = action === null ? "hidden" : nowPlayingSlotShow(action, slotSong);
     if (action === null || show === "hidden") return null;
     return <SlotButton key={slot} action={action} off={show === "off"} context={slotContext} />;
@@ -426,7 +435,7 @@ export function NowPlayingSheet() {
 
         <View className="flex-1" onLayout={(event) => setPagesTop(event.nativeEvent.layout.y)}>
           {item !== null && pages.queueMounted && (
-            <ScreenPage screen="queue" pages={pages}>
+            <ScreenPage screen="queue" pages={pages} swipes={pageSwipesEnabled}>
               <Activity
                 mode={(page === "queue" || turning) && !covered ? "visible" : "hidden"}
                 name={strings.playbackText.queue}
@@ -436,7 +445,7 @@ export function NowPlayingSheet() {
             </ScreenPage>
           )}
           {/* The player's page: a swipe to the left anywhere but the scrubber brings the Queue. */}
-          <ScreenPage screen="player" pages={pages} swipes={item !== null && !editing}>
+          <ScreenPage screen="player" pages={pages} swipes={pageSwipesEnabled && item !== null}>
             <View className="flex-1" {...dimmed}>
               {item === null ? (
                 <DismissArea style={{ flex: 1 }}>
@@ -522,6 +531,9 @@ export function NowPlayingSheet() {
       )}
       {/* The lyrics card's preview, over the whole sheet (Share in the Lyrics view). */}
       <LyricCardLayer />
+      {slotDrag.dragging !== null && (
+        <SlotDragPreview drag={slotDrag} action={buttons[slotDrag.dragging] ?? null} />
+      )}
     </Animated.View>
   );
 }

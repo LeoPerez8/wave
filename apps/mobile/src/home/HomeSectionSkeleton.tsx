@@ -12,15 +12,19 @@ import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { SkeletonLine } from "@/catalog/SkeletonLine";
-import { AlbumCardSkeleton, SkeletonGroup, TrackSkeletons } from "@/catalog/Skeletons";
+import {
+  AlbumCardSkeleton,
+  SkeletonGroup,
+  SongCardSkeleton,
+  TrackSkeletons,
+} from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
-
 import { StatsFactRow } from "./StatsFactRow";
 import { statsSeeAllAction } from "./statsSeeAllAction";
 import { DiscoverMixesSkeleton } from "./DiscoverMixesSkeleton";
 import { useHomeArrangement } from "./homeArrangement";
-import { homePlaceholderHeight } from "./homeOpening";
+import { homePlaceholderHeight, magicQueueGrid } from "./homeOpening";
 
 function DiscoverSkeleton() {
   const { strings } = useLocalisation();
@@ -46,16 +50,33 @@ function DiscoverSkeleton() {
 /** A still, labelled placeholder in the section's own shape, including its heading. */
 export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
   const { strings } = useLocalisation();
-  const { fontScale } = useWindowDimensions();
+  const { fontScale, width } = useWindowDimensions();
   const songs = id === "most-played" || id === "favorites";
-  const artists = id === "most-played-artists" || id === "in-your-orbit";
+  const orbit = id === "in-your-orbit";
+  const artists = id === "most-played-artists";
+  const orbitGrid = magicQueueGrid(width - 2 * (CELL * 3), Math.min(fontScale, 1));
   return (
     <TitledSection
       title={homeSectionTitle(id, strings)}
       {...(id === "stats" ? { action: statsSeeAllAction(strings) } : {})}
     >
       <View style={{ minHeight: homePlaceholderHeight(id, fontScale) }}>
-        {id === "discover" ? (
+        {orbit ? (
+          <SkeletonGroup label={strings.library.loadingSongs}>
+            <View
+              style={{
+                width: orbitGrid.available,
+                flexDirection: "row",
+                flexWrap: "wrap",
+                gap: CELL,
+              }}
+            >
+              {Array.from({ length: 9 }, (_, index) => (
+                <SongCardSkeleton key={index} size={orbitGrid.size} fontScale={fontScale} />
+              ))}
+            </View>
+          </SkeletonGroup>
+        ) : id === "discover" ? (
           <DiscoverSkeleton />
         ) : id === "from-your-library" ? (
           <DiscoverMixesSkeleton label={strings.home.loadingPlaylists} />
