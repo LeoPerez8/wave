@@ -88,6 +88,7 @@ import type { DesktopRecap, StatsRoute } from "../../shared/stats.ts";
 import { ListeningHistory } from "./ListeningHistory.tsx";
 import type { HistoryRoute } from "../../shared/history.ts";
 import { isYtRoute, YtPage, type YtRoute } from "./YtPages.tsx";
+import { Recognize } from "./Recognize.tsx";
 import { AlbumArtistLink, ArtistPage, ArtistToggle, useArtistSection } from "./ArtistPage.tsx";
 import {
   NowPlayingSongActions,
@@ -182,6 +183,7 @@ export function App() {
   const percent = downloadPercent(downloads);
   const download = (run: Promise<unknown>) => void run.catch(failed);
   const [shortcuts, setShortcuts] = useState(false);
+  const [recognizing, setRecognizing] = useState(false);
   const panel = useSidePanel();
   const [nowPlaying, setNowPlaying] = useState(false);
   const linkPlaying = useCallback(() => setNowPlaying(true), [setNowPlaying]);
@@ -774,6 +776,19 @@ export function App() {
             onFocus={() => route.kind !== "search" && go({ kind: "search", query: field })}
             onKeyDown={(event) => event.key === "Enter" && rememberSearch()}
           />
+          {field === "" && (
+            <button
+              className="search-recognize"
+              aria-label={text.playbackText.recognizeSong}
+              title={text.playbackText.recognizeSong}
+              onClick={(event) => {
+                event.preventDefault();
+                setRecognizing(true);
+              }}
+            >
+              <Icon name="microphone" size={16} />
+            </button>
+          )}
         </label>
         <nav aria-label={labels.library}>
           <button
@@ -1489,6 +1504,16 @@ export function App() {
       {actions.overlays}
       {playlistEdits.overlays}
       {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}
+      {recognizing && (
+        <Recognize
+          onClose={() => setRecognizing(false)}
+          onAlbum={(id) => {
+            setNowPlaying(false);
+            go({ kind: "album", id });
+          }}
+          onChanged={playback.refresh}
+        />
+      )}
       {recap && <RecapViewer recap={recap} onClose={closeRecap} notify={notify} />}
     </main>
   );

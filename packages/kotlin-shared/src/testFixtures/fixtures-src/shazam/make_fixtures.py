@@ -14,7 +14,7 @@ numpy (`pip install shazamio-core==2.0.0 numpy`). For each fixture it:
    are not the WAV's samples) and the signature of those samples alone;
 4. checks the three signatures are the same bytes, then writes
    `<name>.pcm` (signed 16-bit little-endian mono at 16 kHz) and `<name>.uri`
-   (the wheel's data URI) to src/test/resources/fixtures/shazam.
+   (the wheel's data URI) to src/testFixtures/resources/fixtures/shazam.
 """
 
 import asyncio

@@ -548,6 +548,10 @@ The threat model in `docs/spec.md` › Security applies. The desktop adds:
   session but writes it nowhere: main hands it over each time that process starts and takes each
   change back.
 - An update installs only with Wave's Ed25519 signature (Build, release and updates).
+- The window gets audio capture only for Recognize, and main decides: its permission handlers
+  allow the microphone (or Linux's monitor input) and a display capture's loopback audio only to
+  the main window, only while a Recognize session is capturing that source, and never the camera
+  or a screen's picture. The window drops the picture of the display capture at once.
 - Out of scope: another program running as the same user. DPAPI doesn't protect against it.
 - No installer holds a credential. A provider key a feature needs stays a secret of the sync
   Worker, as for the phone.

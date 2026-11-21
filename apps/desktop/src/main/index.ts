@@ -6,6 +6,7 @@ import {
   ClipboardItem,
   clipboard,
   app,
+  desktopCapturer,
   dialog,
   ipcMain,
   net,
@@ -13,6 +14,8 @@ import {
   nativeImage,
   nativeTheme,
   safeStorage,
+  session as electronSession,
+  systemPreferences,
 } from "electron";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -54,6 +57,9 @@ import type { KotlinEvent } from "./kotlin/protocol.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
 import { geniusLyricsSearchLayer } from "./lyrics/geniusLyricsSearchLayer.ts";
+import { guardCapture } from "./recognize/capturePermissions.ts";
+import { fetchCover } from "./recognize/cover.ts";
+import { Recognize, recognizeLayer, type RecognizeShape } from "./recognize/recognizeLayer.ts";
 import { botguardPost, createPoTokens, poTokenHost } from "./yt/poTokens.ts";
 import { openPoTokenPage } from "./yt/poTokenWindow.ts";
 import { createWaveAccount } from "./account/account.ts";
@@ -234,6 +240,8 @@ else {
       jar: process.env["WAVE_KOTLIN_JAR"] ?? join(resources, "jvm", "wave-kotlin.jar"),
       dataDir: join(app.getPath("userData"), "kotlin"),
       platform: process.platform,
+      // Tests point Recognize at a fake Shazam; a packaged Wave always asks Shazam.
+      shazamUrl: app.isPackaged ? undefined : process.env["WAVE_SHAZAM_URL"],
     });
     // What the JVM tells main unasked (`ready`, `downloadsChanged`), for whoever listens.
     const kotlinListeners = new Set<(event: KotlinEvent) => void>();
@@ -484,6 +492,31 @@ else {
               online: () => net.isOnline(),
               openExternal: (url) => shell.openExternal(url),
             }),
+            recognizeLayer({
+              online: () => net.isOnline(),
+              // Windows' privacy switch for desktop apps; Linux has none to read.
+              microphone: () =>
+                process.platform === "linux" ||
+                systemPreferences.getMediaAccessStatus("microphone") === "granted" ||
+                systemPreferences.getMediaAccessStatus("microphone") === "not-determined"
+                  ? "granted"
+                  : "denied",
+              systemAudio: process.platform === "linux" ? "monitor" : "loopback",
+              catalogue: () => text,
+              language: () => language,
+              events: (listener) => {
+                kotlinListeners.add(listener);
+                return () => kotlinListeners.delete(listener);
+              },
+              openPrivacySettings:
+                process.platform === "win32"
+                  ? () => shell.openExternal("ms-settings:privacy-microphone")
+                  : null,
+              fetchCover: (url) => fetchCover(url, fetch),
+              log: (level, line) =>
+                process.stderr.write(`[recognize] ${level}: ${line}
+`),
+            }),
             ytAccountLayer({
               sessions: ytSessions,
               online: () => net.isOnline(),
@@ -552,6 +585,21 @@ else {
         }),
       ),
     );
+    // Only Recognize's session may capture, and only once the services are up.
+    let recognize: RecognizeShape | undefined;
+    guardCapture(electronSession.defaultSession, {
+      trusted: (contents) => window !== undefined && contents === window.webContents,
+      trustedFrame: (frame) => window !== undefined && frame === window.webContents.mainFrame,
+      allows: (kind) => recognize?.allows(kind) ?? false,
+      screen: async () =>
+        (
+          await desktopCapturer.getSources({
+            types: ["screen"],
+            thumbnailSize: { width: 0, height: 0 },
+          })
+        )[0],
+      loopback: process.platform === "win32",
+    });
     const readTheme = () =>
       runtime.runPromise(Effect.map(Account, (it) => readThemeChoice(it.view().theme)));
     // Builds the services now, so the JVM starts with the app rather than on the first call.
@@ -675,6 +723,7 @@ else {
       runtime.runPromise(Playback),
       runtime.runPromise(YtMusic),
     ]);
+    recognize = await runtime.runPromise(Recognize);
     // Closed while the services started: Wave is quitting.
     if (window === undefined || quitting) return;
     // A file that won't open leaves its queue showing, stopped, as any such song does.

@@ -10,6 +10,13 @@ export const desktopPtBr = {
   },
   playbackText: {
     thisPhone: "Este computador",
+    holdYourPhoneNearTheMusic: "Aproxime a música do microfone.",
+    listeningToAudioFromThisPhone: "Ouvindo o áudio deste computador.",
+    allowWaveToCaptureAudioInItsAndroidSettingsToRecognizeSongs:
+      "Permita que os apps usem o microfone nas configurações de privacidade do sistema e tente de novo.",
+    thisAppBlocksAudioCapture: "Nenhum som deste computador",
+    tryTheMicrophoneToRecognizeMusicAroundYou:
+      "Toque a música neste computador ou use o microfone para reconhecer músicas ao seu redor.",
   },
   shows: {
     phoneRegion: "Região deste computador",

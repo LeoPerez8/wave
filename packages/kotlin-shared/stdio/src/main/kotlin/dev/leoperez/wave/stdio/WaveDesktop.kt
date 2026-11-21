@@ -30,6 +30,8 @@ import expo.modules.wavenative.tags.TagWriteFailure
 import expo.modules.wavenative.tags.TagWriteFile
 import expo.modules.wavenative.tags.TagWriteStepException
 import expo.modules.wavenative.yt.YtAudioStreams
+import expo.modules.wavenative.recognize.ShazamHttp
+import expo.modules.wavenative.recognize.UrlConnectionShazamHttp
 
 /**
  * The shared Kotlin as the desktop's JVM serves it over [host]: each method answers what the
@@ -56,6 +58,7 @@ import expo.modules.wavenative.yt.YtAudioStreams
  *   `ytCheckSession` are the phone's `signOut`, `getSession` and `checkSession`. Each answers
  *   Core's `YtSession`: who is signed in, never the cookie.
  * - `libraryPlaylists`: the account's YouTube Music playlists (`YtLibraryPlaylist.toMap`).
+ * - `recognize.*`: Recognize over audio the host captures ([DesktopRecognize]).
  *
  * The visitor data lives in [dataDir]; the YouTube session is the host's to keep
  * ([HostSessionStore]).
@@ -66,6 +69,7 @@ class WaveDesktop(
   http: YtHttp = ::ytHttpClient,
   online: () -> Boolean = ::reachesYouTube,
   audioStreams: (YtClient) -> YtAudioStreams = ::JvmYtAudioStreams,
+  shazam: ShazamHttp = UrlConnectionShazamHttp(),
 ) : java.io.Closeable {
   private val platform = DesktopYtPlatform(dataDir, host, http, online)
   val yt = YtClient(platform)
@@ -73,6 +77,7 @@ class WaveDesktop(
   val downloads = DesktopDownloads(host, dataDir, yt, online, audioStreams(yt))
   private val pages = YtPages(yt)
   private val playlists = YtPlaylistWrites(yt)
+  private val recognize = DesktopRecognize(host, dataDir, shazam)
 
   suspend fun handle(method: String, params: JsonObject): JsonElement {
     // Before anything asks YouTube: the account the host kept from the last run.
@@ -81,7 +86,8 @@ class WaveDesktop(
   }
 
   private suspend fun answer(method: String, params: JsonObject): JsonElement =
-    when (method) {
+    if (method.startsWith("recognize.")) withContext(Dispatchers.IO) { recognize.call(method, params) }
+    else when (method) {
       "search" -> jsonOf(yt.searchSongs(params.string("query")).toMap())
       "readTags" -> {
         val read = tags.read(File(params.string("path")))
@@ -137,7 +143,10 @@ class WaveDesktop(
       else -> withContext(Dispatchers.IO) { downloadCall(method, params) }
     }
 
-  override fun close() = downloads.close()
+  override fun close() {
+    recognize.close()
+    downloads.close()
+  }
 
   /**
    * The phone's `writeLyricsAndGenre` (Fix Songs): what Core found online, written into the file's

@@ -104,6 +104,7 @@ import { MINI_PLAYER_CALLS, miniPlayerBridge, type MiniPlayerContract } from "./
 import { ARTIST_PAGE_CALLS, artistPageBridge, type ArtistPageContract } from "./artistPage.ts";
 import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
 import { HISTORY_CALLS, historyBridge, type HistoryContract } from "./history.ts";
+import { RECOGNIZE_CALLS, recognizeBridge, type RecognizeContract } from "./recognize.ts";
 import { YT_ACCOUNT_CALLS, ytAccountBridge, type YtAccountContract } from "./ytAccount.ts";
 import {
   SPOTIFY_ACCOUNT_CALLS,
@@ -151,6 +152,7 @@ export interface BridgeContract
     YtAccountContract,
     SpotifyAccountContract,
     HistoryContract,
+    RecognizeContract,
     SpotifyImportContract,
     MiniPlayerContract,
     SpotifyShareContract {
@@ -743,6 +745,7 @@ export const BRIDGE_CALLS = [
   "cards.saveImage",
   "cards.copyImage",
   ...HISTORY_CALLS,
+  ...RECOGNIZE_CALLS,
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -760,6 +763,8 @@ export interface WaveBridge {
   /** A streamed YouTube Music song's menu. */
   readonly streamed: ReturnType<typeof streamedBridge>;
   readonly history: ReturnType<typeof historyBridge>;
+  /** Recognize: the card main runs, and the capture it asks for. */
+  readonly recognize: ReturnType<typeof recognizeBridge>;
   /** The YouTube account: its session never reaches the window. */
   readonly ytAccount: ReturnType<typeof ytAccountBridge>;
   readonly spotifyAccount: ReturnType<typeof spotifyAccountBridge>;
@@ -1196,4 +1201,5 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     copyImage: (pngBase64) => invoke("cards.copyImage", pngBase64),
   },
   history: historyBridge(invoke),
+  recognize: recognizeBridge(invoke),
 });
