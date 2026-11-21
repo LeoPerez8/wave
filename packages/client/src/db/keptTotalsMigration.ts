@@ -169,6 +169,7 @@ CREATE TABLE played_entities (
 	entity text NOT NULL,
 	sort_key text NOT NULL,
 	item text NOT NULL,
+	played_at integer NOT NULL,
 	PRIMARY KEY (kind, entity)
 ) WITHOUT ROWID;
 --> statement-breakpoint

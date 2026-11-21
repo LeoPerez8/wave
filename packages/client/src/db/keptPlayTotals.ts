@@ -131,12 +131,16 @@ interface Resolver {
 
 const resolvers = new WeakMap<object, Resolver>();
 
+/** The connection [db] runs on: a transaction shares its database's, so both find one resolver. */
+const connectionOf = (db: LibraryDatabase): object =>
+  (db as unknown as { readonly session?: object }).session ?? db;
+
 const releaseOf = (song: YtAlbumSong): string | null =>
   song.album === null || song.albumId == null ? null : `${releaseTitle(song.album)}|${song.albumId}`;
 
 /** The resolver of [generation]: kept between settles, built again (a whole-Library read) when it moved. */
 const resolverOf = (db: LibraryDatabase, generation: number): Resolver => {
-  const cached = resolvers.get(db);
+  const cached = resolvers.get(connectionOf(db));
   if (cached?.generation === generation) return cached;
   const videos = db
     .all<{ videoId: string }>(
@@ -154,13 +158,22 @@ const resolverOf = (db: LibraryDatabase, generation: number): Resolver => {
     known: new Set(releases.map((song) => releaseOf(song)!)),
     resolve: playedResolver(rows, releases),
   };
-  resolvers.set(db, resolver);
+  resolvers.set(connectionOf(db), resolver);
   return resolver;
 };
 
 /** Whether crediting [songs] would build Core's resolver: a whole-Library read. */
 const needsResolver = (db: LibraryDatabase, songs: readonly string[], generation: number) =>
-  songs.some((song) => song.startsWith("v:")) && resolvers.get(db)?.generation !== generation;
+  songs.some((song) => song.startsWith("v:")) && resolvers.get(connectionOf(db))?.generation !== generation;
+
+/** An online album, artist or song as the latest played song crediting it names it. */
+interface OnlineEntity {
+  readonly kind: CreditKind;
+  readonly entity: string;
+  readonly sortKey: string;
+  readonly item: unknown;
+  readonly playedAt: number;
+}
 
 interface Settled {
   readonly credits: Credit[];
@@ -249,7 +262,7 @@ const streamedTracks = (
 /** Credits [songs] owe, writes them and marks them settled. */
 const creditSongs = (db: LibraryDatabase, songs: readonly string[], generation: number) => {
   const settled = new Map<string, Settled>();
-  const online: { kind: CreditKind; entity: string; sortKey: string; item: unknown }[] = [];
+  const online: OnlineEntity[] = [];
   const library = songs.filter((song) => song.startsWith("t:"));
   for (const [id, credits] of libraryCredits(
     db,
@@ -288,6 +301,17 @@ const creditSongs = (db: LibraryDatabase, songs: readonly string[], generation: 
   const metadata = streamedSongsOf(
     db,
     unmapped.map((entry) => entry.videoId),
+  );
+  const playedAt = new Map(
+    unmapped.length === 0
+      ? []
+      : db
+          .all<{ videoId: string; playedAt: number }>(
+            sql`SELECT video_id AS "videoId", max(started_at) AS "playedAt" FROM play_events
+            WHERE video_id IN (SELECT value FROM json_each(${JSON.stringify(unmapped.map((entry) => entry.videoId))}))
+            GROUP BY video_id`,
+          )
+          .map((row) => [row.videoId, row.playedAt]),
   );
   const hinted: string[] = [];
   let resolver: Resolver | undefined;
@@ -337,8 +361,9 @@ const creditSongs = (db: LibraryDatabase, songs: readonly string[], generation: 
     }
     const song = metadata.get(entry.videoId);
     const songEntity = `yt:${entry.videoId}`;
+    const at = playedAt.get(entry.videoId) ?? 0;
     count(credits, { kind: "song", entity: songEntity, albumId: null, artistId: null });
-    online.push({ kind: "song", entity: songEntity, sortKey: sortKey(song?.title ?? ""), item: {} });
+    online.push({ kind: "song", entity: songEntity, sortKey: sortKey(song?.title ?? ""), item: {}, playedAt: at });
     if (song !== undefined) {
       const resolved = resolver!.resolve(song);
       for (const artist of resolved.artists) {
@@ -359,7 +384,7 @@ const creditSongs = (db: LibraryDatabase, songs: readonly string[], generation: 
           thumbPath: null,
           artworkPath: null,
         };
-        online.push({ kind: "artist", entity: artist.id, sortKey: sortKey(artist.name), item });
+        online.push({ kind: "artist", entity: artist.id, sortKey: sortKey(artist.name), item, playedAt: at });
       }
       const album = resolved.album;
       if (album !== null) {
@@ -378,7 +403,7 @@ const creditSongs = (db: LibraryDatabase, songs: readonly string[], generation: 
             online: true,
             albumArtist: album.artists.join(", "),
           };
-          online.push({ kind: "album", entity: album.id, sortKey: sortKey(album.title), item });
+          online.push({ kind: "album", entity: album.id, sortKey: sortKey(album.title), item, playedAt: at });
         }
       }
     }
@@ -402,7 +427,7 @@ const sameCredit = (a: Credit, b: Credit) =>
 const writeCredits = (
   db: LibraryDatabase,
   settled: ReadonlyMap<string, Settled>,
-  online: readonly { kind: CreditKind; entity: string; sortKey: string; item: unknown }[],
+  online: readonly OnlineEntity[],
   hinted: readonly string[],
 ) => {
   db.transaction((tx) => {
@@ -434,9 +459,13 @@ const writeCredits = (
         WHERE song = ${song} AND state = 1`);
     }
     for (const entity of online)
-      tx.run(sql`INSERT INTO played_entities (kind, entity, sort_key, item)
-        VALUES (${entity.kind}, ${entity.entity}, ${entity.sortKey}, ${JSON.stringify(entity.item)})
-        ON CONFLICT (kind, entity) DO UPDATE SET sort_key = excluded.sort_key, item = excluded.item`);
+      // The latest played song crediting it names it, as Home's Recently played does.
+      tx.run(sql`INSERT INTO played_entities (kind, entity, sort_key, item, played_at)
+        VALUES (${entity.kind}, ${entity.entity}, ${entity.sortKey}, ${JSON.stringify(entity.item)},
+          ${entity.playedAt})
+        ON CONFLICT (kind, entity) DO UPDATE SET sort_key = excluded.sort_key, item = excluded.item,
+          played_at = excluded.played_at
+        WHERE excluded.played_at >= played_entities.played_at`);
     for (const hint of new Set(hinted))
       tx.run(sql`UPDATE played_songs SET state = 1 WHERE state = 2 AND album_hint = ${hint}`);
   });
