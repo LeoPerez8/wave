@@ -1,7 +1,9 @@
 import {
   djCanStart,
+  djCells,
   djGrid,
   djOpened,
+  djPagesNeeded,
   djReduce,
   djSeedTiles,
   djSelectable,
@@ -9,39 +11,69 @@ import {
   type DjArtistTile,
   type DjState,
   type DjTileKey,
+  identityKey,
 } from "@wave/core";
 import { IconX } from "@tabler/icons-react-native";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ArtistImage } from "@/catalog/ArtistImage";
-import { CardTile, CardTitle } from "@/catalog/cards/CardParts";
+import { CardTile, CardTitle, titleLineHeight } from "@/catalog/cards/CardParts";
 import { TileCheck } from "@/catalog/CheckCell";
 import { CELL, grid, widthOf } from "@/catalog/grid";
+import { SkeletonLine } from "@/catalog/SkeletonLine";
 import { IconButton } from "@/components/IconButton";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { TextButton } from "@/components/TextButton";
 import { magicQueueGrid } from "@/home/homeOpening";
 import type { MixIndexes } from "@/home/mixKnown";
 import { recommendationSnapshot } from "@/home/recommendationSnapshot";
+import { savedYtArtist } from "@/home/ytArtistPage";
 import { useScreenContent } from "@/lib/screenTiming";
 import { router } from "@/lib/timingRouter";
 import { appRuntime } from "@/library/runtime";
 import { useLocalisation } from "@/localisation/localisation";
+import { online } from "@/native/waveNative";
 import { startDjMagicQueue } from "@/playback/MagicQueue";
 import { latestTasteProfile } from "@/playback/TasteProfile";
+import { ytMusicEnabled } from "@/settings/ytMusic";
 import { usePlayedArtist } from "@/stats/PlayedEntityViews";
 import { useThemeColor } from "@/theme/useThemeColor";
+import { fetchArtist } from "@/ytmusic/artistSection";
 import type { ArtistRow } from "@wave/client";
 
 import { runDjDone, type DjDone } from "./djDone";
+import { readDjSimilar } from "./djSimilar";
 
 /** The Library's artists by id, for the tiles that show one's image. */
 type LibraryArtists = ReadonlyMap<number, ArtistRow>;
 
+/** DJ on screen: Core's state, and the Library's artists its tiles show and open. */
+interface Opened {
+  readonly state: DjState;
+  readonly artists: LibraryArtists;
+  readonly library: MixIndexes["artists"];
+}
+
+/**
+ * The "Fans might also like" list of [name]'s YouTube Music page, for the row
+ * their tile opened (`readDjSimilar`). A page that's asked for is read and
+ * saved under the artist's name as a Library album's page reads it
+ * (`fetchArtist`, the page alone), so it feeds the artist graph. Only the
+ * name and the artist's browse id are sent.
+ */
+const similarOf = (name: string) =>
+  readDjSimilar({
+    saved: () => appRuntime.runPromise(savedYtArtist(name)),
+    canAsk: () => ytMusicEnabled() && online(),
+    ask: (saved) =>
+      appRuntime.runPromise(fetchArtist(name, identityKey(name), saved, { allSongs: false })),
+    now: Date.now,
+  });
+
 /** DJ as it opens: the grid Core builds from [library], the last taste profile and artist graph. */
-const openedOver = (library: MixIndexes): { state: DjState; artists: LibraryArtists } => ({
+const openedOver = (library: MixIndexes): Opened => ({
   state: djOpened(
     djGrid({
       artists: library.artists,
@@ -51,16 +83,20 @@ const openedOver = (library: MixIndexes): { state: DjState; artists: LibraryArti
     }),
   ),
   artists: new Map(library.artists.map((artist) => [artist.id, artist])),
+  library: library.artists,
 });
 
 /**
  * DJ's grid, drawn once per opening from what the phone already has: no
  * derivation and no request is waited for. Only a snapshot whose Library
  * part was never read (DJ opened before Home's mixes asked for it) is read
- * first, from the local database; null until then.
+ * first, from the local database; null until then. A tile selected for the
+ * first time opens its similar artists from the last artist graph; a row
+ * that isn't full reads the artist's page once (Core's `djPagesNeeded`), and
+ * whatever comes of it settles the row.
  */
 const useDjGrid = () => {
-  const [opened, setOpened] = useState(() => {
+  const [opened, setOpened] = useState<Opened | null>(() => {
     const { library } = recommendationSnapshot.peek();
     return library === null ? null : openedOver(library);
   });
@@ -74,7 +110,7 @@ const useDjGrid = () => {
         if (current) setOpened(openedOver(library));
       })
       .catch(() => {
-        if (current) setOpened({ state: djOpened([]), artists: new Map() });
+        if (current) setOpened({ state: djOpened([]), artists: new Map(), library: [] });
       });
     return () => {
       current = false;
@@ -83,8 +119,39 @@ const useDjGrid = () => {
   const toggle = (key: DjTileKey): void =>
     setOpened(
       (current) =>
-        current && { ...current, state: djReduce(current.state, { type: "toggle", key }) },
+        current && {
+          ...current,
+          state: djReduce(current.state, {
+            type: "toggle",
+            key,
+            graph: recommendationSnapshot.peek().graph,
+            library: current.library,
+          }),
+        },
     );
+  const asked = useRef(new Set<DjTileKey>());
+  const state = opened?.state;
+  useEffect(() => {
+    if (state === undefined) return;
+    for (const tile of djPagesNeeded(state)) {
+      if (asked.current.has(tile.key)) continue;
+      asked.current.add(tile.key);
+      const settle = (artists: Awaited<ReturnType<typeof similarOf>>): void =>
+        setOpened(
+          (current) =>
+            current && {
+              ...current,
+              state: djReduce(current.state, {
+                type: "similar",
+                key: tile.key,
+                artists,
+                library: current.library,
+              }),
+            },
+        );
+      void similarOf(tile.name).then(settle, () => settle(null));
+    }
+  }, [state]);
   return { opened, toggle };
 };
 
@@ -137,9 +204,30 @@ function ArtistTile({
 }
 
 /**
+ * The place a row holds while its artist's page loads: a still circle and a
+ * title bar, as large as an artist tile, so the grid doesn't jump when the
+ * page arrives. Screen readers skip it.
+ */
+function PlaceholderTile({ size, fontScale }: { size: number; fontScale: number }) {
+  return (
+    <View
+      style={{ width: size }}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      <View className="bg-fill" style={{ width: size, height: size, borderRadius: size / 2 }} />
+      <View className="items-center" style={{ paddingTop: CELL }}>
+        <SkeletonLine lineHeight={titleLineHeight(fontScale)} width="60%" />
+      </View>
+    </View>
+  );
+}
+
+/**
  * DJ (docs/spec.md, DJ): the owner picks the artists a Magic Queue starts
- * from. A tap selects or unselects a tile; Done reads the session's first
- * batch and plays it, then closes; Close leaves the queue as it is.
+ * from. A tap selects or unselects a tile, and a tile selected for the first
+ * time opens up to 3 similar artists right after it; Done reads the session's
+ * first batch and plays it, then closes; Close leaves the queue as it is.
  */
 export function DjScreen() {
   const { strings } = useLocalisation();
@@ -153,6 +241,7 @@ export function DjScreen() {
   useScreenContent(opened !== null);
   const state = opened?.state;
   const seed = useMemo(() => (state === undefined ? [] : djSeedTiles(state)), [state]);
+  const cells = useMemo(() => (state === undefined ? [] : djCells(state)), [state]);
   const loading = done === "loading";
   const canStart = state !== undefined && djCanStart(state);
   const start = (): void =>
@@ -192,21 +281,28 @@ export function DjScreen() {
                 rowGap: CELL * 2,
               }}
             >
-              {state?.tiles.map((tile) => (
-                <ArtistTile
-                  key={tile.key}
-                  tile={tile}
-                  artist={tile.libraryId === null ? undefined : opened?.artists.get(tile.libraryId)}
-                  size={size}
-                  selected={djSelected(state, tile.key)}
-                  // A selection can't change while its first batch is read.
-                  selectable={!loading && djSelectable(state, tile.key)}
-                  onPress={() => {
-                    setDone("idle");
-                    toggle(tile.key);
-                  }}
-                />
-              ))}
+              {cells.map((cell) => {
+                if (cell.kind === "placeholder" || state === undefined)
+                  return <PlaceholderTile key={cell.key} size={size} fontScale={fontScale} />;
+                const { tile } = cell;
+                return (
+                  <ArtistTile
+                    key={cell.key}
+                    tile={tile}
+                    artist={
+                      tile.libraryId === null ? undefined : opened?.artists.get(tile.libraryId)
+                    }
+                    size={size}
+                    selected={djSelected(state, tile.key)}
+                    // A selection can't change while its first batch is read.
+                    selectable={!loading && djSelectable(state, tile.key)}
+                    onPress={() => {
+                      setDone("idle");
+                      toggle(tile.key);
+                    }}
+                  />
+                );
+              })}
             </View>
           )}
         </View>
