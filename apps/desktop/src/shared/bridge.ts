@@ -375,9 +375,12 @@ export interface BridgeContract
     readonly args: readonly [DiscoverSettings];
     readonly result: DiscoverSettings;
   };
-  /** Plays today's mix [id] from its song [index]; false when the mix is gone. */
+  /**
+   * Plays today's mix [id] from its song [index], or its songs shuffled with [shuffle]; false
+   * when the mix is gone.
+   */
   readonly "discover.playMix": {
-    readonly args: readonly [id: string, index: number];
+    readonly args: readonly [id: string, index: number, shuffle?: boolean];
     readonly result: boolean;
   };
   /** Plays a Magic Queue of [target]'s songs; false when none can play. */
@@ -942,7 +945,7 @@ export interface WaveBridge {
     readonly mixes: () => Promise<DiscoverMixesView>;
     readonly settings: () => Promise<DiscoverSettings>;
     readonly setSettings: (value: DiscoverSettings) => Promise<DiscoverSettings>;
-    readonly playMix: (id: string, index: number) => Promise<boolean>;
+    readonly playMix: (id: string, index: number, shuffle?: boolean) => Promise<boolean>;
   };
   readonly magicQueue: {
     readonly start: (target: SongTarget) => Promise<boolean>;
@@ -1120,7 +1123,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     mixes: () => invoke("discover.mixes"),
     settings: () => invoke("discover.settings"),
     setSettings: (value) => invoke("discover.setSettings", value),
-    playMix: (id, index) => invoke("discover.playMix", id, index),
+    playMix: (id, index, shuffle) => invoke("discover.playMix", id, index, shuffle),
   },
   magicQueue: {
     start: (target) => invoke("magicQueue.start", target),

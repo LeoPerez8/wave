@@ -1057,7 +1057,9 @@ export function App() {
               </div>
             </div>
           </div>
-        ) : route.kind === "ytArtist" || route.kind === "ytAlbum" ? null : (
+        ) : route.kind === "ytArtist" ||
+          route.kind === "ytAlbum" ||
+          route.kind === "discoverMix" ? null : (
           <div className="page-heading">
             <h1>{title}</h1>
             {(route.kind === "home" || route.kind === "songs") && (
@@ -1507,6 +1509,7 @@ export function App() {
           geniusAccess={geniusAccess(account)}
           onGeniusSignIn={openGeniusSignIn}
           onSongDrop={(songs, at) => dropSongs(songs, { queue: at })}
+          shuffleMenu={shuffleMenu}
           notify={notify}
           onClose={() => {
             // Focus goes back to the bar's button for this tab; Related opens from Queue's.

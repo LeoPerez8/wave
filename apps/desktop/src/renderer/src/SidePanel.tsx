@@ -14,6 +14,7 @@ import { LyricsView, trackIdOf } from "./LyricsView.tsx";
 import { panelTabs, shownPanelTab, stepPanelTab, type PanelTab } from "../../shared/panelTabs.ts";
 import { QueuePanel } from "./QueuePanel.tsx";
 import { RelatedPanel } from "./RelatedPanel.tsx";
+import type { shuffleMenuEvents } from "./ShuffleKinds.tsx";
 import { draggedSongs, type DraggedSongs } from "./songDrag.ts";
 import { labels, text } from "./text.ts";
 import type { GeniusAccess } from "./useSongGenius.ts";
@@ -46,6 +47,7 @@ export function SidePanel({
   geniusAccess,
   onGeniusSignIn,
   onSongDrop,
+  shuffleMenu,
   notify,
 }: {
   readonly tab: PanelTab;
@@ -67,6 +69,8 @@ export function SidePanel({
   readonly onGeniusSignIn: () => void;
   /** Songs dragged from a list and dropped in the Queue's Up Next [at]. */
   readonly onSongDrop?: (songs: DraggedSongs, at: UpNextPlace | undefined) => void;
+  /** What opens the kinds of shuffle from the Queue's shuffle toggle. */
+  readonly shuffleMenu?: ReturnType<typeof shuffleMenuEvents>;
   /** Shows a toast: the lyrics card's Save Image and Copy Image answers. */
   readonly notify: (message: string) => void;
 }) {
@@ -141,6 +145,7 @@ export function SidePanel({
             onError={onError}
             onMenu={onSongMenu}
             onSongDrop={onSongDrop}
+            shuffleMenu={shuffleMenu}
           />
         )}
       </div>

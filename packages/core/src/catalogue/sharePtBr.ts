@@ -13,6 +13,8 @@ export const sharePtBr: typeof shareEn = {
   shareRecap: "Compartilhar Retrospectiva",
   recapSlide: (title: string) => `Slide da Retrospectiva de ${title}`,
   copyLink: "Copiar Link",
+  copySpotifyLink: "Copiar Link do Spotify",
+  copyYtMusicLink: "Copiar Link do YT Music",
   songLink: "Link da música",
   linkCopied: "Link copiado",
   copyFailed: "Não foi possível copiar o link",

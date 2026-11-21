@@ -173,10 +173,11 @@ export const MISSING_SONGS_ACTIONS: readonly MissingSongsDownloadAction[] = [
 
 /**
  * A YT Music list whose songs download together, as its page reads them: an album's page by its
- * browse id. Its page's download button and head line are `YtListDownloadView`.
+ * browse id, or one of today's Discover mixes by its id. Its page's download button and head
+ * line are `YtListDownloadView`.
  */
 export interface YtSongsList {
-  readonly kind: "album";
+  readonly kind: "album" | "discoverMix";
   readonly id: string;
 }
 

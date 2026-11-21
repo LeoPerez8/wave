@@ -131,6 +131,7 @@ export function Shelf({
   onOpen,
   onMenu,
   onSeeAll,
+  onPlay,
 }: {
   readonly title: string;
   readonly items: readonly TileItem[];
@@ -141,6 +142,8 @@ export function Shelf({
   readonly onMenu?: (index: number, at: { readonly x: number; readonly y: number }) => void;
   /** Its heading's See all, opening the whole list (Home's shelves). */
   readonly onSeeAll?: () => void;
+  /** A tile that opens a page gets a play glyph on its cover, which plays it without opening. */
+  readonly onPlay?: (index: number) => void;
 }) {
   const states = useSongStates(items.flatMap((item) => (item.song ? [item.song.id] : [])));
   if (items.length === 0) return null;
@@ -160,7 +163,7 @@ export function Shelf({
       )}
       <div className="shelf-row" role="list">
         {items.map((item, index) => (
-          <div key={item.key} role="listitem">
+          <div key={item.key} role="listitem" className={onPlay ? "tile-playable" : undefined}>
             <button
               className={`tile ${marks[index] ? markClass(marks[index]) : ""}`.trimEnd()}
               aria-label={item.label ?? item.title}
@@ -186,6 +189,18 @@ export function Shelf({
                 <span className="tile-caption truncate secondary">{item.caption}</span>
               )}
             </button>
+            {onPlay && (
+              <span className="tile-play-area">
+                <button
+                  className="tile-play"
+                  aria-label={text.playbackText.playValue(item.title)}
+                  title={text.playbackText.playValue(item.title)}
+                  onClick={() => onPlay(index)}
+                >
+                  <Icon name="play" size={16} />
+                </button>
+              </span>
+            )}
           </div>
         ))}
       </div>
