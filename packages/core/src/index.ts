@@ -2913,7 +2913,7 @@ export {
   openedFileTrackId,
   openedFilesQueue,
 } from "./openedFiles.ts";
-import {
+export {
   floatingWindowPosition,
   readFloatingWindowPosition,
   storedFloatingWindowPosition,
