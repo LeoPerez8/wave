@@ -1,18 +1,21 @@
 import type { MouseEvent } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import { DiscoverPage } from "./Discover.tsx";
+import { DiscoverMixPage } from "./DiscoverMixPage.tsx";
 import { MagicQueuePage } from "./MagicQueuePage.tsx";
 import { YtAlbumPage, YtArtistPage } from "./YtArtist.tsx";
 
-/** YouTube Music's pages: Discover, the Magic Queue, and an artist's or album's page. */
+/** YouTube Music's pages: Discover and a mix's, the Magic Queue, and an artist's or album's page. */
 export type YtRoute =
   | { readonly kind: "discover" }
+  | { readonly kind: "discoverMix"; readonly id: string }
   | { readonly kind: "magicQueue" }
   | { readonly kind: "ytArtist"; readonly id: string }
   | { readonly kind: "ytAlbum"; readonly id: string };
 
 const KINDS: ReadonlySet<string> = new Set<YtRoute["kind"]>([
   "discover",
+  "discoverMix",
   "magicQueue",
   "ytArtist",
   "ytAlbum",
@@ -45,7 +48,23 @@ export function YtPage({
 }) {
   switch (route.kind) {
     case "discover":
-      return <DiscoverPage run={run} onSongMenu={onSongMenu} />;
+      return (
+        <DiscoverPage
+          run={run}
+          onSongMenu={onSongMenu}
+          onMix={(id) => go({ kind: "discoverMix", id })}
+        />
+      );
+    case "discoverMix":
+      return (
+        <DiscoverMixPage
+          key={route.id}
+          id={route.id}
+          run={run}
+          onSongMenu={onSongMenu}
+          onError={onError}
+        />
+      );
     case "magicQueue":
       return <MagicQueuePage run={run} revision={revision} onSongMenu={onSongMenu} />;
     case "ytArtist":

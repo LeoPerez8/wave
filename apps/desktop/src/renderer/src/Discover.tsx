@@ -99,9 +99,10 @@ export const useMixes = (revision = 0, online = true) => {
   return mixes;
 };
 
-export const playMix = (run: Run, id: string, index: number) =>
+/** Plays mix [id] from its song [index], or its songs shuffled with [shuffle]. */
+export const playMix = (run: Run, id: string, index: number, shuffle?: boolean) =>
   run(
-    window.wave.discover.playMix(id, index).then((played) => {
+    window.wave.discover.playMix(id, index, shuffle).then((played) => {
       // A mix rebuilt for a new day under the window's feet.
       if (!played) throw new Error(text.discover.goneTitle);
     }),
@@ -109,13 +110,19 @@ export const playMix = (run: Run, id: string, index: number) =>
 
 const MIX_ROWS: readonly MixRowId[] = ["artist-mixes", "genre-mixes"];
 
-/** Discover's page: the Magic Queue row, then each Artist and Genre mix as a list of its songs. */
+/**
+ * Discover's page: the Magic Queue row, then each Artist and Genre mix as a list of its songs,
+ * under a heading that opens the mix's page.
+ */
 export function DiscoverPage({
   run,
   onSongMenu,
+  onMix,
 }: {
   readonly run: Run;
   readonly onSongMenu: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
+  /** Opens mix [id]'s page. */
+  readonly onMix: (id: string) => void;
 }) {
   const mixes = useMixes();
   const picks = useMagicQueuePicks();
@@ -142,7 +149,9 @@ export function DiscoverPage({
                       aria-label={text.discover.mixTitle(mix.name)}
                     >
                       <h3>
-                        {text.discover.mixTitle(mix.name)}
+                        <button className="yt-mix-title" onClick={() => onMix(mix.id)}>
+                          {text.discover.mixTitle(mix.name)}
+                        </button>
                         <span className="secondary"> · {text.discover.songs(mix.songs.total)}</span>
                       </h3>
                       <YtSongList

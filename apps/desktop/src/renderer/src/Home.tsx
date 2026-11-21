@@ -191,7 +191,14 @@ export function Home({
           {view.hint === "none" && <p className="home-hint secondary">{text.home.noSections}</p>}
           {view.items.map((section) =>
             section.id === "discover" ? (
-              ytMusic && <HomeDiscover key={section.id} rows={view.discoverRows} run={run} />
+              ytMusic && (
+                <HomeDiscover
+                  key={section.id}
+                  rows={view.discoverRows}
+                  run={run}
+                  onMix={(id) => go({ kind: "discoverMix", id })}
+                />
+              )
             ) : section.id === "new-releases" ? (
               <HomeNewReleases key={section.id} cards={follow.releases} go={go} notify={notify} />
             ) : section.id === "upcoming-shows" ? (

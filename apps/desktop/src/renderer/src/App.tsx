@@ -1020,7 +1020,9 @@ export function App() {
               </div>
             </div>
           </div>
-        ) : route.kind === "ytArtist" || route.kind === "ytAlbum" ? null : (
+        ) : route.kind === "ytArtist" ||
+          route.kind === "ytAlbum" ||
+          route.kind === "discoverMix" ? null : (
           <div className="page-heading">
             <h1>{title}</h1>
             {(route.kind === "home" || route.kind === "songs") && (

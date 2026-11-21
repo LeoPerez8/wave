@@ -6,7 +6,7 @@ import { Icon } from "./Icon.tsx";
 import { itemMenuEvents } from "./Menu.tsx";
 import { listRowDrag, songDragProps } from "./songDrag.ts";
 import { markClass, SongMark, useSongStates } from "./SongMark.tsx";
-import { labels, albumName, artistName } from "./text.ts";
+import { labels, albumName, artistName, text } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
 
 /**
@@ -125,6 +125,7 @@ export function Shelf({
   nested = false,
   onOpen,
   onMenu,
+  onPlay,
 }: {
   readonly title: string;
   readonly items: readonly TileItem[];
@@ -133,6 +134,8 @@ export function Shelf({
   readonly nested?: boolean;
   readonly onOpen: (index: number) => void;
   readonly onMenu?: (index: number, at: { readonly x: number; readonly y: number }) => void;
+  /** A tile that opens a page gets a play glyph on its cover, which plays it without opening. */
+  readonly onPlay?: (index: number) => void;
 }) {
   const states = useSongStates(items.flatMap((item) => (item.song ? [item.song.id] : [])));
   if (items.length === 0) return null;
@@ -145,7 +148,7 @@ export function Shelf({
       <Heading>{title}</Heading>
       <div className="shelf-row" role="list">
         {items.map((item, index) => (
-          <div key={item.key} role="listitem">
+          <div key={item.key} role="listitem" className={onPlay ? "tile-playable" : undefined}>
             <button
               className={`tile ${marks[index] ? markClass(marks[index]) : ""}`.trimEnd()}
               aria-label={item.label ?? item.title}
@@ -171,6 +174,18 @@ export function Shelf({
                 <span className="tile-caption truncate secondary">{item.caption}</span>
               )}
             </button>
+            {onPlay && (
+              <span className="tile-play-area">
+                <button
+                  className="tile-play"
+                  aria-label={text.playbackText.playValue(item.title)}
+                  title={text.playbackText.playValue(item.title)}
+                  onClick={() => onPlay(index)}
+                >
+                  <Icon name="play" size={16} />
+                </button>
+              </span>
+            )}
           </div>
         ))}
       </div>
