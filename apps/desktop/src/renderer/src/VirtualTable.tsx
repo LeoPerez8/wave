@@ -10,6 +10,7 @@ import {
   songSortLabelFor,
   streamedCoverUrls,
   type AppLanguage,
+  type DiscHead,
   type PlaylistSongSort,
   type SongSort,
   type SongSortKey,
@@ -177,9 +178,15 @@ export function VirtualTable({
   const [ready, setReady] = useState(false);
   const [sort, setSort] = useState<SongSort | PlaylistSongSort>();
   const [changingSort, setChangingSort] = useState(false);
+  /** An album's "Disc n" heads: each takes a row's height before its disc's first song. */
+  const [discs, setDiscs] = useState<readonly DiscHead[]>([]);
   const sortVersion = useRef(0);
-  const start = Math.max(0, Math.floor(top / HEIGHT) - 5);
-  const end = Math.min(total, start + Math.ceil(height / HEIGHT) + 10);
+  /** Where row [index] sits, counting the heads before it. */
+  const slotOf = (index: number) => index + discs.filter((head) => head.at <= index).length;
+  const first = Math.floor(top / HEIGHT);
+  // A row sits at most one slot per head below its index.
+  const start = Math.max(0, first - 5 - discs.length);
+  const end = Math.min(total, Math.max(0, first - 5) + Math.ceil(height / HEIGHT) + 10);
   const firstPage = Math.floor(start / SIZE);
   const lastPage = Math.floor(Math.max(start, end - 1) / SIZE);
   const songList = !["albums", "artists", "playlists", "genres"].includes(scope.kind);
@@ -240,6 +247,7 @@ export function VirtualTable({
           if (Math.abs(index - firstPage) > 3) cache.current.delete(index);
         setPages(new Map(cache.current));
         setTotal(results[0]![1].total);
+        setDiscs(results[0]![1].discs ?? []);
         setReady(true);
         setSort(results[0]![1].sort);
         onSort?.(results[0]![1].sort);
@@ -318,9 +326,10 @@ export function VirtualTable({
     const next = Math.max(0, Math.min(total - 1, index));
     setActive(next);
     const element = viewport.current!;
-    if (next * HEIGHT < element.scrollTop) element.scrollTop = next * HEIGHT;
-    else if ((next + 1) * HEIGHT > element.scrollTop + element.clientHeight)
-      element.scrollTop = (next + 1) * HEIGHT - element.clientHeight;
+    const slot = slotOf(next);
+    if (slot * HEIGHT < element.scrollTop) element.scrollTop = slot * HEIGHT;
+    else if ((slot + 1) * HEIGHT > element.scrollTop + element.clientHeight)
+      element.scrollTop = (slot + 1) * HEIGHT - element.clientHeight;
     setTop(element.scrollTop);
   };
   const jump = async (letter: string) => {
@@ -437,7 +446,7 @@ export function VirtualTable({
           ? (labels[scope.kind as keyof typeof labels] as string)
           : labels.songs)
       }
-      aria-rowcount={total + 1}
+      aria-rowcount={total + discs.length + 1}
       aria-multiselectable={onSelection !== undefined ? true : undefined}
       aria-colcount={
         3 +
@@ -489,7 +498,22 @@ export function VirtualTable({
         role="rowgroup"
         onScroll={(event) => setTop(event.currentTarget.scrollTop)}
       >
-        <div className="table-space" style={{ height: total * HEIGHT }}>
+        <div className="table-space" style={{ height: (total + discs.length) * HEIGHT }}>
+          {discs.map(
+            (head, index) =>
+              head.at >= start &&
+              head.at < end && (
+                <div
+                  key={`disc-${head.disc}-${head.at}`}
+                  role="row"
+                  className="disc-heading"
+                  aria-rowindex={head.at + index + 2}
+                  style={{ top: (head.at + index) * HEIGHT }}
+                >
+                  <span role="rowheader">{text.library.disc(head.disc)}</span>
+                </div>
+              ),
+          )}
           {Array.from({ length: Math.max(0, end - start) }, (_, i) => start + i).map((index) => {
             const row = get(index);
             const mark = row && songList ? rowMark(row, states) : undefined;
@@ -499,7 +523,7 @@ export function VirtualTable({
                   key={index}
                   id={rowId(index)}
                   role="row"
-                  aria-rowindex={index + 2}
+                  aria-rowindex={slotOf(index) + 2}
                   data-row={index}
                   aria-selected={
                     selection === undefined
@@ -508,7 +532,7 @@ export function VirtualTable({
                   }
                   aria-disabled={row.unavailable}
                   className={`table-row table-columns ${active === index ? "active-row" : ""} ${mark ? markClass(mark) : ""}`}
-                  style={{ top: index * HEIGHT }}
+                  style={{ top: slotOf(index) * HEIGHT }}
                   // A song row drags onto a playlist or the Queue; a ranking's rows only with selection.
                   {...(songList && (preview === undefined || onSelection !== undefined)
                     ? songDragProps(() => rowDrag({ selection }, scope, row))
