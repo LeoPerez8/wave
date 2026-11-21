@@ -176,7 +176,12 @@ test("Recognize names a song from the microphone, with its actions and failures"
       await expect(card).toHaveCount(0);
       await expect.poll(() => state(page)).toBe("playing");
 
-      // What the computer plays is its own source, named as the computer's.
+      // What the computer plays is its own source, named as the computer's. In the icon-only
+      // sidebar of a 1024×720 window, Recognize beside the closed Search field still takes a click.
+      await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0]!.setSize(1024, 720),
+      );
+      await expect.poll(() => page.evaluate(() => window.innerWidth)).toBeLessThan(1120);
       await page.getByRole("button", { name: "Recognize Song" }).click();
       await card.getByRole("radio", { name: "This computer" }).click();
       await expect(card.getByRole("radio", { name: "This computer" })).toHaveAttribute(

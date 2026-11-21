@@ -950,6 +950,9 @@ export function App() {
               className="search-recognize"
               aria-label={text.playbackText.recognizeSong}
               title={text.playbackText.recognizeSong}
+              // Pressing it keeps focus where it was: in the icon-only sidebar, focus inside the
+              // field would move the field to the title bar before the click lands.
+              onMouseDown={(event) => event.preventDefault()}
               onClick={(event) => {
                 event.preventDefault();
                 setRecognizing(true);
