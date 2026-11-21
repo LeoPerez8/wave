@@ -8,6 +8,8 @@ the system and the commit. Audio is checked by the engine's tests, not by ear.
 
 From the repo root:
 
+Install this worktree's desktop dependencies with `scripts/install-for.sh desktop`.
+
 ```sh
 pnpm --filter @wave/desktop typecheck
 pnpm --filter @wave/desktop test       # node:test units in src/

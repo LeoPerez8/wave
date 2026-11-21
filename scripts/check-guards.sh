@@ -5,6 +5,14 @@
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
+
+if [ ! -d apps/mobile/node_modules ] || [ ! -d apps/desktop/node_modules ]; then
+  echo "check-guards.sh checks both apps and needs both filtered installs:" >&2
+  echo "  scripts/install-for.sh mobile" >&2
+  echo "  scripts/install-for.sh desktop" >&2
+  exit 1
+fi
+
 pnpm -s lint --quiet
 node scripts/ci/client-imports.ts
 node --test scripts/ci/client-imports.test.ts >/dev/null

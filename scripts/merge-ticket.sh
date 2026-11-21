@@ -29,8 +29,16 @@ if ! git merge -q --no-ff --no-verify -m "$message" "origin/$ticket"; then
   exit 2
 fi
 
-pnpm install -s --frozen-lockfile --prefer-offline
-pnpm -s typecheck
+app="$("$here/install-for.sh" --print)"
+"$here/install-for.sh" "$app"
+if [ "$app" = mobile ]; then
+  other=desktop
+else
+  other=mobile
+fi
+# The guard script checks both apps, so give it both filtered installs.
+"$here/install-for.sh" "$other"
+pnpm -s --filter "@wave/$app..." typecheck
 "$here/check-guards.sh"
 git push -q origin "HEAD:refs/heads/$integration"
 echo "$integration is at $(git rev-parse HEAD)"

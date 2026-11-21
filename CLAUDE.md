@@ -66,6 +66,9 @@ Pick tickets whose blockers are closed.
 
 - `scripts/check-guards.sh` runs the fast repo-wide checks; tests near a change miss what they catch.
   Enable its pre-commit hook once per clone with `git config core.hooksPath .githooks`.
+- Run `scripts/install-for.sh mobile` or `scripts/install-for.sh desktop` in a worktree. With no
+  argument it picks an app from paths changed against `origin/main` (shared changes default to
+  mobile). `scripts/check-guards.sh` checks both apps and needs both filtered installs.
 - `scripts/merge-ticket.sh` merges a ticket into an integration branch; an agent only resolves its
   conflicts. Keep the integration branch out of every checkout so worktrees can use it.
 - `docs/agents/emulator-checks.md` is how to check a ticket without a phone.
