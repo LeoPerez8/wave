@@ -33,10 +33,13 @@ bash ~/.wave/heavy.sh node scripts/perf/perf.ts emulator-check --serial <adb-ser
   --artist "<artist on Artists' first screen>" --playlist "<playlist on Playlists' first screen>"
 ```
 
-It plays `reference-taps` (five iterations, about 15 minutes; `--iterations 2` for a quick look),
-sends Wave home so the timing session writes its "Speed since" summary, and reads the app log
+It plays `reference-taps` (five iterations; `--iterations 2` for a quick look, which took ten
+minutes on the PC). Then it sends Wave home and brings it back, since the timing session writes
+its "Speed since" summary on leaving and a paused Wave runs no JS timer. Last, it reads the app log
 (`files/logs/wave.log`) through the emulator's root, or `run-as` on a debug build. Only entries
-from after it started count. `--album` and `--yt-artist` add those pages, as for `run`.
+from after it started count. `--album` and `--yt-artist` add those pages, as for `run`. A slow
+cold start (`Status: timeout` from `am start -W`) doesn't stop it. The first run's numbers are in
+`docs/performance/1359-emulator-block-check.md`.
 
 It prints the run's results file, the AVD and the build, then:
 
