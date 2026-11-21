@@ -359,7 +359,9 @@ export type FollowReleaseOpening =
   | { readonly kind: "search" }
   | { readonly kind: "ytMusicOff" }
   | { readonly kind: "noAnswer" }
-  | { readonly kind: "notFound" };
+  | { readonly kind: "notFound" }
+  /** A matched release's album is gone from YT Music (`followAlbumOpening`). */
+  | { readonly kind: "gone" };
 /**
  * Opening a new release the Library lacks: with YT Music off it says so, even
  * for a matched release; a matched one opens; an unmatched one asks for an
@@ -393,6 +395,31 @@ export const followReleaseOpening = (
   );
   return match === null ? { kind: "notFound" } : { kind: "open", browseId: match.browseId };
 };
+/** What reading a matched release's album page said: its songs, or why it has none. */
+export type FollowAlbumRead = { readonly videoIds: readonly string[] } | "offline" | "failed";
+/**
+ * Opening a matched release on its album [browseId], by what reading the page said ([read]): it
+ * opens with songs; offline is no answer; a page YT Music doesn't give, or one with no songs, is
+ * gone, and the release then loses its match (`unmatchFollowRelease`).
+ */
+export const followAlbumOpening = (
+  browseId: string,
+  read: FollowAlbumRead,
+): Extract<FollowReleaseOpening, { kind: "open" | "noAnswer" | "gone" }> =>
+  read === "offline"
+    ? { kind: "noAnswer" }
+    : read === "failed" || read.videoIds.length === 0
+      ? { kind: "gone" }
+      : { kind: "open", browseId };
+/**
+ * [releases] with [key]'s YT Music match and songs dropped: it hides until a later check's
+ * search finds it again (`followReleasesToSearch`).
+ */
+export const unmatchFollowRelease = (
+  releases: readonly FollowRelease[],
+  key: string,
+): FollowRelease[] =>
+  releases.map((r) => (r.key === key ? { ...r, browseId: null, videoIds: [] } : r));
 /** Home opening checks after 12 hours, the daily background task after 24. */
 export type FollowCheckContext = "home" | "background";
 export const checkDue = (last: number | null, now: number, context: FollowCheckContext): boolean =>

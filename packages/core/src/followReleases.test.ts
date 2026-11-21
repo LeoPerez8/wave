@@ -1,11 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  followAlbumOpening,
   followFeed,
   followReleaseOpening,
   followReleaseQuery,
   followReleasesToSearch,
   type FollowRelease,
+  unmatchFollowRelease,
 } from "./index.ts";
 const now = Date.UTC(2026, 9, 29);
 const follow = {
@@ -154,4 +156,30 @@ test("a check searches each eligible release without a match or Library album, n
 
 test("a release's search asks for its artist and title", () => {
   assert.equal(followReleaseQuery(release("Voyage", 1), "ABBA"), "ABBA Voyage");
+});
+
+test("a matched release opens when its album reads with songs; offline is no answer, otherwise it's gone", () => {
+  assert.deepEqual(followAlbumOpening("MPREb_v", { videoIds: ["a"] }), {
+    kind: "open",
+    browseId: "MPREb_v",
+  });
+  assert.deepEqual(followAlbumOpening("MPREb_v", "offline"), { kind: "noAnswer" });
+  assert.deepEqual(followAlbumOpening("MPREb_v", "failed"), { kind: "gone" });
+  assert.deepEqual(followAlbumOpening("MPREb_v", { videoIds: [] }), { kind: "gone" });
+});
+
+test("a release whose album is gone loses its match and songs, and hides until a search finds it", () => {
+  const gone = { ...release("Voyage", 1), browseId: "MPREb_v", videoIds: ["a"] };
+  const kept = { ...release("Other", 2), browseId: "MPREb_o", videoIds: ["b"] };
+  const releases = unmatchFollowRelease([gone, kept], "Voyage");
+  assert.deepEqual(
+    releases.map((r) => [r.key, r.browseId, r.videoIds]),
+    [
+      ["Voyage", null, []],
+      ["Other", "MPREb_o", ["b"]],
+    ],
+  );
+  const input = { follows: [follow], releases, hidden: [], countedPlays: [], now };
+  assert.deepEqual(followFeed(input).releaseCards.map((r) => r.key), ["Other"]);
+  assert.deepEqual(followReleasesToSearch(input).map((r) => r.key), ["Voyage"]);
 });
