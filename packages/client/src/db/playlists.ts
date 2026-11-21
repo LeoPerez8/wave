@@ -960,6 +960,7 @@ export const selectUnsearchedEntries = (db: LibraryDatabase): PlaylistUnsearched
 export const selectPlaylistEntryVideoIdsPage = (
   db: LibraryDatabase,
   after: number,
+  whole = false,
 ): VideoPage<number> => {
   const { playlists, playlistItems, tracks } = schema;
   const rows = db.all<{ id: number; videoId: unknown }>(sql`
@@ -970,12 +971,17 @@ export const selectPlaylistEntryVideoIdsPage = (
       THEN ${storedVideoId} END AS videoId
     FROM ${playlistItems} JOIN ${playlists} ON ${playlists.id} = ${playlistItems.playlistId}
     WHERE ${playlistItems.id} > ${after}
-    ORDER BY ${playlistItems.id} LIMIT ${VIDEO_PAGE_ROWS}`);
+    ORDER BY ${playlistItems.id} ${whole ? sql`` : sql`LIMIT ${VIDEO_PAGE_ROWS}`}`);
   return {
     videos: videoIdsOf(rows),
-    next: rows.at(-1)?.id ?? null,
+    next: whole ? null : (rows.at(-1)?.id ?? null),
   };
 };
+
+/** Every page of `selectPlaylistEntryVideoIdsPage` in one statement, each video once (#1351). */
+export const selectPlaylistEntryVideoIds = (db: LibraryDatabase): string[] => [
+  ...new Set(selectPlaylistEntryVideoIdsPage(db, 0, true).videos),
+];
 
 /**
  * The YT Music songs the owner's playlists hold as [videoIds], one per video

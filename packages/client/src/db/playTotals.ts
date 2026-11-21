@@ -145,13 +145,20 @@ export const selectCountedPlays = (
   db: LibraryDatabase,
   ids: readonly number[],
 ): Map<number, number> =>
+  // One statement however many ids (a cold mix build asks for the whole Library's, #1351).
   new Map(
-    chunks(ids).flatMap((some) =>
-      db
-        .select({ id: schema.playTotals.trackId, plays: schema.playTotals.countedPlays })
-        .from(schema.playTotals)
-        .where(and(inArray(schema.playTotals.trackId, some), gt(schema.playTotals.countedPlays, 0)))
-        .all()
-        .map(({ id, plays }) => [id, plays] as const),
-    ),
+    ids.length === 0
+      ? []
+      : db
+          .select({ id: schema.playTotals.trackId, plays: schema.playTotals.countedPlays })
+          .from(schema.playTotals)
+          .where(
+            and(
+              sql`${schema.playTotals.trackId} IN (SELECT value FROM json_each(${JSON.stringify(ids)}))`,
+              gt(schema.playTotals.countedPlays, 0),
+            ),
+          )
+          .orderBy(schema.playTotals.trackId)
+          .all()
+          .map(({ id, plays }) => [id, plays] as const),
   );

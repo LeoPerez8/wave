@@ -37,7 +37,7 @@ export interface MixIndexes {
 const knownVideos = makeExternalStore<ReadonlySet<string> | null>(null);
 
 /**
- * Reads in pages, each on a settled turn, and
+ * Reads them in one read, on a settled turn, and
  * refreshes only a changed source version: a re-blend (a level change,
  * opening a mix's page or menu, Home coming into focus) leaves the new songs
  * played or added to a playlist since the build out. Offline; a failed read
@@ -46,7 +46,7 @@ const knownVideos = makeExternalStore<ReadonlySet<string> | null>(null);
 const videoRead = createKnownVideosRead(
   Effect.gen(function* () {
     yield* settledTurnEffect;
-    return yield* readKnownVideos(yield* LibraryStore, settledTurnEffect);
+    return yield* readKnownVideos(yield* LibraryStore);
   }),
 );
 onLibraryChange(videoRead.change);

@@ -89,6 +89,10 @@ test("suggestion inputs never page the candidate catalog: the radios replace it"
         catalogPages++;
         return store.mixCatalogPage(after);
       },
+      mixCatalog: Effect.suspend(() => {
+        catalogPages++;
+        return store.mixCatalog;
+      }),
     };
     const source = snapshotOf(counted, Effect.void);
     const input = await Effect.runPromise(source.get(fixture.playlistId));
@@ -108,10 +112,10 @@ test("a star reaches the next suggestions without paging the Library again", asy
     let songPasses = 0;
     const counted: Store = {
       ...store,
-      mixSongsPage: (after: number) => {
-        if (after === 0) songPasses++;
-        return store.mixSongsPage(after);
-      },
+      mixSongs: Effect.suspend(() => {
+        songPasses++;
+        return store.mixSongs;
+      }),
     };
     const source = snapshotOf(counted, Effect.void);
     const [one, two] = await Promise.all([
@@ -140,10 +144,10 @@ test("a write that leaves the Library's tracks as they were keeps its array, and
     let songPasses = 0;
     const counted: Store = {
       ...store,
-      mixSongsPage: (after: number) => {
-        if (after === 0) songPasses++;
-        return store.mixSongsPage(after);
-      },
+      mixSongs: Effect.suspend(() => {
+        songPasses++;
+        return store.mixSongs;
+      }),
     };
     const source = snapshotOf(counted, Effect.void);
     const first = await Effect.runPromise(source.get(fixture.playlistId));

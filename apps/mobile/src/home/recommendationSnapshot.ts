@@ -28,6 +28,10 @@ import type { MixIndexes } from "./mixKnown";
 import { readMixInputs } from "./mixInputs";
 import { readMixCatalog } from "./readMixCatalog";
 import { shareRecommendationSnapshot } from "./sharedRecommendationSnapshot";
+import { homeTurnOf, homeWork } from "./homeWork";
+
+/** The snapshot's reads are Home's build: they take Home's turns (#1351). */
+const homeTurn = homeTurnOf(recommendationTurnEffect);
 
 let versions: SnapshotVersions = {};
 const written = (source: SnapshotSource): void => {
@@ -37,29 +41,39 @@ onLibraryChange((change) => written(change.kind));
 onArtistGraphSourcesChanged(written);
 
 /**
- * The snapshot. Its reads give the JavaScript thread back between steps
- * (`recommendationTurnEffect`, when a frame is due) so Home stays smooth; the graph waits for Home to
- * settle first.
+ * The snapshot, as Home's mixes and Magic Queue carousel ask for it. Its
+ * reads give the JavaScript thread back between steps
+ * (`recommendationTurnEffect`, when a frame is due) so Home stays smooth, and
+ * take no step while Home is out of sight and nobody else waits for them
+ * (`homeWork`); the graph waits for Home to settle first.
  */
-export const recommendationSnapshot = shareRecommendationSnapshot({
+export const homeRecommendationSnapshot = shareRecommendationSnapshot({
   library: Effect.gen(function* () {
-    const indexes: MixIndexes = yield* readMixInputs(
-      yield* LibraryStore,
-      recommendationTurnEffect,
-      Date.now(),
-    );
+    const indexes: MixIndexes = yield* readMixInputs(yield* LibraryStore, homeTurn, Date.now());
     return indexes;
   }).pipe(namedWork("Home mix inputs")),
   catalog: Effect.gen(function* () {
-    return yield* readMixCatalog(yield* LibraryStore, recommendationTurnEffect);
+    return yield* readMixCatalog(yield* LibraryStore, homeTurn);
   }).pipe(namedWork("Home mix catalog")),
   graph: {
     store: Effect.service(LibraryStore),
-    start: settledTurnEffect,
-    between: recommendationTurnEffect,
+    start: homeTurnOf(settledTurnEffect),
+    between: homeTurn,
   },
   versions: () => versions,
 });
+
+/**
+ * The snapshot, as everyone off Home asks for it (a Magic Queue, DJ, a
+ * playlist's suggestions): waiting for a part opens Home's gate until it comes.
+ */
+export const recommendationSnapshot = {
+  ...homeRecommendationSnapshot,
+  library: homeWork.wanted(homeRecommendationSnapshot.library),
+  catalog: homeWork.wanted(homeRecommendationSnapshot.catalog),
+  graph: homeWork.wanted(homeRecommendationSnapshot.graph),
+  get: homeWork.wanted(homeRecommendationSnapshot.get),
+};
 
 /**
  * The snapshot's stars part, for playlist suggestions: which songs are
