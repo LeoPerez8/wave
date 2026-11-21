@@ -1,4 +1,8 @@
-import { DONT_PLAY_EXPLICIT_SETTING } from "@wave/core";
+import {
+  DONT_PLAY_EXPLICIT_SETTING,
+  readDontPlayExplicit,
+  writeDontPlayExplicit,
+} from "@wave/core";
 
 import { persistedSetting } from "@/lib/persistedSetting";
 
@@ -10,8 +14,8 @@ import { persistedSetting } from "@/lib/persistedSetting";
 const dontPlayExplicitSetting = persistedSetting<boolean>({
   key: DONT_PLAY_EXPLICIT_SETTING,
   synced: true,
-  read: (stored) => stored === "on",
-  write: (on) => (on ? "on" : null),
+  read: readDontPlayExplicit,
+  write: writeDontPlayExplicit,
   onValue: (on) => listener?.(on),
 });
 
