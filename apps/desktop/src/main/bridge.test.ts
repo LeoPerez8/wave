@@ -2584,9 +2584,11 @@ test("a Magic Queue, an artist page and Discover's row come through the bridge, 
       );
       await assert.rejects(call("magicQueue.startStreamed", "nope"), /Refused/);
       await assert.rejects(call("discover.playMix", "mix", -1), /Refused/);
+      await assert.rejects(call("discover.playMix", "mix", 0, "yes"), /Refused/);
       await assert.rejects(call("yt.queue", "shuffle", "mayyounever"), /Refused/);
       await assert.rejects(call("yt.queue", "playNow", "unknownsong"), /yt-unknown/);
       assert.equal(await call("discover.playMix", "gone", 0), false);
+      assert.equal(await call("discover.playMix", "gone", 0, true), false);
       await assert.rejects(
         call("discover.setSettings", { level: 6, faithfulness: 3, popularity: 3 }),
         /Refused/,
@@ -3165,6 +3167,15 @@ test("main refuses download calls with bad songs, actions, ids or pages", async 
       );
       // An album page main hasn't read has no download to show or start.
       assert.equal(await call("downloads.ytList", { kind: "album", id: "MPREb_unread" }), null);
+      // A mix that's gone (Home rebuilt its mixes) has no download either.
+      assert.equal(
+        await call("downloads.ytList", { kind: "discoverMix", id: "artist:gone" }),
+        null,
+      );
+      await assert.rejects(
+        call("downloads.ytList", { kind: "discoverMix", id: "x".repeat(201) }),
+        /Refused/,
+      );
       await call("downloads.ytListAction", "download", { kind: "album", id: "MPREb_unread" });
       // A move that names nothing waiting is taken and does nothing.
       await call("downloads.move", { kind: "group", from: "songs", step: 1 });
@@ -3226,6 +3237,16 @@ test("Copy Link puts a song's share link on the clipboard, and pasted text that 
       await assert.rejects(call("links.open", 7), /refused/i);
       await assert.rejects(call("links.open", "x".repeat(16_385)), /refused/i);
       await assert.rejects(call("links.copySong", "not a video"), /refused/i);
+      await assert.rejects(call("links.songShare", "not a video"), /refused/i);
+      await assert.rejects(call("links.copyShareLink", "https://example.com/"), /refused/i);
+      assert.deepEqual(
+        await wave.links.copyShareLink("https://music.youtube.com/watch?v=abcdefghijk"),
+        {
+          kind: "copied",
+          message: "Link copied",
+        },
+      );
+      copied.pop();
       await assert.rejects(call("links.copyPlaylist", 0), /refused/i);
       await assert.rejects(call("links.importPlaylist", "token", "yes"), /refused/i);
       // Main answers in the language it resolved, whatever the window believes.

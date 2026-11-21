@@ -173,9 +173,9 @@ export const createYtFeatureHandlers = (
       return {
         status,
         mixes: mixes.map((mix) => {
-          // Familiar songs the Library has are its rows; the others stream.
-          const items = mix.songs.flatMap((song) =>
-            song.source === "stream" ? [ytRow(song.song)] : browseSongs(db, [song.track.id]),
+          // Its Library songs among its new ones, as they play (`discover.playMix`).
+          const items = (discover.placed(mix.id) ?? []).flatMap((song) =>
+            song.source === "stream" ? [ytRow(song.song)] : browseSongs(db, [song.track]),
           );
           // Its tile's lead artists and cover, as the phone's (Core's `discoverMixCaption`).
           const { artists, artworkUrl } = discoverMixCaption(mix);
@@ -202,13 +202,14 @@ export const createYtFeatureHandlers = (
           return discover.settings();
         })
       : refuse("discover.setSettings", "invalid settings"),
-  "discover.playMix": ([id, index]) =>
+  "discover.playMix": ([id, index, shuffle]) =>
     typeof id === "string" &&
     id.length <= 200 &&
     typeof index === "number" &&
     Number.isSafeInteger(index) &&
-    index >= 0
-      ? featuresCall(({ playMix }) => playMix(id, index))
+    index >= 0 &&
+    (shuffle === undefined || typeof shuffle === "boolean")
+      ? featuresCall(({ playMix }) => playMix(id, index, shuffle))
       : refuse("discover.playMix", "invalid mix or song"),
   "magicQueue.start": ([target]) =>
     validTarget(target)

@@ -560,7 +560,7 @@ else {
             ),
           ).pipe(
             Layer.provideMerge(
-              ytFeaturesLayer({ online: () => net.isOnline() }).pipe(
+              ytFeaturesLayer({ online: () => net.isOnline(), language: () => language }).pipe(
                 Layer.provideMerge(
                   playlists.pipe(
                     Layer.provideMerge(

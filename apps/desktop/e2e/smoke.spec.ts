@@ -228,6 +228,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.links.importPlaylist",
       "wave.links.copySong",
       "wave.links.copyPlaylist",
+      "wave.links.songShare",
+      "wave.links.copyShareLink",
       "wave.artistPage.albums",
       "wave.artistPage.albumArtists",
       "wave.artistPage.section",

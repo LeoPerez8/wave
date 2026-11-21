@@ -264,13 +264,13 @@ const downloadsCall = <A>(run: (downloads: Downloads["Service"]) => A | Promise<
     return yield* Effect.tryPromise({ try: async () => run(downloads), catch: (error) => error });
   });
 
-/** A YT Music list as a page names it: an album's page by its browse id. */
+/** A YT Music list as a page names it: an album's page by its browse id, a mix by its id. */
 const ytSongsList = (value: unknown): YtSongsList | undefined => {
   if (typeof value !== "object" || value === null) return undefined;
   const { kind, id } = value as YtSongsList;
-  return kind === "album" && typeof id === "string" && /^[A-Za-z0-9_-]{2,128}$/.test(id)
-    ? { kind, id }
-    : undefined;
+  if (typeof id !== "string") return undefined;
+  if (kind === "album") return /^[A-Za-z0-9_-]{2,128}$/.test(id) ? { kind, id } : undefined;
+  return kind === "discoverMix" && id.length > 0 && id.length <= 200 ? { kind, id } : undefined;
 };
 
 /** [run] on [list]'s songs as its page last read them; [unread] when it wasn't read. */

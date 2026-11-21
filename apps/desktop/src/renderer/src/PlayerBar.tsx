@@ -65,13 +65,13 @@ export function usePlayback(failed: () => void) {
   return { view, run, refresh };
 }
 
-const repeatLabel = (view: PlayerView | undefined) =>
+export const repeatLabel = (view: PlayerView | undefined) =>
   view?.repeat === "one"
     ? labels.repeatOne
     : view?.repeat === "all"
       ? labels.repeatAll
       : labels.repeatOff;
-const nextRepeat = { off: "all", all: "one", one: "off" } as const;
+export const nextRepeat = { off: "all", all: "one", one: "off" } as const;
 
 /** The player's keys (docs/spec-desktop.md, Keyboard); Core's `desktopKey` scopes them. */
 function usePlayerKeys(view: PlayerView | undefined, run: (action: Promise<unknown>) => void) {

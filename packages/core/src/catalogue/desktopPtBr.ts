@@ -79,11 +79,6 @@ export const desktopPtBr = {
     waveLooksUpAPhotoOfEach:
       "O Wave busca uma foto de cada artista no Deezer, enviando os nomes dos artistas, e guarda as fotos neste computador. Desativado, os artistas mostram as capas dos álbuns e o Wave não faz solicitações.",
   },
-  itemActions: {
-    labels: {
-      share: "Copiar Link",
-    },
-  },
   recap: {
     tapToWatch: "Clique para assistir",
   },
