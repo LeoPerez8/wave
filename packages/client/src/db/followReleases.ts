@@ -1,6 +1,7 @@
 import { followArtistKey, releaseTitle, type FollowRelease } from "@wave/core";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import type { LibraryDatabase } from "./database.ts";
+import { countedRecordings } from "./keptPlayTotals.ts";
 import { stamped } from "./sync.ts";
 import {
   followReleaseCache,
@@ -93,7 +94,10 @@ export const followReleaseListening = (db: LibraryDatabase, releases: readonly F
     const keys = [
       ...new Set([...r.recordingKeys, ...songs.flatMap((s) => (s.key ? [s.key] : []))]),
     ];
-    if (keys.length)
+    // The kept counts per recording (#1349); summed from the plays until an upgrade seeds them.
+    const counted = countedRecordings(db, keys);
+    if (counted !== null) for (const key of counted) played.add(key);
+    else if (keys.length)
       for (const p of db
         .select({ key: playEvents.recordingKey })
         .from(playEvents)

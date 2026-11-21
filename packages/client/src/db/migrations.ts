@@ -5,6 +5,8 @@
  * Never edit a migration that has shipped; add a new one.
  */
 
+import { mKeptPlayTotals } from "./keptTotalsMigration.ts";
+
 const m0000 = `
 CREATE TABLE \`artists\` (
 	\`id\` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -1650,6 +1652,7 @@ export default {
         tag: "0068_collaborative_playlists",
         breakpoints: true,
       },
+      { idx: 69, when: 1_797_768_000_000, tag: "0069_kept_play_totals", breakpoints: true },
     ],
   },
   migrations: {
@@ -1722,5 +1725,6 @@ export default {
     m0066,
     m0067,
     m0068,
+    m0069: mKeptPlayTotals,
   },
 };

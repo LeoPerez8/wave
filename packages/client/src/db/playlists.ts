@@ -47,6 +47,7 @@ import {
   countPageRead,
   countSummarized,
 } from "./playlistWork.ts";
+import { keptPlaylistPlays } from "./keptPlayTotals.ts";
 import * as schema from "./schema.ts";
 import { stamped } from "./sync.ts";
 import { filePath, hasFile, inScope, songColumns, type TrackScope } from "./tracks.ts";
@@ -1425,19 +1426,22 @@ export const selectPlaylistsLastPlayed = (db: LibraryDatabase): Map<number, numb
 export const selectPlaylistPlays = (db: LibraryDatabase, now: number): PlaylistPlays[] => {
   const { playEvents } = schema;
   const recent = sql`${playEvents.startedAt} >= ${recentWindowStart(now)} AND ${playEvents.startedAt} <= ${now}`;
-  const rows = db
-    .select({
-      contextId: playEvents.contextId,
-      recentPlays: sql<number>`coalesce(sum(CASE WHEN ${playEvents.counted} AND ${recent} THEN 1 ELSE 0 END), 0)`,
-      plays: sql<number>`coalesce(sum(${playEvents.counted}), 0)`,
-      latestPlayAt: sql<
-        number | null
-      >`max(CASE WHEN ${playEvents.counted} THEN ${playEvents.startedAt} END)`,
-    })
-    .from(playEvents)
-    .where(and(eq(playEvents.contextType, "playlist"), isNotNull(playEvents.contextId)))
-    .groupBy(playEvents.contextId)
-    .all();
+  // The kept counts (#1349), or summed from the plays until an upgrade seeds them.
+  const rows =
+    keptPlaylistPlays(db, { from: recentWindowStart(now), to: now }) ??
+    db
+      .select({
+        contextId: playEvents.contextId,
+        recentPlays: sql<number>`coalesce(sum(CASE WHEN ${playEvents.counted} AND ${recent} THEN 1 ELSE 0 END), 0)`,
+        plays: sql<number>`coalesce(sum(${playEvents.counted}), 0)`,
+        latestPlayAt: sql<
+          number | null
+        >`max(CASE WHEN ${playEvents.counted} THEN ${playEvents.startedAt} END)`,
+      })
+      .from(playEvents)
+      .where(and(eq(playEvents.contextType, "playlist"), isNotNull(playEvents.contextId)))
+      .groupBy(playEvents.contextId)
+      .all();
   // Two spellings of one number ("7", "07") are one playlist.
   const byPlaylist = new Map<number, PlaylistPlays>();
   for (const { contextId, recentPlays, plays, latestPlayAt } of rows) {

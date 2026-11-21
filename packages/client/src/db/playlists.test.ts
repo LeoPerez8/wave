@@ -1221,7 +1221,7 @@ describe("From your library's plays", () => {
     }
   });
 
-  test("the plays are read from the play contexts' index, never the whole play history", () => {
+  test("the plays are read from their kept counts and the partial days' plays, never the whole play history", () => {
     recorded.length = 0;
     for (let at = 1; at <= 200; at += 1)
       play(at * 1_000, at % 4 === 0 ? fromPlaylist(playlistId) : { kind: "album", id: "1" });
@@ -1231,9 +1231,10 @@ describe("From your library's plays", () => {
       .filter((query) => query.sql.includes("play_events"))
       .map((query) => query.plan.join("; "));
     assert.equal(plans.length, 1);
+    // Kept since #1349: only the window's partial days' plays are read, through their start.
     for (const plan of plans) {
-      assert.match(plan, /SEARCH play_events USING INDEX play_events_context_idx/);
-      assert.doesNotMatch(plan, /TEMP B-TREE/);
+      assert.match(plan, /SEARCH play_events USING INDEX play_events_started_at_idx/);
+      assert.doesNotMatch(plan, /SCAN play_events/);
     }
   });
 });
