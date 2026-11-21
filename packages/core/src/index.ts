@@ -2880,3 +2880,10 @@ export {
   type LanguageChoice,
 } from "./languageChoice.ts";
 export { displayTag } from "./displayTag.ts";
+export {
+  openedAudioFiles,
+  openedFilePath,
+  openedFileTitle,
+  openedFileTrackId,
+  openedFilesQueue,
+} from "./openedFiles.ts";

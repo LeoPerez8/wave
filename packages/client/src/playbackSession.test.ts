@@ -482,3 +482,59 @@ test("Undo to a song that won't load goes back to the old queue, stopped", async
   assert.equal(undone.canUndo, false);
   assert.ok(changes > before, "the change is told");
 });
+
+test("a file outside the Library plays from its path between Library songs and records no play", async (t) => {
+  const db = await openTestDatabase();
+  const a = addTrack(db, { title: "Library" });
+  const loaded: string[] = [];
+  const preloaded: (string | undefined)[] = [];
+  const audio = device();
+  let now = 1000;
+  const ended: string[] = [];
+  const session = await createPlaybackSession({
+    db,
+    audio: {
+      ...audio,
+      load: (path, key) => {
+        loaded.push(path);
+        return audio.load(path, key);
+      },
+      preload: (path, key) => {
+        preloaded.push(path);
+        return audio.preload(path, key);
+      },
+    },
+    source: "desktop",
+    now: () => now,
+    openedFile: (path) => path !== "/gone/Deleted.mp3",
+    playEnded: (play) => ended.push(play.trackId),
+  });
+  t.after(() => session.close());
+  await session.dispatch({
+    type: "play",
+    trackIds: ["file:/tmp/Outside.mp3", "file:/gone/Deleted.mp3", String(a)],
+    context: { kind: "files", id: null },
+  });
+  assert.deepEqual(loaded, ["/tmp/Outside.mp3"]);
+  assert.match(String(preloaded.at(-1)), /Library\.mp3$/, "a file that is gone is skipped");
+  await session.play();
+  now += 40000;
+  await session.dispatch({ type: "next" });
+  assert.equal(db.select().from(playEvents).all().length, 1, "only the Library song has a play");
+  assert.equal(db.select().from(playEvents).all()[0]?.trackId, a);
+  assert.deepEqual(ended, [], "a play of a file outside the Library isn't told as one to sync");
+});
+
+test("without an opened-file reader, a file entry is skipped as unplayable", async (t) => {
+  const db = await openTestDatabase();
+  const a = addTrack(db, { title: "Library" });
+  const session = await createPlaybackSession({ db, audio: device(), source: "phone" });
+  t.after(() => session.close());
+  await session.dispatch({
+    type: "play",
+    trackIds: ["file:/tmp/Outside.mp3", String(a)],
+    context: { kind: "files", id: null },
+  });
+  const { queue } = session.snapshot();
+  assert.equal(queue.entries[queue.index]?.trackId, String(a));
+});

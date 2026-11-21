@@ -239,7 +239,7 @@ export function PlayerBar({
             labels.favorite,
             () => run(window.wave.playback.favorite()),
             song?.favorite,
-            song === null,
+            song === null || song.outside,
           )}
         </div>
         <div className="player-center">

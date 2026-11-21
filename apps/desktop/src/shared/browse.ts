@@ -49,6 +49,11 @@ export interface BrowseRow {
   readonly artworkUrl?: string | null;
   /** A playlist's own image, fetched through `playlists.image`; changes when the image does. */
   readonly imageKey?: string | null;
+  /**
+   * A file opened with Wave that the Library doesn't hold: its `id` is 0, its `path` the file,
+   * and nothing of the Library's (a star, a playlist, counted plays) applies to it.
+   */
+  readonly outside?: true;
 }
 export interface BrowsePage extends Page<BrowseRow> {
   readonly hero?: BrowseRow;
