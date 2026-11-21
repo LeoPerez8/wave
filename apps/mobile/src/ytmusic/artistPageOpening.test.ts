@@ -78,3 +78,60 @@ test("selection renders keep the artist page's data and do not repeat matching",
     act(() => renderer?.unmount());
   }
 });
+
+test("offline, the page keeps the similar artists saved with it over the offline line", () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const justice = { name: "Justice", browseId: "UCjustice", audience: null };
+  const state = {
+    status: "ready" as const,
+    failure: null,
+    saved: {
+      outcome: "found" as const,
+      checkedAt: 1000,
+      browseId: "artist",
+      page: {
+        name: "Air",
+        songs: [],
+        allSongs: [],
+        albums: [],
+        singles: [],
+        similar: [justice],
+        description: "French electronic duo.",
+        subscribers: "7.19M",
+        views: "6,030,217,324",
+      },
+    },
+  };
+  const nowhere = () => null;
+  let shown: ReturnType<typeof useArtistPageOpening>;
+  function Page() {
+    const current = useArtistPageOpening(state, {
+      enabled: true,
+      now: 1000,
+      settled: true,
+      online: false,
+      librarySong: nowhere,
+      libraryAlbum: nowhere,
+    });
+    useLayoutEffect(() => {
+      shown = current;
+    });
+    return createElement("row");
+  }
+  let renderer: ReactTestRenderer | undefined;
+  try {
+    act(() => {
+      renderer = create(createElement(Page));
+    });
+    assert.equal(shown!.view.note, "offline");
+    assert.deepEqual(shown!.view.songs, []);
+    assert.deepEqual(shown!.view.similar, [justice]);
+    assert.deepEqual(shown!.view.about, {
+      description: "French electronic duo.",
+      subscribers: "7.19M",
+      views: "6,030,217,324",
+    });
+  } finally {
+    act(() => renderer?.unmount());
+  }
+});

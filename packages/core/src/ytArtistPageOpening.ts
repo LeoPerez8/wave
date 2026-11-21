@@ -2,13 +2,19 @@ import { ytArtistOpeningState } from "./ytArtistOpening.ts";
 import {
   ytArtistPageAsks,
   ytArtistPageView,
+  ytArtistPageWaiting,
+  ytArtistAbout,
   ytArtistSavedStands,
   type YtArtistPageViewContext,
   type YtArtistSection,
 } from "./ytArtist.ts";
 import type { YtSong } from "./ytMusic.ts";
 
-/** Remote-only pages can show an offline result without acquiring the Library finder. */
+/**
+ * Remote-only pages can show an offline result without acquiring the Library
+ * finder. Offline, a page seen before keeps its similar artists (Fans might
+ * also like) and its About with the offline line, however old it is.
+ */
 export const ytArtistPageOpening = <S extends YtSong, L, A>(
   state: YtArtistSection<S>,
   context: YtArtistPageViewContext<S, L, A> & {
@@ -18,7 +24,16 @@ export const ytArtistPageOpening = <S extends YtSong, L, A>(
   },
 ) => {
   const shown: YtArtistSection<S> = ytArtistOpeningState(state, context.online);
-  const view = ytArtistPageView(shown, context);
+  const seen = state.status !== "reading" && state.saved?.outcome === "found" ? state.saved : null;
+  const read = ytArtistPageView(shown, context);
+  const view =
+    !context.online && context.enabled && seen !== null
+      ? {
+          ...read,
+          similar: seen.page.similar ?? [],
+          about: ytArtistAbout(seen.page),
+        }
+      : read;
   const finder =
     context.online &&
     context.settled &&
@@ -27,10 +42,7 @@ export const ytArtistPageOpening = <S extends YtSong, L, A>(
     state.saved?.outcome === "found" &&
     ytArtistSavedStands(state.saved, context.now);
   return {
-    view:
-      !finder && view.note === null
-        ? { ...view, songs: [], shelves: [], note: "loading" as const }
-        : view,
+    view: !finder && view.note === null ? ytArtistPageWaiting(view) : view,
     ask:
       context.online &&
       context.settled &&

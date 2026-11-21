@@ -9,6 +9,7 @@ import {
 } from "./index.ts";
 import type {
   YtArtistAlbum,
+  YtArtistCandidate,
   YtArtistSaved,
   YtArtistSection,
   YtArtistSectionEvent,
@@ -44,7 +45,13 @@ const release = (browseId: string, year: number | null): YtArtistAlbum => ({
 const found = (
   checkedAt: number,
   allSongs: YtSong[] = [song("a")],
-  parts: { top?: YtSong[]; albums?: YtArtistAlbum[]; singles?: YtArtistAlbum[] } = {},
+  parts: {
+    top?: YtSong[];
+    albums?: YtArtistAlbum[];
+    singles?: YtArtistAlbum[];
+    similar?: YtArtistCandidate[];
+    about?: { description: string; subscribers?: string | null; views?: string | null };
+  } = {},
 ): YtArtistSaved => ({
   outcome: "found",
   checkedAt,
@@ -56,7 +63,15 @@ const found = (
     allSongs,
     albums: parts.albums ?? [],
     singles: parts.singles ?? [],
+    ...(parts.similar === undefined ? {} : { similar: parts.similar }),
+    ...(parts.about === undefined ? {} : parts.about),
   },
+});
+
+const similar = (name: string): YtArtistCandidate => ({
+  name,
+  browseId: `UC${name}`,
+  audience: null,
 });
 
 /** A page saved before the artist's songs playlist was read: it has no full list. */
@@ -133,6 +148,33 @@ const view = (state: Page, context: { enabled?: boolean; now?: number } = {}) =>
   });
 
 describe("what a YouTube Music artist page shows", () => {
+  test("About appears only for a nonblank description and keeps each available count", () => {
+    const shown = view(
+      restored(
+        found(NOW, [], {
+          about: {
+            description: "A short biography.",
+            subscribers: "7.19M",
+            views: "6,030,217,324",
+          },
+        }),
+      ),
+    );
+    assert.deepEqual(shown.about, {
+      description: "A short biography.",
+      subscribers: "7.19M",
+      views: "6,030,217,324",
+    });
+    const withoutDescription = view(
+      restored(found(NOW, [], { about: { description: "  ", subscribers: "4" } })),
+    );
+    assert.equal(withoutDescription.about, null);
+    const oneCount = view(
+      restored(found(NOW, [], { about: { description: "Bio", subscribers: null, views: "12" } })),
+    );
+    assert.deepEqual(oneCount.about, { description: "Bio", subscribers: null, views: "12" });
+  });
+
   test("the artist's image, name and every song of theirs in YouTube's order; the Library's play its files", () => {
     const shown = view(
       restored(found(NOW, [song("b"), song("mine1"), song("a")], { top: [song("top")] })),
@@ -200,10 +242,47 @@ describe("what a YouTube Music artist page shows", () => {
         artworkUrl: null,
         songs: [],
         shelves: [],
+        similar: [],
+        about: null,
         note: reason,
         retry: true,
       });
     }
+  });
+
+  test("the similar artists the page lists, in its order; none for a page saved before they were read", () => {
+    const listed = [similar("Justice"), similar("Air")];
+    assert.deepEqual(view(restored(found(NOW, [song("a")], { similar: listed }))).similar, listed);
+    assert.deepEqual(view(restored(found(NOW))).similar, []);
+  });
+
+  test("when asking again fails, the similar artists saved before still show with the quiet line", () => {
+    const listed = [similar("Justice")];
+    const failed = step(
+      restored(found(NOW - 8 * DAY, [song("a")], { similar: listed })),
+      { type: "requested" },
+      { type: "failed", reason: "failed" },
+    );
+    const shown = view(failed);
+    assert.equal(shown.note, "failed");
+    assert.deepEqual(shown.songs, []);
+    assert.deepEqual(shown.similar, listed);
+  });
+
+  test("while it's looking or with YT Music off, no similar artists show", () => {
+    const old = restored(found(NOW - 8 * DAY, [song("a")], { similar: [similar("Justice")] }));
+    assert.deepEqual(view(old).similar, []);
+    assert.deepEqual(view(old, { enabled: false }).similar, []);
+  });
+
+  test("when asking again fails, the About saved before still shows; none while looking or with YT Music off", () => {
+    const old = restored(
+      found(NOW - 8 * DAY, [song("a")], { about: { description: "Bio", views: "12" } }),
+    );
+    const failed = step(old, { type: "requested" }, { type: "failed", reason: "failed" });
+    assert.deepEqual(view(failed).about, { description: "Bio", subscribers: null, views: "12" });
+    assert.equal(view(old).about, null);
+    assert.equal(view(old, { enabled: false }).about, null);
   });
 
   test("with YT Music off it says so instead of asking, saved answer or not", () => {
