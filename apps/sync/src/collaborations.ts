@@ -219,6 +219,36 @@ const endForOthers = (where: string, args: readonly string[], at: number): InSta
 });
 
 /**
+ * The statements that end the collaboration of [playlistId] when [ownerId]
+ * owns it: the record and its members and invites go, and the other members
+ * get an end record at [at]. Nothing changes for a playlist it doesn't own.
+ */
+export const endOwnedCollaboration = (
+  playlistId: string,
+  ownerId: string,
+  at: number,
+): InStatement[] => {
+  const owned = "c.playlist_id = ? AND c.owner_id = ?";
+  return [
+    endForOthers(owned, [playlistId, ownerId], at),
+    {
+      sql: `DELETE FROM collaboration_members
+            WHERE playlist_id IN (SELECT c.playlist_id FROM collaborations c WHERE ${owned})`,
+      args: [playlistId, ownerId],
+    },
+    {
+      sql: `DELETE FROM collaboration_invites
+            WHERE playlist_id IN (SELECT c.playlist_id FROM collaborations c WHERE ${owned})`,
+      args: [playlistId, ownerId],
+    },
+    {
+      sql: "DELETE FROM collaborations WHERE playlist_id = ? AND owner_id = ?",
+      args: [playlistId, ownerId],
+    },
+  ];
+};
+
+/**
  * Ends the collaboration of [playlistId], for its owner: the record and its
  * members go, the others get an end record, and the playlist's rows stay as
  * they are.
@@ -229,26 +259,8 @@ export const endCollaboration = async (
   accountId: string,
   at: number,
 ): Promise<CollaborationRefusal | null> => {
-  const owned = "c.playlist_id = ? AND c.owner_id = ?";
   const [asked] = await db.batch(
-    [
-      role(playlistId, accountId),
-      endForOthers(owned, [playlistId, accountId], at),
-      {
-        sql: `DELETE FROM collaboration_members
-              WHERE playlist_id IN (SELECT c.playlist_id FROM collaborations c WHERE ${owned})`,
-        args: [playlistId, accountId],
-      },
-      {
-        sql: `DELETE FROM collaboration_invites
-              WHERE playlist_id IN (SELECT c.playlist_id FROM collaborations c WHERE ${owned})`,
-        args: [playlistId, accountId],
-      },
-      {
-        sql: "DELETE FROM collaborations WHERE playlist_id = ? AND owner_id = ?",
-        args: [playlistId, accountId],
-      },
-    ],
+    [role(playlistId, accountId), ...endOwnedCollaboration(playlistId, accountId, at)],
     "write",
   );
   const part = roleOf(asked);

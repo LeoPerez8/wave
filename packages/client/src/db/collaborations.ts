@@ -115,54 +115,57 @@ const removeHere = (tx: LibraryDatabase, syncId: string): void => {
  * page says once that it is now the member's own (`selectPrivateCopyNotices`).
  */
 export const makePrivateCopy = (db: LibraryDatabase, syncId: string): void =>
-  db.transaction((tx) => {
-    const { playlists, playlistItems, privateCopyNotices } = schema;
-    const playlist = tx
-      .select({ id: playlists.id })
-      .from(playlists)
-      .where(eq(playlists.syncId, syncId))
-      .get();
-    tx.delete(schema.syncPending).where(pendingOf(syncId)).run();
-    tx.delete(schema.collaborations).where(eq(schema.collaborations.playlistSyncId, syncId)).run();
-    if (playlist === undefined) return;
-    tx.delete(playlistItems)
-      .where(
-        and(
-          eq(playlistItems.playlistId, playlist.id),
-          eq(playlistItems.deleted, true),
-          isNull(playlistItems.removedAt),
-        ),
-      )
+  db.transaction((tx) => copyPrivately(tx, syncId));
+
+/** `makePrivateCopy` in the transaction [tx]. */
+const copyPrivately = (tx: LibraryDatabase, syncId: string): void => {
+  const { playlists, playlistItems, privateCopyNotices } = schema;
+  const playlist = tx
+    .select({ id: playlists.id })
+    .from(playlists)
+    .where(eq(playlists.syncId, syncId))
+    .get();
+  tx.delete(schema.syncPending).where(pendingOf(syncId)).run();
+  tx.delete(schema.collaborations).where(eq(schema.collaborations.playlistSyncId, syncId)).run();
+  if (playlist === undefined) return;
+  tx.delete(playlistItems)
+    .where(
+      and(
+        eq(playlistItems.playlistId, playlist.id),
+        eq(playlistItems.deleted, true),
+        isNull(playlistItems.removedAt),
+      ),
+    )
+    .run();
+  const entries = tx
+    .select({ id: playlistItems.id, syncId: playlistItems.syncId })
+    .from(playlistItems)
+    .where(eq(playlistItems.playlistId, playlist.id))
+    .all();
+  for (const entry of entries) {
+    tx.update(playlistItems)
+      .set({
+        syncId: privateCopyId(entry.syncId),
+        libraryEntry: null,
+        addedBy: null,
+        pushed: false,
+      })
+      .where(eq(playlistItems.id, entry.id))
       .run();
-    const entries = tx
-      .select({ id: playlistItems.id, syncId: playlistItems.syncId })
-      .from(playlistItems)
-      .where(eq(playlistItems.playlistId, playlist.id))
-      .all();
-    for (const entry of entries) {
-      tx.update(playlistItems)
-        .set({
-          syncId: privateCopyId(entry.syncId),
-          libraryEntry: null,
-          addedBy: null,
-          pushed: false,
-        })
-        .where(eq(playlistItems.id, entry.id))
-        .run();
-    }
-    tx.update(playlists)
-      .set({ syncId: privateCopyId(syncId), pushed: false })
-      .where(eq(playlists.id, playlist.id))
-      .run();
-    tx.insert(privateCopyNotices).values({ playlistId: playlist.id }).onConflictDoNothing().run();
-  });
+  }
+  tx.update(playlists)
+    .set({ syncId: privateCopyId(syncId), pushed: false })
+    .where(eq(playlists.id, playlist.id))
+    .run();
+  tx.insert(privateCopyNotices).values({ playlistId: playlist.id }).onConflictDoNothing().run();
+};
 
 /**
  * Brings the device's collaborative playlists in line with what an account pull states
  * ([membership], Core's `membershipChanges`): each one's members and owner kept, its own
  * pull started again when its owner changed, a playlist the account left taken off the
  * device, and one it was removed from, or whose owner ended or deleted it, kept as a private
- * copy. True when a playlist here changed.
+ * copy, all in one transaction. True when a playlist here changed.
  */
 export const applyMembership = (db: LibraryDatabase, membership: PullMembership): boolean => {
   const changes = membershipChanges(selectHeld(db), membership);
@@ -184,8 +187,8 @@ export const applyMembership = (db: LibraryDatabase, membership: PullMembership)
     for (const syncId of changes.forget) {
       tx.delete(collaborations).where(eq(collaborations.playlistSyncId, syncId)).run();
     }
+    for (const syncId of changes.privateCopy) copyPrivately(tx, syncId);
   });
-  for (const syncId of changes.privateCopy) makePrivateCopy(db, syncId);
   return changes.leave.length > 0 || changes.privateCopy.length > 0;
 };
 

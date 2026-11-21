@@ -394,16 +394,20 @@ membership first. The owner may call them too.
   count in the owner's caps. A removal of an entry the service never held is dropped: nothing
   says which playlist it was in.
 - `GET /v1/collaboration/pull?playlist=<id>&since=<cursor>`: `{ "playlists": [Playlist],
-"playlistEntries": [PlaylistEntry], "cursor": "<n>", "more": false }`, every change of the
-  playlist's row and entries after the cursor, whoever made it, oldest first and paged as
-  `GET /v1/pull`. The cursor is per playlist; start with none. Core's `readPullPage` reads it.
+"playlistEntries": [PlaylistEntry], "cursor": "<n>_<owner>", "more": false }`, every change
+  of the playlist's row and entries after the cursor, whoever made it, oldest first and paged
+  as `GET /v1/pull`. The cursor is per playlist and opaque to the app; start with none. It names
+  the owner whose change numbers it counts, so after the playlist passes to another owner a
+  cursor taken before starts from the beginning. Core's `readPullPage` reads it.
 
 Refusals, besides those of `POST /v1/push`:
 
 - `403 { "error": "not_member" }`: the playlist isn't collaborative (never was, or it ended)
   or the account isn't in it.
-- `403 { "error": "deleted" }`: a push to a playlist the owner deleted. Its pull still
-  answers, with the playlist's tombstone.
+- `403 { "error": "deleted" }`: a push to a playlist whose row is a tombstone while it is
+  still collaborative. The owner deleting the playlist ends its collaboration in the same push,
+  as `DELETE /v1/collaboration` does, so members are then refused as `not_member` and their
+  account pull says it ended.
 - `403 { "error": "not_owner" }`: a push that deletes the playlist.
 - `400 { "error": "bad_request", "detail": "…" }`: a push with another table, another
   playlist's row, or an entry of another playlist (one the owner holds in another playlist
@@ -428,6 +432,9 @@ ordinary push included:
 - **Size.** At most `maxCollaborativeSongs` live entries and `maxCollaborativeEntries` with
   the removed ones, as well as the owner's `maxPlaylistEntries`. A push past one is refused only
   when it raises that count, so a playlist already past it still takes moves and removals.
+- **A deleted playlist.** The owner's push that deletes a collaborative playlist ends its
+  collaboration (the other members get an `ended` record), and a live entry the same push, or
+  a later one while it is still collaborative, sends into it is left out; removals still go in.
 
 Migration `0019_collaborative_entries` adds those entry columns and an index for the
 per-playlist pull. Deploy it before an app that sends them.

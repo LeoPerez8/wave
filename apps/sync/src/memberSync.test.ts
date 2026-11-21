@@ -341,7 +341,7 @@ describe("a member's push of a collaborative playlist", () => {
     );
   });
 
-  test("a playlist the owner deleted is refused", async () => {
+  test("a playlist the owner deleted is refused, as no longer collaborative", async () => {
     const { service, ana, bo } = await shared();
     await push(service, ana, {
       playlists: [{ id: "list-1", changedAt: 9, phoneId: "phone-a", deleted: true }],
@@ -350,8 +350,13 @@ describe("a member's push of a collaborative playlist", () => {
       await refusal(
         await memberPush(service, bo, "list-1", { playlistEntries: [entry("b", "list-1")] }),
       ),
-      [403, "deleted"],
+      [403, "not_member"],
     );
+    const held = await service.db.execute({
+      sql: "SELECT count(*) AS n FROM playlist_entries WHERE id = 'b'",
+      args: [],
+    });
+    assert.equal(Number(held.rows[0]?.n), 0);
   });
 
   test("it needs a session, a playlist and a body of tables", async () => {
@@ -460,16 +465,54 @@ describe("a member's pull of a collaborative playlist", () => {
     assert.deepEqual(await refusal(noPlaylist), [400, "bad_request"]);
   });
 
-  test("the owner's deletion of the playlist reaches the members", async () => {
-    const { service, ana, bo } = await shared();
+  test("the owner's deletion of the playlist ends it for the members", async () => {
+    const { service, ana, bo, cy } = await shared();
     const first = await pullPlaylist(service, bo, "list-1");
     await push(service, ana, {
       playlists: [{ id: "list-1", changedAt: 9, phoneId: "phone-a", deleted: true }],
     });
-    const next = await pullPlaylist(service, bo, "list-1", first.cursor);
-    assert.deepEqual(next.playlists, [
-      { id: "list-1", changedAt: 9, phoneId: "phone-a", deleted: true },
+    for (const session of [bo, cy]) {
+      const pulled = await pull(service, session);
+      assert.deepEqual(pulled.collaborations, []);
+      assert.deepEqual(pulled.endedCollaborations, [
+        { playlistId: "list-1", reason: "ended", endedAt: service.now },
+      ]);
+    }
+    assert.deepEqual(await refusal(await memberPull(service, bo, "list-1", first.cursor)), [
+      403,
+      "not_member",
     ]);
+    // The owner's own pull no longer lists it either.
+    assert.deepEqual((await pull(service, ana)).collaborations, []);
+  });
+
+  test("the owner's deletion leaves out the live entries the same push sends into it", async () => {
+    const { service, ana } = await shared();
+    await push(service, ana, {
+      playlists: [{ id: "list-1", changedAt: 9, phoneId: "phone-a", deleted: true }],
+      playlistEntries: [
+        entry("late-1", "list-1", { changedAt: 9 }),
+        { id: "entry-1", changedAt: 9, phoneId: "phone-a", deleted: true },
+      ],
+    });
+    const pulled = await pullAll(service, ana);
+    assert.equal(byId(pulled.playlistEntries, "late-1"), undefined);
+    assert.equal(byId(pulled.playlistEntries, "entry-1")?.deleted, true);
+  });
+
+  test("a playlist that passed to another owner is pulled again from the start", async () => {
+    const { service, ana, cy } = await shared();
+    const first = await pullPlaylist(service, cy, "list-1");
+    assert.equal((await requestAccountDeletion(service, ana)).status, 204);
+    const next = await pullPlaylist(service, cy, "list-1", first.cursor);
+    assert.deepEqual(
+      next.playlists.map((row) => row.id),
+      ["list-1"],
+    );
+    assert.deepEqual(
+      next.playlistEntries.map((row) => row.id),
+      ["entry-1"],
+    );
   });
 });
 
