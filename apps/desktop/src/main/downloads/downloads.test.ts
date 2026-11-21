@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { catalogueOf, moveQueuedJobs, type MissingTrack, type YtAlbumSong } from "@wave/core";
+import {
+  catalogueOf,
+  moveQueuedJobs,
+  readStarDownloads,
+  STAR_ASKED_SETTING,
+  type MissingTrack,
+  type YtAlbumSong,
+} from "@wave/core";
 import { createDownloads, type DownloadsDeps } from "./downloads.ts";
 import type { KotlinDownloadMethod } from "../kotlin/protocol.ts";
 import type { DownloadRow } from "../../shared/downloads.ts";
@@ -459,6 +466,26 @@ test("a star taken back keeps a download the owner then asked for themselves", a
   await downloads.unstarred([song.videoId]);
   assert.deepEqual(journal.asked("downloads.cancel"), []);
   downloads.dispose();
+});
+
+test("cancelling an album download clears the cancelled songs' star claims", async () => {
+  const { journal, downloads, kept } = starSetup([42]);
+  const album = {
+    songs: [song],
+    inLibrary: () => false,
+    origin: { kind: "album", id: "MPREb_album", name: "Elis & Tom" } as const,
+  };
+  try {
+    const claims = () => readStarDownloads(kept.get(STAR_ASKED_SETTING) ?? null);
+    await downloads.syncStars();
+    await downloads.yt([song.videoId], "star");
+    assert.deepEqual(claims(), new Set(["missing:42", song.videoId]));
+    await downloads.ytListAction("cancel", album);
+    assert.deepEqual(journal.asked("downloads.cancel"), [{ id: song.videoId }]);
+    assert.deepEqual(claims(), new Set(["missing:42"]));
+  } finally {
+    downloads.dispose();
+  }
 });
 
 test("a missing song starred while listened to is cancelled when its star comes off anywhere", async () => {

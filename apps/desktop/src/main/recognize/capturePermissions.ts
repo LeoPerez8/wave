@@ -11,7 +11,7 @@ export interface PermissionSession<Contents, Source> {
       contents: Contents,
       permission: string,
       callback: (granted: boolean) => void,
-      details: object,
+      details: { readonly isMainFrame: boolean; readonly mediaTypes?: readonly string[] },
     ) => void,
   ) => void;
   readonly setPermissionCheckHandler: (
@@ -19,7 +19,7 @@ export interface PermissionSession<Contents, Source> {
       contents: Contents | null,
       permission: string,
       origin: string,
-      details: object,
+      details: { readonly isMainFrame: boolean; readonly mediaType?: string },
     ) => boolean,
   ) => void;
   readonly setDisplayMediaRequestHandler: (
@@ -50,27 +50,27 @@ export interface CaptureGuard<Contents, Source> {
 const audioOnly = (mediaTypes: readonly string[] | undefined): boolean =>
   mediaTypes !== undefined && mediaTypes.length > 0 && mediaTypes.every((type) => type === "audio");
 
-/**
- * Installs the guard on the window's session. Every other permission keeps Electron's answer;
- * the camera, a screen's picture and the microphone outside Recognize are refused.
- */
+/** Recognize is the only feature that needs renderer permissions. */
 export const guardCapture = <Contents, Source>(
   session: PermissionSession<Contents, Source>,
   guard: CaptureGuard<Contents, Source>,
 ): void => {
-  session.setPermissionRequestHandler((contents, permission, callback, details) => {
-    if (permission !== "media") return callback(true);
-    const { mediaTypes } = details as { readonly mediaTypes?: readonly string[] };
-    callback(guard.trusted(contents) && audioOnly(mediaTypes) && guard.allows("microphone"));
-  });
-  session.setPermissionCheckHandler((contents, permission, _origin, details) => {
-    if (permission !== "media") return true;
-    const { mediaType } = details as { readonly mediaType?: string };
-    return guard.trusted(contents) && mediaType === "audio" && guard.allows("microphone");
+  const loopbackAllowed = () => guard.loopback && guard.allows("systemAudio");
+  session.setPermissionRequestHandler(
+    (contents, permission, callback, { isMainFrame, mediaTypes }) => {
+      if (!isMainFrame || !guard.trusted(contents)) return callback(false);
+      if (permission === "display-capture")
+        return callback(mediaTypes?.includes("audio") === true && loopbackAllowed());
+      callback(permission === "media" && audioOnly(mediaTypes) && guard.allows("microphone"));
+    },
+  );
+  session.setPermissionCheckHandler((contents, permission, _origin, { isMainFrame, mediaType }) => {
+    if (!isMainFrame || !guard.trusted(contents)) return false;
+    if (permission === "display-capture") return loopbackAllowed();
+    return permission === "media" && mediaType === "audio" && guard.allows("microphone");
   });
   session.setDisplayMediaRequestHandler((request, callback) => {
-    if (!guard.loopback || !guard.trustedFrame(request.frame) || !guard.allows("systemAudio"))
-      return callback({});
+    if (!guard.trustedFrame(request.frame) || !loopbackAllowed()) return callback({});
     void guard.screen().then(
       (screen) => callback(screen === undefined ? {} : { video: screen, audio: "loopback" }),
       () => callback({}),
