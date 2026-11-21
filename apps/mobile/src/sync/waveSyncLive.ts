@@ -7,7 +7,9 @@ import { LibraryStore } from "@/library/LibraryStore";
 
 import { WaveAccount, waveAccountErrorCode, type WaveAccountErrorCode } from "@/native/waveAccount";
 import { perfCount } from "@/perf/perf";
+import { collaborativePlaylistsOn } from "@/settings/collaborativePlaylists";
 
+import { collaborations } from "./collaborations";
 import type { WaveSync, WaveSyncPorts } from "./WaveSync";
 
 /** Offline or signed out: a sync stops, and tries again at the next chance, with nothing to warn of. */
@@ -36,6 +38,8 @@ export const make = Effect.gen(function* () {
         wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
         // Each database step waits until the owner's taps are through.
         turn: freeTurn,
+        // Collaborative playlists, while Settings › Developer has them on.
+        ...(collaborativePlaylistsOn() ? { collaboration: collaborations } : {}),
       }),
     ).then(
       (result) => {

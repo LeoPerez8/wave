@@ -1464,6 +1464,25 @@ CREATE INDEX saved_lyrics_search_word_idx ON saved_lyrics_search_words (word, vi
 
 const m0062 = `ALTER TABLE playlist_items ADD COLUMN restored_at integer;`;
 
+const m0063 = `ALTER TABLE playlist_items ADD COLUMN added_by text;
+--> statement-breakpoint
+ALTER TABLE playlist_items ADD COLUMN library_entry text;
+--> statement-breakpoint
+CREATE TABLE collaborations (
+  playlist_sync_id text PRIMARY KEY NOT NULL,
+  owned integer NOT NULL,
+  owner_account_id text,
+  members text NOT NULL,
+  cursor text,
+  unseen integer DEFAULT false NOT NULL,
+  invite_url text,
+  invite_expires_at integer
+);
+--> statement-breakpoint
+CREATE TABLE private_copy_notices (
+  playlist_id integer PRIMARY KEY NOT NULL REFERENCES playlists(id) ON DELETE CASCADE
+);`;
+
 export default {
   journal: {
     entries: [
@@ -1560,6 +1579,12 @@ export default {
         tag: "0062_playlist_entry_restores",
         breakpoints: true,
       },
+      {
+        idx: 63,
+        when: 1_797_249_600_000,
+        tag: "0063_collaborative_playlists",
+        breakpoints: true,
+      },
     ],
   },
   migrations: {
@@ -1626,5 +1651,6 @@ export default {
     m0060,
     m0061,
     m0062,
+    m0063,
   },
 };

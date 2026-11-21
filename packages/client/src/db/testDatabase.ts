@@ -43,7 +43,11 @@ const migrationsThrough = (through: string): typeof migrations => {
  * Columns a later migration adds to a table the store's writes name in full
  * (Drizzle's insert names every column of today's schema), as `table.column`.
  */
-const LATER_COLUMNS = ["playlist_items.restored_at"] as const;
+const LATER_COLUMNS = [
+  "playlist_items.restored_at",
+  "playlist_items.added_by",
+  "playlist_items.library_entry",
+] as const;
 
 /** The databases lent `LATER_COLUMNS`, with those each was lent. */
 const lent = new WeakMap<TestDatabase, readonly string[]>();
