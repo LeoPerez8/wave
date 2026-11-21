@@ -24,6 +24,7 @@ import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts"
 import { ytRow } from "../../shared/yt.ts";
 import { searchSongIds } from "./search.ts";
 import { playlistListSort, sortedPlaylistIds } from "./playlistList.ts";
+import { releaseSongDate, typedReleaseDates } from "./releaseDates.ts";
 import {
   playlistSongSort,
   readBrowseSort,
@@ -205,9 +206,20 @@ const orderedEntries = (db: LibraryDatabase, source: SQL, page = sql``): Playlis
       return song === null ? [] : [{ itemId, song, addedAt }];
     });
 
-/** The date a playlist's Release date sort reads for a Library song: its date tag, else its Year. */
-const released = (song: { readonly releaseDate?: string | null; readonly year: number | null }) =>
-  song.releaseDate || (song.year ? String(song.year) : undefined);
+/**
+ * The date a playlist's Release date sort reads: the one the owner typed (here or on a phone),
+ * else a Library song's date tag, else its Year.
+ */
+const released = (
+  typed: Readonly<Record<string, string>>,
+  song: {
+    readonly title: string;
+    readonly artist: string;
+    readonly album: string | null;
+    readonly releaseDate?: string | null;
+    readonly year: number | null;
+  },
+) => releaseSongDate(typed, { ...song, original: song.releaseDate ?? null }) ?? undefined;
 
 /**
  * The playlist's every entry in [sort]'s order (Core's `sortPlaylistSongs`), each with its place
@@ -221,6 +233,7 @@ const sortedEntries = (
   find?: string,
 ): PlaylistSong[] => {
   const finds = find === undefined ? null : createFindMatcher(find);
+  const typed = typedReleaseDates(db);
   const entries = db
     .all<{
       itemId: number;
@@ -251,7 +264,12 @@ const sortedEntries = (
                 artist: entry.artist ?? "",
                 album: entry.album ?? "",
                 addedAt,
-                releaseDate: released(entry) ?? null,
+                releaseDate:
+                  released(typed, {
+                    ...entry,
+                    title: entry.title ?? "",
+                    artist: entry.artist ?? "",
+                  }) ?? null,
                 discNumber: entry.discNumber,
                 trackNumber: entry.trackNumber,
                 song: { trackId, addedAt } as PlaylistSong,
@@ -266,6 +284,13 @@ const sortedEntries = (
               artist: joinArtists(song.artists),
               album: song.album ?? "",
               addedAt,
+              releaseDate:
+                released(typed, {
+                  title: song.title,
+                  artist: joinArtists(song.artists),
+                  album: song.album ?? null,
+                  year: null,
+                }) ?? null,
               song: { itemId, song, addedAt } as PlaylistSong,
             },
           ];
@@ -434,9 +459,10 @@ export const browseLibrary = (
       });
     }
   }
+  const typed = playlist === undefined ? {} : typedReleaseDates(db);
   if (playlist !== undefined)
     items = items.map((item) => {
-      const date = released(item as { releaseDate?: string | null; year: number | null });
+      const date = released(typed, item as BrowseRow & { releaseDate?: string | null });
       return date === undefined ? item : { ...item, released: date };
     });
   const parentKind = {

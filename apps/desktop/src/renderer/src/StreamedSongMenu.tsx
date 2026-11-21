@@ -1,7 +1,8 @@
 /**
  * A streamed YouTube Music song's menu in the window (`window.wave.streamed`), as the phone gives
  * it: Play Next, Add to Queue, the Magic Queue, Add to Playlist, the star, Go to Album and Go to
- * Artist, Share and its download. Now Playing's Add to Playlist and Download buttons too.
+ * Artist, Release Date, Share and its download. Now Playing's Add to Playlist and Download
+ * buttons too.
  */
 import type { ActionSurface, StreamedArtistTarget, UpNextPlace } from "@wave/core";
 import { useCallback, useEffect, useState } from "react";
@@ -31,6 +32,8 @@ export interface StreamedMenuOptions {
   readonly notify: (message: string | null) => void;
   /** Reads the player and the rows again once an action changed them. */
   readonly changed: () => void;
+  /** Opens Release Date for the song with [videoId]. */
+  readonly releaseDate: (videoId: string) => void;
 }
 
 /** The playlists Add to Playlist offers: the sidebar's first page. */
@@ -56,7 +59,13 @@ export const playlistItems = async (
 };
 
 /** Runs [action] on a streamed song and says what it did, as a Library song's menu does. */
-export function useStreamedSongs({ go, failed, notify, changed }: StreamedMenuOptions) {
+export function useStreamedSongs({
+  go,
+  failed,
+  notify,
+  changed,
+  releaseDate,
+}: StreamedMenuOptions) {
   const run = useCallback(
     async (
       videoId: string,
@@ -118,6 +127,12 @@ export function useStreamedSongs({ go, failed, notify, changed }: StreamedMenuOp
                 .then(changed)
                 .catch(() => failed(text.playbackText.couldntStartTheMagicQueue)),
           };
+        case "releaseDate":
+          return {
+            key,
+            label: text.itemActions.labels.releaseDate,
+            run: () => releaseDate(videoId),
+          };
         case "share":
           return {
             key,
@@ -159,7 +174,7 @@ export function useStreamedSongs({ go, failed, notify, changed }: StreamedMenuOp
         }
       }
     },
-    [run, go, goToArtist, changed, failed, notify],
+    [run, go, goToArtist, changed, failed, notify, releaseDate],
   );
 
   /** [videoId]'s menu entries; [playing] for the song playing (no Play Next). */

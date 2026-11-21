@@ -349,6 +349,8 @@ else {
         };
       })(),
       pickFolder,
+      // Called when Show in Folder runs, so an e2e run can stand in for the file manager.
+      showItemInFolder: (path) => shell.showItemInFolder(path),
     }).pipe(Layer.provideMerge(services));
     const downloads = downloadsLayer({
       get catalogue() {

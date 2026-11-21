@@ -77,6 +77,7 @@ import type { UpNextPlace } from "@wave/core";
 import type { ArtistStatsPage, DesktopRecap, StatsOverview, StatsRow } from "./stats.ts";
 import type {
   ActionSurface,
+  ShowInFolderResult,
   SongMenu,
   SongRunAction,
   SongRunResult,
@@ -105,6 +106,7 @@ import { ARTIST_PAGE_CALLS, artistPageBridge, type ArtistPageContract } from "./
 import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
 import { HISTORY_CALLS, historyBridge, type HistoryContract } from "./history.ts";
 import { RECOGNIZE_CALLS, recognizeBridge, type RecognizeContract } from "./recognize.ts";
+import { RELEASE_DATE_CALLS, releaseDateBridge, type ReleaseDateContract } from "./releaseDates.ts";
 import { YT_ACCOUNT_CALLS, ytAccountBridge, type YtAccountContract } from "./ytAccount.ts";
 import {
   SPOTIFY_ACCOUNT_CALLS,
@@ -161,7 +163,8 @@ export interface BridgeContract
     SpotifyImportContract,
     MiniPlayerContract,
     SpotifyShareContract,
-    PlaylistSuggestionsContract {
+    PlaylistSuggestionsContract,
+    ReleaseDateContract {
   readonly "system.mediaBackend": {
     readonly args: readonly [];
     readonly result: "native" | "chromium";
@@ -495,6 +498,11 @@ export interface BridgeContract
     ];
     readonly result: SongRunResult;
   };
+  /** Opens the file manager on a Library song's file: the song by its id, never a path. */
+  readonly "songs.showInFolder": {
+    readonly args: readonly [songId: number];
+    readonly result: ShowInFolderResult;
+  };
   /** Opens an audio file by its absolute path, paused at its start. */
   readonly "player.load": {
     readonly args: readonly [path: string];
@@ -655,6 +663,7 @@ export const BRIDGE_CALLS = [
   "songs.states",
   "songs.actions",
   "songs.run",
+  "songs.showInFolder",
   "player.load",
   "player.play",
   "player.pause",
@@ -761,6 +770,7 @@ export const BRIDGE_CALLS = [
   ...HISTORY_CALLS,
   ...RECOGNIZE_CALLS,
   ...PLAYLIST_SUGGESTIONS_CALLS,
+  ...RELEASE_DATE_CALLS,
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -782,6 +792,8 @@ export interface WaveBridge {
   readonly recognize: ReturnType<typeof recognizeBridge>;
   /** A playlist page's Recommended songs: main holds the visit, the page reads its view. */
   readonly playlistSuggestions: ReturnType<typeof playlistSuggestionsBridge>;
+  /** A song's Release Date: the date Wave has, and the one the owner types. */
+  readonly releaseDates: ReturnType<typeof releaseDateBridge>;
   /** The YouTube account: its session never reaches the window. */
   readonly ytAccount: ReturnType<typeof ytAccountBridge>;
   readonly spotifyAccount: ReturnType<typeof spotifyAccountBridge>;
@@ -900,6 +912,8 @@ export interface WaveBridge {
       playlistId?: number,
       at?: UpNextPlace,
     ) => Promise<SongRunResult>;
+    /** Opens the file manager on the song [songId]'s file; main finds the file. */
+    readonly showInFolder: (songId: number) => Promise<ShowInFolderResult>;
   };
   /** One song at a time; each call answers with the engine's status after it. */
   readonly player: {
@@ -1089,6 +1103,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     states: (ids) => invoke("songs.states", ids),
     actions: (target, surface) => invoke("songs.actions", target, surface),
     run: (target, action, playlistId, at) => invoke("songs.run", target, action, playlistId, at),
+    showInFolder: (songId) => invoke("songs.showInFolder", songId),
   },
   player: {
     load: (path) => invoke("player.load", path),
@@ -1223,4 +1238,5 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   history: historyBridge(invoke),
   recognize: recognizeBridge(invoke),
   playlistSuggestions: playlistSuggestionsBridge(invoke),
+  releaseDates: releaseDateBridge(invoke),
 });

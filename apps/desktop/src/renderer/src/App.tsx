@@ -547,6 +547,7 @@ export function App() {
     failed: (message) => setError(message ?? text.desktopLibrary.actionFailed),
     notify,
     changed: playback.refresh,
+    releaseDate: actions.openReleaseDate,
   });
   /** A YouTube Music page's or the Queue's song menu: a streamed song's, or a Library song's. */
   const ytSongMenu = (row: BrowseRow, event: MouseEvent<HTMLElement>) =>

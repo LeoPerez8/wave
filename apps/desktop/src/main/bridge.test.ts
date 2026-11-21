@@ -1822,6 +1822,7 @@ test("a streamed song has the phone's menu: star, playlist, download, its album 
           "favorite",
           "goToAlbum",
           "goToArtist",
+          "releaseDate",
           "share",
           "download",
         ],
@@ -2898,7 +2899,9 @@ test("a song's menu and the selection bar offer and run the phone's actions thro
         { action: "goToArtist", artists: { kind: "open", artistId: menu.artists[0]!.id } },
         // It has no lyrics, genre or year to fix yet.
         { action: "fixSong" },
+        { action: "releaseDate" },
         { action: "share" },
+        { action: "showInFolder" },
         { action: "select" },
         { action: "removeFromLibrary" },
       ]);
@@ -2906,6 +2909,28 @@ test("a song's menu and the selection bar offer and run the phone's actions thro
         menu.artists.map((artist) => artist.name),
         ["Nick Drake"],
       );
+      // Release Date reads and keeps one song's date; the fields are checked before use.
+      const one = { scope: songs, ids: [ids[0]!] };
+      assert.deepEqual(await wave.releaseDates.view(one), {
+        title: "Parasite",
+        date: null,
+        typed: false,
+      });
+      assert.deepEqual(await wave.releaseDates.save(one, { year: "1972", month: "2", day: "" }), {
+        ok: true,
+      });
+      assert.equal((await wave.releaseDates.view(one)).date, "1972-02");
+      assert.deepEqual(await wave.releaseDates.save(one, { year: "1972", month: "", day: "9" }), {
+        ok: false,
+        problem: "impossible",
+      });
+      await assert.rejects(wave.releaseDates.save(one, { year: 1972 } as never));
+      await assert.rejects(wave.releaseDates.view({ scope: songs, ids: [ids[0]!, ids[1]!] }));
+      assert.deepEqual(await wave.releaseDates.save(one, null), { ok: true });
+      // Show in Folder names a song by its id alone: main finds its file, here none on disk.
+      assert.equal(await wave.songs.showInFolder(ids[0]!), "gone");
+      for (const song of ["C:/Music/Road.flac", -1, 1.5, { id: ids[0] }])
+        await assert.rejects(wave.songs.showInFolder(song as never));
       const onAlbum = await wave.songs.actions(
         { scope: { kind: "album", id: album.id }, ids: [ids[0]!] },
         "selection",

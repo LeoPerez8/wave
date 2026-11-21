@@ -14,6 +14,8 @@ test("a song's menu holds the desktop's entries in the phone's order", () => {
     "favorite",
     "goToAlbum",
     "goToArtist",
+    "releaseDate",
+    "showInFolder",
     "select",
     "removeFromLibrary",
   ]);
@@ -37,7 +39,9 @@ test("Magic Queue, Share and Fix Song join the menu once their features do", () 
       "goToAlbum",
       "goToArtist",
       "fixSong",
+      "releaseDate",
       "share",
+      "showInFolder",
       "select",
       "removeFromLibrary",
     ],
@@ -91,8 +95,22 @@ test("a missing song can't be queued but can leave the Library, as on the phone"
     "favorite",
     "goToAlbum",
     "goToArtist",
+    "releaseDate",
     "removeFromLibrary",
   ]);
+});
+
+test("one song's menu offers Release Date, whatever kind of song it is, as on the phone", () => {
+  assert.ok(actions({ items: [{ ...song, missing: true }] }).includes("releaseDate"));
+  assert.ok(actions({ items: [{ streamed: true }] }).includes("releaseDate"));
+  assert.ok(!actions({ items: [song, song], surface: "selection" }).includes("releaseDate"));
+});
+
+test("Show in Folder is one song's with a file: not a missing song's, nor a streamed one's", () => {
+  assert.ok(actions({ items: [song] }).includes("showInFolder"));
+  assert.ok(!actions({ items: [{ ...song, missing: true }] }).includes("showInFolder"));
+  assert.ok(!actions({ items: [{ streamed: true }] }).includes("showInFolder"));
+  assert.ok(!actions({ items: [song, song], surface: "selection" }).includes("showInFolder"));
 });
 
 test("no songs, no entries", () => {
@@ -109,6 +127,8 @@ test("a playlist's songs can leave it, from their menu or the selection bar", ()
     "removeFromPlaylist",
     "goToAlbum",
     "goToArtist",
+    "releaseDate",
+    "showInFolder",
     "select",
     "removeFromLibrary",
   ]);

@@ -76,6 +76,7 @@ import { Lyrics } from "./lyrics/lyrics.ts";
 import { GeniusLyricsSearch } from "./lyrics/geniusLyricsSearchLayer.ts";
 import { DesktopLinks } from "./links/layer.ts";
 import { linkHandlers } from "./links/handlers.ts";
+import { releaseDateHandlers } from "./library/releaseDateHandlers.ts";
 import { artistPageHandlers } from "./artistPageHandlers.ts";
 import { YtAccount } from "./yt/ytAccountLayer.ts";
 import { SpotifyAccount } from "./spotify/spotifyAccountLayer.ts";
@@ -429,6 +430,7 @@ const createHandlers = (
         : refuse("settings.setWindow", "invalid window setting"),
     ...createYtFeatureHandlers(validTarget),
     ...linkHandlers(validTarget),
+    ...releaseDateHandlers(validTarget),
     ...artistPageHandlers(),
     ...streamed.handlers,
     "playback.view": () => playbackCall((p) => p.view()),
@@ -883,6 +885,10 @@ const createHandlers = (
             return songMenu(yield* Database, target, surface, (yield* YtMusic).enabled());
           })
         : refuse("songs.actions", "invalid songs or surface"),
+    "songs.showInFolder": (args) =>
+      args.length === 1 && songId(args[0])
+        ? libraryCall((library) => library.showInFolder(args[0] as number))
+        : refuse("songs.showInFolder", "invalid song"),
     "songs.run": ([target, action, playlistId, at]) =>
       validTarget(target) &&
       SONG_RUN_ACTIONS.includes(action as SongRunAction) &&

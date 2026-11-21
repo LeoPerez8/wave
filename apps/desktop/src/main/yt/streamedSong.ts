@@ -44,7 +44,7 @@ export interface StreamedSongPorts {
   readonly changed: () => void;
 }
 
-/** The entries the desktop offers; Select, Release Date and the playing card's are the phone's. */
+/** The entries the desktop offers; Select and the playing card's are the phone's. */
 const OFFERED: ReadonlySet<string> = new Set<StreamedEntry["action"]>([
   "playNext",
   "addToQueue",
@@ -54,6 +54,7 @@ const OFFERED: ReadonlySet<string> = new Set<StreamedEntry["action"]>([
   "unfavorite",
   "goToAlbum",
   "goToArtist",
+  "releaseDate",
   "share",
 ]);
 
@@ -131,7 +132,9 @@ export const streamedSongMenu = (
       .map((entry): StreamedEntry => {
         if (entry.action === "goToAlbum") return { action: "goToAlbum", album: entry.album };
         if (entry.action !== "goToArtist")
-          return { action: entry.action as StreamedRunAction | "magicQueue" | "share" };
+          return {
+            action: entry.action as StreamedRunAction | "magicQueue" | "releaseDate" | "share",
+          };
         return { action: "goToArtist", artists: entry.artists };
       }),
     ...(hasFile ? [] : ytDownloadActions(status, { inLibrary: false })).map((action) => ({
