@@ -59,6 +59,12 @@ test("a streamed song's menu from Search, the player bar, the Queue and Now Play
     await menu.getByRole("menuitem", { name: "Add to Playlist" }).click();
     await menu.getByRole("menuitem", { name: "Evening" }).click();
     await expect(page.getByRole("status").filter({ hasText: "Evening" })).toBeVisible();
+    // The song's download started with it, and says nothing that would take the toast's place.
+    const downloads = await page.evaluate(() =>
+      (window as unknown as { wave: WaveBridge }).wave.downloads.view(),
+    );
+    expect(downloads.rows).toBe(1);
+    expect(downloads.notice).toBeNull();
 
     // The player bar: its menu and star, for the song streaming.
     await first.dblclick();

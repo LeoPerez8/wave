@@ -90,6 +90,9 @@ export interface DownloadsDeps {
   readonly renewMs?: number;
 }
 
+/** Who asked for a download besides the owner: a star, or Add to Playlist bringing the song in. */
+export type AskedBy = "star" | "playlist";
+
 export interface DownloadsShape {
   /** Reads the journal and starts it when online; call once the JVM is up (and after a restart). */
   readonly start: (online: boolean) => Promise<void>;
@@ -104,11 +107,12 @@ export interface DownloadsShape {
   readonly listView: (list: MissingSongsList) => MissingSongsView | null;
   /**
    * Downloads YT Music songs a search found. With [by] `star`, a star asked rather than the
-   * owner, so [unstarred] takes the download back.
+   * owner, so [unstarred] takes the download back; with `playlist`, Add to Playlist asked, and
+   * its toast stays the only word of it.
    */
-  readonly yt: (videoIds: readonly string[], by?: "star") => Promise<void>;
-  /** Downloads missing songs, each into its Track (a missing song's click, or its star with [by]). */
-  readonly missing: (trackIds: readonly number[], by?: "star") => Promise<void>;
+  readonly yt: (videoIds: readonly string[], by?: AskedBy) => Promise<void>;
+  /** Downloads missing songs, each into its Track (a missing song's click, or [by]'s). */
+  readonly missing: (trackIds: readonly number[], by?: AskedBy) => Promise<void>;
   /** The stars of the jobs [ids] came off: each download only its star asked for is taken back. */
   readonly unstarred: (ids: readonly string[]) => Promise<void>;
   /** Download All, Retry Failed or Cancel on every missing song, or [list]'s, in its order. */
@@ -288,7 +292,10 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
     requests = next.catch(() => {});
     return next;
   };
-  /** [told]: the window says the downloads started; a star's say nothing, the star is the toast. */
+  /**
+   * [told]: the window says the downloads started. A star's and a playlist's say nothing: the
+   * star or the playlist's toast says it, and the notice would take that toast's place.
+   */
   const enqueue = async (asked: readonly JobRequest[], told = true) => {
     if (asked.length === 0) return;
     const active = new Set(followed.filter(ytDownloadUnfinished).map((job) => job.id));
@@ -314,8 +321,8 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
   };
 
   /** A star asked for [ids], or with no [by] the owner did. */
-  const askedBy = (by: "star" | undefined, ids: readonly string[]) => {
-    if (by === undefined) return ownerAsked(ids);
+  const askedBy = (by: AskedBy | undefined, ids: readonly string[]) => {
+    if (by !== "star") return ownerAsked(ids);
     const asked = readStarDownloads(store.read(STAR_ASKED));
     const after = starAskedAfter(asked, { kind: "starred", queued: ids });
     if (after !== asked) store.write(STAR_ASKED, writeStarDownloads(after));
@@ -417,13 +424,16 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
                 },
               ];
         });
-        await enqueue(asked);
+        await enqueue(asked, by !== "playlist");
       }),
     missing: (trackIds, by) =>
       queued(async () => {
         const current = await session();
         askedBy(by, trackIds.map(missingSongJobId));
-        await enqueue(missingJobs(trackIds).map((job) => missingSongRequest(job, current)));
+        await enqueue(
+          missingJobs(trackIds).map((job) => missingSongRequest(job, current)),
+          by !== "playlist",
+        );
       }),
     missingAction: (action, list) =>
       queued(async () => {
