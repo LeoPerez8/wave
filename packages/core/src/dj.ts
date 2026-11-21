@@ -107,6 +107,13 @@ export const djArtistTile = (
 };
 
 /**
+ * Whether [tile] shows "New to you" under its name: an artist the Library
+ * doesn't have. Album and genre tiles never do.
+ */
+export const djNewToYou = (tile: DjTile): boolean =>
+  tile.kind === "artist" && tile.libraryId === null;
+
+/**
  * The album tile of [album]; null for one with no title. Two albums are the
  * same tile when their titles match as releases do (`releaseTitle`: case,
  * accents, punctuation and edition notes don't count) and their album

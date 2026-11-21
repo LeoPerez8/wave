@@ -136,3 +136,18 @@ export const parseDjSettings = (value: unknown): DjSettings => {
         : null,
   };
 };
+
+/**
+ * The line DJ's bottom bar sums Adjust up in: the Artist variety and Music
+ * discovery steps, then each filter and the mood that's on, in Adjust's
+ * order ("Medium variety · Blend · Trending · Energetic").
+ */
+export const djSettingsSummary = (settings: DjSettings, strings: Catalogue = en): string =>
+  [
+    strings.dj.varietySummary[settings.variety],
+    strings.dj.discoverySteps[settings.discovery],
+    ...DJ_FILTERS.filter((filter) => djFilterOn(settings, filter)).map(
+      (filter) => strings.dj.filterNames[filter],
+    ),
+    ...(settings.mood === null ? [] : [strings.dj.moodNames[settings.mood]]),
+  ].join(" · ");

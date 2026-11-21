@@ -3118,6 +3118,7 @@ export {
   djRadioSongAllowed,
   djGenreTiles,
   djGenreTile,
+  djNewToYou,
   DJ_MAX_SELECTED,
   djArtistTile,
   djCanStart,
@@ -3153,6 +3154,7 @@ export {
   DJ_FILTERS,
   DJ_MOOD_FILTERS,
   djFilterOn,
+  djSettingsSummary,
   djToggleFilter,
   djToggleMood,
 } from "./djSettings.ts";
