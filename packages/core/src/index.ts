@@ -704,6 +704,24 @@ export {
 } from "./glassProbe.ts";
 export type { GlassLayers, GlassProbe } from "./glassProbe.ts";
 export {
+  EMPTY_FRAME_TALLY,
+  effectsVerdict,
+  judgeFrames,
+  phoneEffectsLine,
+  readEffectsVerdict,
+  sessionEffects,
+  tallyFrames,
+  WEAK_PHONE_RULE,
+  writeEffectsVerdict,
+} from "./phoneEffects.ts";
+export type {
+  EffectsVerdict,
+  FrameTally,
+  FrameWindow,
+  PhoneEffects,
+  SessionEffects,
+} from "./phoneEffects.ts";
+export {
   STATS_FACT_LABELS,
   counted,
   statsFacts,
