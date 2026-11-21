@@ -373,7 +373,10 @@ export const libraryReleaseFinder = <A extends LibraryAlbumKey>(
 export function* libraryReleaseFinderSteps<A extends LibraryAlbumKey>(
   artistNamed: (name: string) => { readonly id: number } | null,
   albums: readonly A[],
-): Generator<void, (release: { readonly title: string; readonly artists: readonly string[] }) => A | null> {
+): Generator<
+  void,
+  (release: { readonly title: string; readonly artists: readonly string[] }) => A | null
+> {
   const byArtist = new Map<number, Map<string, A>>();
   for (const album of albums) {
     const title = releaseTitle(album.title);
@@ -389,7 +392,9 @@ export function* libraryReleaseFinderSteps<A extends LibraryAlbumKey>(
     for (const name of release.artists) {
       const artist = artistNamed(name);
       const album =
-        artist === null ? null : (byArtist.get(artist.id)?.get(releaseTitle(release.title)) ?? null);
+        artist === null
+          ? null
+          : (byArtist.get(artist.id)?.get(releaseTitle(release.title)) ?? null);
       if (album !== null) return album;
     }
     return null;

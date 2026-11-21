@@ -116,7 +116,7 @@ export function* playedLibraryRowsSteps(db: LibraryDatabase): Generator<void, Re
     ["tracks", "artist_credit", "artist_credits"],
     ["albums", "album_artist_credit", "album_artist_credits"],
   ] as const) {
-    for (let after = 0; ; ) {
+    for (let after = 0; ;) {
       const rows = db.all<{ id: number; credit: string; stored: string | null }>(
         sql`SELECT id, ${sql.raw(credit)} AS credit, ${sql.raw(stored)} AS stored
           FROM ${sql.raw(table)} WHERE id > ${after} ORDER BY id LIMIT ${ROWS_STEP}`,

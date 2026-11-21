@@ -217,7 +217,11 @@ test("a write to the history only marks its plays' days owed, for the settler to
   const buckets = () => db.get<{ n: number }>(sql`SELECT count(*) AS n FROM play_buckets`).n;
   const before = buckets();
   // Plays written as a pull or an import writes them: no play write of the player's.
-  for (const [index, startedAt] of [NOW - 3 * DAY, NOW - 3 * DAY - 60_000, NOW - 400 * DAY].entries())
+  for (const [index, startedAt] of [
+    NOW - 3 * DAY,
+    NOW - 3 * DAY - 60_000,
+    NOW - 400 * DAY,
+  ].entries())
     db.run(sql`INSERT INTO play_events (track_id, snapshot, recording_key, started_at, listened_ms,
         duration_ms, end_reason, counted, source, sync_id)
       VALUES (${solo}, '{}', 'solo-key', ${startedAt}, 180000, 180000, 'completed', 1, 'phone',
@@ -353,10 +357,12 @@ test("a play credits a few owed songs within its write and leaves the rest owed,
   for (const id of more) recordPlay(db, play(id, NOW - 7_200_000), false);
   settle(db);
   // Each of them owes its credits again, as after a Library change.
-  db.run(sql`UPDATE played_songs SET state = 1 WHERE song IN (${sql.join(
-    more.map((id) => sql`${`t:${id}`}`),
-    sql`, `,
-  )})`);
+  db.run(
+    sql`UPDATE played_songs SET state = 1 WHERE song IN (${sql.join(
+      more.map((id) => sql`${`t:${id}`}`),
+      sql`, `,
+    )})`,
+  );
   const owed = () =>
     db.get<{ owed: number }>(sql`SELECT count(*) AS owed FROM played_songs WHERE state = 1`).owed;
   assert.equal(owed(), 12);
@@ -507,6 +513,7 @@ test("marking songs owed looks them up by their key, never through every settled
       .join(" | ");
     assert.doesNotMatch(plan, /played_songs_state_idx|SCAN played_songs/, `${name}: ${plan}`);
     // A song with no Library song isn't a key either: that is most streamed songs.
-    if (!/song_track (=|IN)/.test(plain)) assert.doesNotMatch(plan, /song_track_idx/, `${name}: ${plan}`);
+    if (!/song_track (=|IN)/.test(plain))
+      assert.doesNotMatch(plan, /song_track_idx/, `${name}: ${plan}`);
   }
 });

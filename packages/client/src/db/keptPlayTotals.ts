@@ -190,12 +190,23 @@ const recountDays = (db: LibraryDatabase, limit: number): number => {
   );
   if (owed.length === 0) return 0;
   db.transaction((tx) => {
-    const sums = (rows: readonly { song: string; bucket: number }[], read: (row: { song: string; bucket: number }) => SQL) => {
+    const sums = (
+      rows: readonly { song: string; bucket: number }[],
+      read: (row: { song: string; bucket: number }) => SQL,
+    ) => {
       const kept: Sums[] = [];
       const gone: { song: string; bucket: number }[] = [];
       for (const row of rows) {
-        const sum = tx.get<{ plays: number; listened: number | null; latest: number | null }>(read(row));
-        if (sum.plays > 0) kept.push({ ...row, plays: sum.plays, listened: sum.listened ?? 0, latest: sum.latest ?? 0 });
+        const sum = tx.get<{ plays: number; listened: number | null; latest: number | null }>(
+          read(row),
+        );
+        if (sum.plays > 0)
+          kept.push({
+            ...row,
+            plays: sum.plays,
+            listened: sum.listened ?? 0,
+            latest: sum.latest ?? 0,
+          });
         else gone.push(row);
       }
       return { kept, gone };
@@ -212,11 +223,14 @@ const recountDays = (db: LibraryDatabase, limit: number): number => {
       const bucket = Math.floor(day / KEPT_BLOCK_DAYS);
       blocks.set(`${bucket}|${song}`, { song, bucket });
     }
-    const sum = sums([...blocks.values()], ({ song, bucket }) => sql`SELECT
+    const sum = sums(
+      [...blocks.values()],
+      ({ song, bucket }) => sql`SELECT
         coalesce(sum(counted_plays), 0) AS plays, sum(listened_ms) AS listened,
         max(latest_play_at) AS latest FROM play_buckets
       WHERE song = ${song} AND span = 0
-        AND bucket BETWEEN ${bucket * KEPT_BLOCK_DAYS} AND ${bucket * KEPT_BLOCK_DAYS + KEPT_BLOCK_DAYS - 1}`);
+        AND bucket BETWEEN ${bucket * KEPT_BLOCK_DAYS} AND ${bucket * KEPT_BLOCK_DAYS + KEPT_BLOCK_DAYS - 1}`,
+    );
     writeBuckets(tx, 1, sum.kept, sum.gone);
     tx.run(sql`DELETE FROM owed_days WHERE (song, day) IN
       (SELECT json_extract(value, '$.song'), json_extract(value, '$.day') FROM json_each(${JSON.stringify(owed)}))`);

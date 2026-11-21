@@ -142,7 +142,7 @@ for (const size of quick ? ([1000] as const) : ([1000, 12000] as const)) {
   const steps: number[] = [];
   const longest = new Map<string, number>();
   const byPiece: Record<string, number[]> = {};
-  for (let done = false; !done; ) {
+  for (let done = false; !done;) {
     const piece = pieceOf(db);
     const settling = settleKeptTotalsSteps(db, KEPT_TOTALS_STEP);
     for (let index = 0; ; index++) {

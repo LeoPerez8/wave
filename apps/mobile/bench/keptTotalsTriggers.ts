@@ -16,12 +16,7 @@
  *
  *   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON apps/mobile/bench/keptTotalsTriggers.ts [--quick]
  */
-import {
-  EMPTY_SYNC_TABLES,
-  normalizeTrack,
-  recordingKey,
-  type SyncPlayRow,
-} from "@wave/core";
+import { EMPTY_SYNC_TABLES, normalizeTrack, recordingKey, type SyncPlayRow } from "@wave/core";
 import { sql } from "drizzle-orm";
 import { performance } from "node:perf_hooks";
 
@@ -83,8 +78,20 @@ const play = (x: number): SyncPlayRow => {
     source: "phone",
     importedFrom: null,
     snapshot: streamed
-      ? { title: `Online ${x % 400}`, artist: `Online artist ${x % 40}`, album: null, artworkPath: null, thumbPath: null }
-      : { title: `Song ${n}`, artist: `Artist ${n % 300}`, album: `Album ${n % 900}`, artworkPath: null, thumbPath: null },
+      ? {
+          title: `Online ${x % 400}`,
+          artist: `Online artist ${x % 40}`,
+          album: null,
+          artworkPath: null,
+          thumbPath: null,
+        }
+      : {
+          title: `Song ${n}`,
+          artist: `Artist ${n % 300}`,
+          album: `Album ${n % 900}`,
+          artworkPath: null,
+          thumbPath: null,
+        },
     videoId: streamed ? `v${String(x % 400).padStart(10, "0")}` : null,
   };
 };
@@ -130,7 +137,8 @@ const pull = (db: TestDatabase): Run => {
   return summed(blocks);
 };
 
-const format = (run: Run) => `${run.total.toFixed(0)} ms total, longest ${run.longest.toFixed(1)} ms`;
+const format = (run: Run) =>
+  `${run.total.toFixed(0)} ms total, longest ${run.longest.toFixed(1)} ms`;
 
 /** The Library store's step (`KEPT_TOTALS_STEP` in `LibraryStore.ts`). */
 const KEPT_TOTALS_STEP = { songs: 2, plays: 250, days: 24 };
