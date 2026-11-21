@@ -66,6 +66,10 @@ import type {
   CollectionRunAction,
   CollectionRunResult,
   CollectionTarget,
+  SelectionMenu,
+  SelectionRunAction,
+  SelectionRunResult,
+  SelectionTarget,
 } from "./collectionActions.ts";
 import {
   LYRICS_AND_TAGS_CALLS,
@@ -389,6 +393,18 @@ export interface BridgeContract
     ];
     readonly result: CollectionRunResult;
   };
+  readonly "collections.selectionActions": {
+    readonly args: readonly [target: SelectionTarget];
+    readonly result: SelectionMenu;
+  };
+  readonly "collections.runSelection": {
+    readonly args: readonly [
+      target: SelectionTarget,
+      action: SelectionRunAction,
+      playlistId?: number,
+    ];
+    readonly result: SelectionRunResult;
+  };
   readonly "songs.run": {
     readonly args: readonly [target: SongTarget, action: SongRunAction, playlistId?: number];
     readonly result: SongRunResult;
@@ -572,6 +588,8 @@ export const BRIDGE_CALLS = [
   "account.answerInvitation",
   "collections.actions",
   "collections.run",
+  "collections.selectionActions",
+  "collections.runSelection",
   ...PLAYLIST_CALLS,
   ...LYRICS_AND_TAGS_CALLS,
   "search.library",
@@ -805,6 +823,13 @@ export interface WaveBridge {
       action: CollectionRunAction,
       playlistId?: number,
     ) => Promise<CollectionRunResult>;
+    /** The selection bar's entries for songs and collections checked together. */
+    readonly selectionActions: (target: SelectionTarget) => Promise<SelectionMenu>;
+    readonly runSelection: (
+      target: SelectionTarget,
+      action: SelectionRunAction,
+      playlistId?: number,
+    ) => Promise<SelectionRunResult>;
   };
   readonly playlists: PlaylistBridge;
   /** Settings › Lyrics and tags. */
@@ -942,6 +967,9 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   collections: {
     actions: (target, options) => invoke("collections.actions", target, options),
     run: (target, action, playlistId) => invoke("collections.run", target, action, playlistId),
+    selectionActions: (target) => invoke("collections.selectionActions", target),
+    runSelection: (target, action, playlistId) =>
+      invoke("collections.runSelection", target, action, playlistId),
   },
   playlists: playlistBridge(invoke),
   lyricsAndTags: lyricsAndTagsBridge(invoke),

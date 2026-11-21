@@ -3,6 +3,7 @@ import {
   desktopKey,
   formatNumber,
   tableSelectionOf,
+  type CollectionKind,
   type SearchOnline,
 } from "@wave/core";
 import {
@@ -32,7 +33,7 @@ import { markClass, rowMark, SongMark, useSongStates } from "./SongMark.tsx";
 import { Artwork, time } from "./VirtualTable.tsx";
 import { YtResults, type YtSearchLinks } from "./YtResults.tsx";
 import { openTableSongMenu, SelectionBar, type SongSelectionControls } from "./SongActions.tsx";
-import { useTableSelection } from "./useTableSelection.ts";
+import { useTableSelection, type TableSelectionProps } from "./useTableSelection.ts";
 import { pressOf } from "./keys.ts";
 
 const groupLabel = (): Readonly<Record<SearchKind, string>> => ({
@@ -248,6 +249,8 @@ export interface SearchPageProps {
   /** Plays song [index] of the songs Search lists (its Songs group, then its lyrics hits). */
   readonly onPlay: (index: number, row: BrowseRow) => void;
   readonly selectionFor: (owner: string) => SongSelectionControls;
+  /** The checked albums, artists, playlists or genres, which check with the songs. */
+  readonly collectionSelection: (kind: CollectionKind) => TableSelectionProps;
   readonly onCollectionMenu: (target: CollectionTarget, title: string, at: MenuPoint) => void;
   /** A song on a drive that isn't connected was asked to play. */
   readonly onUnavailable: () => void;
@@ -310,6 +313,7 @@ function LibraryResults({
   onOpen,
   onPlay,
   selectionFor,
+  collectionSelection,
   onCollectionMenu,
   onUnavailable,
   onPick,
@@ -436,39 +440,20 @@ function LibraryResults({
         data-testid={`search-shelf-${section.kind}`}
       >
         {heading}
-        <div role="list" className="search-shelf">
-          {section.rows.map((row) => (
-            <button
-              key={row.id}
-              role="listitem"
-              className="search-tile"
-              aria-label={[tagTitle(row.title, section.kind), artistName(row.artist)]
-                .filter(Boolean)
-                .join(", ")}
-              onClick={() => openRow(section.kind, row)}
-              {...(kind !== "song" &&
-                itemMenuEvents((at) => onCollectionMenu({ kind, id: row.id }, row.title, at)))}
-            >
-              <span className={section.kind === "artist" ? "artist-image" : undefined}>
-                <Artwork
-                  large
-                  kind={
-                    section.kind === "song" || section.kind === "album" || section.kind === "artist"
-                      ? section.kind
-                      : undefined
-                  }
-                  id={row.id}
-                  hash={row.artworkHash}
-                  artist={section.kind === "artist"}
-                />
-              </span>
-              <span className="truncate">{tagTitle(row.title, section.kind)}</span>
-              <span className="truncate secondary">
-                {section.kind === "album" ? artistName(row.artist) : labels.songCount(row.count)}
-              </span>
-            </button>
-          ))}
-        </div>
+        <SearchShelf
+          kind={kind}
+          rows={section.rows}
+          controls={kind === "song" ? {} : collectionSelection(kind)}
+          order={view.query}
+          revision={revision}
+          onOpen={(row) => openRow(kind, row)}
+          onMenu={
+            kind === "song"
+              ? undefined
+              : (row, at) => onCollectionMenu({ kind, id: row.id }, row.title, at)
+          }
+          onError={onError}
+        />
         {more}
       </section>
     );
@@ -483,6 +468,83 @@ function LibraryResults({
         sections.map(render)
       )}
     </>
+  );
+}
+
+/** A shelf of tiles; Ctrl+click and Shift+click check them, and so does a click while selecting. */
+function SearchShelf({
+  kind,
+  rows: items,
+  controls,
+  order,
+  revision,
+  onOpen,
+  onMenu,
+  onError,
+}: {
+  readonly kind: SearchKind;
+  readonly rows: readonly BrowseRow[];
+  readonly controls: TableSelectionProps;
+  readonly order: string;
+  readonly revision: number;
+  readonly onOpen: (row: BrowseRow) => void;
+  readonly onMenu: ((row: BrowseRow, at: MenuPoint) => void) | undefined;
+  readonly onError: () => void;
+}) {
+  const { selection } = controls;
+  const rows = useTableSelection({
+    ...controls,
+    total: items.length,
+    order,
+    revision,
+    onError,
+    read: (start, end) => items.slice(start, end + 1).map((row) => row.id),
+  });
+  return (
+    <div role="list" className="search-shelf">
+      {items.map((row, index) => {
+        const checked = selection !== undefined && checkedTableRow(selection, row.id);
+        return (
+          <button
+            key={row.id}
+            role="listitem"
+            className={checked ? "search-tile selected" : "search-tile"}
+            aria-label={[tagTitle(row.title, kind), artistName(row.artist)]
+              .filter(Boolean)
+              .join(", ")}
+            onClick={(event) => {
+              const selecting =
+                selection?.checkboxes || event.shiftKey || event.ctrlKey || event.metaKey;
+              if (selecting && controls.onSelection) rows.click(index, row.id, event);
+              else onOpen(row);
+            }}
+            {...(onMenu && itemMenuEvents((at) => onMenu(row, at)))}
+          >
+            <span className={kind === "artist" ? "artist-image" : undefined}>
+              <Artwork
+                large
+                kind={kind === "song" || kind === "album" || kind === "artist" ? kind : undefined}
+                id={row.id}
+                hash={row.artworkHash}
+                artist={kind === "artist"}
+              />
+            </span>
+            <span className="truncate">{tagTitle(row.title, kind)}</span>
+            <span className="truncate secondary">
+              {kind === "album" ? artistName(row.artist) : labels.songCount(row.count)}
+            </span>
+            {(checked || selection?.checkboxes) && (
+              <span
+                className="row-check"
+                role="checkbox"
+                aria-checked={checked}
+                aria-label={text.desktopLibrary.checkSong(row.title)}
+              />
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -525,7 +587,7 @@ function SearchSongList({
   });
   return (
     <>
-      {selection && (
+      {selection && controls.bar !== false && (
         <SelectionBar
           scope={scope}
           revision={revision}

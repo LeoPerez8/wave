@@ -1,6 +1,8 @@
 import type { LibraryDatabase } from "@wave/client/db/database";
 import { addToPlaylist, selectPlaylistEntries } from "@wave/client/db/playlists";
 import {
+  desktopSelectionActions,
+  groupSongs,
   isCollectionKind,
   itemActions,
   menuLayout,
@@ -9,6 +11,9 @@ import {
   settleUnsearched,
   toPlaylistSongs,
   unsearchedSearchQuery,
+  type ActionItem,
+  type CollectionKind,
+  type DesktopSelectionItem,
   type QueueSong,
   type YtAlbumSong,
   type YtDownloadStatus,
@@ -18,15 +23,23 @@ import type {
   CollectionMenu,
   CollectionRunAction,
   CollectionRunResult,
+  CollectionPick,
   CollectionTarget,
+  SelectionMenu,
+  SelectionRunAction,
+  SelectionRunResult,
+  SelectionTarget,
 } from "../../shared/collectionActions.ts";
+import { SELECTION_RUN_ACTIONS } from "../../shared/collectionActions.ts";
+import { MAX_TARGET_IDS, type SongTarget } from "../../shared/songActions.ts";
 import type { DesktopDownloadsShape } from "../downloads/downloadsLayer.ts";
 import { lookupsEnabled } from "../lookupSettings.ts";
 import type { PlaybackShape } from "../playback/playback.ts";
 import type { YtMusicShape } from "../yt/ytMusic.ts";
 import { albumArtists } from "./artistPage.ts";
-import { browseRows, browseSongs, browseTrackIds } from "./browse.ts";
-import { songFacts } from "./songActions.ts";
+import { streamedLibraryFacts } from "../yt/streamedSong.ts";
+import { browseRowIds, browseRows, browseSongs, browseTrackIds } from "./browse.ts";
+import { songFacts, targetEntries } from "./songActions.ts";
 
 const lists = { album: "albums", artist: "artists", genre: "genres", playlist: "playlists" } as const;
 
@@ -105,12 +118,18 @@ interface CollectionActionPorts {
 }
 
 export const runCollectionAction = async (
-  { db, playback, downloads, yt, unavailable }: CollectionActionPorts,
+  ports: CollectionActionPorts,
   target: CollectionTarget,
   action: CollectionRunAction,
   destination?: number,
+): Promise<CollectionRunResult> => runOnSongs(ports, collectionSongs(ports.db, target), action, destination);
+
+const runOnSongs = async (
+  { db, playback, downloads, yt, unavailable }: CollectionActionPorts,
+  songs: readonly CollectionSong[],
+  action: CollectionRunAction,
+  destination?: number,
 ): Promise<CollectionRunResult> => {
-  const songs = collectionSongs(db, target);
   switch (action) {
     case "playNext":
     case "addToQueue": {
@@ -150,4 +169,123 @@ export const runCollectionAction = async (
       return { kind: "fixed", ...result };
     }
   }
+};
+
+const positiveIds = (value: unknown): value is readonly number[] =>
+  Array.isArray(value) &&
+  value.length <= MAX_TARGET_IDS &&
+  value.every((id) => Number.isSafeInteger(id) && id > 0);
+
+const validPick = (value: unknown): value is CollectionPick => {
+  if (typeof value !== "object" || value === null) return false;
+  const { kind, ids, all, except } = value as { [key: string]: unknown };
+  if (typeof kind !== "string" || !isCollectionKind(kind as CollectionKind)) return false;
+  return all === true
+    ? ids === undefined && positiveIds(except)
+    : all === undefined && except === undefined && positiveIds(ids) && ids.length > 0;
+};
+
+/** A selection that holds a collection; songs alone go through the song actions. */
+export const validSelectionTarget = (
+  value: unknown,
+  validSongs: (songs: unknown) => songs is SongTarget,
+): value is SelectionTarget => {
+  if (typeof value !== "object" || value === null) return false;
+  const { songs, collections } = value as { [key: string]: unknown };
+  return (
+    (songs === undefined || validSongs(songs)) &&
+    Array.isArray(collections) &&
+    collections.length > 0 &&
+    collections.length <= 8 &&
+    collections.every(validPick)
+  );
+};
+
+/** The checked collections, each kind's in its list's order when all of them are. */
+const pickedCollections = (db: LibraryDatabase, pick: CollectionPick): CollectionTarget[] => {
+  if (!("all" in pick)) return [...new Set(pick.ids)].map((id) => ({ kind: pick.kind, id }));
+  const except = new Set(pick.except);
+  return browseRowIds(db, { kind: lists[pick.kind] }, 0, 2 ** 31 - 1)
+    .items.filter((id) => !except.has(id))
+    .map((id) => ({ kind: pick.kind, id }));
+};
+
+/** The checked items in order: the songs, then each collection with the songs it holds. */
+const selectionItems = (db: LibraryDatabase, target: SelectionTarget) => {
+  const listed = target.songs === undefined ? [] : targetEntries(db, target.songs);
+  const tracks = new Map(
+    browseSongs(
+      db,
+      listed.flatMap((entry) => ("trackId" in entry ? [entry.trackId] : [])),
+    ).map((track) => [track.id, track]),
+  );
+  const songs = listed.flatMap((entry): CollectionSong[] => {
+    if ("song" in entry) return [{ source: "stream", song: entry.song }];
+    const track = tracks.get(entry.trackId);
+    return track === undefined ? [] : [{ source: "library", track }];
+  });
+  const collections = target.collections
+    .flatMap((pick) => pickedCollections(db, pick))
+    .map((collection) => ({ kind: collection.kind, songs: collectionSongs(db, collection) }));
+  return { songs, collections };
+};
+
+const runnable: ReadonlySet<string> = new Set(SELECTION_RUN_ACTIONS);
+
+/** The entries the bar offers for songs and collections checked together. */
+export const selectionMenu = (
+  db: LibraryDatabase,
+  target: SelectionTarget,
+  ytMusic: boolean,
+): SelectionMenu => {
+  const { songs, collections } = selectionItems(db, target);
+  const facts = new Map(
+    songFacts(db, libraryIds([...songs, ...collections.flatMap((item) => item.songs)])).map(
+      (song) => [song.id, song],
+    ),
+  );
+  const factsOf = (entry: CollectionSong): ActionItem[] => {
+    if (entry.source === "library") return [facts.get(entry.track.id) ?? {}];
+    if (entry.source !== "stream") return [];
+    return [{ streamed: true, downloaded: streamedLibraryFacts(db, entry.song).hasFile }];
+  };
+  const items: DesktopSelectionItem[] = [
+    ...songs.flatMap(factsOf).map((song) => ({ ...song, kind: "track" as const })),
+    ...collections.map(({ kind, songs }) => ({ kind, songs: songs.flatMap(factsOf) })),
+  ];
+  return {
+    entries: desktopSelectionActions({ items, onlineLookups: lookupsEnabled(db), ytMusic }).filter(
+      (entry) => runnable.has(entry.action),
+    ),
+    count: items.length,
+  };
+};
+
+interface SelectionActionPorts extends CollectionActionPorts {
+  /** Downloads missing songs into their Library entries. */
+  readonly download: (trackIds: readonly number[]) => Promise<void>;
+  /** Downloads a streamed song, as its menu's Download does. */
+  readonly downloadStreamed: (song: YtAlbumSong) => Promise<unknown>;
+}
+
+/** Runs [action] on every song the checked items hold, a song two of them hold once. */
+export const runSelectionAction = async (
+  ports: SelectionActionPorts,
+  target: SelectionTarget,
+  action: SelectionRunAction,
+  destination?: number,
+): Promise<SelectionRunResult> => {
+  const { db } = ports;
+  const { songs, collections } = selectionItems(db, target);
+  const held = groupSongs([songs, ...collections.map((item) => item.songs)], queueSongTrackId);
+  if (action !== "download") return runOnSongs(ports, held, action, destination);
+  const missing = libraryIds(
+    held.filter((entry) => entry.source === "library" && entry.track.path === null),
+  );
+  const streams = held.flatMap((entry) =>
+    entry.source === "stream" && !streamedLibraryFacts(db, entry.song).hasFile ? [entry.song] : [],
+  );
+  if (missing.length > 0) await ports.download(missing);
+  for (const song of streams) await ports.downloadStreamed(song);
+  return { kind: "downloaded", count: missing.length + streams.length };
 };

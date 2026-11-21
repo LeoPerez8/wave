@@ -503,6 +503,8 @@ export function ConfirmDialog({
 
 export type SongSelectionControls = TableSelectionProps & {
   readonly actions: ReturnType<typeof useSongActions>;
+  /** False where the songs are checked with collections, whose bar acts on them all. */
+  readonly bar?: false;
 };
 
 /** A selected row opens the group's menu. Other rows keep their own actions. */

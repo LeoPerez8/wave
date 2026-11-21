@@ -2419,6 +2419,92 @@ test("collection actions queue and copy every song in collection order", async (
   });
 });
 
+test("a selection of songs and collections acts on every song they hold, once each", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, handlers } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    const call = (channel: string, ...args: unknown[]) => handlers.get(channel)!(trusted, ...args);
+    try {
+      const { loose, missing, destination } = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const loose = addTrack(db, { title: "Loose", album: "Elsewhere", artist: "Solo" });
+          for (const [index, title] of ["Zulu", "Alpha"].entries())
+            addTrack(db, { title, artist: "Wave", album: "Disc", trackNumber: index + 1 });
+          const missing = addTrack(db, { title: "Gone", artist: "Away", album: "Lost" });
+          db.run(sql`UPDATE tracks SET path=NULL WHERE id=${missing}`);
+          const destination = createPlaylist(db, "Destination", [], 1000).playlistId;
+          return { loose, missing, destination };
+        }),
+      );
+      await wave.settings.setYtMusic(false);
+      const albums = (await wave.library.browse({ kind: "albums" }, 0, 10)).items;
+      const disc = albums.find((row) => row.title === "Disc")!.id;
+      const lost = albums.find((row) => row.title === "Lost")!.id;
+      const songs = { scope: { kind: "songs" }, ids: [loose] } as const;
+      const target = { songs, collections: [{ kind: "album", ids: [disc] }] } as const;
+      const actions = async (asked: Parameters<typeof wave.collections.selectionActions>[0]) =>
+        (await wave.collections.selectionActions(asked)).entries.map((entry) => entry.action);
+      assert.deepEqual(await wave.collections.selectionActions(target), {
+        entries: [{ action: "playNext" }, { action: "addToQueue" }, { action: "addToPlaylist" }],
+        count: 2,
+      });
+      assert.deepEqual(await wave.collections.runSelection(target, "addToPlaylist", destination), {
+        kind: "playlist",
+        name: "Destination",
+        added: 3,
+        alreadyIn: 0,
+      });
+      assert.deepEqual(
+        (await wave.library.browse({ kind: "playlist", id: destination }, 0, 10)).items.map(
+          (row) => row.title,
+        ),
+        ["Loose", "Zulu", "Alpha"],
+      );
+      // The playlist holds the album's songs: checked with the album, each still acts once.
+      const overlap = {
+        collections: [
+          { kind: "album", ids: [disc] },
+          { kind: "playlist", ids: [destination] },
+        ],
+      } as const;
+      await wave.playback.start({ kind: "search", query: "Loose" }, 0);
+      assert.deepEqual(await wave.collections.runSelection(overlap, "addToQueue"), {
+        kind: "queued",
+        count: 3,
+      });
+      assert.deepEqual(
+        (await wave.playback.queue(0, 20)).items.map((row) => row.title),
+        ["Loose", "Zulu", "Alpha", "Loose"],
+      );
+      // Every album but the unchecked ones, as Select All leaves them.
+      const all = { collections: [{ kind: "album", all: true, except: [lost] }] } as const;
+      assert.equal((await wave.collections.selectionActions(all)).count, 2);
+      assert.ok(!(await actions(all)).includes("download"));
+      assert.deepEqual(
+        await actions({ collections: [{ kind: "album", ids: [disc, lost] }] }),
+        ["playNext", "addToQueue", "addToPlaylist", "download", "fixSongs"],
+      );
+      assert.deepEqual(
+        await actions({ songs: { scope: { kind: "songs" }, ids: [missing] }, collections: [{ kind: "artist", all: true, except: [] }] }),
+        ["playNext", "addToQueue", "addToPlaylist", "download"],
+      );
+      for (const refused of [
+        { collections: [] },
+        { collections: [{ kind: "songs", ids: [1] }] },
+        { collections: [{ kind: "album", ids: [] }] },
+        { collections: [{ kind: "album", ids: [0] }] },
+        { songs: { scope: { kind: "albums" }, ids: [1] }, collections: [{ kind: "album", ids: [1] }] },
+      ])
+        await assert.rejects(call("collections.selectionActions", refused), /refused/i);
+      await assert.rejects(call("collections.runSelection", target, "favorite"), /refused/i);
+      await assert.rejects(call("collections.runSelection", target, "addToPlaylist"), /refused/i);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
 test("a song's menu and the selection bar offer and run the phone's actions through the bridge", async () => {
   await withFile(async (file) => {
     const { runtime, exposed } = connect(file);
