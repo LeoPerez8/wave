@@ -331,7 +331,11 @@ test("a match goes to the Shazam playlist on its own, and the notification says 
   await settle();
   assert.deepEqual(world.saves, [resolved().result]);
   assert.deepEqual(tile.saved, [
-    { line: "Added to Shazam", match: writeRecognizeMatch(SONG, resolved().result), favorite: null },
+    {
+      line: "Added to Shazam",
+      match: writeRecognizeMatch(SONG, resolved().result),
+      favorite: null,
+    },
   ]);
 });
 
