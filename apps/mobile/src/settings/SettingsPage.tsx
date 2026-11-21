@@ -1,11 +1,12 @@
 import { useLocalisation } from "@/localisation/localisation";
 import { type Catalogue, type LayoutPage, type SettingsIcon, type SettingsPage } from "@wave/core";
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import { ScrollView, Text, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { StagedSections } from "@/components/StagedSections";
 import { useListScrollable } from "@/motion/heldTouch";
 import { Press } from "@/motion/Press";
 
@@ -13,6 +14,12 @@ import { SETTINGS_GLYPH_GAP, SettingsGlyph } from "./SettingsGlyph";
 
 /** Room between a page's sections. */
 export const SECTION_GAP = 48;
+
+/**
+ * A short Settings section's height (a row and its note), for mounting a page's
+ * sections across frames; short, so the first frame fills the screen.
+ */
+export const SECTION_ESTIMATE = grid.row + CELL * 4;
 
 /**
  * A page of Settings, one of Settings › Layout's, or a page one of them opens
@@ -32,7 +39,8 @@ const pageTitle = (id: PageId, strings: Catalogue): string => {
 
 /**
  * A Settings page: back, its title, then its sections (each one element) with
- * room between them, scrolling. It holds still while a long-pressed finger
+ * room between them, scrolling. The first frame mounts only the sections on
+ * screen and the rest follow a frame later (#1355). It holds still while a long-pressed finger
  * slides on a menu (Touch's sample opens one).
  */
 export function SettingsPageScreen({ children, ...id }: PageId & { children: ReactNode }) {
@@ -49,7 +57,9 @@ export function SettingsPageScreen({ children, ...id }: PageId & { children: Rea
           gap: SECTION_GAP,
         }}
       >
-        {children}
+        <StagedSections estimate={SECTION_ESTIMATE} gap={SECTION_GAP}>
+          {children}
+        </StagedSections>
       </ScrollView>
     </View>
   );
@@ -74,9 +84,10 @@ export function SettingsEditorScreen({ children, ...id }: PageId & { children: R
  * A row in Settings opening one of its pages, with a line on what's there when
  * it has one. Settings' own rows lead with their page's glyph; the rows inside
  * a page (Layout's) have none. `trailing` sits on its right edge, outside the
- * row's own press (Version History's Install Now).
+ * row's own press (Version History's Install Now). Memoized: a summary that
+ * changes redraws its own row, not the list (#1355).
  */
-export function SettingsPageRow({
+export const SettingsPageRow = memo(function SettingsPageRow({
   title,
   summary,
   icon,
@@ -119,4 +130,4 @@ export function SettingsPageRow({
       <Hairline />
     </View>
   );
-}
+});
