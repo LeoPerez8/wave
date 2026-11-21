@@ -12,6 +12,8 @@ import {
   magicPickEnded,
   magicQueueDislikedEntries,
   magicBatchRadios,
+  djFirstLibrarySong,
+  djLibraryCandidates,
   magicLibrarySongs,
   magicListSeedSongs,
   completeMagicRadioBatch,
@@ -64,6 +66,7 @@ import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 import { songHasFile, type SongRow, type ArtistRow } from "@wave/client";
 import { readDjAlbumSongs } from "@/dj/djAlbums";
+import { djBatchReadMayResume, djStartWhileOpen } from "@/dj/djDone";
 import { readYtAlbum } from "@/ytmusic/albumPages";
 import { YtMusic } from "@/ytmusic/YtMusic";
 import { appLog } from "@/log/appLog";
@@ -72,7 +75,11 @@ import { continueQueueOn, onContinueQueue } from "@/settings/continueQueue";
 import { ytMusicEnabled, subscribeYtMusicEnabled } from "@/settings/ytMusic";
 import { subscribeConnectivity } from "@/native/waveNative";
 
-import { magicQueueYtCandidates } from "./magicQueueRadio";
+import {
+  magicQueueDjLibraryRanking,
+  magicQueueFirstRadioSong,
+  magicQueueYtCandidates,
+} from "./magicQueueRadio";
 import { MAGIC_RADIO_DEADLINE_MS } from "./songRadioSession";
 import { magicSignalsOf } from "./magicSongs";
 import { Player, playbackState, sleepTimerState, sleepTimerLoaded } from "./Player";
@@ -531,6 +538,8 @@ const begin = (session: MagicSession, startedAt: number, track: QueueTrack) =>
       },
       [track],
     );
+    if (session.seed.kind === "dj")
+      appLog("info", "WaveTiming", `DJ first song: ${Date.now() - startedAt}ms`);
   });
 
 /** A picked batch's songs as queue tracks, in its order: [library]'s files and the batch's own streams. */
@@ -567,7 +576,7 @@ export type DjStart = "started" | "empty" | "failed";
  * [deadlineAt] (epoch ms), the first batch's deadline its radios share.
  * Only the album's browse id is sent.
  */
-const djAlbumSeedSongs = (tiles: readonly DjTile[], deadlineAt: number) =>
+const djAlbumSeedSongs = (tiles: readonly DjTile[], deadlineAt: number, libraryOnly = false) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
     const playsOf = (trackIds: readonly string[]) =>
@@ -612,25 +621,23 @@ const djAlbumSeedSongs = (tiles: readonly DjTile[], deadlineAt: number) =>
     return yield* Effect.promise(() =>
       readDjAlbumSongs(tiles, {
         library: (albumId) => Effect.runPromise(library(albumId)),
-        page: (browseId) => Effect.runPromise(page(browseId)),
+        page: (browseId) => (libraryOnly ? Promise.resolve([]) : Effect.runPromise(page(browseId))),
       }),
     );
   });
 
 /**
  * Starts a Magic Queue from a DJ seed, the selected [tiles] (Core's
- * `startDjQueue`). No seed song plays first: the session's first batch of 10
- * is read, from the radios of up to 3 of the selected artists and of the
- * selected albums' songs (`djAlbumSeedSongs`), and replaces
- * the queue (with Undo, as any play does), its first song playing. It ranks
- * with [settings], DJ's own choices from Adjust, not Discover's sliders, and
- * its Artist variety limits who each batch may hold (`magicQueueYtCandidates`). Nothing is waited for but
- * the album pages and the radios, under one deadline from the tap
- * (`MAGIC_RADIO_DEADLINE_MS`): the radios get what the album pages leave of
- * it. The Library, catalog, graph and taste profile are the last ones
- * derived. The queue that's playing is left alone unless it starts, and once
- * [closed] aborts (DJ closed while the batch was read) it never starts: the
- * batch is dropped as "failed", before anything is saved.
+ * `startDjQueue`). A playable Library song starts as soon as local album
+ * seeds are read; otherwise the first answered radio starts it while the
+ * other selected radios keep loading. The remaining nine songs join that
+ * first song through the regular Magic Queue batch picker. It ranks with
+ * [settings], DJ's own choices from Adjust, not Discover's sliders, and its
+ * Artist variety limits each batch (`magicQueueYtCandidates`). Selected
+ * album pages and radios share one deadline from the tap
+ * (`MAGIC_RADIO_DEADLINE_MS`). The Library, catalog, graph and taste profile
+ * are the last ones derived. Closing DJ before a first song starts cancels
+ * the queue change.
  */
 export const startDjMagicQueue = (
   tiles: readonly DjTile[],
@@ -643,6 +650,90 @@ export const startDjMagicQueue = (
     const deadlineAt = startedAt + MAGIC_RADIO_DEADLINE_MS;
     const latest = recommendationSnapshot.peek();
     const library = latest.library ?? { songs: [], artists: [] };
+    // A playable Library match starts the DJ session before any album page or radio read.
+    const localAlbumSongs = yield* djAlbumSeedSongs(tiles, deadlineAt, true);
+    const localAlbumSession = startDjSession(tiles, {
+      id: String(startedAt),
+      played: latest.library?.topArtists ?? [],
+      settings,
+      albumSongs: localAlbumSongs,
+    });
+    if (localAlbumSession === null) return "empty" satisfies DjStart;
+    const drawnLibrary = magicBatchRadios(localAlbumSession, Math.random);
+    const artistNames = new Map(library.artists.map((artist) => [artist.id, artist.name]));
+    const playableLibrary = library.songs
+      .filter((song): song is SongRow & { readonly path: string } => song.path !== null)
+      .map((song) => ({
+        ...song,
+        artistNames: song.artistIds.flatMap((id) => {
+          const name = artistNames.get(id);
+          return name === undefined ? [] : [name];
+        }),
+      }));
+    const matchingLibrary = djLibraryCandidates(tiles, playableLibrary);
+    const rankedLibrary = yield* magicQueueDjLibraryRanking(
+      drawnLibrary.session,
+      matchingLibrary,
+      { songs: library.songs, artists: library.artists },
+      {
+        catalog: latest.catalog ?? [],
+        graph: latest.graph,
+        taste: latestTasteProfile(),
+        profileOf: magicProfileOf(library),
+        sliders: magicSessionSliders(drawnLibrary.session, discoverSliders.get()),
+      },
+    );
+    const initialLibraryBatch = completeMagicRadioBatch(drawnLibrary.session, rankedLibrary, []);
+    const initialLibraryOrder = new Map(
+      initialLibraryBatch.trackIds.map((trackId, index) => [trackId, index] as const),
+    );
+    const firstLibrarySong = djFirstLibrarySong(
+      tiles,
+      matchingLibrary.filter((song) => initialLibraryOrder.has(String(song.id))),
+      {
+        excluded: dislikedSongsNow(),
+        scoreOf: (song) => -(initialLibraryOrder.get(String(song.id)) ?? Number.POSITIVE_INFINITY),
+      },
+    );
+    if (closed?.aborted) return "failed" satisfies DjStart;
+    if (localAlbumSession !== null && firstLibrarySong !== null) {
+      const session = { ...drawnLibrary.session, used: [String(firstLibrarySong.id)] };
+      const needsAlbumPages = tiles.some(
+        (tile) => tile.kind === "album" && tile.browseId !== null && !localAlbumSongs.has(tile.key),
+      );
+      startingLibrary = { songs: library.songs.filter(songHasFile), artists: library.artists };
+      if (needsAlbumPages) pendingDjFirstBatch = session.id;
+      const start = djStartWhileOpen(closed, () =>
+        begin(
+          session,
+          startedAt,
+          toQueueTrack({ ...firstLibrarySong, path: firstLibrarySong.path! }),
+        ),
+      );
+      if (start === null) return "failed" satisfies DjStart;
+      yield* start;
+      if (needsAlbumPages)
+        yield* Effect.forkDetach(
+          djAlbumSeedSongs(tiles, deadlineAt).pipe(
+            Effect.tap((albumSongs) =>
+              Effect.sync(() => {
+                const current = activeMagicSession();
+                if (current?.id !== session.id) return;
+                const refreshed = startDjSession(tiles, {
+                  id: session.id,
+                  played: latest.library?.topArtists ?? [],
+                  settings,
+                  albumSongs,
+                });
+                if (refreshed !== null) save({ ...refreshed, used: current.used });
+              }),
+            ),
+            Effect.catchCause(() => Effect.void),
+            Effect.ensuring(Effect.sync(() => finishDjFirstBatch(session.id))),
+          ),
+        );
+      return "started" satisfies DjStart;
+    }
     const started = startDjSession(tiles, {
       id: String(startedAt),
       played: latest.library?.topArtists ?? [],
@@ -651,6 +742,32 @@ export const startDjMagicQueue = (
     });
     if (started === null) return "empty" satisfies DjStart;
     const drawn = magicBatchRadios(started, Math.random);
+    pendingDjFirstBatch = drawn.session.id;
+    const firstRadioSong = yield* magicQueueFirstRadioSong(
+      drawn.session.id,
+      drawn.seeds,
+      deadlineAt,
+      () => finishDjFirstBatch(drawn.session.id),
+    );
+    if (firstRadioSong !== null) {
+      const firstId = ytTrackId(firstRadioSong.videoId);
+      startingLibrary = { songs: library.songs.filter(songHasFile), artists: library.artists };
+      const start = djStartWhileOpen(closed, () =>
+        begin(
+          { ...drawn.session, used: [firstId] },
+          startedAt,
+          toYtQueueTrack(firstRadioSong, null),
+        ),
+      );
+      if (start === null) {
+        finishDjFirstBatch(drawn.session.id);
+        return "failed" satisfies DjStart;
+      }
+      yield* start;
+      yield* cacheYtCoversInBackground([firstRadioSong]);
+      return "started" satisfies DjStart;
+    }
+    pendingDjFirstBatch = null;
     const yt = yield* magicQueueYtCandidates(drawn.session, drawn.seeds, library, {
       catalog: latest.catalog ?? [],
       graph: latest.graph,
@@ -697,6 +814,7 @@ export const startDjMagicQueue = (
       },
       songs,
     );
+    appLog("info", "WaveTiming", `DJ first song: ${Date.now() - startedAt}ms`);
     yield* cacheYtCoversInBackground(batchStreams(batch));
     return "started" satisfies DjStart;
   }).pipe(namedWork("DJ batch"));
@@ -717,6 +835,16 @@ const ASKS_AGAIN: ReadonlySet<MagicSignalKind> = new Set(["favorite", "download"
  * move): an empty pick under way meanwhile doesn't mark its session, it picks again.
  */
 let asked = 0;
+/** Holds the first DJ pick until its startup reads have settled. */
+let pendingDjFirstBatch: string | null = null;
+
+/** Releases [sessionId]'s queued batch after its startup reads finish. */
+const finishDjFirstBatch = (sessionId: string): void => {
+  if (pendingDjFirstBatch !== sessionId) return;
+  pendingDjFirstBatch = null;
+  const activeId = activeMagicSession()?.id ?? null;
+  if (djBatchReadMayResume(sessionId, activeId)) retryMagicBatch();
+};
 
 /**
  * Follows the queue for the Magic Queue under way: plays ending (Next
@@ -858,6 +986,7 @@ export const layer = Layer.effectDiscard(
      */
     const pickOnce = Effect.suspend(() => {
       const wanted = activeMagicSession();
+      if (wanted?.id === pendingDjFirstBatch) return Effect.succeed(false);
       if (
         wanted === null ||
         !magicPickDue(wanted, emptyBatch.get(), queueState.get(), sleepTimerState.get())

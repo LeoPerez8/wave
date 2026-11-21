@@ -9,12 +9,14 @@ import {
 } from "./PlaylistRecommendations";
 import { useGoToSuggestionsPill } from "./useGoToSuggestionsPill";
 import { IconGripVertical } from "@tabler/icons-react-native";
+import { IconPlus } from "@tabler/icons-react-native";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import {
   entryAdder,
   goToSuggestionsPillShown,
   goToSuggestionsScroll,
   moveItem,
+  playlistAddSongsPath,
   playlistSuggestionsPlace,
   type PlaylistPlace,
   type CollaborationMember,
@@ -31,7 +33,7 @@ import {
   useState,
   type ReactElement,
 } from "react";
-import { View, type AccessibilityActionInfo } from "react-native";
+import { Text, View, type AccessibilityActionInfo } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedReaction,
@@ -42,6 +44,7 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 
 import { CompactTitleHead, useCompactTitleList } from "@/components/CompactTitle";
+import { router } from "@/lib/timingRouter";
 import { FLOATING_PILL_ROOM } from "@/components/FloatingPill";
 import { afterPaint } from "@/lib/afterPaint";
 import { makeExternalStore } from "@wave/client/externalStore";
@@ -51,6 +54,7 @@ import { useLocalisation } from "@/localisation/localisation";
 import { ROW, useDraggedRow, useRowDrag, type DragRows } from "@/catalog/rowDrag";
 import { useChromeInset } from "@/chrome/chrome";
 import { useListScrollable } from "@/motion/heldTouch";
+import { useCurrentPath } from "@/library/routes";
 import { playPlaylist } from "@/playback/actions";
 import { openTrackActions, openUnsearchedActions, type MenuOptions } from "@/playback/ActionsMenu";
 import type { ActionItems, TrackItem } from "@/playback/actionTargets";
@@ -68,6 +72,7 @@ import { explainUnavailable, openUnavailableEntryActions } from "./UnavailableEn
 import type { PlaylistEntryRow } from "@wave/client";
 import { entryText, FindFrame, FindHead, useFindInLegendList } from "./FindInPlaylist";
 import { movePlaylistItem, removePlaylistItems } from "./playlists";
+import { Press } from "@/motion/Press";
 
 /** What the list holds besides the entries: the empty note, then the recommendations. */
 type Slot = { readonly kind: "empty" } | { readonly kind: "recommendations" };
@@ -164,6 +169,31 @@ function Grip({ shown, color }: { shown: boolean; color: string }) {
   );
 }
 
+/** The playlist's first song-list item: a route into the song-only add search. */
+function AddSongsTile({ playlistId, from }: { playlistId: number; from: string }) {
+  const { strings } = useLocalisation();
+  const background = useThemeColor("background");
+  return (
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel={strings.playlists.addSongs}
+      onPress={() => router.push(playlistAddSongsPath(from, playlistId))}
+    >
+      <View className="flex-row items-center" style={{ height: ROW, gap: CELL * 1.5 }}>
+        <View
+          className="items-center justify-center rounded-lg bg-primary"
+          style={{ width: CELL * 5, height: CELL * 5 }}
+        >
+          <IconPlus size={24} color={background} strokeWidth={1.75} />
+        </View>
+        <Text className="flex-1 font-sans text-body text-foreground">
+          {strings.playlists.addSongs}
+        </Text>
+      </View>
+    </Press>
+  );
+}
+
 /**
  * An entry's row with its grip on the right, dragged by it on the UI thread
  * (`useRowDrag`): it steps aside as another passes, and leaves a gap while
@@ -207,6 +237,8 @@ type Props = {
   customOrder?: boolean;
   showReleaseYear?: boolean;
   playlistId: number;
+  /** This page belongs to an owner-editable ordinary or collaborative playlist. */
+  canAddSongs: boolean;
   /** In playlist order; undefined until they are read (only the header shows). */
   items: readonly PlaylistEntryRow[] | undefined;
   /** The playlist's head (mosaic, title, Play / Shuffle). */
@@ -257,6 +289,7 @@ export const playPlaylistEntries = (
  */
 export function PlaylistItems({
   playlistId,
+  canAddSongs,
   items,
   header,
   empty,
@@ -265,6 +298,7 @@ export function PlaylistItems({
   members = NO_MEMBERS,
 }: Props) {
   const { strings } = useLocalisation();
+  const path = useCurrentPath();
   const scrollable = useListScrollable();
   const read = items ?? NO_ITEMS;
   const bottomInset = useChromeInset();
@@ -639,6 +673,9 @@ export function PlaylistItems({
           ListHeaderComponent={
             <CompactTitleHead onLayout={(event) => setLead(event.nativeEvent.layout.height)}>
               <FindHead find={find} header={header} />
+              {canAddSongs && found === null && !selecting && (
+                <AddSongsTile playlistId={playlistId} from={path} />
+              )}
             </CompactTitleHead>
           }
         />
