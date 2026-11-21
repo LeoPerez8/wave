@@ -1,5 +1,5 @@
 /**
- * Now Playing's seven slots, which the owner fills (on the player, and in
+ * Now Playing's seven slots, which the owner fills (on the player in edit mode, and in
  * Settings › Layout › Now Playing): five footer slots under the transport,
  * then one on each side of it, left of Previous and right of Next. Related
  * and Song menu have places of their own (the chevron beside the title, the
@@ -75,8 +75,8 @@ const parsed = (stored: string): unknown => {
 };
 
 /**
- * The actions a slot's choices list (its picker in Settings, its long-press
- * card), in order.
+ * The actions a slot's choices list (its picker in Settings, its card in
+ * edit mode), in order; both put None before them.
  */
 export const nowPlayingSlotChoices = (): readonly NowPlayingAction[] => NOW_PLAYING_ACTIONS;
 

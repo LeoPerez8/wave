@@ -2,6 +2,7 @@ import { currentLocalisation } from "@/localisation/localisation";
 import {
   NOW_PLAYING_BUTTONS_KEY,
   NOW_PLAYING_PREVIOUS_ROW_KEY,
+  NOW_PLAYING_TRANSPORT_SLOTS,
   editNowPlayingButtons,
   readNowPlayingButtons,
   storedNowPlayingButtons,
@@ -74,3 +75,15 @@ const ACTION_LABELS: Readonly<Record<NowPlayingAction, string>> = {
 /** A slot's name for what it holds: its action's, or None. */
 export const nowPlayingSlotLabel = (slot: NowPlayingSlot): string =>
   slot === null ? currentLocalisation().strings.playbackText.none : ACTION_LABELS[slot];
+
+/**
+ * A slot's name on its Settings row, its picker's header and, in edit mode,
+ * to screen readers: "Slot 1" to "Slot 5" for the footer's, left to right,
+ * and the transport's two by their side.
+ */
+export const nowPlayingSlotTitle = (slot: number): string => {
+  const { settings } = currentLocalisation().strings;
+  if (slot === NOW_PLAYING_TRANSPORT_SLOTS.left) return settings.slotLeftOfPrevious;
+  if (slot === NOW_PLAYING_TRANSPORT_SLOTS.right) return settings.slotRightOfNext;
+  return settings.slot(slot + 1);
+};

@@ -1,7 +1,5 @@
-import { currentLocalisation } from "@/localisation/localisation";
 import { useLocalisation } from "@/localisation/localisation";
 import {
-  NOW_PLAYING_TRANSPORT_SLOTS,
   nowPlayingButtonsAreDefault,
   nowPlayingSlotChoices,
   nowPlayingSlotRoute,
@@ -17,20 +15,10 @@ import { ChoiceRow } from "./ChoiceRow";
 import {
   editSavedNowPlayingButtons,
   nowPlayingSlotLabel,
+  nowPlayingSlotTitle,
   useNowPlayingButtons,
 } from "./nowPlayingButtons";
 import { SettingsPageRow, SettingsPageScreen } from "./SettingsPage";
-
-/**
- * A slot's name on its row and its picker's header: "Slot 1" to "Slot 5" for
- * the footer's, left to right, and the transport's two by their side.
- */
-const slotTitle = (slot: number): string => {
-  const { settings } = currentLocalisation().strings;
-  if (slot === NOW_PLAYING_TRANSPORT_SLOTS.left) return settings.slotLeftOfPrevious;
-  if (slot === NOW_PLAYING_TRANSPORT_SLOTS.right) return settings.slotRightOfNext;
-  return settings.slot(slot + 1);
-};
 
 /**
  * Where slot [slot]'s picker is (also `wave://settings/layout/now-playing/<n>`,
@@ -53,7 +41,7 @@ export function NowPlayingSlotsSection() {
       {buttons.map((action, slot) => (
         <SettingsPageRow
           key={slot}
-          title={slotTitle(slot)}
+          title={nowPlayingSlotTitle(slot)}
           summary={nowPlayingSlotLabel(action)}
           onPress={() => router.push(pickerRoute(slot))}
         />
@@ -88,7 +76,7 @@ const closePicker = (): void => {
  */
 export function NowPlayingSlotPickerScreen({ slot }: { slot: number }) {
   const { strings } = useLocalisation();
-  const title = slotTitle(slot);
+  const title = nowPlayingSlotTitle(slot);
   const buttons = useNowPlayingButtons();
   const chosen = buttons[slot];
   return (
@@ -106,7 +94,7 @@ export function NowPlayingSlotPickerScreen({ slot }: { slot: number }) {
                 accessibilityLabel={
                   holder === -1 || holder === slot
                     ? `${label}, ${title}`
-                    : strings.settings.swapSlot(label, title, slotTitle(holder))
+                    : strings.settings.swapSlot(label, title, nowPlayingSlotTitle(holder))
                 }
                 chosen={choice === chosen}
                 onPress={() => {

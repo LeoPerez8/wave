@@ -24,6 +24,11 @@ export const playbackTextEn = {
   backToCurrentSong: "Back to Current Song",
   cancel: "Cancel",
   changeButton: "Change Button",
+  /** Now Playing's edit mode: the screen reader's action on a slot, the header's button, the line under the slots and the first open's toast. */
+  editButtons: "Edit Buttons",
+  doneEditing: "Done",
+  tapASlotToChooseItsAction: "Tap a slot to choose its action",
+  holdAButtonToEditThisScreen: "Hold a button to edit this screen",
   checkYourConnectionAndTryAgain: "Check your connection and try again.",
   clear: "Clear",
   clearSearch: "Clear search",

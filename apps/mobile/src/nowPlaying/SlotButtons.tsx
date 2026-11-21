@@ -1,20 +1,27 @@
 import { useLocalisation } from "@/localisation/localisation";
 import {
+  IconDownload,
   IconListNumbers,
+  IconPlaylistAdd,
+  IconPlus,
   IconQuote,
   IconRepeat,
   IconRepeatOnce,
   IconShare3,
+  IconZzz,
 } from "@tabler/icons-react-native";
-import type { NowPlayingAction } from "@wave/core";
+import type { NowPlayingAction, NowPlayingSlot } from "@wave/core";
 import type { ComponentType } from "react";
 
+import { CELL } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { cycleRepeat, toggleShuffle } from "@/playback/actions";
 import { useQueue } from "@/playback/hooks";
+import { nowPlayingSlotLabel, nowPlayingSlotTitle } from "@/settings/nowPlayingButtons";
+import { useThemeColor } from "@/theme/useThemeColor";
 
-import { slotChange, type SlotChange } from "./ChangeSlotMenu";
+import { openChangeSlotMenu, slotEdit, type SlotChange } from "./ChangeSlotMenu";
 import { repeatLabel } from "./QueueView";
 import { useShuffleControl } from "./ShuffleMenu";
 import { SleepTimerButton } from "./SleepTimer";
@@ -24,7 +31,7 @@ type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
 /**
  * An icon that toggles something in Now Playing: teal while it's on, graphite
- * otherwise. In a slot, a long press changes it ([change]).
+ * otherwise. In a slot, a long press starts edit mode ([change]).
  */
 export function ViewToggle({
   icon: Icon,
@@ -65,6 +72,8 @@ export interface SlotContext {
   readonly openQueue: () => void;
   /** Shares the song playing, as its menu's Share does. */
   readonly share: () => void;
+  /** Starts edit mode, as a long press on any slot does. */
+  readonly edit: () => void;
 }
 
 /** Shuffle: teal while on, with the icon and name of the chosen kind of shuffle. */
@@ -100,19 +109,17 @@ function RepeatSlot({ change }: { change: SlotChange }) {
 /**
  * The button slot [slot] of Now Playing holds (0 to 4 for the footer's, then
  * the transport's left and right), for [action]. A tap runs it; a long press
- * opens the card that changes it.
+ * starts edit mode.
  */
 export function SlotButton({
-  slot,
   action,
   context,
 }: {
-  slot: number;
   action: NowPlayingAction;
   context: SlotContext;
 }) {
   const { strings } = useLocalisation();
-  const change = slotChange(slot);
+  const change = slotEdit(context.edit);
   switch (action) {
     case "lyrics":
       return (
@@ -162,4 +169,52 @@ export function SlotButton({
         />
       );
   }
+}
+
+/** Each action's glyph on its slot in edit mode; Shuffle's is the chosen kind's. */
+const EDIT_ICONS: Readonly<Record<Exclude<NowPlayingAction, "shuffle">, ComponentType<IconProps>>> =
+  {
+    lyrics: IconQuote,
+    queue: IconListNumbers,
+    sleepTimer: IconZzz,
+    addToPlaylist: IconPlaylistAdd,
+    download: IconDownload,
+    repeat: IconRepeat,
+    share: IconShare3,
+  };
+
+/** A slot's place: the size of its button. */
+const SLOT = CELL * 6;
+
+/**
+ * Slot [slot] in edit mode: outlined, with the glyph of the action it holds
+ * ([action]) or a plus while it's empty. A tap opens the card that changes
+ * it, anchored here; the action itself doesn't run.
+ */
+export function EditSlot({ slot, action }: { slot: number; action: NowPlayingSlot }) {
+  const shuffle = useShuffleControl();
+  const [foreground, tertiary] = useThemeColor(["foreground", "tertiary"]);
+  const Icon =
+    action === null ? IconPlus : action === "shuffle" ? shuffle.icon : EDIT_ICONS[action];
+  return (
+    <IconButton
+      label={`${nowPlayingSlotTitle(slot)}, ${nowPlayingSlotLabel(action)}`}
+      onPress={() => openChangeSlotMenu(slot)}
+      opensMenu
+      haptic="selection"
+      size={SLOT}
+      style={{
+        borderWidth: 1.5,
+        borderStyle: "dashed",
+        borderColor: tertiary,
+        borderRadius: CELL * 1.25,
+      }}
+    >
+      <Icon
+        size={action === null ? 20 : 24}
+        color={action === null ? tertiary : foreground}
+        strokeWidth={1.5}
+      />
+    </IconButton>
+  );
 }
