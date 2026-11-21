@@ -15,6 +15,7 @@ import { AppState } from "react-native";
 
 import { WaveNative } from "@/native/waveNative";
 import { homeContent, type HomeContent } from "@/home/homeOpening";
+import { useSnapshotted } from "@/home/homeSnapshot";
 import { useSightedStore } from "@/lib/screenSight";
 import { createAllFilesAccess, type AllFilesAccessState } from "./allFilesAccess";
 
@@ -467,19 +468,21 @@ const readListeningSums = storeQuery(
  * undefined while loading. The library totals are Library's counts; the
  * listening totals one row of the all-time play totals, re-read after plays
  * (at most every 1.5 s while Home is in sight, else when it comes back) and
- * scan batches.
+ * scan batches. Kept ready from startup (`readListeningSums`, and Library's counts).
  */
 export const useStatsFacts = (): StatsFacts | undefined => {
   const { language } = useLocalisation();
   const counts = useLibraryCounts();
   const sums = useLibraryQuery<ListeningSums | undefined>(readListeningSums, undefined);
-  return useMemo(
+  const facts = useMemo(
     () =>
       counts === undefined || sums === undefined
         ? undefined
         : statsFacts(counts, summedListeningTotals(sums), language),
     [counts, sums, language],
   );
+  // At a cold start, Home's snapshot's facts until both reads answer (#1353).
+  return useSnapshotted("stats", facts);
 };
 
 export const usePlaylistGraveyard = (id: number) => {
@@ -519,4 +522,6 @@ export const readyLibraryQueries: readonly LibraryQuery<unknown>[] = [
   readHomeAdded,
   readHomePlays,
   readHomeFavorites,
+  // Home's Stats facts (#1353).
+  readListeningSums,
 ] as readonly LibraryQuery<unknown>[];

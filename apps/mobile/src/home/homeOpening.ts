@@ -56,19 +56,13 @@ export const homeSectionWaiting = (id: HomeSectionId, home: HomeContent): boolea
   }
 };
 
-/**
- * Whether the section [id] shows a skeleton before Home paints. The followed
- * artists' sections and Community playlists draw themselves instead: each is
- * left out with nothing to show, so a skeleton would flash its header and go.
- */
-export const homePlaceholderSkeleton = (id: HomeSectionId): boolean =>
-  id !== "new-releases" && id !== "upcoming-shows" && id !== "community-playlists";
-
 /** The room a playlist card's sleeves take above its cover (`SLEEVE_ROOM` in `PlaylistCard`). */
 const PLAYLIST_SLEEVE_ROOM = 10;
 
 /**
- * Only placeholders reserve space; answered sections use their content's
+ * The room a local section holds before its first read answers with no
+ * snapshot to draw (`HomeSectionSpace`); answered sections use their
+ * content's height. Only these reserve space; answered sections use their content's
  * height. [available] is the width inside the screen's margins, which In your
  * orbit's grid fills as the Magic Queue's does (`magicQueueGrid`).
  */

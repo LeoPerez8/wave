@@ -5,15 +5,23 @@ import { playSongs } from "@/playback/actions";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { startMagicQueueFrom, startStreamedMagicQueueFrom } from "./magicQueueSection";
-import { useMostListenedRecently } from "./mostListenedRecently";
+import { useSnapshotted } from "./homeSnapshot";
+import { mostListenedRecentlyQuery, useMostListenedRecently } from "./mostListenedRecently";
+
+export { mostListenedRecentlyQuery };
 
 /** Songs played from In your orbit with YT Music off are queued from it. */
 const IN_YOUR_ORBIT_CONTEXT = { kind: "home", id: "in-your-orbit" } as const;
 
-/** Home's In your orbit: the carousel's shared recent ranking, shown only at nine songs (Core's `inYourOrbitSongs`). */
+/**
+ * Home's In your orbit: the carousel's shared recent ranking
+ * (`mostListenedRecentlyQuery`), shown only at nine songs (Core's
+ * `inYourOrbitSongs`). At a cold start, the snapshot's until the first read
+ * answers.
+ */
 export const useInYourOrbit = (): readonly MagicQueueSeed<PlayableSongRow>[] | undefined => {
   const songs = useMostListenedRecently(true);
-  return songs === undefined ? undefined : inYourOrbitSongs(songs);
+  return useSnapshotted("orbit", songs === undefined ? undefined : inYourOrbitSongs(songs));
 };
 
 /**

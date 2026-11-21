@@ -868,6 +868,15 @@ export {
   type YtAccountHome,
   type YtPlaylistShelf,
 } from "./homeCommunityPlaylists.ts";
+export {
+  HOME_SNAPSHOT_MAX_LENGTH,
+  HOME_SNAPSHOT_VERSION,
+  homeSnapshotList,
+  homeSnapshotRecord,
+  parseHomeSnapshot,
+  storedHomeSnapshot,
+} from "./homeSnapshot.ts";
+export type { HomeSnapshot, HomeSnapshotChecks, HomeSnapshotField } from "./homeSnapshot.ts";
 export { rowWindow, windowRows } from "./rowWindow.ts";
 export type { RowView, RowWindow } from "./rowWindow.ts";
 export {

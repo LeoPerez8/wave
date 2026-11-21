@@ -72,7 +72,8 @@ import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
 import { AlbumShelf, ArtistShelf, MostPlayedRows, SongRows } from "./HomeSections";
 import { HomeStats } from "./HomeStats";
-import { HomeSectionSkeleton } from "./HomeSectionSkeleton";
+import { HomeSectionSpace } from "./HomeSectionSpace";
+import { noteCarouselPage, snapshotCarouselPage } from "./homeSnapshot";
 import {
   homeOpeningState,
   homeSectionWaiting,
@@ -98,7 +99,7 @@ type SectionProps = {
 function MostPlayedAlbums({ title }: SectionProps) {
   const { strings } = useLocalisation();
   const ranking = useMostPlayedOfAllTime();
-  if (ranking === undefined) return <HomeSectionSkeleton id="most-played-albums" />;
+  if (ranking === undefined) return <HomeSectionSpace id="most-played-albums" />;
   const albums = withPlays(ranking.albums);
   if (albums.length === 0) return null;
   return (
@@ -333,8 +334,11 @@ function DiscoverMixRow({
   );
 }
 
-/** The page the carousel last showed, kept while the app runs: coming back to Home finds it there. */
-let keptPage: number | null = null;
+/**
+ * The page the carousel last showed, kept while the app runs: coming back to
+ * Home finds it there. A cold start opens on the snapshot's (#1353).
+ */
+let keptPage: number | null = snapshotCarouselPage();
 
 /**
  * As tall as the refresh button, so the label line keeps its height; with
@@ -375,7 +379,9 @@ function MagicQueueRow({ section }: { section: MagicQueueSection }) {
   const [available, setAvailable] = useState(width - grid.margin * 2);
   const [kept, setKept] = useState(keptPage);
   useEffect(() => {
-    if (kept !== null) keptPage = kept;
+    if (kept === null) return;
+    keptPage = kept;
+    noteCarouselPage(kept);
   }, [kept]);
   const { size } = magicQueueGrid(available, fontScale);
   const { shown } = section;
@@ -534,7 +540,7 @@ function Favorites({ home, title }: SectionProps) {
 function MostPlayedArtists({ title }: SectionProps) {
   const { strings } = useLocalisation();
   const ranking = useMostPlayedOfAllTime();
-  if (ranking === undefined) return <HomeSectionSkeleton id="most-played-artists" />;
+  if (ranking === undefined) return <HomeSectionSpace id="most-played-artists" />;
   const artists = ranking.artists.map((entry) => entry.item);
   if (artists.length === 0) return null;
   return (
@@ -595,7 +601,7 @@ function InYourOrbit({ title }: SectionProps) {
   const ytMusic = useYtMusicEnabled();
   const { width, fontScale } = useWindowDimensions();
   const [available, setAvailable] = useState(width - grid.margin * 2);
-  if (songs === undefined) return <HomeSectionSkeleton id="in-your-orbit" />;
+  if (songs === undefined) return <HomeSectionSpace id="in-your-orbit" />;
   if (songs.length === 0) return null;
   const { size } = magicQueueGrid(available, fontScale);
   return (
@@ -630,7 +636,7 @@ function InYourOrbit({ title }: SectionProps) {
 function FromYourLibrary({ title }: SectionProps) {
   const { strings } = useLocalisation();
   const playlists = useFromYourLibrary();
-  if (playlists === undefined) return <HomeSectionSkeleton id="from-your-library" />;
+  if (playlists === undefined) return <HomeSectionSpace id="from-your-library" />;
   if (playlists.length === 0) return null;
   return (
     <TitledSection title={title}>
@@ -749,7 +755,7 @@ export function HomeSection({ id, home }: { id: HomeSectionId; home: HomeContent
         <HomeSection id={id} home={home} />
       </HomeFollowProvider>
     );
-  if (homeSectionWaiting(id, home)) return <HomeSectionSkeleton id={id} />;
+  if (homeSectionWaiting(id, home)) return <HomeSectionSpace id={id} />;
   const Section = SECTIONS[id];
   return <Section home={home} title={homeSectionTitle(id, strings)} />;
 }

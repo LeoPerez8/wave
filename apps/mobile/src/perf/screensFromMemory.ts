@@ -20,7 +20,13 @@ export type InMemory =
    */
   | { readonly kind: "recent"; readonly name: string }
   /** An external store held in memory for the session. */
-  | { readonly kind: "store" };
+  | { readonly kind: "store" }
+  /**
+   * Kept in memory like "kept" ([name] is its query, kept by `readyScreens.ts`
+   * or `homeReady.ts`), and drawn at a cold start from Home's snapshot
+   * (`homeSnapshot.ts`, `useSnapshotted`) until its first read answers (#1353).
+   */
+  | { readonly kind: "snapshot"; readonly name: string };
 
 /** Each hook a covered screen draws, as `file#symbol`, and how it's in memory. */
 export const MEMORY_SOURCES: Record<string, InMemory> = {
@@ -54,6 +60,23 @@ export const MEMORY_SOURCES: Record<string, InMemory> = {
   "stats/hooks.ts#useTopSongs": { kind: "session", name: "keptReadings" },
   "dj/DjScreen.tsx#useDjGrid": { kind: "session", name: "preparedDjOpening" },
   "updates/versionHistory.ts#useVersionHistory": { kind: "store" },
+  // Home (#1353): its local sections are kept from startup and drawn from the snapshot at a cold start.
+  "home/homeContent.ts#useHomeScreenContent": { kind: "snapshot", name: "readHomeAdded" },
+  "home/mostPlayedOfAllTime.ts#useMostPlayedOfAllTime": {
+    kind: "snapshot",
+    name: "readMostPlayed",
+  },
+  "home/inYourOrbit.ts#useInYourOrbit": { kind: "snapshot", name: "mostListenedRecentlyQuery" },
+  "home/fromYourLibrary.ts#useFromYourLibrary": {
+    kind: "snapshot",
+    name: "fromYourLibraryQuery",
+  },
+  "library/hooks.ts#useStatsFacts": { kind: "snapshot", name: "readListeningSums" },
+  "home/magicQueueSection.ts#useMagicQueueSection": { kind: "snapshot", name: "keptPages" },
+  // Kept on the phone as last built or read, and read from storage in the first frame.
+  "home/discoverMixes.ts#useDiscoverMixes": { kind: "store" },
+  "home/communityPlaylists.ts#useCommunityPlaylists": { kind: "store" },
+  "home/useHomeFollow.ts#useHomeFollow": { kind: "store" },
 };
 
 /** A covered screen: the files its first frame's hooks are called in, and those hooks. */
@@ -89,6 +112,20 @@ const SECTION_LISTS: ScreenFromMemory = {
 const SETTINGS_ONLY: ScreenFromMemory = { draws: [] };
 
 export const SCREENS_FROM_MEMORY: Record<string, ScreenFromMemory> = {
+  "app/(tabs)/index.tsx": {
+    via: ["home/HomeSection.tsx", "home/HomeStats.tsx", "home/NewReleases.tsx"],
+    draws: [
+      "home/homeContent.ts#useHomeScreenContent",
+      "home/mostPlayedOfAllTime.ts#useMostPlayedOfAllTime",
+      "home/inYourOrbit.ts#useInYourOrbit",
+      "home/fromYourLibrary.ts#useFromYourLibrary",
+      "library/hooks.ts#useStatsFacts",
+      "home/magicQueueSection.ts#useMagicQueueSection",
+      "home/discoverMixes.ts#useDiscoverMixes",
+      "home/communityPlaylists.ts#useCommunityPlaylists",
+      "home/useHomeFollow.ts#useHomeFollow",
+    ],
+  },
   "app/(tabs)/library.tsx": {
     draws: [
       "library/hooks.ts#useLibraryCounts",
@@ -170,7 +207,6 @@ export const SCREEN_PRESS_READS: Record<string, string> = {
 
 /** Route files that aren't #1352's local screens, each with its reason. */
 export const NOT_LOCAL_SCREENS: Record<string, string> = {
-  "app/(tabs)/index.tsx": "Home: its ready data and cold-start snapshot are #1353's.",
   "app/(tabs)/search.tsx": "Search: its in-memory index is #1354's (searchIndex.ts).",
   "app/library/yt-album/[id].tsx": "An online YT Music album page: #1356 opens it from known data.",
   "app/library/yt-artist/[id].tsx":
@@ -178,7 +214,7 @@ export const NOT_LOCAL_SCREENS: Record<string, string> = {
   "app/library/yt-playlist/[id].tsx":
     "An online YT Music playlist page: #1356 opens it from known data.",
   "app/library/discover-mix/[id].tsx":
-    "A Home mix's page: Home's mixes and their data are #1353's.",
+    "A Home mix's page, drawn from the mixes saved on the phone; a mix's streamed songs are network.",
   "app/library/discover.tsx": "A redirect to Home's Discover section, which draws nothing itself.",
   "app/recap/[id].tsx":
     "A Recap's stories over everything, built from Stats; not one of the ticket's screens.",

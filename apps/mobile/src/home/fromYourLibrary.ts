@@ -5,9 +5,11 @@ import { useMemo } from "react";
 
 import { libraryQuery, useLibraryQuery } from "@/library/hooks";
 import { LibraryStore } from "@/library/LibraryStore";
+import { useSnapshotted } from "./homeSnapshot";
 import { useLastDefined, useLocalDay } from "./useLocalDay";
 
-const readFromYourLibrary = (day: string) =>
+/** From your library's read for the local [day], kept ready from startup (`homeReady.ts`). */
+export const fromYourLibraryQuery = (day: string) =>
   libraryQuery(
     `home:fromYourLibrary:${day}`,
     { playlists: true, tracks: true, plays: true },
@@ -25,10 +27,14 @@ const readFromYourLibrary = (day: string) =>
  * 14 days first and the rest by their plays of all time (Core's
  * `fromYourLibrary`), or undefined while it first loads. Re-read after plays
  * and playlist edits, as `useMostPlayedOfAllTime` is, and when the local day
- * changes, so the 14 days move on with nothing played.
+ * changes, so the 14 days move on with nothing played. At a cold start, the
+ * snapshot's until the first read answers.
  */
 export const useFromYourLibrary = (): readonly PlaylistRow[] | undefined => {
   const day = useLocalDay();
-  const query = useMemo(() => readFromYourLibrary(day), [day]);
-  return useLastDefined(useLibraryQuery<readonly PlaylistRow[] | undefined>(query, undefined));
+  const query = useMemo(() => fromYourLibraryQuery(day), [day]);
+  return useSnapshotted(
+    "fromYourLibrary",
+    useLastDefined(useLibraryQuery<readonly PlaylistRow[] | undefined>(query, undefined)),
+  );
 };

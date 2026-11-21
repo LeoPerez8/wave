@@ -14,9 +14,9 @@ import { IconButton } from "@/components/IconButton";
 import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { useHomeArrangement, homeTitleLongPress } from "@/home/homeArrangement";
 import { HomeSection, SECTION_GAP } from "@/home/HomeSection";
-import { HomeSectionSkeleton } from "@/home/HomeSectionSkeleton";
-import { afterHomeFrame, homeOpeningState, homePlaceholderSkeleton } from "@/home/homeOpening";
-import { useHomeContent } from "@/library/hooks";
+import { useHomeScreenContent } from "@/home/homeContent";
+import { afterHomeFrame, homeOpeningState } from "@/home/homeOpening";
+import { startSavingHomeSnapshot } from "@/home/homeSnapshot";
 import { useRenderCount } from "@/perf/perf";
 import { useRecapToAnnounce } from "@/stats/hooks";
 import { RecapCard } from "@/stats/StatsViews";
@@ -47,6 +47,9 @@ function HomeLine({ children, top }: { children: string; top: number }) {
   );
 }
 
+/** From Home's first render on, the app leaving saves what Home shows for the next cold start. */
+startSavingHomeSnapshot();
+
 export default function HomeScreen() {
   const { strings } = useLocalisation();
   useRenderCount("HomeScreen");
@@ -60,7 +63,8 @@ export default function HomeScreen() {
       }),
     [],
   );
-  // Even focus effects in Discover or Recap cannot read before the shell has painted.
+  // The first frame draws Home's sections from memory or the cold-start snapshot (#1353);
+  // the follow cards' and Recap's reads wait until it has painted.
   return (
     <HomeFollowProvider reading={painted}>
       <LargeTitleScreen
@@ -75,34 +79,15 @@ export default function HomeScreen() {
           />
         }
       >
-        {painted ? <HomeContent newRecap={newRecap} /> : <HomePlaceholders newRecap={newRecap} />}
+        <HomeContent newRecap={newRecap} />
       </LargeTitleScreen>
     </HomeFollowProvider>
   );
 }
 
-function HomePlaceholders({ newRecap }: { newRecap: RecapPeriod | null }) {
-  useScreenContent(false);
-  const arrangement = useHomeArrangement();
-  return (
-    <>
-      <HomeRecap period={newRecap} />
-      <View style={newRecap === null ? FIRST_SECTION : undefined}>
-        {arrangement.sections.map((id) =>
-          homePlaceholderSkeleton(id) ? (
-            <HomeSectionSkeleton key={id} id={id} />
-          ) : (
-            <HomeSection key={id} id={id} home={{}} />
-          ),
-        )}
-      </View>
-    </>
-  );
-}
-
 function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
   const { strings } = useLocalisation();
-  const home = useHomeContent();
+  const home = useHomeScreenContent();
   const { empty, nothingPlayed, ready } = homeOpeningState(home);
   useScreenContent(ready);
   const arrangement = useHomeArrangement();

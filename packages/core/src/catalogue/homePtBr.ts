@@ -21,10 +21,6 @@ export const homePtBr: typeof homeEn = {
     "As músicas adicionadas recentemente, tocadas recentemente e mais tocadas aparecem aqui.",
   noSections: "Mantenha Início pressionado para adicionar as seções de volta.",
   playHint: "Reproduza algo, e o que você ouvir aparece aqui.",
-  loadingStats: "Carregando Estatísticas",
-  loadingArtists: "Carregando artistas",
-  loadingAlbums: "Carregando álbuns",
-  loadingPlaylists: "Carregando playlists",
   edit: "Editar Início",
   notOnHome: "Fora do Início",
 };
