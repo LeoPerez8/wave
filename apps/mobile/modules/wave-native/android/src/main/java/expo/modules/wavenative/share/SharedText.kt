@@ -4,8 +4,9 @@ import android.content.Intent
 
 /**
  * The text an intent hands Wave's [SharedTextInbox]: the text of a `text/` share (`SEND`), or the
- * address of a tapped web link (`VIEW` with an `http` or `https` link, from the song-link filter
- * in app.config.ts). `wave://` links stay with expo-router, and anything else gives nothing.
+ * address of a tapped web link (`VIEW` with an `http` or `https` link, from the song-link or the
+ * invite-link filter in app.config.ts). `wave://` links stay with expo-router, and anything else
+ * gives nothing.
  */
 object SharedText {
   fun of(intent: Intent?): String? =

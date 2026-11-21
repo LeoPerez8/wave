@@ -210,6 +210,7 @@ import * as Layer from "effect/Layer";
 import { timeLibraryRead } from "@/log/slowLibraryReads";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { syncCycle, type SyncCycleInput, type SyncCycleResult } from "@wave/client/sync/syncCycle";
+import { selectCollaborations } from "@wave/client/db/collaborations";
 
 import { selectAlbumDetail, selectAlbums } from "@wave/client/db/albums";
 import { importedPlays, saveImportedPlays, selectImportTracks } from "@wave/client/db/blackPlayer";
@@ -1242,6 +1243,11 @@ export class LibraryStore extends Context.Service<
      */
     readonly leaveAccount: Effect.Effect<void, LibraryStoreError>;
     /**
+     * The playlist here of the collaborative playlist [syncId] (an invite just joined); null
+     * while no pull has brought it.
+     */
+    readonly joinedPlaylistId: (syncId: string) => Effect.Effect<number | null, LibraryStoreError>;
+    /**
      * What the Lyrics view saved for a non-D song's video (Core's
      * `SavedLyrics`): lyrics it found online, or a miss; null for nothing.
      */
@@ -2042,6 +2048,12 @@ const make = Effect.gen(function* () {
       }),
 
     leaveAccount: writeAttempt("leave the Wave account", () => signOut(db, splits)),
+
+    joinedPlaylistId: (syncId) =>
+      attempt(
+        "read a joined playlist",
+        () => selectCollaborations(db).find((held) => held.syncId === syncId)?.playlistId ?? null,
+      ),
 
     savedLyrics: (videoId) => attempt("read saved lyrics", () => selectSavedLyrics(db, videoId)),
 
