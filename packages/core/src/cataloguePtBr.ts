@@ -26,6 +26,7 @@ import { itemActionsPtBr } from "./catalogue/itemActionsPtBr.ts";
 import { collaborativeMenuPtBr } from "./catalogue/collaborativeMenuPtBr.ts";
 import { songDeletionPtBr } from "./catalogue/songDeletionPtBr.ts";
 import { appUpdatesPtBr } from "./catalogue/appUpdatesPtBr.ts";
+import { inviteJoinPtBr } from "./catalogue/inviteJoinPtBr.ts";
 import { whatsNewPtBr } from "./catalogue/whatsNewPtBr.ts";
 import { versionHistoryPtBr } from "./catalogue/versionHistoryPtBr.ts";
 /**
@@ -181,6 +182,8 @@ export const ptBR: Catalogue = {
     heading: "Este é um convite do Wave",
     body: "Abra este link no seu celular com o Wave atualizado.",
   },
+  /** Opening an invite link in Wave: the join screen and why it can't join. */
+  inviteJoin: inviteJoinPtBr,
   settings: settingsPtBr,
   downloadStatus: downloadStatusPtBr,
   alert: alertPtBr,

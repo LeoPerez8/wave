@@ -125,6 +125,9 @@ export const make = Effect.gen(function* () {
       Effect.sync(() => {
         if (account !== null) signedInTriggers().played(step);
       }),
+    now: Effect.sync(() => {
+      if (account !== null) signedInTriggers().now();
+    }),
   };
   return sync;
 });
