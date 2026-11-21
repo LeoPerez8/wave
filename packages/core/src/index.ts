@@ -2862,6 +2862,7 @@ export {
   NOW_PLAYING_PREVIOUS_ROW_KEY,
   NOW_PLAYING_TRANSPORT_SLOTS,
   editNowPlayingButtons,
+  moveNowPlayingButton,
   nowPlayingButtonsAreDefault,
   nowPlayingRelatedChevronShown,
   nowPlayingSlotRoute,

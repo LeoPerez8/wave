@@ -39,7 +39,7 @@ import { LyricCardLayer } from "@/share/LyricCardLayer";
 import { useLyricCardShown } from "@/share/lyricCard";
 import { useSongShareShown } from "@/share/songShare";
 import { shareNowPlaying } from "@/share/songShare";
-import { useNowPlayingButtons } from "@/settings/nowPlayingButtons";
+import { moveSavedNowPlayingButton, useNowPlayingButtons } from "@/settings/nowPlayingButtons";
 import { showNowPlayingEditHint } from "@/settings/nowPlayingEditHint";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
@@ -72,7 +72,8 @@ import {
   useNowPlayingSettled,
 } from "./sheet";
 import { onRelatedOpened } from "./openRelated";
-import { EditSlot, SlotButton, type SlotContext } from "./SlotButtons";
+import { EditSlot, SlotButton, SlotDragPreview, type SlotContext } from "./SlotButtons";
+import { useNowPlayingSlotDrag } from "./slotDrag";
 import { EDITING_OPACITY, Transport } from "./Transport";
 import {
   nowPlayingSongLookup,
@@ -343,11 +344,16 @@ export function NowPlayingSheet() {
         ? "unsearched"
         : "song";
   const buttons = useNowPlayingButtons();
+  const applySlotMove = useCallback(
+    (from: number, to: number) => moveSavedNowPlayingButton(from, to),
+    [],
+  );
+  const slotDrag = useNowPlayingSlotDrag(applySlotMove);
   // A slot's button; null while the slot is None or its action hides for what's on.
   // In edit mode every slot shows, outlined, and opens its card instead.
   const slotButton = (slot: number) => {
     const action = buttons[slot] ?? null;
-    if (editing) return <EditSlot key={slot} slot={slot} action={action} />;
+    if (editing) return <EditSlot key={slot} slot={slot} action={action} drag={slotDrag} />;
     const show = action === null ? "hidden" : nowPlayingSlotShow(action, slotSong);
     if (action === null || show === "hidden") return null;
     return <SlotButton key={slot} action={action} off={show === "off"} context={slotContext} />;
@@ -525,6 +531,9 @@ export function NowPlayingSheet() {
       )}
       {/* The lyrics card's preview, over the whole sheet (Share in the Lyrics view). */}
       <LyricCardLayer />
+      {slotDrag.dragging !== null && (
+        <SlotDragPreview drag={slotDrag} action={buttons[slotDrag.dragging] ?? null} />
+      )}
     </Animated.View>
   );
 }

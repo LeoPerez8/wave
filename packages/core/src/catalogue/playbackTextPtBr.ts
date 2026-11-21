@@ -27,7 +27,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   changeButton: "Alterar Botão",
   editButtons: "Editar botões",
   doneEditing: "Concluir",
-  tapASlotToChooseItsAction: "Toque num espaço para escolher a ação",
+  tapASlotToChooseItsAction: "Toque para escolher ou segure e arraste para mover",
   holdAButtonToEditThisScreen: "Segure um botão para editar esta tela",
   checkYourConnectionAndTryAgain: "Verifique sua conexão e tente novamente.",
   clear: "Limpar",
