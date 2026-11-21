@@ -11,7 +11,13 @@ import type {
   QueueRow,
 } from "./playerView.ts";
 import type { WindowSettings } from "./windowSettings.ts";
-import type { DatedRelease, LanguageChoice, PlaylistSongSort, SongSortKey } from "@wave/core";
+import type {
+  DatedRelease,
+  LanguageChoice,
+  PlaylistSongSort,
+  SongSortKey,
+  ThemeEdit,
+} from "@wave/core";
 
 import type { LanguageView } from "./language.ts";
 import type { LibraryCounts } from "@wave/client/db/counts";
@@ -186,6 +192,10 @@ export interface BridgeContract
   readonly "settings.setAppearance": {
     readonly args: readonly [appearance: Appearance];
     readonly result: void;
+  };
+  readonly "settings.editTheme": {
+    readonly args: readonly [edit: ThemeEdit];
+    readonly result: string;
   };
   readonly "settings.playback": { readonly args: readonly []; readonly result: PlaybackSettings };
   readonly "settings.setPlayback": {
@@ -478,6 +488,7 @@ export const BRIDGE_CALLS = [
   "settings.window",
   "settings.setWindow",
   "settings.setAppearance",
+  "settings.editTheme",
   "settings.playback",
   "settings.setPlayback",
   "settings.ytMusic",
@@ -660,6 +671,11 @@ export interface WaveBridge {
     readonly language: () => Promise<LanguageView>;
     readonly setLanguage: (choice: LanguageChoice) => Promise<void>;
     readonly setAppearance: (appearance: Appearance) => Promise<void>;
+    /**
+     * Makes one change of Settings › Appearance › Theme to the account's theme and gives the
+     * theme as it is kept then (`AccountView.theme`).
+     */
+    readonly editTheme: (edit: ThemeEdit) => Promise<string>;
     /** Settings › Playback: Crossfade, Normalize Volume and Buffer, synced with the account. */
     readonly playback: () => Promise<PlaybackSettings>;
     /** Keeps a change to Settings › Playback; it applies from the next song. */
@@ -813,6 +829,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     window: () => invoke("settings.window"),
     setWindow: (change) => invoke("settings.setWindow", change),
     setAppearance: (appearance) => invoke("settings.setAppearance", appearance),
+    editTheme: (edit) => invoke("settings.editTheme", edit),
     playback: () => invoke("settings.playback"),
     setPlayback: (change) => invoke("settings.setPlayback", change),
     ytMusic: () => invoke("settings.ytMusic"),

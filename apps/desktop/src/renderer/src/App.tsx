@@ -45,6 +45,7 @@ import { usePlaylistEdits } from "./Playlists.tsx";
 import { Graveyard } from "./Graveyard.tsx";
 import { applyLanguage, labels, text, useLanguage, tagTitle, artistName } from "./text.ts";
 import { LanguageSettings } from "./LanguageSettings.tsx";
+import { ThemeSettings } from "./ThemeSettings.tsx";
 import { LyricsAndTagsSettings } from "./LyricsAndTagsSettings.tsx";
 import { geniusAccess } from "./useSongGenius.ts";
 import { Home } from "./Home.tsx";
@@ -892,6 +893,14 @@ export function App() {
                       </option>
                     ))}
                   </select>
+                  <ThemeSettings
+                    theme={theme ?? null}
+                    appearance={appearance}
+                    onChange={(stored) =>
+                      setAccount((previous) => previous && { ...previous, theme: stored })
+                    }
+                    onError={failed}
+                  />
                   <LanguageSettings view={localisation} onError={failed} />
                 </>
               ) : setting === "accounts" ? (
