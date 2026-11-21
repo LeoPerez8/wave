@@ -12,6 +12,19 @@ on:
   # The promotion's way in (promote.yml): its token's tag push starts no run, so it starts this
   # one on the tag. Off a v* tag, this run releases nothing and has no update channel.
   workflow_dispatch:
+    inputs:
+      # Set by promote.sh, once per ti release the promoted apps come from (docs/spec.md,
+      # Promotion). Empty, the run picks its apps by the change rule, as a pushed tag does.
+      app:
+        description: The apps this promotion run publishes, both, mobile or desktop. Empty follows the change rule.
+        required: false
+        type: string
+        default: ""
+      promoted_from:
+        description: The -ti release those apps are built from, at or below the tag. Empty takes the tag's own number.
+        required: false
+        type: string
+        default: ""
 
 # This file holds the jobs both apps share and calls each app's own workflow: mobile.yml for the
 # phone and desktop.yml for the desktop, so one app's failure never holds up the other's release.
@@ -22,8 +35,9 @@ permissions: {}
 # Runs on main queue up instead of cancelling each other: a run that has pushed its version
 # bump must get to release it. A newer push still replaces a run that's only waiting, and the
 # next run releases what that one would have, counting from the previous release.
+# A promotion may start one run per app on the same tag, so each app has its own group there.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}${{ inputs.app && format('-{0}', inputs.app) || '' }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
@@ -79,6 +93,7 @@ jobs:
         id: rule
         env:
           GH_TOKEN: ${{ github.token }}
+          PROMOTED_APP: ${{ inputs.app }}
         run: scripts/ci/changes.sh
 
       - name: Report the skipped native unit tests
@@ -424,13 +439,16 @@ jobs:
 
   # The release source (docs/release-provenance.md): the one commit the rest of the run scans,
   # checks and builds, and that a release signs and publishes. The autofix commit on a PR, the
-  # version bump on main (which may sit on a newer tip than the pushed commit), or else the
-  # event's commit. It runs no code from the repo and holds no token.
+  # version bump on main (which may sit on a newer tip than the pushed commit), a promotion's ti
+  # release (promoted_from, which may be older or newer than the tag's commit when the apps come
+  # from different releases), or else the event's commit. It runs no code from the repo, and its
+  # token only reads the ti release's commit.
   source:
     name: Release source
     needs: [version, autofix-apply]
     runs-on: ubuntu-latest
-    permissions: {}
+    permissions:
+      contents: read
     outputs:
       sha: ${{ steps.pick.outputs.sha }}
     steps:
@@ -438,7 +456,21 @@ jobs:
         id: pick
         env:
           SOURCE_SHA: ${{ needs.autofix-apply.outputs.sha || needs.version.outputs.sha || github.event.pull_request.head.sha || github.sha }}
+          PROMOTED_FROM: ${{ inputs.promoted_from }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # Check release tag and each app's gate check this ti release against the tag.
+          if [ -n "$PROMOTED_FROM" ]; then
+            if [ "$GITHUB_EVENT_NAME" != workflow_dispatch ] || [[ "$GITHUB_REF" != refs/tags/v* ]] || [[ "$GITHUB_REF" == *-ti ]]; then
+              echo "::error::Only a promotion's run on a stable tag builds from another ti release."
+              exit 1
+            fi
+            if ! [[ "$PROMOTED_FROM" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-ti$ ]]; then
+              echo "::error::\"$PROMOTED_FROM\" isn't a -ti release."
+              exit 1
+            fi
+            SOURCE_SHA="$(gh api "repos/$GITHUB_REPOSITORY/commits/$PROMOTED_FROM" --jq .sha)"
+          fi
           if ! [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::No release source: \"$SOURCE_SHA\"."
             exit 1
@@ -484,9 +516,12 @@ jobs:
       - name: Install
         run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
 
-      # Fails a tag that isn't v<app version> before the APK job starts.
+      # Fails a tag that isn't v<app version> before the APK job starts. A promotion's tag may
+      # name a newer version than the ti release it builds (promoted_from).
       - name: Check release tag
         if: env.IS_RELEASE == 'true'
+        env:
+          PROMOTED_FROM: ${{ inputs.promoted_from }}
         run: scripts/ci/step.sh "Check release tag" scripts/ci/check-release-tag.sh "$GITHUB_REF_NAME"
 
       # On PRs, by the rule in scripts/ci/changes.ts: the packages the PR changed and their
@@ -558,6 +593,8 @@ jobs:
     with:
       source_sha: ${{ needs.source.outputs.sha }}
       release_tag: ${{ needs.checks.outputs.release_tag }}
+      # The ti release a promotion builds the phone from; empty takes the tag's own number.
+      promoted_from: ${{ inputs.promoted_from }}
       # The shared jobs' results and outputs, which the phone's gate admits on.
       evidence: ${{ toJSON(needs) }}
       notes: ${{ needs.notes.outputs.notes }}
@@ -586,6 +623,8 @@ jobs:
     with:
       source_sha: ${{ needs.source.outputs.sha }}
       release_tag: ${{ needs.checks.outputs.release_tag }}
+      # The ti release a promotion builds the desktop from; empty takes the tag's own number.
+      promoted_from: ${{ inputs.promoted_from }}
       # The shared jobs' results and outputs, which the desktop's gate admits on.
       evidence: ${{ toJSON(needs) }}
       # The desktop's own notes, so a version it publishes alone doesn't go out with the phone's.

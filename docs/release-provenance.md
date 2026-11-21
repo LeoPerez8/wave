@@ -181,12 +181,13 @@ files and notes to R2, then updates one signed channel pointer covering both ins
 checks the signature, channel, platform and installer digest before installation. It applies the
 update on quit. On Linux, the installed AppImage must be writable by the user.
 
-In **Roll back an update**, choose the `desktop` target, channel and earlier version. The job
-verifies the tagged GitHub Release with `verified-release.sh`, then both installers against the
-desktop's record (`wave-<version>.desktop.provenance.json`, which must name the same source as the
-phone's sealed record), or against the phone's sealed record for a release from before #1336. The publisher
-also checks the original signed desktop manifests in R2 and signs a fresh channel pointer that
-allows the downgrade. Desktop has no transition for releases without provenance.
+In **Roll back an update**, choose `app=desktop`, the channel and the earlier version. Before
+any secret, the job runs `verified-desktop-release.sh` on the tagged GitHub Release (below), which
+checks the desktop's record and both installers and needs no APK, so a version the desktop
+released alone can go back. The publisher also checks the original signed desktop manifests in R2
+and signs a fresh channel pointer that allows the downgrade. It writes only under
+`desktop/<channel>/`, so the phone's update and metadata stay as they are; `app=mobile` likewise
+writes none of the desktop's files. Desktop has no transition for releases without provenance.
 
 ## Trusting a published release
 
@@ -196,16 +197,32 @@ asks the API for the tag's commit, and runs `release-gate.ts verify-release`: th
 this tag's, name the tag's commit as `source`, be sealed, and have `signedSha256` equal to the
 APK's digest. It writes `file=<record>` to `$GITHUB_OUTPUT`. A release with no record fails.
 
+`scripts/ci/verified-desktop-release.sh <tag> <dir>` does the same for the desktop. It downloads
+the desktop's record (`wave-<version>.desktop.provenance.json`, or the phone's record for a
+release from before #1336) and both installers, and runs `release-gate.ts verify-desktop-release`:
+the record must be this tag's, hold the desktop's admission for its own tag and source, and name
+the tag's commit as `source`. A stable desktop built from another ti release than the phone's
+names that release in `promotedFrom` instead, and then `source` must be that release's commit.
+`desktop-release.ts verify-published` then checks the installers against the admission.
+
 ## Promotion
 
-`promote.sh` checks the ti release with `verified-release.sh` before it pushes the stable tag,
-after `promote-version.ts`'s version rules and the ancestry check against `main`, which stay as
-they were. The stable tag's CI run then goes through the gate like any release: Secret scan,
-Checks (the tag must be on the ti tag's commit), native tests, notes and a full build, all on that
-commit. Before admitting, the gate job downloads the ti release's record, and `admit` refuses a
-stable tag unless that record is sealed, is `v<version>-ti`'s and names the same source. The
-admitted record carries the link as `promotedFrom`. The release job still opens the `main`
-Environment, so the owner approves every stable release as before.
+Promote to main takes an `app` (`both`, `mobile` or `desktop`). `promote-version.ts` keeps
+its version rules and picks each app's ti release: its newest at or below `v<version>-ti` that
+holds its files (`promotedApps`). `promote.sh` checks the ancestry of each against `main`, the
+phone's with `verified-release.sh` and the desktop's with `verified-desktop-release.sh`, before
+it pushes the stable tag on the phone's commit (the desktop's when only the desktop goes out).
+It then starts one CI run per ti release, with `app` and `promoted_from` (`ci.yml`'s
+`workflow_dispatch` inputs). The Release source job takes `promoted_from`'s commit as the run's
+source, so each run checks, scans and builds only its apps, from the commit their ti release was
+built from: Secret scan, Checks (the checkout must be `promoted_from`'s commit, at or below the
+tag's number), native tests, notes and a full build. Before admitting, each gate downloads the
+promoted ti release's record. The phone's `admit` refuses a stable tag unless that record is
+sealed, is `promoted_from`'s (by default `v<version>-ti`), is at or below the stable number and
+names the same source. The desktop's `promote-desktop` refuses unless the desktop's ti record
+admitted installers from the same source. Each admitted record carries the link as
+`promotedFrom`. Each release job still opens the `main` Environment, so the owner approves every
+stable release as before.
 
 A stable release is its own full build, so its APK and bundle digests differ from the ti
 release's. What links the two is the shared source and the ti record's seal.
@@ -223,8 +240,8 @@ can't replace a release built from another source (above).
 
 **Roll back an update** (`rollback.yml`) republishes the update R2 keeps for a version, with a
 new id and time and a new signature. It needs no new build and no new commit: the release's record
-and R2's copy are enough. Before any step that names a secret, it runs `verified-release.sh` on
-`v<version>`. Then `apps/updates/scripts/promote.ts` gets the checked record
+and R2's copy are enough. For `app=mobile`, before any step that names a secret, it runs
+`verified-release.sh` on `v<version>` (the desktop's path is under Desktop installers). Then `apps/updates/scripts/promote.ts` gets the checked record
 (`WAVE_PROVENANCE_FILE`) and refuses, before signing, unless R2's update is what that record
 admitted:
 
@@ -280,4 +297,5 @@ permissions and fork runs, and any setting not listed above.
 - To find what a release was built from, use `verified-release.sh`, or read
   `wave-<version>.provenance.json` on its GitHub Release and check `source` against the tag's
   commit and `signedSha256` against the APK asset.
-- A stable release's record links its ti release in `promotedFrom`.
+- A stable release's record links its ti release in `promotedFrom`, for the phone and the
+  desktop each. The desktop's may be another release than the phone's.

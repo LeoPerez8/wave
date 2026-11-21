@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { admitRelease } from "./release-gate.ts";
+import { admitRelease, desktopPromotion, verifyDesktopPublished } from "./release-gate.ts";
 
 const gate = fileURLToPath(new URL("./release-gate.ts", import.meta.url));
 const run = (args: string[], env: Record<string, string> = {}) =>
@@ -316,6 +316,20 @@ describe("a promotion's admission", () => {
     );
   });
 
+  it("links an older ti release when the promotion names it, as for an app it skipped", () => {
+    const older = tiRecord({ releaseTag: "v1.2.9-ti" });
+    const provenance = admitRelease(stable(), undefined, older, "v1.2.9-ti");
+    assert.equal(provenance.promotedFrom?.releaseTag, "v1.2.9-ti");
+    assert.throws(() => admitRelease(stable(), undefined, older, "v1.2.8-ti"), /v1\.2\.8-ti/);
+  });
+
+  it("refuses to promote a ti release above the stable version, or a stable one", () => {
+    const newer = tiRecord({ releaseTag: "v1.3.1-ti" });
+    assert.throws(() => admitRelease(stable(), undefined, newer, "v1.3.1-ti"), /above v1\.3\.0/);
+    const promoted = tiRecord({ releaseTag: "v1.2.0" });
+    assert.throws(() => admitRelease(stable(), undefined, promoted, "v1.2.0"), /-ti release/);
+  });
+
   it("leaves ti releases as they were, with nothing to link", () => {
     assert.equal(admitRelease(healthy()).promotedFrom, undefined);
   });
@@ -330,6 +344,114 @@ describe("a promotion's admission", () => {
     const missing = run(["admit", join(dir, "needs.json"), join(dir, "absent.json")]);
     assert.notEqual(missing.status, 0);
     assert.equal(missing.stdout, "");
+  });
+
+  it("takes the ti release the promotion names from the command line", () => {
+    const dir = mkdtempSync(join(tmpdir(), "wave-gate-"));
+    writeFileSync(join(dir, "needs.json"), JSON.stringify(stable()));
+    writeFileSync(join(dir, "ti.json"), JSON.stringify(tiRecord({ releaseTag: "v1.2.9-ti" })));
+    const admitted = run(["admit", join(dir, "needs.json"), join(dir, "ti.json"), "v1.2.9-ti"]);
+    assert.equal(admitted.status, 0, admitted.stderr);
+    assert.equal(JSON.parse(admitted.stdout).promotedFrom.releaseTag, "v1.2.9-ti");
+  });
+});
+
+/** The desktop's record as its release job publishes it beside the installers. */
+const desktopRecord = (tag: string, source = SOURCE, overrides: Record<string, unknown> = {}) => ({
+  schema: "wave-release-provenance/1",
+  source,
+  releaseTag: tag,
+  desktop: { tag, source, platforms: {} },
+  ...overrides,
+});
+
+describe("a desktop promotion", () => {
+  it("links the stable desktop to the ti release it is built from", () => {
+    assert.deepEqual(
+      desktopPromotion(desktopRecord("v1.2.9-ti"), {
+        tiTag: "v1.2.9-ti",
+        stableTag: "v1.3.0",
+        source: SOURCE,
+      }),
+      { releaseTag: "v1.2.9-ti", source: SOURCE },
+    );
+  });
+
+  it("refuses a record of another release or source, or one that admitted no desktop", () => {
+    const promote = (value: unknown, tiTag = "v1.2.9-ti") =>
+      desktopPromotion(value, { tiTag, stableTag: "v1.3.0", source: SOURCE });
+    assert.throws(() => promote(undefined), /no desktop record/);
+    assert.throws(() => promote(desktopRecord("v1.2.8-ti")), /v1\.2\.8-ti/);
+    assert.throws(() => promote(desktopRecord("v1.2.9-ti", EVENT)), new RegExp(EVENT.slice(0, 7)));
+    assert.throws(
+      () => promote(desktopRecord("v1.2.9-ti", SOURCE, { desktop: undefined })),
+      /admitted no desktop/,
+    );
+    assert.throws(() => promote(desktopRecord("v1.3.1-ti"), "v1.3.1-ti"), /above v1\.3\.0/);
+  });
+
+  it("prints the link from the command line", () => {
+    const dir = mkdtempSync(join(tmpdir(), "wave-gate-"));
+    writeFileSync(join(dir, "ti.json"), JSON.stringify(desktopRecord("v1.2.9-ti")));
+    const linked = run(["promote-desktop", join(dir, "ti.json"), "v1.2.9-ti", "v1.3.0", SOURCE]);
+    assert.equal(linked.status, 0, linked.stderr);
+    assert.deepEqual(JSON.parse(linked.stdout), { releaseTag: "v1.2.9-ti", source: SOURCE });
+  });
+});
+
+describe("a published desktop record", () => {
+  it("holds for its own tag and the tag's commit", () => {
+    const record = desktopRecord("v1.3.0-ti");
+    assert.equal(verifyDesktopPublished(record, { tag: "v1.3.0-ti", commit: SOURCE }), record);
+  });
+
+  it("holds for a stable release built from the ti release it links", () => {
+    const record = desktopRecord("v1.3.0", SOURCE, {
+      promotedFrom: { releaseTag: "v1.2.9-ti", source: SOURCE },
+    });
+    const checked = { tag: "v1.3.0", commit: EVENT, promotedCommit: SOURCE };
+    assert.equal(verifyDesktopPublished(record, checked), record);
+    assert.throws(
+      () => verifyDesktopPublished(record, { ...checked, promotedCommit: EVENT }),
+      /v1\.2\.9-ti is on/,
+    );
+    assert.throws(
+      () => verifyDesktopPublished(record, { tag: "v1.3.0", commit: EVENT }),
+      new RegExp(EVENT.slice(0, 7)),
+    );
+  });
+
+  it("fails for another tag or commit, or without the desktop's admission", () => {
+    const record = desktopRecord("v1.3.0-ti");
+    assert.throws(
+      () => verifyDesktopPublished(record, { tag: "v1.3.1-ti", commit: SOURCE }),
+      /v1\.3\.1-ti/,
+    );
+    assert.throws(
+      () => verifyDesktopPublished(record, { tag: "v1.3.0-ti", commit: EVENT }),
+      new RegExp(EVENT.slice(0, 7)),
+    );
+    assert.throws(
+      () =>
+        verifyDesktopPublished(
+          { ...record, desktop: undefined },
+          { tag: "v1.3.0-ti", commit: SOURCE },
+        ),
+      /admitted no desktop/,
+    );
+    assert.throws(
+      () => verifyDesktopPublished(undefined, { tag: "v1.3.0-ti", commit: SOURCE }),
+      /no desktop record/,
+    );
+  });
+
+  it("checks a downloaded record from the command line", () => {
+    const dir = mkdtempSync(join(tmpdir(), "wave-gate-"));
+    writeFileSync(join(dir, "record.json"), JSON.stringify(desktopRecord("v1.3.0-ti")));
+    const checked = run(["verify-desktop-release", join(dir, "record.json"), "v1.3.0-ti", SOURCE]);
+    assert.equal(checked.status, 0, checked.stderr);
+    const refused = run(["verify-desktop-release", join(dir, "record.json"), "v1.3.0-ti", EVENT]);
+    assert.notEqual(refused.status, 0);
   });
 });
 

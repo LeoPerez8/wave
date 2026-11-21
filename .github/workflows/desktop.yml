@@ -16,6 +16,12 @@ on:
         type: string
         required: false
         default: ""
+      # The -ti release a promotion builds the desktop from (promote.sh), at or below
+      # release_tag. Empty takes the stable tag's own number.
+      promoted_from:
+        type: string
+        required: false
+        default: ""
       # The shared jobs' evidence, as the caller's toJSON(needs): source, changes, secret-scan,
       # checks and notes. The desktop's gate admits on it together with this workflow's own jobs.
       evidence:
@@ -243,7 +249,9 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ inputs.source_sha }}
-          sparse-checkout: apps/updates
+          sparse-checkout: |
+            apps/updates
+            scripts/ci
           persist-credentials: false
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -285,14 +293,40 @@ jobs:
           test "$NOTES_OUTCOME" = success || { echo "::error::Patch notes did not succeed."; exit 1; }
           echo "sha=$SOURCE_SHA" | tee -a "$GITHUB_OUTPUT"
 
+      # A stable tag promotes the desktop's newest ti release at or below it (promoted_from, by
+      # default the same number's): that release's record must have admitted installers built
+      # from this run's source, and the stable record links it as promotedFrom.
+      - name: Link the promoted ti release
+        id: promoted
+        if: ${{ !endsWith(inputs.release_tag, '-ti') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTED_FROM: ${{ inputs.promoted_from }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          promoted="${PROMOTED_FROM:-${RELEASE_TAG}-ti}"
+          dir="$RUNNER_TEMP/promoted"
+          # Before #1336 the desktop's admission was part of the phone's record.
+          for name in "wave-${promoted#v}.desktop.provenance.json" "wave-${promoted#v}.provenance.json"; do
+            if gh release download "$promoted" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$dir" 2> /dev/null; then
+              record="$dir/$name"
+              break
+            fi
+          done
+          node scripts/ci/release-gate.ts promote-desktop "${record:-$dir/none.json}" "$promoted" "$RELEASE_TAG" "$SOURCE_SHA" > "$RUNNER_TEMP/promoted.json"
+          cat "$RUNNER_TEMP/promoted.json"
+          echo "file=$RUNNER_TEMP/promoted.json" >> "$GITHUB_OUTPUT"
+
       - name: Create desktop provenance input
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
           RELEASE_TAG: ${{ inputs.release_tag }}
+          PROMOTED_FILE: ${{ steps.promoted.outputs.file }}
         run: |
           mkdir -p "$RUNNER_TEMP/provenance"
-          node -e 'require("node:fs").writeFileSync(process.argv[1], JSON.stringify({schema:"wave-release-provenance/1",source:process.argv[2],releaseTag:process.argv[3]})+"\n")' \
-            "$RUNNER_TEMP/provenance/provenance.json" "$SOURCE_SHA" "$RELEASE_TAG"
+          node -e 'const fs = require("node:fs"); const [out, source, releaseTag, promoted] = process.argv.slice(1); fs.writeFileSync(out, JSON.stringify({schema:"wave-release-provenance/1",source,releaseTag,...(promoted ? {promotedFrom: JSON.parse(fs.readFileSync(promoted, "utf8"))} : {})})+"\n")' \
+            "$RUNNER_TEMP/provenance/provenance.json" "$SOURCE_SHA" "$RELEASE_TAG" "$PROMOTED_FILE"
 
       - name: Admit the desktop installers
         id: desktop

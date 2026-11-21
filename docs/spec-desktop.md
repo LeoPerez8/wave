@@ -450,8 +450,13 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   built from and leave the phone's out. A version the desktop releases alone has a GitHub
   Release with only the installers, the desktop's record and the desktop's notes; phones skip
   that number. Promote to
-  main publishes the desktop too once v1 is complete (`app=both` or `app=desktop`), from its
-  newest release at or below the promoted version.
+  main publishes the desktop too once v1 is complete and `RELEASE_DESKTOP_MAIN` is on
+  (`app=both`, the default, or `app=desktop`; `app=mobile` publishes no installer). It builds
+  the desktop from the desktop's newest `-ti` release at or below the promoted version that holds
+  both installers, which may be older or newer than the phone's. That run builds only the
+  desktop, from that release's commit, and its record links the release as `promotedFrom`. With
+  `app=both`, a desktop with nothing new since its last stable release is a log line, not a
+  failure; with `app=desktop` it fails the promotion.
   `apps/updates` serves the desktop's updates per channel.
 - Updates are whole-app in v1 (the NSIS blockmap downloads only what changed); no JS-only
   bundles. electron-updater only downloads.
@@ -460,7 +465,9 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   into it before installing, on Windows and Linux alike, as the phone does. The channel is fixed
   in the build; Wave's code never sets the update endpoint or channel at run time.
 - Roll back an update (`app=desktop`) republishes the previous version for the channel with
-  downgrade allowed, and leaves the phone's update alone.
+  downgrade allowed. It checks the release's desktop record and installers, needs no APK, and
+  writes only the desktop's files in R2 (`desktop/<channel>/…`), so the phone's update and
+  metadata stay as they are; `app=mobile` leaves the desktop's alone the same way.
 - Windows code signing: SignPath Foundation, free for OSI-licensed projects, once the GPL-3.0-only
   licence is in the repo (#1122). The key stays in SignPath's HSM and the Sign the Windows
   release job asks for the signature. Until then `ti` builds are unsigned and Windows warns on each new version.

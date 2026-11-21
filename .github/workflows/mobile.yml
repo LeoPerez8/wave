@@ -15,6 +15,12 @@ on:
         type: string
         required: false
         default: ""
+      # The -ti release a promotion builds the phone from (promote.sh), at or below release_tag.
+      # Empty takes the stable tag's own number.
+      promoted_from:
+        type: string
+        required: false
+        default: ""
       # The shared jobs' evidence, as the caller's toJSON(needs): source, changes, secret-scan,
       # checks and notes. The release gate admits on it together with this workflow's own jobs.
       evidence:
@@ -523,16 +529,20 @@ jobs:
           node-version: 22
           package-manager-cache: false
 
-      # A stable tag promotes the ti release of the same number, and is admitted only with that
-      # release's sealed record for the same source (#1130). Without one, admit refuses.
+      # A stable tag promotes the phone's newest ti release at or below it (promoted_from, by
+      # default the same number's), and is admitted only with that release's sealed record for
+      # the same source (#1130). Without one, admit refuses.
       - name: Fetch the promoted ti release's record
         if: startsWith(github.ref, 'refs/tags/v') && !endsWith(github.ref, '-ti')
         env:
           GH_TOKEN: ${{ github.token }}
+          PROMOTED_FROM: ${{ inputs.promoted_from }}
         run: |
-          gh release download "${GITHUB_REF_NAME}-ti" --repo "$GITHUB_REPOSITORY" \
-            --pattern "wave-${GITHUB_REF_NAME#v}-ti.provenance.json" --dir "$RUNNER_TEMP/promoted" ||
-            echo "::warning::${GITHUB_REF_NAME}-ti has no provenance record to download."
+          promoted="${PROMOTED_FROM:-${GITHUB_REF_NAME}-ti}"
+          echo "PROMOTED_TAG=$promoted" >> "$GITHUB_ENV"
+          gh release download "$promoted" --repo "$GITHUB_REPOSITORY" \
+            --pattern "wave-${promoted#v}.provenance.json" --dir "$RUNNER_TEMP/promoted" ||
+            echo "::warning::$promoted has no provenance record to download."
 
       - name: Admit the release
         id: admit
@@ -543,7 +553,8 @@ jobs:
           # The shared jobs and this workflow's own, as one set of prerequisites.
           node -e 'const [shared, own] = process.argv.slice(1).map((json) => JSON.parse(json)); console.log(JSON.stringify({ ...shared, ...own }))' \
             "$SHARED" "$NEEDS" > "$RUNNER_TEMP/needs.json"
-          node scripts/ci/release-gate.ts admit "$RUNNER_TEMP/needs.json" "$RUNNER_TEMP/promoted/wave-${GITHUB_REF_NAME#v}-ti.provenance.json" > "$RUNNER_TEMP/provenance.json"
+          promoted="${PROMOTED_TAG:-${GITHUB_REF_NAME}-ti}"
+          node scripts/ci/release-gate.ts admit "$RUNNER_TEMP/needs.json" "$RUNNER_TEMP/promoted/wave-${promoted#v}.provenance.json" "$promoted" > "$RUNNER_TEMP/provenance.json"
           cat "$RUNNER_TEMP/provenance.json"
           node -e 'console.log(`sha=${JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).source}`)' \
             "$RUNNER_TEMP/provenance.json" | tee -a "$GITHUB_OUTPUT"

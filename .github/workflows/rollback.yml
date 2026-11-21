@@ -1,13 +1,20 @@
 name: Roll back an update
 
-# Promotes an earlier bundle back onto a channel, for a bad update that doesn't crash. Phones on
-# that channel with the same runtime version move to it at their next check. See "Over-the-air
-# updates" in docs/spec.md. It republishes the update R2 keeps for that release, with no new build,
-# once the release's sealed provenance record holds and R2's update is the one it admitted
+# Promotes an earlier update back onto a channel, for a bad update that doesn't crash: the phone's
+# bundle, or the desktop's installers. Each app's rollback touches only its own channel files in
+# R2, never the other app's. Phones on that channel with the same runtime version move to it at
+# their next check; desktops install it as an allowed downgrade. See "Rolling back an update" in
+# docs/spec.md and docs/spec-desktop.md. It republishes what R2 keeps for that release, with no
+# new build, once the release's record holds and R2's files are the ones it admitted
 # (docs/release-provenance.md).
 on:
   workflow_dispatch:
     inputs:
+      app:
+        description: The app to roll back
+        required: true
+        type: choice
+        options: [mobile, desktop]
       channel:
         description: The channel to roll back
         required: true
@@ -17,28 +24,23 @@ on:
         description: The version to go back to, such as 0.46.1-ti
         required: true
         type: string
-      target:
-        description: The app to roll back
-        required: true
-        type: choice
-        options: [android, desktop]
-        default: android
       allow_unrecorded:
-        description: Owner's transition. Allow a release published before provenance records, checked on its runtime version alone
+        description: Owner's transition, phone only. Allow a release published before provenance records, checked on its runtime version alone
         required: false
         type: boolean
         default: false
 
 permissions: {}
 
-# Two runs on a channel would each read its history and lose the other's line.
+# Two runs on a channel would each read its history and lose the other's line. The desktop's
+# share a group with its release job, the phone's have their own.
 concurrency:
-  group: ${{ inputs.target == 'desktop' && format('desktop-release-{0}', inputs.channel) || format('rollback-{0}', inputs.channel) }}
+  group: ${{ inputs.app == 'desktop' && format('desktop-release-{0}', inputs.channel) || format('rollback-{0}', inputs.channel) }}
   cancel-in-progress: false
 
 jobs:
   rollback:
-    name: Roll ${{ inputs.channel }} back to ${{ inputs.version }}
+    name: Roll the ${{ inputs.app }} on ${{ inputs.channel }} back to ${{ inputs.version }}
     # The channel's Environment holds the release secrets; main's waits for the owner.
     environment: ${{ inputs.channel }}
     runs-on: ubuntu-latest
@@ -57,54 +59,34 @@ jobs:
           node-version: 22
           package-manager-cache: false
 
-      # Before any secret: the release's GitHub Release has to carry a sealed record for its tag's
-      # commit and its APK. Only the owner's transition lets a release from before records through.
+      # Before any secret, the release's GitHub Release has to carry the app's record for its tag's
+      # commit: the phone's sealed record and its APK, or the desktop's record and the installers it
+      # admitted, which needs no APK (a version the desktop released alone has none). Only the
+      # owner's transition lets a phone release from before records through.
       - name: Check the release's provenance
         id: provenance
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
-          TARGET: ${{ inputs.target }}
+          APP: ${{ inputs.app }}
           ALLOW_UNRECORDED: ${{ inputs.allow_unrecorded }}
         run: |
           version="$(echo "$VERSION" | tr -d '[:space:]')"
           version="${version#v}"
           flags=()
-          if [ "$TARGET" = android ] && [ "$ALLOW_UNRECORDED" = "true" ]; then flags=(--allow-unrecorded); fi
-          scripts/ci/verified-release.sh "v$version" "$RUNNER_TEMP/release" "${flags[@]}"
-
-      # The desktop publishes apart from the phone, with its own record beside the installers
-      # (wave-<version>.desktop.provenance.json), which must name the source the phone's checked
-      # record names. A release from before that keeps the desktop's admission in the phone's.
-      - name: Verify the published desktop installers
-        id: desktop_provenance
-        if: inputs.target == 'desktop'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PHONE_PROVENANCE: ${{ steps.provenance.outputs.file }}
-        run: |
-          field() { node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"))[process.argv[2]]' "$1" "$2"; }
-          tag="$(field "$PHONE_PROVENANCE" releaseTag)"
-          own="wave-${tag#v}.desktop.provenance.json"
-          held="$(gh release view "$tag" --json assets --jq '.assets[].name')"
-          PROVENANCE="$PHONE_PROVENANCE"
-          if grep -qxF "$own" <<< "$held"; then
-            gh release download "$tag" --dir "$RUNNER_TEMP/desktop-record" --pattern "$own"
-            PROVENANCE="$RUNNER_TEMP/desktop-record/$own"
-            if [ "$(field "$PROVENANCE" source)" != "$(field "$PHONE_PROVENANCE" source)" ]; then
-              echo "::error::$tag's desktop record names another source than its release."
+          if [ "$APP" = mobile ] && [ "$ALLOW_UNRECORDED" = "true" ]; then flags=(--allow-unrecorded); fi
+          case "$APP" in
+            mobile) scripts/ci/verified-release.sh "v$version" "$RUNNER_TEMP/release" ${flags[@]+"${flags[@]}"} ;;
+            desktop) scripts/ci/verified-desktop-release.sh "v$version" "$RUNNER_TEMP/release" ;;
+            *)
+              echo "::error::The app to roll back is mobile or desktop, not \"$APP\"."
               exit 1
-            fi
-          fi
-          echo "file=$PROVENANCE" >> "$GITHUB_OUTPUT"
-          assets="$(node apps/updates/scripts/desktop-release.ts names "$tag")"
-          patterns=()
-          while IFS= read -r asset; do patterns+=(--pattern "$asset"); done <<< "$assets"
-          gh release download "$tag" --dir "$RUNNER_TEMP/release" "${patterns[@]}"
-          node apps/updates/scripts/desktop-release.ts verify-published "$PROVENANCE" "$RUNNER_TEMP/release"
+              ;;
+          esac
 
+      # The phone's update, history and pointers only (updates/, assets/, apks/ in R2).
       - name: Promote the update
-        if: inputs.target == 'android'
+        if: inputs.app == 'mobile'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -115,12 +97,13 @@ jobs:
           WAVE_ALLOW_UNRECORDED: ${{ inputs.allow_unrecorded }}
         run: node apps/updates/scripts/promote.ts
 
+      # The desktop's channel pointer and history only (desktop/ in R2), with the downgrade allowed.
       - name: Roll back both desktop installers
-        if: inputs.target == 'desktop'
+        if: inputs.app == 'desktop'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WAVE_DESKTOP_UPDATE_SIGNING_KEY: ${{ secrets.WAVE_DESKTOP_UPDATE_SIGNING_KEY }}
           WAVE_UPDATE_CHANNEL: ${{ inputs.channel }}
-          PROVENANCE: ${{ steps.desktop_provenance.outputs.file }}
+          PROVENANCE: ${{ steps.provenance.outputs.file }}
         run: node apps/updates/scripts/desktop-release.ts rollback "$PROVENANCE" "$RUNNER_TEMP/release"
