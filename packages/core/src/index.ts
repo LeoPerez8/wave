@@ -1685,6 +1685,7 @@ export {
   parseHomeArrangement,
   storedHomeArrangement,
 } from "./homeSections.ts";
+export { editStoredHomeArrangement, readHomeArrangementEdit } from "./homeArrangementEdit.ts";
 export type {
   HomeArrangement,
   HomeArrangementEdit,
