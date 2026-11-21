@@ -5,6 +5,7 @@ import {
   NOW_PLAYING_FOOTER_SLOTS,
   NOW_PLAYING_TRANSPORT_SLOTS,
   isUnsearchedTrackId,
+  nowPlayingPageSwipesEnabled,
   nowPlayingSlotShow,
   nowPlayingSongMenuShow,
   type NowPlayingSlotSong,
@@ -238,6 +239,8 @@ export function NowPlayingSheet() {
   const covered = ytMusic && screen === "related" && !pages.relatedMoving;
   // Related stays drawn, with its songs, while its panel leaves.
   const relatedMounted = ytMusic && (screen === "related" || pages.relatedMoving);
+  // The page gestures sit under Related's carousel, so they must stand down while it shows.
+  const pageSwipesEnabled = nowPlayingPageSwipesEnabled({ screen, editing }) && !relatedMounted;
   const { videoId, findAgain } = usePlayingVideoId(relatedMounted ? trackId : null, ytSong);
   const playerPageInSight = (page === "player" || turning) && !covered;
   const leaveQueue = useCallback(() => void send({ type: "headerTap" }), [send]);
@@ -426,7 +429,7 @@ export function NowPlayingSheet() {
 
         <View className="flex-1" onLayout={(event) => setPagesTop(event.nativeEvent.layout.y)}>
           {item !== null && pages.queueMounted && (
-            <ScreenPage screen="queue" pages={pages}>
+            <ScreenPage screen="queue" pages={pages} swipes={pageSwipesEnabled}>
               <Activity
                 mode={(page === "queue" || turning) && !covered ? "visible" : "hidden"}
                 name={strings.playbackText.queue}
@@ -436,7 +439,7 @@ export function NowPlayingSheet() {
             </ScreenPage>
           )}
           {/* The player's page: a swipe to the left anywhere but the scrubber brings the Queue. */}
-          <ScreenPage screen="player" pages={pages} swipes={item !== null && !editing}>
+          <ScreenPage screen="player" pages={pages} swipes={pageSwipesEnabled && item !== null}>
             <View className="flex-1" {...dimmed}>
               {item === null ? (
                 <DismissArea style={{ flex: 1 }}>
