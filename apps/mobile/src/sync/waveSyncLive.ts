@@ -7,7 +7,6 @@ import { LibraryStore } from "@/library/LibraryStore";
 
 import { WaveAccount, waveAccountErrorCode, type WaveAccountErrorCode } from "@/native/waveAccount";
 import { perfCount } from "@/perf/perf";
-import { collaborativePlaylistsOn } from "@/settings/collaborativePlaylists";
 
 import { collaborations } from "./collaborations";
 import type { WaveSync, WaveSyncPorts } from "./WaveSync";
@@ -48,8 +47,7 @@ export const make = Effect.gen(function* () {
         wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
         // Each database step waits until the owner's taps are through.
         turn: freeTurn,
-        // Collaborative playlists, while Settings › Developer has them on.
-        ...(collaborativePlaylistsOn() ? { collaboration: collaborations } : {}),
+        collaboration: collaborations,
       }),
     ).then(
       (result) => {
@@ -76,10 +74,10 @@ export const make = Effect.gen(function* () {
     return finished;
   };
 
-  /** The page of the collaborative playlist [playlistId] pulls it, while the switch is on. */
+  /** The page of the collaborative playlist [playlistId] pulls it. */
   const syncPlaylist = (playlistId: number): Promise<void> =>
     inTurn(async () => {
-      if (account === null || ports === null || !collaborativePlaylistsOn()) return;
+      if (account === null || ports === null) return;
       const { preferences, pulled } = ports;
       const result = await Effect.runPromise(
         store.syncCollaborativePlaylist(

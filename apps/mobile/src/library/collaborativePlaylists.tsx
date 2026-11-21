@@ -1,9 +1,8 @@
 /**
- * A collaborative playlist on the phone, behind Settings › Developer's switch (docs/spec.md,
- * "Collaborative playlists", What it shows and Refreshing): which playlists are collaborative
- * and changed elsewhere, the members under a page's name, the page's pull every 15 seconds
- * while it is in sight, and the notice a private copy's page gives once. With the switch off
- * none of it shows, and nothing is read or pulled.
+ * A collaborative playlist on the phone (docs/spec.md, "Collaborative playlists", What it shows
+ * and Refreshing): which playlists are collaborative and changed elsewhere, the members under a
+ * page's name, the page's pull every 15 seconds while it is in sight, and the notice a private
+ * copy's page gives once.
  */
 import type { CollaborativePlaylist } from "@wave/client/db/collaborations";
 import { collaborativePageMembers, collaborativePagePull, SYSTEM_SYNC_CLOCK } from "@wave/core";
@@ -17,7 +16,6 @@ import { useCollaborations } from "@/collaboration/collaborativePlaylists";
 import { TextButton } from "@/components/TextButton";
 import { useScreenSight } from "@/lib/screenSight";
 import { useLocalisation } from "@/localisation/localisation";
-import { useCollaborativePlaylists } from "@/settings/collaborativePlaylists";
 import { syncCollaborativePage } from "@/sync/startSync";
 
 import { LibraryStore, type LibraryStoreError } from "./LibraryStore";
@@ -56,10 +54,10 @@ const keptMembers = (held: readonly CollaborativePlaylist[]): CollaborativePlayl
 
 /**
  * The collaborative playlists here, by local id (the menu's `useCollaborations`), each one's
- * members kept as they were shown while they don't change; none while the switch is off.
+ * members kept as they were shown while they don't change.
  */
 export const useShownCollaborations = (): ReadonlyMap<number, CollaborativePlaylist> => {
-  const held = useCollaborations(useCollaborativePlaylists());
+  const held = useCollaborations(true);
   return useMemo(() => {
     if (held.size === 0) return EMPTY;
     const byId = new Map<number, CollaborativePlaylist>();
@@ -150,8 +148,7 @@ export function CollaborativeMembers({ collaboration }: { collaboration: Collabo
 
 /** Whether the page of [playlistId] still owes its private copy's notice. */
 export const usePrivateCopyNotice = (playlistId: number): boolean => {
-  const on = useCollaborativePlaylists();
-  return useLibraryQuery(on ? noticesQuery : null, NO_NOTICES).includes(playlistId);
+  return useLibraryQuery(noticesQuery, NO_NOTICES).includes(playlistId);
 };
 
 /**

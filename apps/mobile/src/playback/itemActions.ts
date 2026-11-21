@@ -61,7 +61,6 @@ import {
 } from "@/settings/lyricsAndGenre";
 import { ytMusicEnabled, useYtMusicEnabled } from "@/settings/ytMusic";
 import { openSharePlaylist } from "@/share/sharePlaylist";
-import { useCollaborativePlaylists } from "@/settings/collaborativePlaylists";
 import { shazamPlaylistId } from "@/settings/shazamPlaylist";
 import {
   endCollaborationFlow,
@@ -239,14 +238,12 @@ function usePlan(
   readonly perAlbum: readonly (readonly number[])[];
   /** The Library songs of the collection the menu is about (none otherwise): what Fix Songs runs on. */
   readonly collectionSongs: readonly SongRow[];
-  /** The account's collaborative playlists here (none with the switch off). */
+  /** The account's collaborative playlists here. */
   readonly collaborations: ReadonlyMap<number, CollaborativePlaylist>;
 } {
   const here = usePathname();
-  // Collaborative playlists, while Settings › Developer has them on.
-  const collaborativePlaylists = useCollaborativePlaylists();
   const collaborations = useCollaborations(
-    collaborativePlaylists && target.kind === "playlist" && target.readOnAction !== true,
+    target.kind === "playlist" && target.readOnAction !== true,
   );
   const onlineLookups = useLyricsAndGenreLookupsEnabled();
   const ytMusic = useYtMusicEnabled();
@@ -301,7 +298,6 @@ function usePlan(
     here,
     streamedArtists,
     playing,
-    collaborativePlaylists,
   });
   return { planned, missingSongs, perAlbum, collectionSongs, collaborations };
 }
@@ -490,7 +486,7 @@ export interface PressContext {
   readonly perAlbum?: readonly (readonly number[])[] | undefined;
   /** The Library songs of the collection the menu is about: what Fix Songs runs on. */
   readonly collectionSongs?: readonly SongRow[] | undefined;
-  /** The account's collaborative playlists here, by playlist id (none with the switch off). */
+  /** The account's collaborative playlists here, by playlist id. */
   readonly collaborations?: ReadonlyMap<number, CollaborativePlaylist> | undefined;
 }
 

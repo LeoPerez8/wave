@@ -14,9 +14,6 @@ export const inviteJoinEn = {
   fullMessage: "Wave can't take new accounts right now, so you can't join this playlist.",
   notValidTitle: "This invite is no longer valid",
   notValidMessage: "Ask whoever invited you for a new link.",
-  updateTitle: "Update Wave to join",
-  updateMessage:
-    "This version of Wave can't open invite links yet. Update it, then tap the link again.",
   couldntOpen: "Couldn't open the invite",
   couldntJoin: "Couldn't join the playlist",
   offlineMessage: "Connect to the internet, then tap the link again.",

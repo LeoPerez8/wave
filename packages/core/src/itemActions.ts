@@ -66,7 +66,7 @@ export interface ActionItem {
   readonly hasImage?: boolean | undefined;
   /**
    * A collaborative playlist (docs/spec.md, "Collaborative playlists"): the account signed in
-   * owns it, or is another member. Read only while [ActionSubject.collaborativePlaylists] is on.
+   * owns it, or is another member.
    */
   readonly collaboration?: "owner" | "member" | undefined;
   /** The Shazam playlist Recognize saves into: it can't be made collaborative. */
@@ -147,12 +147,6 @@ export interface ActionSubject<A extends LibraryArtistRef = LibraryArtistRef> {
    * artists they share with the other items; without it, they offer none.
    */
   readonly streamedArtists?: StreamedArtists<A> | undefined;
-  /**
-   * Collaborative playlists are on (Settings › Developer's switch until they ship): a
-   * playlist's menu offers Make Collaborative, or its collaboration's entries. Off, or left
-   * out, every playlist's menu is an ordinary one.
-   */
-  readonly collaborativePlaylists?: boolean | undefined;
 }
 
 export type ItemAction =
@@ -377,11 +371,8 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
   const streamed = items.filter((item) => item.streamed === true).length;
   const files = items.length - missing - streamed;
   const [only] = items;
-  // One playlist's collaboration, as its menu offers it: none while the switch is off.
-  const collaboration =
-    kind === "playlist" && items.length === 1 && subject.collaborativePlaylists === true
-      ? only?.collaboration
-      : undefined;
+  // One playlist's collaboration, as its menu offers it.
+  const collaboration = kind === "playlist" && items.length === 1 ? only?.collaboration : undefined;
   // A missing song's menu leads with its download, as a YT Music song's offers it.
   const download =
     surface === "menu" && kind === "track" && items.length === 1 && only?.missing === true
@@ -441,8 +432,7 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
       // Shared as a playlist on another service, from its menu alone (#483): Spotify always can.
       entries.push({ action: "share" });
       if (collaboration !== undefined) entries.push(...collaborationEntries(collaboration));
-      else if (subject.collaborativePlaylists === true && only?.shazam !== true)
-        entries.push({ action: "makeCollaborative" });
+      else if (only?.shazam !== true) entries.push({ action: "makeCollaborative" });
     }
   }
   // Looks up online what the songs lack and writes it into their files; it
@@ -464,13 +454,7 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     entries.push({ action: "fixSongs" });
   // Another member leaves where the owner deletes; the bar deletes only playlists the account owns.
   if (kind === "playlist" && collaboration === "member") entries.push({ action: "leavePlaylist" });
-  else if (
-    kind === "playlist" &&
-    !(
-      subject.collaborativePlaylists === true &&
-      items.some((item) => item.collaboration === "member")
-    )
-  )
+  else if (kind === "playlist" && !items.some((item) => item.collaboration === "member"))
     entries.push({ action: items.length === 1 ? "deletePlaylist" : "deletePlaylists" });
   // One song's menu shares it as a card (the song share sheet), whatever kind of song it is,
   // after Release Date, where the owner types the date the song first came out.

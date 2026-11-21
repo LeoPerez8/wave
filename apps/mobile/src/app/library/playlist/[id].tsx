@@ -60,7 +60,7 @@ function PlaylistHead({
   collaboration,
 }: {
   shown: Shown;
-  /** The playlist is collaborative (the switch on): its members under its name. */
+  /** The playlist is collaborative: its members under its name. */
   collaboration: CollaborativePlaylist | undefined;
 }) {
   const { language, strings } = useLocalisation();
@@ -221,7 +221,7 @@ export default function PlaylistScreen() {
   }, [playlistId, settled]);
   const shown: Shown | null | undefined =
     detail === undefined && known !== undefined ? { playlist: known, items: undefined } : detail;
-  // A collaborative playlist (the switch on): its members, who added each song, its own pull.
+  // A collaborative playlist: its members, who added each song, its own pull.
   const collaboration = useShownCollaborations().get(playlistId);
   useCollaborativePage(playlistId, collaboration);
   return (

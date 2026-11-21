@@ -269,7 +269,7 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
   own, as for any playlist. The sync cycle reads the account's collaborations on every pull. A
   member's desktop then pulls each playlist with its own cursor, in the same cycle, and pushes
   nothing of it (`pushCollaborative: false`), so it shows the playlist after a sync and follows
-  later changes. The desktop has no Developer switch for them.
+  later changes.
 
 ### Sign-in
 
