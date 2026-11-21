@@ -331,6 +331,7 @@ else {
       get catalogue() {
         return text;
       },
+      language: () => language,
       platform: process.platform,
       musicFolder,
       pickFolder,
@@ -421,6 +422,18 @@ else {
         languageChanged: (view) => {
           language = view.language;
           text = catalogueOf(language, "desktop");
+        },
+        // An edit in Settings › Appearance, or a pull: the window's frame follows at once.
+        themeChanged: (stored) => {
+          theme = readThemeChoice(stored);
+          if (window === undefined || window.isDestroyed()) return;
+          window.setBackgroundColor(colours().background);
+          if (process.platform === "win32")
+            window.setTitleBarOverlay({
+              color: colours().background,
+              symbolColor: colours().foreground,
+              height: 48,
+            });
         },
         focused: () => BrowserWindow.getFocusedWindow() !== null,
       }).pipe(

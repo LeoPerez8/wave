@@ -25,6 +25,10 @@ export const desktopShortcutsPtBr: typeof desktopShortcutsEn = {
     close: "Fechar um menu, a seleção ou um painel",
     shortcuts: "Listar os atalhos",
     quit: "Sair do Wave",
+    toggleRowSelection: "Adicionar ou remover uma linha da seleção",
+    selectRowRange: "Selecionar um intervalo de linhas",
+    extendRowSelection: "Estender a seleção de linhas",
+    selectAllRows: "Selecionar todas as linhas",
   },
   keys: {
     ctrl: "Ctrl",
@@ -49,5 +53,7 @@ export const desktopShortcutsPtBr: typeof desktopShortcutsEn = {
     f: "F",
     l: "L",
     q: "Q",
+    a: "A",
+    click: "Clique",
   },
 };

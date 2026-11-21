@@ -1,7 +1,13 @@
 /** Starts the audio process as an Electron utility process, apart from main and the window. */
 import { utilityProcess } from "electron";
 import type { PlaybackEvent } from "../../shared/playback.ts";
-import type { AudioRequest, AudioResponse, ResolveAnswer, ResolveEvent } from "./protocol.ts";
+import type {
+  AudioRequest,
+  AudioResponse,
+  OutputsEvent,
+  ResolveAnswer,
+  ResolveEvent,
+} from "./protocol.ts";
 import type { AudioEvents, AudioProcess } from "./supervisor.ts";
 
 /** The name `app.getAppMetrics()` gives the audio process. */
@@ -22,7 +28,7 @@ export const forkAudio =
       for (const request of queued ?? []) child.postMessage(request);
       queued = undefined;
     });
-    child.on("message", (response: AudioResponse | PlaybackEvent | ResolveEvent) =>
+    child.on("message", (response: AudioResponse | PlaybackEvent | ResolveEvent | OutputsEvent) =>
       events.message(response),
     );
     child.once("exit", () => {

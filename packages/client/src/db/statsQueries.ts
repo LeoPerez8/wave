@@ -1,7 +1,11 @@
 import {
   countedGenreSongIds,
-  genrePlayShares,
+  ARTIST_MOST_PLAYED,
+  artistStats,
   rankSongPlays,
+  type ArtistStats as ArtistStatsLines,
+  type Catalogue,
+  genrePlayShares,
   statsWindow,
   type MixedSong,
   type RecapSongGenre,
@@ -14,10 +18,12 @@ import * as Effect from "effect/Effect";
 import { songHasFile, type SongRow } from "../types.ts";
 import type { LibraryDatabase } from "./database.ts";
 import {
+  playedArtistSongs,
   playedEntityTotals,
   type PlayedAlbum,
   type PlayedArtist,
   type PlayedEntityTotals,
+  type PlayedArtistSongs,
 } from "./playedEntities.ts";
 import { songGenres, songPlayTotals } from "./stats.ts";
 import { streamedSongsOf } from "./streamedSongs.ts";
@@ -49,13 +55,56 @@ interface StatsReads<E> {
   ) => Effect.Effect<readonly RecapSongGenre[], E>;
 }
 
-export const statsDatabaseReads = (db: LibraryDatabase): StatsReads<never> => ({
+type ArtistStatsReads<E> = Pick<StatsReads<E>, "songsByIds" | "streamedSongsByIds"> & {
+  readonly playedArtistSongs: (
+    artistId: number,
+    now: number,
+  ) => Effect.Effect<PlayedArtistSongs, E>;
+};
+
+export const statsDatabaseReads = (
+  db: LibraryDatabase,
+): StatsReads<never> & ArtistStatsReads<never> => ({
+  playedArtistSongs: (artistId, now) => Effect.sync(() => playedArtistSongs(db, artistId, now)),
   songPlayTotals: (window) => Effect.sync(() => songPlayTotals(db, window)),
   songsByIds: (ids) => Effect.sync(() => selectPlayableSongs(db, ids).filter(songHasFile)),
   streamedSongsByIds: (ids) => Effect.sync(() => streamedSongsOf(db, ids)),
   playedEntityTotals: (window) => Effect.sync(() => playedEntityTotals(db, window)),
   songGenres: (ids, includeStreamed) => Effect.sync(() => songGenres(db, ids, includeStreamed)),
 });
+
+/** An artist's all-time listening totals with the same loaded song rows on both apps. */
+export type ArtistListeningStats =
+  | Extract<ArtistStatsLines, { readonly played: false }>
+  | (Omit<Extract<ArtistStatsLines, { readonly played: true }>, "mostPlayed"> & {
+      readonly mostPlayed: readonly Ranked<StatsSong>[];
+    });
+
+/** The artist page's stats block, assembled from the shared reads and ranking rules. */
+export const artistListeningStats = <E>(
+  store: ArtistStatsReads<E>,
+  artistId: number,
+  strings: Catalogue,
+  now = Date.now,
+): Effect.Effect<ArtistListeningStats, E> =>
+  Effect.gen(function* () {
+    const at = now();
+    const plays = yield* store.playedArtistSongs(artistId, at);
+    const stats = artistStats({ artistId, now: at, ...plays }, strings);
+    if (!stats.played) return stats;
+    const ranking = rankSongPlays(
+      [
+        ...stats.mostPlayed.map(({ id, ...totals }): SongPlayTotals => ({
+          ...totals,
+          song: { kind: "library", id },
+        })),
+        ...plays.streamedSongPlays,
+      ],
+      ARTIST_MOST_PLAYED,
+    );
+    const mostPlayed = yield* rankSongs(store, ranking);
+    return { ...stats, mostPlayed };
+  });
 
 /** Loads the rows of a song ranking, in order, skipping songs that have left the Library. */
 export const rankSongs = <E>(
