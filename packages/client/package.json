@@ -30,7 +30,8 @@
     "./geniusStorage": "./src/geniusStorage.ts",
     "./geniusLyricsSearch": "./src/geniusLyricsSearch.ts",
     "./geniusHitMenu": "./src/geniusHitMenu.ts",
-    "./resolveRecognition": "./src/resolveRecognition.ts"
+    "./resolveRecognition": "./src/resolveRecognition.ts",
+    "./lyricsTranslationSource": "./src/lyricsTranslationSource.ts"
   },
   "scripts": {
     "test": "node --test \"src/**/*.test.ts\"",

@@ -9,10 +9,13 @@ import { plural } from "../plural.ts";
  */
 export const desktopEn = {
   home: {
-    noSections: "Your Home sections are hidden. Arrange Home on your phone to add them back.",
+    noSections: "Your Home sections are hidden. Choose Edit Home to add them back.",
   },
   playbackText: {
     thisPhone: "This computer",
+  },
+  shows: {
+    phoneRegion: "This computer's region",
   },
   settings: {
     openingLyricsOnASongWithLyrics:

@@ -239,7 +239,7 @@ export function PlayerBar({
             labels.favorite,
             () => run(window.wave.playback.favorite()),
             song?.favorite,
-            song === null,
+            song === null || song.outside,
           )}
         </div>
         <div className="player-center">
@@ -309,6 +309,13 @@ export function PlayerBar({
             (event) => onMenu(event.currentTarget),
             undefined,
             song === null,
+          )}
+          {button(
+            "miniPlayer",
+            text.desktopWindow.miniPlayer,
+            () => run(window.wave.miniPlayer.open()),
+            undefined,
+            false,
           )}
           {button(
             view?.muted ? "mute" : "volume",

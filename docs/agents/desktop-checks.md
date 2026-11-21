@@ -189,6 +189,25 @@ and [Development Mode requirements](https://developer.spotify.com/documentation/
 folder for each test. It checks the profile, restart, Sign Out, Sign In Again, and the no-keyring
 notice. The owner can verify the system browser and consent screen with a registered Spotify app.
 
+## From Spotify
+
+Import Playlists on the Playlists page offers From Files and, while YT Music is on, From Spotify.
+Main reads the account with Spotify's Web API (`src/main/spotify/spotifyImport.ts`, Core's
+`readSpotifyWebLibrary` and `readSpotifyWebPlaylist`) and the window uses
+`wave.spotifyImport.library`, `run`, `cancel`, `artwork` and `missing`. `run` accepts only
+sources the last `library` listed. A playlist Spotify answers 403 or 404 for is skipped, which
+is what Development Mode does for playlists the account doesn't own.
+
+A playlist page hides songs the Library lacks until YT Music has them, so its hero counts them
+("2 not in your library") and lists them. Reading that list has main look them up on YT Music;
+each one found takes its place among the page's rows.
+
+`e2e/spotifyImport.spec.ts` fakes Spotify's browser and Web API. It checks the choice with YT
+Music off and on, the sign-in before the picker, the rows, Import, the Imported label, Try Again
+and Sign In Again. Its two absent songs are looked up on the live YT Music when the JVM is
+built; the check holds whether or not it answers. Import & Download's queueing is covered in
+`src/main/spotify/spotifyImport.test.ts`. A real account and a real download are owner checks.
+
 ## Share to Spotify
 
 A playlist's menu has Share to Spotify when the build names a Spotify client ID. Main matches the
@@ -216,6 +235,20 @@ to Playlist and Remove from Library. A target is `{scope, ids}` or `{scope, all:
 (at most 10,000 ids). Remove from Library adds a file exclusion, so later scans skip the file
 until Settings includes it again; the file stays on disk. The renderer's keys go through Core's
 `desktopKey`, with focus read by `keys.ts`.
+
+## Listening History
+
+`e2e/listeningHistory.spec.ts` seeds 3,000 counted plays, a streamed play with YT Music off, a
+play of a song removed since and one that never counted. It checks the day headers, the dimmed
+rows, that scrolling reads more pages while few rows are drawn, the search, Go to This Moment
+with its 3-second tint, Back to the results, a double click that plays, and the Settings entry.
+Screenshots are `listening-history-<platform>.png` and `listening-history-moment-<platform>.png`.
+
+`history.page(from, query)` returns 50 plays: the newest (`{ before: undefined }`), older than a
+cursor, newer than one (`{ after }`) or around a play (`{ around }`). `history.play(playId)`
+replays that play's song alone; main reads the play again and does nothing for a dimmed one.
+The rows come from `src/main/library/history.ts`, over Client's `db/listeningHistory`; the
+paging is Core's `listeningHistoryReads`, which the phone uses too.
 
 ## Downloads and Fix Songs
 
@@ -257,6 +290,30 @@ and by Move Up, and the failed section. Its screenshots are `downloads-<step>-<p
 JVM, and a live YouTube download with its tags read back and its Library entry visible. The live
 check stops after search on CI; inspect its annotations if YouTube refuses the machine.
 
+## Home's editor
+
+`e2e/homeEditor.spec.ts` edits Home from its Edit Home dialog with the keyboard alone (Move Up,
+Remove, Add, Discover's rows), drags a row, then edits again under Settings › Home. It checks
+Home's headings after each change and, once the app has closed, that a section this Wave doesn't
+draw kept its place in the stored arrangement. Screenshots are `home-editor-<platform>-light.png`,
+`-dark.png` and `-settings.png`.
+
+`home.arrangement()` gives Core's `HomeArrangement`; `home.edit(edit)` takes one
+`HomeArrangementEdit`, which main checks with `readHomeArrangementEdit`, applies to the synced
+`settings.homeArrangement` with `editStoredHomeArrangement` (`src/main/homeArrangement.ts`) and
+stamps for sync. `bridge.test.ts` syncs it with a phone both ways.
+
+## Lyrics translation
+
+`e2e/lyricsTranslation.spec.ts` turns Translate on in the Lyrics tab and Now Playing against a
+stand-in for Google Translate (it replaces `globalThis.fetch` in main, which the translation
+reads at call time). It checks the skeleton, each line's translation, the sung line, the
+"already in" line, a failed request with Try Again, that nothing is sent while Translate is off,
+and that a restart keeps the switch and shows the saved translation with Google out of reach.
+The real endpoint is an owner check. `wave.lyrics.translateOn`, `setTranslateOn` and
+`translation(trackId, language)` are the calls; main reads the lyrics itself
+(`src/main/lyrics/translation.ts`).
+
 ## Theme editor
 
 `e2e/themeEditor.spec.ts` edits the theme in Settings › Appearance: a background in each mode, a
@@ -292,6 +349,17 @@ plays and a Genius page that opens. A hit that plays from YT Music is tested in
 `src/main/lyrics/geniusLyricsSearch.test.ts` against a fake search; the live one is an owner
 check.
 
+## Opening files
+
+`e2e/openFiles.spec.ts` starts Wave with a file outside the Library as its argument, then launches
+it again with more files while it runs: they play in the running window as a new queue with
+Undo, a text file among them is ignored, and only the Library's song leaves a counted play. The
+screenshot is `open-files-<platform>.png`. `Playback.openFiles` is main's entry
+(`src/main/playback/playback.ts`); `src/main/system/openedFiles.ts` gathers the files of
+launches that come close together. What the installer registers and the AppImage declares is
+`scripts/file-types.ts`, tested in `src/fileTypes.test.ts` without building an installer; "Open
+with" after a real install is an owner check.
+
 ## The dev window
 
 To look at `pnpm dev` from an agent, start it in the background with a debugging port and a
@@ -321,6 +389,17 @@ start and Settings › Window. Two variables add the real system controls to it:
 
 The spec never turns on Start with the system, so it writes no login entry. `autostart.test.ts`
 covers what the switch registers.
+
+## Mini player
+
+`e2e/miniPlayer.spec.ts` opens the mini player from the player bar and from the tray menu's
+entry (read off the menu template Wave builds, since Playwright can't click a tray), checks that
+it is above other windows with the main window's web preferences and CSP, drives its buttons and
+Space, hides and brings back the main window, and checks the position after a restart and after
+a stored position that is on no screen. The screenshot is `mini-player-<platform>.png`. Find the
+windows by title: the main one is "Wave", the mini player is the catalogue's "Mini Player".
+`src/main/system/miniPlayer.test.ts` covers the window's placement against fake screens.
+Dragging it by hand and unplugging a monitor remain owner checks.
 
 ## Linux under WSLg
 

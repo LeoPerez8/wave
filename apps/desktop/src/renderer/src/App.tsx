@@ -21,6 +21,7 @@ import {
 import type { AccountView } from "../../shared/account.ts";
 import type { YtAccountPanel } from "../../shared/ytAccount.ts";
 import { SpotifyAccountSettings } from "./SpotifyAccountSettings.tsx";
+import { PlaylistMissingSongs } from "./SpotifyImport.tsx";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { CollectionTarget } from "../../shared/collectionActions.ts";
 import type { ScanStatus } from "../../shared/library.ts";
@@ -53,6 +54,14 @@ import {
   type SongSelectionControls,
 } from "./SongActions.tsx";
 import { collectionActions, CollectionSelectionBar } from "./CollectionActions.tsx";
+import {
+  MixedSelectionBar,
+  onlyCollection,
+  pickCheckboxes,
+  withCollection,
+  withPick,
+  type CollectionPicks,
+} from "./MixedSelection.tsx";
 import { itemMenuEvents, type MenuPoint } from "./Menu.tsx";
 import { usePlaylistEdits } from "./Playlists.tsx";
 import { Graveyard } from "./Graveyard.tsx";
@@ -60,10 +69,15 @@ import { applyLanguage, labels, text, useLanguage, tagTitle, artistName } from "
 import { LanguageSettings } from "./LanguageSettings.tsx";
 import { ThemeSettings } from "./ThemeSettings.tsx";
 import { LyricsAndTagsSettings } from "./LyricsAndTagsSettings.tsx";
+import { FollowButton } from "./FollowButton.tsx";
+import { FollowedArtistsSettings } from "./FollowedArtistsSettings.tsx";
 import { geniusAccess } from "./useSongGenius.ts";
 import { Home } from "./Home.tsx";
+import { HomeSettings } from "./HomeEditor.tsx";
 import { Stats } from "./Stats.tsx";
 import type { StatsRoute } from "../../shared/stats.ts";
+import { ListeningHistory } from "./ListeningHistory.tsx";
+import type { HistoryRoute } from "../../shared/history.ts";
 import { isYtRoute, YtPage, type YtRoute } from "./YtPages.tsx";
 import { AlbumArtistLink, ArtistPage, ArtistToggle, useArtistSection } from "./ArtistPage.tsx";
 import {
@@ -80,6 +94,7 @@ type Route =
   | { readonly kind: "downloads" }
   | { readonly kind: "graveyard"; readonly id: number }
   | StatsRoute
+  | HistoryRoute
   | YtRoute;
 const defaultStats: StatsRoute = { kind: "stats", period: "month" };
 const sections = ["playlists", "artists", "albums", "songs", "genres", "favorites"] as const;
@@ -98,9 +113,11 @@ const ytPages = [
 const settings = [
   "library",
   "appearance",
+  "home",
   "window",
   "playback",
   "lyricsAndTags",
+  "followedArtists",
   "downloads",
   "accounts",
   "versionHistory",
@@ -162,11 +179,31 @@ export function App() {
     readonly list: string;
     readonly selection: TableSelection;
   }>();
-  const [selectedItem, setSelectedItem] = useState<{
+  /** The albums, artists, genres and playlists checked on a page, alone or with its songs. */
+  const [picked, setPicked] = useState<{
     readonly route: Route;
-    readonly target: CollectionTarget;
+    readonly picks: CollectionPicks;
   }>();
-  const collectionSelection = selectedItem?.route === route ? selectedItem.target : undefined;
+  const picks = picked?.route === route ? picked.picks : undefined;
+  const setPicks = (change: (picks: CollectionPicks | undefined) => CollectionPicks | undefined) =>
+    setPicked((current) => {
+      const next = change(current?.route === route ? current.picks : undefined);
+      return next && { route, picks: next };
+    });
+  // Search lists songs beside collections: its checked songs act with them, under one bar.
+  const searched = route.kind === "search" ? (route.query ?? "").trim() : undefined;
+  const searchSongs =
+    selecting !== undefined &&
+    searched !== undefined &&
+    [`search-songs:${searched}`, `search-lyrics:${searched}`].includes(selecting.list)
+      ? { scope: { kind: "search", query: searched } as const, selection: selecting.selection }
+      : undefined;
+  const pickedSongs = picks && searchSongs;
+  const searchBoxes =
+    searched !== undefined && (pickCheckboxes(picks) || searchSongs?.selection.checkboxes === true);
+  /** One collection checked through its menu's Select keeps its own bar. */
+  const collectionSelection =
+    pickedSongs === undefined && pickCheckboxes(picks) ? onlyCollection(picks) : undefined;
   const playlistEdits = usePlaylistEdits({
     go: (next) => go(next),
     deleted: (id) => {
@@ -293,6 +330,7 @@ export function App() {
       route.kind === "downloads" ||
       route.kind === "graveyard" ||
       route.kind === "stats" ||
+      route.kind === "history" ||
       isYtRoute(route)
         ? { kind: "songs" }
         : route,
@@ -313,11 +351,21 @@ export function App() {
     changed: playback.refresh,
     newPlaylist: playlistEdits.newPlaylist,
   });
-  const selectionFor = (owner: string): SongSelectionControls => ({
-    selection: selecting?.list === owner ? selecting.selection : undefined,
-    onSelection: (selection) => setSelection(owner, selection),
-    actions,
-  });
+  const selectionFor = (owner: string): SongSelectionControls => {
+    const own = selecting?.list === owner ? selecting.selection : undefined;
+    return {
+      selection: !searchBoxes
+        ? own
+        : own === undefined
+          ? tableSelectionOf([], true)
+          : own.checkboxes
+            ? own
+            : { ...own, checkboxes: true },
+      onSelection: (selection) => setSelection(owner, selection),
+      actions,
+      ...(searched !== undefined && picks ? { bar: false as const } : {}),
+    };
+  };
   const table = selectionFor(list);
   // Says a download began, wherever it was asked for; a notice from before the window opened isn't news.
   const noticeSeen = useRef<number | null | undefined>(undefined);
@@ -340,8 +388,10 @@ export function App() {
       if (actions.closeMenu()) return;
       if (shortcuts) return setShortcuts(false);
       if (nowPlaying) return setNowPlaying(false);
-      if (selecting) return setSelecting(undefined);
-      if (collectionSelection) return setSelectedItem(undefined);
+      if (selecting || picks) {
+        setSelecting(undefined);
+        return setPicked(undefined);
+      }
       return false;
     },
   });
@@ -353,20 +403,24 @@ export function App() {
   });
   /** A YouTube Music page's or the Queue's song menu: a streamed song's, or a Library song's. */
   const ytSongMenu = (row: BrowseRow, event: MouseEvent<HTMLElement>) =>
-    row.videoId !== undefined
-      ? actions.openItems(
-          text.desktopLibrary.songMenu(row.title),
-          streamed.items(row.videoId),
-          event.currentTarget,
-        )
-      : actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, {
-          x: event.clientX,
-          y: event.clientY,
-        });
+    // A file outside the Library has none of a song's actions.
+    row.outside
+      ? undefined
+      : row.videoId !== undefined
+        ? actions.openItems(
+            text.desktopLibrary.songMenu(row.title),
+            streamed.items(row.videoId),
+            event.currentTarget,
+          )
+        : actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, {
+            x: event.clientX,
+            y: event.clientY,
+          });
   /** The song playing's menu, from the player bar. */
   const playingMenu = (element: HTMLElement) => {
     const song = playback.view?.current;
-    if (song === null || song === undefined) return;
+    // A file outside the Library has none of a song's actions.
+    if (song === null || song === undefined || song.outside) return;
     if (song.videoId !== undefined)
       return actions.openItems(
         text.desktopLibrary.songMenu(song.title),
@@ -387,7 +441,7 @@ export function App() {
     Math.floor((playback.view?.status.positionMs ?? 0) / 2000),
   );
   /** Now Playing's Add to Playlist and Download, for a streamed song or a Library one. */
-  const nowPlayingActions = playingSong && (
+  const nowPlayingActions = playingSong && !playingSong.outside && (
     <NowPlayingSongActions
       download={
         playingSong.videoId !== undefined
@@ -478,8 +532,8 @@ export function App() {
     play: (target, shuffle) => playList(shuffle, target),
     goToArtist: (id) => go({ kind: "artist", id }),
     select: (target) => {
-      setSelecting(undefined);
-      setSelectedItem({ route, target });
+      if (searched === undefined) setSelecting(undefined);
+      setPicks((current) => withCollection(current, target));
     },
     newPlaylist: playlistEdits.newPlaylist,
     playlistEdits: playlistEdits.playlistItems,
@@ -541,10 +595,12 @@ export function App() {
         ? route.ranking === undefined
           ? text.home.sections.stats
           : text.stats.rankings[route.ranking]
-        : ((hero && tagTitle(hero.title, route.kind)) ??
-          (route.kind in labels
-            ? (labels[route.kind as keyof typeof labels] as string)
-            : labels.library));
+        : route.kind === "history"
+          ? text.settings.pages.history
+          : ((hero && tagTitle(hero.title, route.kind)) ??
+            (route.kind in labels
+              ? (labels[route.kind as keyof typeof labels] as string)
+              : labels.library));
   const playlistId = route.kind === "playlist" ? route.id : undefined;
   const scanning = scan?.status === "scanning";
   // A playlist's image is an edit none of the three counts, and its page shows it.
@@ -658,6 +714,16 @@ export function App() {
           >
             <Icon name="stats" />
             <span>{text.home.sections.stats}</span>
+          </button>
+          <button
+            className="nav-item"
+            aria-label={text.settings.pages.history}
+            title={text.settings.pages.history}
+            aria-current={route.kind === "history" ? "page" : undefined}
+            onClick={() => go({ kind: "history" })}
+          >
+            <Icon name="history" />
+            <span>{text.settings.pages.history}</span>
           </button>
           {(ytMusic || (downloads?.rows ?? 0) > 0) && (
             <>
@@ -805,11 +871,24 @@ export function App() {
                   {labels.shuffle}
                 </button>
                 {route.kind === "artist" && <ArtistToggle section={artistSection} />}
+                {route.kind === "artist" && (
+                  <FollowButton
+                    artist={{ name: hero.title }}
+                    revision={account?.revision}
+                    onError={setError}
+                  />
+                )}
                 {missingList !== undefined && (
                   <ListDownloadButton
                     list={missingList}
                     revision={`${scan?.revision}:${account?.revision}:${downloads?.progress}:${downloads?.failed}`}
                     onError={failed}
+                  />
+                )}
+                {playlistId !== undefined && (
+                  <PlaylistMissingSongs
+                    playlistId={playlistId}
+                    revision={`${playback.view?.revision}:${playlistEdits.edits}`}
                   />
                 )}
                 {playlistId !== undefined && (
@@ -841,7 +920,12 @@ export function App() {
             )}
             {route.kind === "playlists" && (
               <div className="hero-actions">
-                <button onClick={playlistEdits.importPlaylists}>
+                <button
+                  onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    playlistEdits.importPlaylists({ x: rect.left, y: rect.bottom + 4 });
+                  }}
+                >
                   <Icon name="folder" size={16} />
                   {text.playlists.importPlaylists}
                 </button>
@@ -874,16 +958,31 @@ export function App() {
           </p>
         )}
         {account?.invitation && <SignInInvitation onError={failed} />}
-        {collectionSelection && (
+        {collectionSelection ? (
           <CollectionSelectionBar
             key={`${collectionSelection.kind}:${collectionSelection.id}`}
             target={collectionSelection}
             here={here}
             itemsFor={collections.itemsFor}
             openItems={actions.openItems}
-            done={() => setSelectedItem(undefined)}
+            done={() => setPicked(undefined)}
             failed={failed}
           />
+        ) : (
+          picks && (
+            <MixedSelectionBar
+              picks={picks}
+              songs={pickedSongs}
+              revision={revision}
+              actions={actions}
+              changed={playback.refresh}
+              failed={failed}
+              done={() => {
+                setPicked(undefined);
+                if (pickedSongs) setSelecting(undefined);
+              }}
+            />
+          )
         )}
         {route.kind === "settings" ? (
           <div className="settings-page">
@@ -894,9 +993,14 @@ export function App() {
                   aria-current={setting === key ? "page" : undefined}
                   onClick={() => setSetting(key)}
                 >
-                  {key === "appearance" ? text.settings.appearance : labels[key]}
+                  {key === "appearance"
+                    ? text.settings.appearance
+                    : key === "followedArtists"
+                      ? text.settings.followedArtists
+                      : labels[key]}
                 </button>
               ))}
+              <button onClick={() => go({ kind: "history" })}>{text.settings.pages.history}</button>
             </nav>
             <section className="settings-body">
               {setting === "library" ? (
@@ -975,8 +1079,24 @@ export function App() {
                 <WindowSettings onError={failed} />
               ) : setting === "versionHistory" ? (
                 <VersionHistory />
+              ) : setting === "home" ? (
+                <HomeSettings revision={revision} onError={failed} />
               ) : setting === "downloads" ? (
                 <DownloadSettings onError={failed} />
+              ) : setting === "followedArtists" ? (
+                <FollowedArtistsSettings
+                  revision={account?.revision}
+                  notify={notify}
+                  onError={(message) => setError(message ?? text.desktopLibrary.actionFailed)}
+                  online={ytMusic}
+                  onOpen={(artist) =>
+                    artist.artistId !== null
+                      ? go({ kind: "artist", id: artist.artistId })
+                      : artist.ytBrowseId !== null
+                        ? go({ kind: "ytArtist", id: artist.ytBrowseId })
+                        : ytLinks.onArtist(artist.name)
+                  }
+                />
               ) : setting === "lyricsAndTags" ? (
                 <LyricsAndTagsSettings
                   onError={failed}
@@ -999,6 +1119,7 @@ export function App() {
             revision={playback.view?.revision ?? 0}
             go={go}
             onSongMenu={ytSongMenu}
+            onError={setError}
           />
         ) : route.kind === "graveyard" ? (
           <Graveyard
@@ -1047,6 +1168,11 @@ export function App() {
               playback.run(window.wave.playback.start(scope, index));
             }}
             selectionFor={selectionFor}
+            collectionSelection={(kind) => ({
+              selection: picks?.[kind] ?? (searchBoxes ? tableSelectionOf([], true) : undefined),
+              onSelection: (selection) =>
+                setPicks((current) => withPick(current, kind, selection, searchBoxes)),
+            })}
             onCollectionMenu={openCollectionMenu}
             onUnavailable={() => setError(text.desktopLibrary.driveDisconnected)}
             onPick={(picked) => {
@@ -1089,7 +1215,7 @@ export function App() {
             onError={failed}
             notify={notify}
             onMenu={(row, at) => {
-              if (row.unavailable) return;
+              if (row.unavailable || row.outside) return;
               if (row.videoId === undefined) {
                 actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at);
               } else {
@@ -1099,6 +1225,26 @@ export function App() {
                   at,
                 );
               }
+            }}
+          />
+        ) : route.kind === "history" ? (
+          <ListeningHistory
+            route={route}
+            revision={revision}
+            ytMusic={ytMusic}
+            go={go}
+            run={playback.run}
+            onMenu={(row, at, extra) => {
+              if (row.id > 0)
+                actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at, extra);
+              else if (row.videoId !== undefined || extra.length > 0)
+                actions.openItems(
+                  text.desktopLibrary.songMenu(row.title),
+                  row.videoId === undefined
+                    ? extra
+                    : streamed.items(row.videoId).then((items) => [...items, ...extra]),
+                  at,
+                );
             }}
           />
         ) : (
@@ -1121,17 +1267,14 @@ export function App() {
                 onHero={setHero}
                 onOpen={open}
                 onError={failed}
-                selection={
-                  collectionSelection && collectionSelection.kind === collectionKind
-                    ? tableSelectionOf([collectionSelection.id], true)
-                    : table.selection
-                }
+                selection={collectionKind ? picks?.[collectionKind] : table.selection}
                 onSelection={
-                  collectionSelection && collectionSelection.kind === collectionKind
-                    ? () => setSelectedItem(undefined)
+                  collectionKind
+                    ? (selection) =>
+                        setPicks((current) => withPick(current, collectionKind, selection))
                     : table.onSelection
                 }
-                {...(collectionSelection
+                {...(picks
                   ? {}
                   : {
                       onMenu: (row: BrowseRow, at: MenuPoint) => {

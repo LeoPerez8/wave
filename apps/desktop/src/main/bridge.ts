@@ -24,10 +24,12 @@ import { readArtwork } from "./library/artwork.ts";
 import { appearance, preference, savePreference } from "./preferences.ts";
 import {
   SEARCH_ONLINE_SETTING,
+  isSpotifyLibrarySource,
   libraryTableSortsFor,
   readSearchOnline,
   readThemeEdit,
   writeSearchOnline,
+  type AppLanguage,
   ytTrackId,
 } from "@wave/core";
 import {
@@ -40,12 +42,17 @@ import { runSongAction, songMenu } from "./library/songActions.ts";
 import {
   collectionMenu,
   runCollectionAction,
+  runSelectionAction,
+  selectionMenu,
   validCollectionTarget,
+  validSelectionTarget,
 } from "./library/collectionActions.ts";
 import {
   COLLECTION_RUN_ACTIONS,
+  SELECTION_RUN_ACTIONS,
   type CollectionActionOptions,
   type CollectionRunAction,
+  type SelectionRunAction,
 } from "../shared/collectionActions.ts";
 import type { Appearance, DesktopVersionHistory } from "../shared/bridge.ts";
 import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
@@ -68,16 +75,26 @@ import { linkHandlers } from "./links/handlers.ts";
 import { artistPageHandlers } from "./artistPageHandlers.ts";
 import { YtAccount } from "./yt/ytAccountLayer.ts";
 import { SpotifyAccount } from "./spotify/spotifyAccountLayer.ts";
+import { SpotifyImport } from "./spotify/spotifyImportLayer.ts";
+import { SPOTIFY_IMPORT_MOST } from "../shared/spotifyImport.ts";
 import { DesktopPlaylists } from "./library/playlists.ts";
 import { playlistHandlers } from "./playlistHandlers.ts";
 import { searchLibrary } from "./library/search.ts";
 import { validWindowSettings } from "../shared/windowSettings.ts";
 import { readWindowSettings, changeWindowSettings } from "./system/windowSettings.ts";
 import { homeHandlers } from "./homeHandlers.ts";
+import {
+  miniPlayerHandlers,
+  noMiniPlayer,
+  type MiniPlayerCalls,
+} from "./system/miniPlayerHandlers.ts";
 import { statsHandlers } from "./statsHandlers.ts";
+import { historyHandlers } from "./historyHandlers.ts";
 import { lyricsAndTagsHandlers } from "./lyricsAndTagsHandlers.ts";
 import { HomeFollow } from "./follows/homeFollow.ts";
 import { homeFollowHandlers } from "./follows/homeFollowHandlers.ts";
+import { FollowedArtists } from "./follows/followedArtists.ts";
+import { followsHandlers } from "./follows/followsHandlers.ts";
 import { streamedHandlers } from "./yt/streamedHandlers.ts";
 import { runStreamedAction } from "./yt/streamedSong.ts";
 import {
@@ -171,8 +188,10 @@ export type BridgeServices =
   | DesktopPlaylists
   | DesktopLinks
   | HomeFollow
+  | FollowedArtists
   | YtAccount
-  | SpotifyAccount;
+  | SpotifyAccount
+  | SpotifyImport;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -314,6 +333,27 @@ const spotifyAccountCall =
         })
       : refuse(call, "expected no arguments");
 
+/** Runs a From Spotify call in the language main resolved: the window's own idea of it is never asked. */
+const spotifyImportCall = <A>(
+  run: (spotify: SpotifyImport["Service"], language: AppLanguage) => A | Promise<A>,
+) =>
+  Effect.gen(function* () {
+    const spotify = yield* SpotifyImport;
+    const { language } = (yield* Account).language();
+    return yield* Effect.tryPromise({
+      try: async () => run(spotify, language),
+      catch: () => new Error("Spotify import failed"),
+    });
+  });
+
+/** Picker rows' sources: Liked Songs or a playlist URI, each once. */
+const spotifySources = (value: unknown): value is string[] =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.length <= SPOTIFY_IMPORT_MOST &&
+  value.every((source) => typeof source === "string" && isSpotifyLibrarySource(source)) &&
+  new Set(value).size === value.length;
+
 /** What each call does; `args` come from the window and are checked here before use. */
 type Handlers = {
   readonly [C in BridgeCall]: (
@@ -326,6 +366,7 @@ const createHandlers = (
   setLogin: (on: boolean) => Promise<void>,
   mediaBackend: () => "native" | "chromium",
   versionHistory: (offset: number, reload: boolean) => Promise<DesktopVersionHistory>,
+  miniPlayer: MiniPlayerCalls,
 ): Handlers => {
   let loadedPath: string | undefined;
   const streamed = streamedHandlers();
@@ -448,6 +489,24 @@ const createHandlers = (
             return yield* Effect.tryPromise({ try: () => online.open(id), catch: (e) => e });
           })
         : refuse("lyrics.openOnlineHit", "invalid hit"),
+    "lyrics.translateOn": () => Effect.map(Lyrics, ({ translation }) => translation.on()),
+    "lyrics.setTranslateOn": ([on]) =>
+      typeof on === "boolean"
+        ? Effect.map(Lyrics, ({ translation }) => {
+            translation.setOn(on);
+            return translation.on();
+          })
+        : refuse("lyrics.setTranslateOn", "invalid switch"),
+    "lyrics.translation": ([trackId, language]) =>
+      lyricTrackId(trackId) && (language === "en" || language === "pt-BR")
+        ? Effect.gen(function* () {
+            const { translation } = yield* Lyrics;
+            return yield* Effect.tryPromise({
+              try: () => translation.song(trackId, language),
+              catch: (error) => error,
+            });
+          })
+        : refuse("lyrics.translation", "invalid request"),
     "settings.appearance": () =>
       Effect.gen(function* () {
         return appearance(yield* Database);
@@ -691,6 +750,52 @@ const createHandlers = (
             );
           })
         : refuse("collections.run", "invalid collection, action or playlist"),
+    "collections.selectionActions": ([target]) =>
+      validSelectionTarget(target, validTarget)
+        ? Effect.gen(function* () {
+            return selectionMenu(yield* Database, target, (yield* YtMusic).enabled());
+          })
+        : refuse("collections.selectionActions", "invalid selection"),
+    "collections.runSelection": ([target, action, playlistId]) =>
+      validSelectionTarget(target, validTarget) &&
+      SELECTION_RUN_ACTIONS.includes(action as SelectionRunAction) &&
+      (action === "addToPlaylist" ? songId(playlistId) : playlistId === undefined)
+        ? Effect.gen(function* () {
+            const db = yield* Database;
+            const playback = yield* Playback;
+            const downloads = yield* Downloads;
+            const yt = yield* YtMusic;
+            const library = yield* DesktopLibrary;
+            return yield* Effect.tryPromise(() =>
+              runSelectionAction(
+                {
+                  db,
+                  playback,
+                  downloads,
+                  yt,
+                  unavailable: library.unavailable,
+                  download: downloads.missing,
+                  downloadStreamed: (song) =>
+                    runStreamedAction(
+                      {
+                        db,
+                        ytMusic: yt.enabled,
+                        downloads,
+                        queue: async (type, id) =>
+                          playback.command({ type, trackIds: [ytTrackId(id)] }),
+                        changed: playback.refresh,
+                      },
+                      song,
+                      "download",
+                    ),
+                },
+                target,
+                action as SelectionRunAction,
+                playlistId as number | undefined,
+              ),
+            );
+          })
+        : refuse("collections.runSelection", "invalid selection, action or playlist"),
     "songs.actions": ([target, surface]) =>
       validTarget(target) && (surface === "menu" || surface === "selection")
         ? Effect.gen(function* () {
@@ -777,8 +882,11 @@ const createHandlers = (
     ...playlistHandlers(validTarget),
     ...homeHandlers,
     ...statsHandlers,
+    ...historyHandlers,
     ...lyricsAndTagsHandlers,
     ...homeFollowHandlers,
+    ...followsHandlers,
+    ...miniPlayerHandlers(miniPlayer),
     "search.library": ([query]) =>
       searchQuery(query)
         ? Effect.gen(function* () {
@@ -807,6 +915,32 @@ const createHandlers = (
     "spotifyAccount.signOut": spotifyAccountCall("spotifyAccount.signOut", (a) => a.signOut()),
     "spotifyAccount.check": spotifyAccountCall("spotifyAccount.check", (a) => a.check()),
     "spotifyAccount.photo": spotifyAccountCall("spotifyAccount.photo", (a) => a.photo()),
+    "spotifyImport.library": (args) =>
+      args.length === 1 && typeof args[0] === "boolean"
+        ? spotifyImportCall((spotify, language) => spotify.library(args[0] as boolean, language))
+        : refuse("spotifyImport.library", "invalid request"),
+    "spotifyImport.run": (args) => {
+      const [sources, download] = args;
+      return args.length === 2 && spotifySources(sources) && typeof download === "boolean"
+        ? spotifyImportCall((spotify, language) => spotify.run(sources, download, language))
+        : refuse("spotifyImport.run", "invalid playlists");
+    },
+    "spotifyImport.cancel": (args) =>
+      args.length === 0
+        ? spotifyImportCall((spotify) => spotify.cancel())
+        : refuse("spotifyImport.cancel", "expected no arguments"),
+    "spotifyImport.missing": (args) => {
+      const [playlistId] = args;
+      return args.length === 1 && songId(playlistId)
+        ? spotifyImportCall((spotify) => spotify.missing(playlistId as number))
+        : refuse("spotifyImport.missing", "invalid playlist");
+    },
+    "spotifyImport.artwork": (args) => {
+      const [source] = args;
+      return args.length === 1 && typeof source === "string" && isSpotifyLibrarySource(source)
+        ? spotifyImportCall((spotify) => spotify.artwork(source))
+        : refuse("spotifyImport.artwork", "invalid playlist");
+    },
     "spotifyShare.playlist": (args) =>
       args.length === 1 && songId(args[0])
         ? Effect.gen(function* () {
@@ -841,8 +975,9 @@ export const registerBridge = (
     currentListed: false,
     releases: { items: [], offset: 0, total: 0 },
   }),
+  miniPlayer: MiniPlayerCalls = noMiniPlayer,
 ): void => {
-  const handlers = createHandlers(onAppearance, setLogin, mediaBackend, versionHistory);
+  const handlers = createHandlers(onAppearance, setLogin, mediaBackend, versionHistory, miniPlayer);
   for (const call of BRIDGE_CALLS) {
     const handler: (args: readonly unknown[]) => Effect.Effect<unknown, unknown, BridgeServices> =
       handlers[call];

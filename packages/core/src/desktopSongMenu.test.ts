@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { desktopSongActions } from "./desktopSongMenu.ts";
+import { desktopSelectionActions, desktopSongActions } from "./desktopSongMenu.ts";
 import { catalogueOf } from "./localisation.ts";
 
 const song = { albumId: 7, artistIds: [3], favorite: false };
@@ -126,4 +126,73 @@ test("missing songs offer Download individually and together, including beside a
   assert.equal(actions({ items: [missing] })[0], "download");
   assert.ok(actions({ items: [missing, missing], surface: "selection" }).includes("download"));
   assert.ok(actions({ items: [missing, song], surface: "selection" }).includes("download"));
+});
+
+const selection = (subject: Parameters<typeof desktopSelectionActions>[0]) =>
+  desktopSelectionActions(subject).map((entry) => entry.action);
+
+test("a song and an album checked together offer what both kinds share", () => {
+  assert.deepEqual(
+    selection({
+      items: [
+        { kind: "track", ...song, fixable: true },
+        { kind: "album", artistIds: [3], songs: [{ fixable: true }] },
+      ],
+      onlineLookups: true,
+    }),
+    ["playNext", "addToQueue", "addToPlaylist"],
+  );
+});
+
+test("checked collections of one kind offer Fix Songs, and none of a single item's entries", () => {
+  assert.deepEqual(
+    selection({
+      items: [
+        { kind: "playlist", songs: [{ fixable: true }] },
+        { kind: "playlist", songs: [] },
+      ],
+      onlineLookups: true,
+    }),
+    ["playNext", "addToQueue", "addToPlaylist", "fixSongs"],
+  );
+});
+
+test("Download shows when a checked item holds a song without a file", () => {
+  const album = { kind: "album" as const, songs: [{ missing: true }, {}] };
+  assert.deepEqual(selection({ items: [album, { kind: "artist", songs: [{}] }] }), [
+    "playNext",
+    "addToQueue",
+    "addToPlaylist",
+    "download",
+  ]);
+  const streamed = { kind: "playlist" as const, songs: [{ streamed: true }] };
+  assert.ok(selection({ items: [streamed, { kind: "track", ...song }] }).includes("download"));
+  assert.ok(
+    !selection({
+      items: [
+        { kind: "playlist", songs: [{ streamed: true, downloaded: true }] },
+        { kind: "genre", songs: [{}] },
+      ],
+    }).includes("download"),
+  );
+  assert.ok(
+    selection({
+      items: [
+        { kind: "track", missing: true },
+        { kind: "genre", songs: [{}] },
+      ],
+    }).includes("download"),
+  );
+});
+
+test("checked songs alone keep the song selection's entries", () => {
+  assert.deepEqual(
+    selection({
+      items: [
+        { kind: "track", ...song },
+        { kind: "track", ...song },
+      ],
+    }),
+    actions({ items: [song, song], surface: "selection" }),
+  );
 });

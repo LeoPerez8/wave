@@ -88,6 +88,9 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.lyrics.cancelGenius",
       "wave.lyrics.searchOnline",
       "wave.lyrics.openOnlineHit",
+      "wave.lyrics.translateOn",
+      "wave.lyrics.setTranslateOn",
+      "wave.lyrics.translation",
       "wave.library.artwork",
       "wave.library.cover",
       "wave.library.browse",
@@ -165,6 +168,10 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.account.signOutEverywhere",
       "wave.account.deleteAccount",
       "wave.account.answerInvitation",
+      "wave.collections.actions",
+      "wave.collections.run",
+      "wave.collections.selectionActions",
+      "wave.collections.runSelection",
       "wave.playlists.checkName",
       "wave.playlists.newName",
       "wave.playlists.create",
@@ -199,6 +206,15 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.home.followCheck",
       "wave.home.openRelease",
       "wave.home.releaseArtwork",
+      "wave.home.arrangement",
+      "wave.home.edit",
+      "wave.follows.state",
+      "wave.follows.set",
+      "wave.follows.restore",
+      "wave.follows.view",
+      "wave.follows.setEnabled",
+      "wave.follows.setCountry",
+      "wave.follows.search",
       "wave.links.open",
       "wave.links.importPlaylist",
       "wave.links.copySong",
@@ -222,10 +238,20 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.spotifyAccount.signOut",
       "wave.spotifyAccount.check",
       "wave.spotifyAccount.photo",
+      "wave.spotifyImport.library",
+      "wave.spotifyImport.run",
+      "wave.spotifyImport.cancel",
+      "wave.spotifyImport.artwork",
+      "wave.spotifyImport.missing",
+      "wave.miniPlayer.open",
+      "wave.miniPlayer.close",
+      "wave.miniPlayer.showMain",
       "wave.stats.overview",
       "wave.stats.ranking",
       "wave.stats.play",
       "wave.stats.open",
+      "wave.history.page",
+      "wave.history.play",
     ],
   });
 });
@@ -254,7 +280,28 @@ test("Settings › Playback keeps a change to Crossfade, Normalize Volume and Bu
     .poll(() =>
       page.evaluate(() => (window as unknown as { wave: WaveBridge }).wave.settings.playback()),
     )
-    .toEqual({ crossfadeSeconds: 6.5, normalizeVolume: false, bufferMinutes: 10 });
+    .toMatchObject({ crossfadeSeconds: 6.5, normalizeVolume: false, bufferMinutes: 10 });
+});
+
+test("Settings › Playback has Don't Play Explicit and Continue with Magic Queue, each with its line, and keeps them", async () => {
+  const text = catalogueOf("en", "desktop");
+  await page.getByRole("button", { name: text.desktopLayout.settings, exact: true }).click();
+  await page.getByRole("button", { name: text.desktopLayout.playback, exact: true }).click();
+  const explicit = page.getByRole("switch", { name: text.settings.dontPlayExplicit });
+  const continues = page.getByRole("switch", { name: text.settings.continueWithMagicQueue });
+  await expect(explicit).not.toBeChecked();
+  await expect(continues).toBeChecked();
+  await expect(page.getByText(text.settings.skipsSongsMarkedExplicitByYouTubeMusic)).toBeVisible();
+  await expect(page.getByText(text.settings.whenAQueueRunsOutWaveContinues)).toBeVisible();
+  await explicit.check();
+  await continues.uncheck();
+  const stored = () =>
+    page.evaluate(() => (window as unknown as { wave: WaveBridge }).wave.settings.playback());
+  await expect.poll(stored).toMatchObject({ dontPlayExplicit: true, continueQueue: false });
+  // Back as they were, for the tests that follow.
+  await explicit.uncheck();
+  await continues.check();
+  await expect.poll(stored).toMatchObject({ dontPlayExplicit: false, continueQueue: true });
 });
 
 test("the CSP stops the page evaluating strings as code", async () => {

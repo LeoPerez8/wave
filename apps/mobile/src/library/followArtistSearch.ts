@@ -1,11 +1,10 @@
 import {
   artistFindText,
   createFindableList,
-  deezerArtistSearchUrl,
-  deezerFollowArtists,
   mergeFollowArtistSearch,
   type DeezerFollowArtist,
 } from "@wave/core";
+import { askFollowArtists } from "@wave/client/follows/followArtistSearch";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { useScreenSight } from "@/lib/screenSight";
@@ -37,17 +36,9 @@ export const useFollowArtistSearch = (query: string, enabled: boolean) => {
     const debounce = setTimeout(() => {
       if (!followedArtistsEnabled()) return;
       void (async () => {
-        try {
-          const response = await fetch(deezerArtistSearchUrl(text), { signal: controller.signal });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const found = deezerFollowArtists(await response.json());
-          if (found === null) throw new Error("Not an artist search result");
-          if (current) setAnswer({ query: text, artists: found, failed: false });
-        } catch {
-          if (current) setAnswer({ query: text, artists: [], failed: true });
-        } finally {
-          clearTimeout(timeout);
-        }
+        const found = await askFollowArtists(fetch, text, controller.signal);
+        clearTimeout(timeout);
+        if (current) setAnswer({ query: text, artists: found ?? [], failed: found === null });
       })();
     }, 350);
     return () => {

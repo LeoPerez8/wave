@@ -1,8 +1,23 @@
-import {
-  startingAt,
-  type ListeningHistoryCursor,
-  type ListeningHistoryPage,
-} from "@wave/client/db/listeningHistory";
+/** Where a page of history goes on: a play's start and id, which orders plays with tied times. */
+export interface ListeningHistoryCursor {
+  readonly startedAt: number;
+  readonly id: number;
+}
+
+/** A page of history as a screen holds it, newest first. */
+export interface ListeningHistoryPageOf<Row> {
+  readonly rows: readonly Row[];
+  /** Where older plays go on, or null at the first play. */
+  readonly next: ListeningHistoryCursor | null;
+  /** Where newer plays go on, for a page opened at a moment; null when it reaches the newest play. */
+  readonly newer: ListeningHistoryCursor | null;
+}
+
+/** The cursor a read older than starts at [play] itself: ids are integers, so none sits between. */
+export const startingAt = (play: ListeningHistoryCursor): ListeningHistoryCursor => ({
+  startedAt: play.startedAt,
+  id: play.id + 1,
+});
 
 /**
  * The next page (`more`), the one above a moment's (`newer`), the newest one
@@ -33,7 +48,7 @@ export interface ListeningHistoryReads {
  * it; until `newer` pages reach the newest play, a head read has nothing to
  * join and a refresh reads from the top row shown.
  */
-export const listeningHistoryReads = ({
+export const listeningHistoryReads = <Row extends ListeningHistoryCursor>({
   initial,
   around,
   readPage,
@@ -41,10 +56,10 @@ export const listeningHistoryReads = ({
   onLoading,
   onError,
 }: {
-  readonly initial: ListeningHistoryPage;
+  readonly initial: ListeningHistoryPageOf<Row>;
   readonly around?: number | undefined;
-  readonly readPage: (from: ListeningHistoryFrom) => Promise<ListeningHistoryPage>;
-  readonly onPage: (page: ListeningHistoryPage) => void;
+  readonly readPage: (from: ListeningHistoryFrom) => Promise<ListeningHistoryPageOf<Row>>;
+  readonly onPage: (page: ListeningHistoryPageOf<Row>) => void;
   readonly onLoading: (loading: boolean) => void;
   readonly onError: (error: boolean) => void;
 }): ListeningHistoryReads => {
