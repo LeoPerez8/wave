@@ -46,7 +46,7 @@ import type { AlbumRow, ArtistRow, SongRow } from "@wave/client";
 import { openAlbum, openArtist } from "@/library/routes";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import { openAlbumActions, openArtistActions } from "@/playback/ActionsMenu";
+import { openAlbumActions } from "@/playback/ActionsMenu";
 import { playPage } from "@/playback/actions";
 import {
   artistSelectionItems,
@@ -66,7 +66,6 @@ import { occurrenceKeys } from "@/songs/songRowState";
 import { ytArtistNote, YtReleaseTile } from "@/ytmusic/YtArtistSection";
 import { useLocalisation } from "@/localisation/localisation";
 import { openYtArtist, YT_ARTIST_BY_NAME } from "@/ytmusic/routes";
-import { openYtArtistActions } from "@/ytmusic/YtArtistActions";
 
 type Song = DiscoverSong<NativeYtSong, SongRow>;
 type Release = YtArtistRelease<AlbumRow>;
@@ -198,7 +197,6 @@ function SimilarRow({
               }}
               size={COVER_ROW_TILE}
               onPress={selecting ? ignore : () => openYtArtist(artist.browseId, artist.name)}
-              onLongPress={selecting ? ignore : () => openYtArtistActions(artist)}
             />
           ) : (
             <ArtistCard
@@ -207,7 +205,6 @@ function SimilarRow({
               artist={library}
               size={COVER_ROW_TILE}
               onPress={selecting ? ignore : () => openArtist(library.id, library)}
-              onLongPress={selecting ? ignore : () => openArtistActions(library)}
             />
           ),
         )}

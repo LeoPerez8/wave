@@ -357,6 +357,15 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "library/hooks.ts#useArtists",
     ],
   },
+  "ytmusic/artistPage.ts#useSimilarArtists": {
+    howOften: FOLLOWED_FINDER,
+    reason:
+      "Only a settled YT artist page that lists similar artists reads the Library's artists, to tell which Fans might also like tiles open a Library page. It runs offline too, where the shelf of a page seen before still shows. No request is made. See ytArtistPageOpening.test.ts and similarArtistLinks.test.ts.",
+    capabilities: [
+      "../../../packages/core/src/ytArtist.ts#libraryArtistFinder",
+      "library/hooks.ts#useArtists",
+    ],
+  },
   "ytmusic/artistPage.ts#useYtArtistPage": {
     howOften: FOLLOWED_FINDER,
     reason:

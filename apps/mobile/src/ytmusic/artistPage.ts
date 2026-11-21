@@ -98,14 +98,17 @@ const NO_SIMILAR: readonly YtArtistCandidate[] = [];
 /**
  * Fans might also like: [listed] (the page's similar artists), each with the
  * Library artist of that name, whose page a tap opens (Core's
- * `similarArtistLinks`). The Library's artists are read only for a page that
- * lists some.
+ * `similarArtistLinks`). The Library's artists are read only once the screen
+ * has settled ([settled]) and only for a page that lists some; until then the
+ * shelf waits.
  */
 const useSimilarArtists = (
   listed: readonly YtArtistCandidate[],
+  settled: boolean,
 ): readonly SimilarArtistLink<ArtistRow>[] => {
-  const artists = useArtists(listed.length > 0);
-  return useMemo(() => similarArtistLinks(listed, libraryArtistFinder(artists)), [listed, artists]);
+  const shown = settled ? listed : NO_SIMILAR;
+  const artists = useArtists(shown.length > 0);
+  return useMemo(() => similarArtistLinks(shown, libraryArtistFinder(artists)), [shown, artists]);
 };
 
 export interface YtArtistPageShown {
@@ -188,7 +191,7 @@ export const useYtArtistPage = (
       return { ...work.view, songs: [], shelves: [], similar: [], note: "loading" as const };
     return ytArtistPageView(state, { enabled, now: openedAt, librarySong: find, libraryAlbum });
   }, [work.finder, work.view, find, state, enabled, openedAt, libraryAlbum]);
-  const similar = useSimilarArtists(view?.similar ?? NO_SIMILAR);
+  const similar = useSimilarArtists(view?.similar ?? NO_SIMILAR, settled);
   return {
     browseId: saved?.outcome === "found" ? saved.browseId : browseId,
     name: view?.name ?? knownName,
