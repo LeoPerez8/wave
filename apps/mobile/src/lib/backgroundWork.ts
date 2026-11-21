@@ -8,12 +8,13 @@
  * started, never holding the JavaScript thread for a tap.
  */
 import { runReplayPassesWith } from "@wave/client/db/offThreadReads";
-import { createBackgroundWork, createJsBlockLog } from "@wave/core";
+import { BACKGROUND_WORK_LIMITS, createBackgroundWork, createJsBlockLog } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { AppState, type GestureResponderEvent } from "react-native";
 
 import { appLog } from "@/log/appLog";
 import { isScreenSettled, onScreenSettled, onTimingTransition, timingRoute } from "./timing";
+import { createFingerDown } from "./fingerDown";
 import { createStartupWork } from "./startupWork";
 import { BackgroundWorkName, shareSlicesWith } from "./stepped";
 
@@ -78,6 +79,15 @@ const work = createBackgroundWork({
   sliceRan: blocks.sliceRan,
 });
 
+/** Whether a finger is on Wave now, from the same root touches (Home's snapshot holds its swap). */
+export const fingerDown = createFingerDown({
+  takeoverMs: BACKGROUND_WORK_LIMITS.takeoverMs,
+  schedule: (ms, run) => {
+    const timer = setTimeout(run, ms);
+    return () => clearTimeout(timer);
+  },
+});
+
 // Every stepped slice in the app runs here, within the scheduler's 8 ms.
 shareSlicesWith(work.runSlice);
 
@@ -121,7 +131,10 @@ const named = (name: string, run: () => void) => (): void => {
 // background, no finger is on Wave, whatever touch end went unheard.
 AppState.addEventListener("change", (state) => {
   if (state === "active") work.resumed();
-  else work.touchEnded();
+  else {
+    work.touchEnded();
+    fingerDown.ended();
+  }
 });
 
 // Headless starts (Android Auto with no activity) report "background" too.
@@ -214,10 +227,15 @@ export const backgroundTransition = {
 };
 
 /** The root view's touches, which background work waits out. */
-export const touchStarted = (): void => work.touchStarted();
+export const touchStarted = (): void => {
+  work.touchStarted();
+  fingerDown.started();
+};
 export const touchEnded = (event: GestureResponderEvent): void => {
   // Another finger still down keeps the touch going.
-  if (event.nativeEvent.touches.length === 0) work.touchEnded();
+  if (event.nativeEvent.touches.length !== 0) return;
+  work.touchEnded();
+  fingerDown.ended();
 };
 
 /**
@@ -225,7 +243,10 @@ export const touchEnded = (event: GestureResponderEvent): void => {
  * handler takes it over, with the finger still down, and the lift then goes
  * unheard: background work goes on waiting, for Core's `takeoverMs` at most.
  */
-export const touchTakenOver = (): void => work.touchTakenOver();
+export const touchTakenOver = (): void => {
+  work.touchTakenOver();
+  fingerDown.takenOver();
+};
 
 // A perf build's runs record when startup work went and how long slices waited.
 registerPerfMeta("startup", () => {

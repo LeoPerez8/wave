@@ -57,16 +57,19 @@ Stored under the key-value key `home.snapshot` (expo-sqlite kv-store, the same s
 persisted settings). It's JSON:
 
 ```json
-{ "version": 1, "savedAt": 1763700000000, "page": 1,
+{ "version": 2, "savedAt": 1763700000000, "page": 1,
   "sections": { "content": {…}, "mostPlayed": {…}, "orbit": […], "fromYourLibrary": […],
-                "stats": […], "magicQueue": [[…], […], […]] } }
+                "stats": {…}, "magicQueue": [[…], […], […]] } }
 ```
 
 - `content`: Recently added, Recently played, Most played and Favorites (Home's `HomeContent`).
 - `mostPlayed`: Most played albums and artists (Stats' all-time top).
 - `orbit`: In your orbit's nine songs.
 - `fromYourLibrary`: the playlists' rows.
-- `stats`: the Stats facts as drawn (label and value).
+- `stats`: the Stats totals as numbers (`library`: songs, albums, artists; `listening`: minutes,
+  plays, songs listened, last play). Home draws the facts from them in the language of the moment,
+  so a language changed since the save still reads right. Version 1 kept the translated facts;
+  a version 1 snapshot reads as none, once, after the update.
 - `magicQueue`: the carousel's pages; `page` is the page in sight.
 
 **Fallback.** `parseHomeSnapshot` returns none for nothing stored, text that isn't JSON, a
@@ -102,6 +105,21 @@ left out, missing, corrupt and old-format snapshots, page checks, the size bound
 React Compiler builds it: a cold start draws the snapshot's pages before the pool's read
 answers), `home/homeOpening.test.ts`, and the perf guards.
 
+## Held while a finger is down (#1346 follow-up)
+
+A section drawing its snapshot swapped to the read the moment the read answered, even with a
+finger on the screen, so a row could change under a tap or a scroll. `useSnapshotted` now keeps
+drawing the snapshot while a finger is down and shows the read when it lifts. The finger comes
+from the root view's touches that background work already tracks (`lib/fingerDown.ts`, set in
+`lib/backgroundWork.ts`). A touch a native scroll takes over may lift unheard, so it counts as down
+for Core's `takeoverMs` (3 s) or until the next touch lifts. A section with no snapshot to draw
+shows its read at once.
+
+Tests (desktop): `home/homeSnapshot.test.ts`, as written and as the React Compiler builds it (held
+under a finger, read shown on lift and saved, no hold without a snapshot, Stats kept as totals),
+`lib/fingerDown.test.ts`, and Core's `homeSnapshot.test.ts` (version 2, a version 1 snapshot
+reads as none).
+
 ## Phone run: pending
 
 On the reference phone, with the `ti` release that carries this change:
@@ -115,6 +133,11 @@ On the reference phone, with the `ti` release that carries this change:
 5. Run the runner's cold start and Home scenarios on the release before this change and on the
    one with it: `node scripts/perf/perf.ts run --scenario startup,reference-taps,scroll-home`.
    Record both runs here, along with the app log's "Speed since" summary.
+
+6. Cold start again and put a finger on Home before its reads answer (within a second), hold it
+   for two seconds, then lift: nothing in sight changes while the finger is down, and the rows
+   settle when it lifts. Change the app language, send Wave to the background, force-stop and
+   start cold: Stats' facts read in the new language from the first frame.
 
 Pass when no freeze line follows the cold start, the first tap after it is within budget, Home's
 first frame line shows content, and PSS stays under 500 MB.

@@ -474,15 +474,23 @@ export const useStatsFacts = (): StatsFacts | undefined => {
   const { language } = useLocalisation();
   const counts = useLibraryCounts();
   const sums = useLibraryQuery<ListeningSums | undefined>(readListeningSums, undefined);
-  const facts = useMemo(
+  const read = useMemo(
     () =>
       counts === undefined || sums === undefined
         ? undefined
-        : statsFacts(counts, summedListeningTotals(sums), language),
-    [counts, sums, language],
+        : {
+            library: { songs: counts.songs, albums: counts.albums, artists: counts.artists },
+            listening: summedListeningTotals(sums),
+          },
+    [counts, sums],
   );
-  // At a cold start, Home's snapshot's facts until both reads answer (#1353).
-  return useSnapshotted("stats", facts);
+  // At a cold start, Home's snapshot's totals until both reads answer (#1353), drawn in the
+  // language of the moment: a language changed since the save still reads right.
+  const totals = useSnapshotted("stats", read);
+  return useMemo(
+    () => totals && statsFacts(totals.library, totals.listening, language),
+    [totals, language],
+  );
 };
 
 export const usePlaylistGraveyard = (id: number) => {
