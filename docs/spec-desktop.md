@@ -270,6 +270,18 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
   the desktop's database and don't sync in v1.
 - The desktop pulls on opening, on focus after five minutes away, and every 15 minutes while
   running. It trusts the system clock as the phone does, and conflicts follow Core's rules.
+- Collaborative playlists (`docs/spec.md`, Collaborative playlists): the desktop shows and plays
+  them and never edits them, for the owner and for the other members. In the sidebar one has a
+  people glyph, and its row and page say "Collaborative" before the song count. Its menu has a
+  line saying it is edited in Wave on the phone, its image entries and sharing. Rename, the
+  Graveyard, Delete, Move Up and Move Down are left out. Add to Playlist doesn't list it, and a
+  playlist's page doesn't offer Remove from Playlist. An M3U or link import with its name makes
+  a playlist of its own. Main refuses every change to its name, entries or order, whatever the
+  window asks (`src/main/library/collaborativePlaylists.ts`). Its image stays this computer's
+  own, as for any playlist. The sync cycle reads the account's collaborations on every pull. A
+  member's desktop then pulls each playlist with its own cursor, in the same cycle, and pushes
+  nothing of it (`pushCollaborative: false`), so it shows the playlist after a sync and follows
+  later changes.
 
 ### Sign-in
 

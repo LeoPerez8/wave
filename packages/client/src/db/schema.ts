@@ -494,6 +494,15 @@ export const playlistItems = sqliteTable(
     removedAt: integer("removed_at"),
     /** When Restore or Undo last brought the entry back (Core's `SyncEntryRow`). */
     restoredAt: integer("restored_at"),
+    /** The account that added the entry, as the service records it (an entry's `addedBy`). */
+    addedBy: text("added_by"),
+    /**
+     * A collaborative playlist's Library entry as the account holds it (JSON: its recording
+     * key `songId` and Core's `LibraryEntryFields`), kept so the entry goes up as it came
+     * whether this device plays it from a Track, a stream or an unsearched song. Null for
+     * every other entry.
+     */
+    libraryEntry: text("library_entry"),
     orderKey: text("order_key").notNull(),
     addedAt: integer("added_at").notNull(),
     ...changeStamp(),
@@ -645,6 +654,38 @@ export const syncRemovals = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.kind, t.id] })],
 );
+
+/**
+ * The collaborative playlists of the account signed in (docs/spec.md, "Collaborative
+ * playlists"), as its account pull last stated them: by the playlist's sync id, whether the
+ * account owns it, its members, and for a member's playlist its own pull's cursor. A member's
+ * playlist syncs through the collaboration routes and never with the account's own push.
+ * Emptied when the device signs out.
+ */
+export const collaborations = sqliteTable("collaborations", {
+  playlistSyncId: text("playlist_sync_id").primaryKey(),
+  owned: integer("owned", { mode: "boolean" }).notNull(),
+  ownerAccountId: text("owner_account_id"),
+  /** The members (JSON, Core's `CollaborationMember`s), the owner first. */
+  members: text("members").notNull(),
+  /** The cursor of the playlist's own pull (a member's); null to pull it from the start. */
+  cursor: text("cursor"),
+  /** A pull brought a change this device didn't make, and the playlist wasn't opened since. */
+  unseen: integer("unseen", { mode: "boolean" }).notNull().default(false),
+  /** The invite link this device created (only its creator ever holds the address). */
+  inviteUrl: text("invite_url"),
+  inviteExpiresAt: integer("invite_expires_at"),
+});
+
+/**
+ * Playlists that became the member's private copy when their membership ended, until the
+ * page has said so once. This device only.
+ */
+export const privateCopyNotices = sqliteTable("private_copy_notices", {
+  playlistId: integer("playlist_id")
+    .primaryKey()
+    .references(() => playlists.id, { onDelete: "cascade" }),
+});
 
 /** Where syncing with the Wave account stands. A single row, id 1. */
 export const syncState = sqliteTable("sync_state", {

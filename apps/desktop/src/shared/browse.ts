@@ -63,6 +63,8 @@ export interface BrowseRow {
   readonly artworkUrl?: string | null;
   /** A playlist's own image, fetched through `playlists.image`; changes when the image does. */
   readonly imageKey?: string | null;
+  /** A playlist several Wave accounts edit: the desktop shows and plays it, and edits none of it. */
+  readonly collaborative?: boolean;
   /**
    * A file opened with Wave that the Library doesn't hold: its `id` is 0, its `path` the file,
    * and nothing of the Library's (a star, a playlist, counted plays) applies to it.

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { catalogueOf, plural, resolveAppLanguage } from "./index.ts";
+import { acceptedLanguages, catalogueOf, plural, resolveAppLanguage } from "./index.ts";
 
 describe("resolveAppLanguage", () => {
   for (const tag of ["pt-BR", "pt-PT", "pt"]) {
@@ -175,5 +175,42 @@ describe("Portuguese counts at zero", () => {
   test("an import cut to nothing doesn't say the first song came", () => {
     assert.equal(imports.onlyFirst(0, "Spotify"), "Nenhuma música veio do Spotify");
     assert.equal(imports.onlyFirst(1, "Spotify"), "Só a primeira música veio do Spotify");
+  });
+});
+
+describe("acceptedLanguages", () => {
+  test("lists a browser's Accept-Language tags, most wanted first", () => {
+    assert.deepEqual(acceptedLanguages("pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"), [
+      "pt-BR",
+      "pt",
+      "en-US",
+      "en",
+    ]);
+    assert.deepEqual(acceptedLanguages("en;q=0.5, pt-BR"), ["pt-BR", "en"]);
+  });
+
+  test("a tag with q=0, the wildcard and junk are left out", () => {
+    assert.deepEqual(acceptedLanguages("pt;q=0, *, en;q=abc, fr"), ["fr"]);
+  });
+
+  test("no header lists nothing, which reads in English", () => {
+    assert.deepEqual(acceptedLanguages(null), []);
+    assert.equal(resolveAppLanguage(acceptedLanguages("")), "en");
+  });
+
+  test("picks the invite page's language", () => {
+    assert.equal(resolveAppLanguage(acceptedLanguages("fr-FR,pt-BR;q=0.8")), "pt-BR");
+  });
+});
+
+describe("the invite page", () => {
+  test("says only that it's a Wave invite, in both languages", () => {
+    for (const language of ["en", "pt-BR"] as const) {
+      const page = catalogueOf(language).invitePage;
+      for (const text of [page.title, page.heading, page.body]) {
+        assert.ok(text.includes("Wave"), `${language}: ${text}`);
+      }
+    }
+    assert.notEqual(catalogueOf("en").invitePage.body, catalogueOf("pt-BR").invitePage.body);
   });
 });

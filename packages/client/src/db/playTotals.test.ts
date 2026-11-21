@@ -191,7 +191,10 @@ describe("Play totals", () => {
     ])
       before.run(sql`INSERT INTO play_events (track_id, started_at, listened_ms, duration_ms, end_reason, counted)
         VALUES (${Number(event.trackId)}, ${event.startedAt}, ${event.listenedMs}, ${event.durationMs}, ${event.endReason}, ${event.counted})`);
+    // `deleteTracksById` reads the collaborations, which come only with a later migration.
+    before.run(sql`CREATE TABLE collaborations (playlist_sync_id text, owned integer)`);
     deleteTracksById(before, [gone]);
+    before.run(sql`DROP TABLE collaborations`);
 
     await migrateTestDatabase(before);
 

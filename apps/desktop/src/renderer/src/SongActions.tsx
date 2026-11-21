@@ -63,9 +63,11 @@ interface Confirm {
   readonly onAction: () => void;
 }
 
-/** The playlists Add to Playlist offers: the sidebar's first page. */
+/** The playlists Add to Playlist offers: the sidebar's first page, but the collaborative ones. */
 const playlists = async () =>
-  (await window.wave.library.browse({ kind: "playlists" }, 0, 200)).items;
+  (await window.wave.library.browse({ kind: "playlists" }, 0, 200)).items.filter(
+    (row) => !row.collaborative,
+  );
 
 /** The menus, toasts and question an entry can show, and how to open them. */
 export function useSongActions({ go, select, failed, changed, newPlaylist }: Options) {

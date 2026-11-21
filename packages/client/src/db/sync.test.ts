@@ -27,7 +27,7 @@ import {
   selectTrackIdentities,
   stampPreference,
 } from "./sync.ts";
-import { joinAccount, selectJoinedAccount, selectSyncCursor, selectUnpushed } from "./syncRows.ts";
+import { selectJoinedAccount, selectSyncCursor, selectUnpushed } from "./syncRows.ts";
 import {
   addTrack,
   migrateTestDatabase,
@@ -314,9 +314,15 @@ const playKeys = (db: TestDatabase) =>
 describe("migration 0064", () => {
   test("a Library joined with an account pulls it from the start again, still joined", async () => {
     const db = await openTestDatabase({ through: "0063_dislike_sync" });
-    joinAccount(db, "ana@example.com");
-    // Where a Wave from before dislikes left it, past dislikes it never read.
-    db.update(schema.syncState).set({ cursor: "42" }).run();
+    // Joined where a Wave from before dislikes left it, past dislikes it never read. Written
+    // straight to the table: `joinAccount` reads tables of later migrations.
+    db.insert(schema.syncState)
+      .values({ id: 1, account: "ana@example.com", cursor: "42" })
+      .onConflictDoUpdate({
+        target: schema.syncState.id,
+        set: { account: "ana@example.com", cursor: "42" },
+      })
+      .run();
 
     await migrateTestDatabase(db);
 

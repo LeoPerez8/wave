@@ -60,6 +60,23 @@ interface SyncPlaylistEntryFields {
   readonly removedAt?: number | null;
   /** When Restore or Undo last brought the entry back (Core's `SyncEntryRow`). */
   readonly restoredAt?: number | null;
+  /**
+   * A Library song's own fields, so the other members of a collaborative
+   * playlist can match it to their Tracks: its title, artist credit, album,
+   * length and YouTube video id (docs/spec.md, Collaborative playlists,
+   * "Library songs"). Absent from an app from before them.
+   */
+  readonly title?: string | null;
+  readonly credit?: string | null;
+  readonly album?: string | null;
+  readonly durationMs?: number | null;
+  readonly videoId?: string | null;
+  /**
+   * The account that added the entry, written by the service from the
+   * session that first pushed it; whatever an app sends is ignored. Null
+   * for an entry from before it, or of an account that was deleted.
+   */
+  readonly addedBy?: string | null;
 }
 
 /** A star; its id is the song's recording key. */
@@ -217,6 +234,13 @@ export const SYNC_FIELDS: {
     removedAt: "int?",
     addedAt: "int",
     restoredAt: "int?",
+    // not UI text: a wire field kind
+    title: "text?",
+    credit: "text?",
+    album: "text?",
+    durationMs: "int?",
+    videoId: "text?",
+    addedBy: "text?",
   },
   favorites: { addedAt: "int" },
   preferences: { value: "text?" },

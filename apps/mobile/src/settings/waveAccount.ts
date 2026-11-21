@@ -27,6 +27,9 @@ const WAVE_ACCOUNT_CONFIG = waveAccountConfig(Constants.expoConfig?.extra);
 /** Whether this build has a sync service, so a Wave account can sign in at all. */
 export const waveAccountAvailable = WAVE_ACCOUNT_CONFIG !== null;
 
+/** The sync service's address on this build (its `/invite` links open Wave); null without one. */
+export const waveSyncUrl: string | null = WAVE_ACCOUNT_CONFIG?.syncUrl ?? null;
+
 /** Whether the card about what goes up has led to a sign-in on this phone (it shows until then). */
 const cardSeen = persistedSetting<boolean>({
   key: "waveAccount.cardSeen",
@@ -100,6 +103,34 @@ const confirmedAccountAction = async (
   }
 };
 
+/** What a sign-in came to; `declined` is the card about what goes up turned down. */
+export type WaveSignInOutcome =
+  | { readonly type: "signedIn"; readonly session: WaveSession }
+  | { readonly type: "cancelled" }
+  | { readonly type: "declined" }
+  | { readonly type: "failed"; readonly reason: WaveSignInFailure };
+
+/**
+ * Settings' Sign In, from anywhere: the card about what goes up the first time, then Google's
+ * account picker; [started] runs as the picker opens. Cancelling either sends nothing. Never
+ * rejects.
+ */
+export const signInWaveAccount = async (started?: () => void): Promise<WaveSignInOutcome> => {
+  const config = WAVE_ACCOUNT_CONFIG;
+  if (config === null) return { type: "failed", reason: "failed" };
+  if (!cardSeen.get() && !(await confirmAction(waveAccountCard(currentLocalisation().strings))))
+    return { type: "declined" };
+  started?.();
+  try {
+    const session = await WaveAccount.signIn(config.syncUrl, config.googleWebClientId);
+    if (session === null) return { type: "cancelled" };
+    cardSeen.set(true);
+    return { type: "signedIn", session };
+  } catch (error) {
+    return { type: "failed", reason: signInFailure(error) };
+  }
+};
+
 /**
  * Settings › Wave Account (Core's `stepWaveAccount`): the native module's
  * session, and any change it hears of while Settings is open (a 401 ends it).
@@ -125,24 +156,12 @@ export const useWaveAccount = (): {
   }, []);
 
   const signIn = useCallback(() => {
-    const config = WAVE_ACCOUNT_CONFIG;
-    if (config === null) return;
-    void (async () => {
-      if (!cardSeen.get() && !(await confirmAction(waveAccountCard(currentLocalisation().strings))))
-        return;
-      dispatch({ type: "signInStarted" });
-      try {
-        const session = await WaveAccount.signIn(config.syncUrl, config.googleWebClientId);
-        if (session === null) {
-          dispatch({ type: "signInCancelled" });
-          return;
-        }
-        cardSeen.set(true);
-        dispatch({ type: "signInEnded", session });
-      } catch (error) {
-        dispatch({ type: "signInFailed", reason: signInFailure(error) });
-      }
-    })();
+    void signInWaveAccount(() => dispatch({ type: "signInStarted" })).then((outcome) => {
+      if (outcome.type === "signedIn") dispatch({ type: "signInEnded", session: outcome.session });
+      else if (outcome.type === "cancelled") dispatch({ type: "signInCancelled" });
+      else if (outcome.type === "failed")
+        dispatch({ type: "signInFailed", reason: outcome.reason });
+    });
   }, []);
 
   const signOut = useCallback(() => {

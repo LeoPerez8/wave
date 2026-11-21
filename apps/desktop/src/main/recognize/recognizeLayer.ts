@@ -30,6 +30,7 @@ import type {
   RecognizeRunResult,
   RecognizeView,
 } from "../../shared/recognize.ts";
+import { refuseCollaborative } from "../library/collaborativePlaylists.ts";
 import { Downloads } from "../downloads/downloadsLayer.ts";
 import { Kotlin } from "../kotlin/kotlin.ts";
 import type { KotlinEvent, KotlinMethod } from "../kotlin/protocol.ts";
@@ -263,6 +264,7 @@ export const recognizeLayer = (options: RecognizeOptions) =>
           }
           case "addToPlaylist": {
             if (playlistId === undefined) throw new Error("No playlist to add to");
+            refuseCollaborative(db, playlistId);
             if (result.kind === "stream")
               return (await runStreamedAction(
                 streamPorts(),

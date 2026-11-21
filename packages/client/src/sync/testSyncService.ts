@@ -45,6 +45,17 @@ export interface TestSyncService extends SyncTransport {
    * add an id past it is refused whole (413), as the service refuses it.
    */
   rowLimits: Partial<Record<Table, number>>;
+  /** Stores a push of [body] as `POST /v1/push` does: the answer, or the limit it passed. */
+  readonly pushTables: (
+    body: Partial<SyncTables>,
+  ) =>
+    | { readonly accepted: Record<string, number>; readonly corrected: Record<string, unknown> }
+    | { readonly limit: string };
+  /** A pull page after change [since] of the rows [keep] takes (all when absent). */
+  readonly pullTables: (
+    since: number,
+    keep?: (table: Table, row: SyncTables[Table][number]) => boolean,
+  ) => Record<string, unknown>;
 }
 
 /** The service's name for each table's row limit (`SYNC_LIMITS`). */
@@ -67,6 +78,8 @@ export const testSyncService = (
     readonly pageSize?: number;
     /** The service's clock (the real time when absent, which no test phone's clock is ahead of). */
     readonly now?: () => number;
+    /** Keys every `GET /v1/pull` answer carries besides the rows (the account's membership). */
+    readonly pullExtras?: () => Record<string, unknown>;
   } = {},
 ): TestSyncService => {
   const pageSize = options.pageSize ?? 1_000;
@@ -122,9 +135,12 @@ export const testSyncService = (
     return { accepted, corrected };
   };
 
-  const pull = (since: number) => {
+  const pull = (
+    since: number,
+    keep: (table: Table, row: SyncTables[Table][number]) => boolean = () => true,
+  ) => {
     const changed = [...held.values()]
-      .filter((entry) => entry.changeNo > since)
+      .filter((entry) => entry.changeNo > since && keep(entry.table, entry.row))
       // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array
       .sort((a, b) => a.changeNo - b.changeNo);
     const page = changed.slice(0, pageSize);
@@ -158,6 +174,8 @@ export const testSyncService = (
     refuse: 0,
     rowLimits: {},
     requests: [],
+    pushTables: push,
+    pullTables: pull,
     rows: () =>
       Object.fromEntries(TABLES.map((table) => [table, rowsOf(table)])) as unknown as SyncTables,
     request: async (method, path, body) => {
@@ -180,7 +198,10 @@ export const testSyncService = (
       }
       const since = /^\/v1\/pull\?since=(\d+)$/.exec(path)?.[1];
       if (method === "GET" && since !== undefined) {
-        return { status: 200, body: JSON.stringify(pull(Number(since))) };
+        return {
+          status: 200,
+          body: JSON.stringify({ ...pull(Number(since)), ...options.pullExtras?.() }),
+        };
       }
       return { status: 404, body: '{"error":"not_found"}' };
     },
