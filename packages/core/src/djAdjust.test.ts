@@ -71,7 +71,7 @@ describe("Adjust's option groups", () => {
       {
         name: "Descoberta de música",
         options: ["[Conhecidas]", "Misturar", "Descobrir"],
-        note: "20% de músicas que você ainda não ouviu.",
+        note: "20% das músicas são novas para você.",
       },
     ]);
   });

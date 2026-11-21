@@ -1143,7 +1143,7 @@ Every translation ticket follows it, so one English term always gets the same Po
 | Low, Medium, High (Artist variety)                                              | Baixa, Média, Alta                                                              |
 | Music discovery                                                                 | Descoberta de música                                                            |
 | Familiar, Blend, Discover (Music discovery)                                     | Conhecidas, Misturar, Descobrir                                                 |
-| <x>% of the songs are new to you. (DJ, Music discovery's note)                  | <x>% de músicas que você ainda não ouviu.                                       |
+| <x>% of the songs are new to you. (DJ, Music discovery's note)                  | <x>% das músicas são novas para você.                                           |
 | Filters (DJ)                                                                    | Filtros                                                                         |
 | Trending                                                                        | Em alta                                                                         |
 | Lesser-known songs                                                              | Músicas pouco conhecidas                                                        |

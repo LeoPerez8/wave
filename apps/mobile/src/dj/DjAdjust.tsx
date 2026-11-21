@@ -132,7 +132,6 @@ function OptionGroup({
   disabled: boolean;
   onChange: (settings: DjSettings) => void;
 }) {
-  const accent = useThemeColor("accent");
   return (
     <View style={{ paddingTop: CELL * 2.5 }}>
       <Text className="font-sans text-footnote font-medium text-secondary">{group.name}</Text>
@@ -147,18 +146,18 @@ function OptionGroup({
           <Press
             key={option.label}
             accessibilityRole="radio"
-            accessibilityLabel={option.label}
+            // The group's name comes first: TalkBack doesn't read a radio group's own label.
+            accessibilityLabel={`${group.name}, ${option.label}`}
             accessibilityState={{ checked: option.selected, disabled }}
             disabled={disabled}
             onPress={() => {
               if (!option.selected) onChange(option.settings);
             }}
-            className="flex-1 items-center"
+            className={`flex-1 items-center ${option.selected ? "border-accent" : "border-transparent"}`}
             style={{
               paddingTop: OPTION.paddingTop,
               paddingBottom: OPTION.paddingBottom,
               borderBottomWidth: OPTION.underline,
-              borderColor: option.selected ? accent : "transparent",
             }}
           >
             <Text
