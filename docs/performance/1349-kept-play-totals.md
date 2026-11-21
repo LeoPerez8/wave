@@ -56,7 +56,7 @@ After:
 
 ## Desktop measurements
 
-`node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON apps/mobile/bench/keptPlayTotals.ts`
+`apps/mobile/bench/keptPlayTotals.ts` (`pnpm --filter @wave/mobile bench:kept-play-totals`)
 uses #579's fixture plus 6,000 streamed plays (300 videos over the same 90 days, a third of them
 crediting a Library artist). It checks that the kept totals equal today's sum, then prints median
 times: before (today's sum, or the reader with the totals unsettled) → after (kept). These are
@@ -166,7 +166,7 @@ busy machine rather than a step that's too big. The phone run will tell.
 
 ### The history's triggers: marks, not sums
 
-`apps/mobile/bench/keptTotalsTriggers.ts` scans 12,000 files in batches of 500 and pulls 60,000
+`apps/mobile/bench/keptTotalsTriggers.ts` (`pnpm --filter @wave/mobile bench:kept-totals-triggers`) scans 12,000 files in batches of 500 and pulls 60,000
 plays in pages of 500 (`applyPulledPage`). It runs both orders: scan then pull, and pull into an
 empty Library then scan. It compares migration 0069's triggers against the same database with
 the `kept_` triggers dropped. `--quick` runs 1,000 files and 5,000 plays.

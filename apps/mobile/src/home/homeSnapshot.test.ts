@@ -25,6 +25,7 @@ const harness = {
   finger: createFingerDown({ takeoverMs: 3000, schedule: () => () => {} }),
   stored: null as string | null,
   saved: [] as string[],
+  appStateListeners: [] as ((state: string) => void)[],
 };
 Object.assign(globalThis, { __homeSnapshotTest: harness });
 
@@ -40,7 +41,13 @@ const builds = await reactCompilerBuilds<Snapshot>(
          removeItem: async () => {},
        };`,
     ),
-    "react-native": stubModule(`export const AppState = { addEventListener: () => {} };`),
+    "react-native": stubModule(
+      `export const AppState = {
+         addEventListener: (_type, listener) => {
+           globalThis.__homeSnapshotTest.appStateListeners.push(listener);
+         },
+       };`,
+    ),
     "@/perf/perf": stubModule(`export const registerPerfMeta = () => {};`),
     "@/lib/backgroundWork": stubModule(
       `export const fingerDown = globalThis.__homeSnapshotTest.finger;`,
@@ -70,7 +77,15 @@ const draw = <K extends keyof HomeSnapshotSections>(snapshot: Snapshot, name: K)
   };
 };
 
+/** Starts [snapshot]'s saving and returns what sends the app to the background, which saves. */
+const backgrounding = (snapshot: Snapshot) => {
+  snapshot.startSavingHomeSnapshot();
+  const listener = harness.appStateListeners.at(-1)!;
+  return () => listener("background");
+};
+
 for (const [build, snapshot] of Object.entries(builds)) {
+  const goToBackground = backgrounding(snapshot);
   harness.stored = storedHomeSnapshot<HomeSnapshotSections>({
     savedAt: 5,
     page: null,
@@ -87,7 +102,7 @@ for (const [build, snapshot] of Object.entries(builds)) {
       assert.deepEqual(orbit.shown(), kept, "the rows under the finger stay");
       act(() => harness.finger.ended());
       assert.deepEqual(orbit.shown(), read, "the read shows once the finger lifts");
-      snapshot.saveHomeSnapshot();
+      goToBackground();
       assert.deepEqual(JSON.parse(harness.saved.at(-1)!).sections.orbit, read);
     } finally {
       orbit.close();
@@ -114,7 +129,7 @@ for (const [build, snapshot] of Object.entries(builds)) {
     try {
       const read = { ...totals, listening: { ...totals.listening, plays: 2501 } };
       stats.answer(read);
-      snapshot.saveHomeSnapshot();
+      goToBackground();
       assert.deepEqual(JSON.parse(harness.saved.at(-1)!).sections.stats, read);
     } finally {
       stats.close();

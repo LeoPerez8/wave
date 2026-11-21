@@ -23,6 +23,24 @@ import type { ArtistRow } from "../types.ts";
 type Rows = number | null;
 const limited = (rows: Rows): SQL => (rows === null ? sql`` : sql`LIMIT ${rows}`);
 
+/**
+ * A page of [query]'s rows, [limit] of them, as [read] makes them, and the `cursor` of its last
+ * row to read the next page after: null for a whole read ([limit] null) or past the end.
+ */
+const readPage = <Row extends { readonly cursor: number }, T>(
+  db: LibraryDatabase,
+  limit: Rows,
+  query: SQL,
+  read: (row: Row) => readonly T[],
+) => {
+  const rows = db.all<Row>(sql`${query} ${limited(limit)}`);
+  const last = rows.at(-1);
+  return {
+    rows: rows.flatMap(read),
+    next: limit === null || last === undefined ? null : last.cursor,
+  };
+};
+
 export const mixSongsPage = (
   db: LibraryDatabase,
   after: number,
@@ -109,18 +127,17 @@ export const mixPlayedRecordingKeys = (db: LibraryDatabase): string[] =>
     )
     .map((row) => row.key);
 
-export const mixStreamedPage = (db: LibraryDatabase, after: number, limit: Rows = 128) => {
-  const rows = db.all<{ cursor: number; song: string; plays: number; firstPlayedAt: number }>(sql`
-    SELECT rowid AS cursor, song, plays, first_played_at AS firstPlayedAt
-    FROM streamed_songs WHERE rowid > ${after} ORDER BY rowid ${limited(limit)}`);
-  return {
-    rows: rows.flatMap((row) => {
+export const mixStreamedPage = (db: LibraryDatabase, after: number, limit: Rows = 128) =>
+  readPage(
+    db,
+    limit,
+    sql`SELECT rowid AS cursor, song, plays, first_played_at AS firstPlayedAt
+      FROM streamed_songs WHERE rowid > ${after} ORDER BY rowid`,
+    (row: { cursor: number; song: string; plays: number; firstPlayedAt: number }) => {
       const song = readPlaylistYtSong(row.song);
       return song === null ? [] : [{ song, plays: row.plays, firstPlayedAt: row.firstPlayedAt }];
-    }),
-    next: limit === null ? null : (rows.at(-1)?.cursor ?? null),
-  };
-};
+    },
+  );
 /** Every song streamed before streamed plays were recorded, as `mixStreamedPage` pages them. */
 export const mixStreamed = (db: LibraryDatabase) => mixStreamedPage(db, 0, null).rows;
 /** One video's streamed plays under one recording key, as `streamed_totals` keeps them. */
@@ -190,44 +207,42 @@ export const mixStreamedPlays = (db: LibraryDatabase): MixStreamedPlays[] =>
  * The credits of a page of Library songs and of their albums' artists, as
  * written: what Core's `creditSplitter` splits streamed credits with.
  */
-export const mixCreditNamesPage = (db: LibraryDatabase, after: number, limit: Rows = 128) => {
-  const rows = db.all<{
-    id: number;
-    credit: string;
-    stored: string | null;
-    albumCredit: string | null;
-    albumStored: string | null;
-  }>(sql`
-    SELECT t.id, t.artist_credit AS credit, t.artist_credits AS stored,
+export const mixCreditNamesPage = (db: LibraryDatabase, after: number, limit: Rows = 128) =>
+  readPage(
+    db,
+    limit,
+    sql`SELECT t.id AS cursor, t.artist_credit AS credit, t.artist_credits AS stored,
       al.album_artist_credit AS "albumCredit", al.album_artist_credits AS "albumStored"
     FROM tracks t LEFT JOIN albums al ON al.id = t.album_id
-    WHERE t.id > ${after} ORDER BY t.id ${limited(limit)}`);
-  return {
-    rows: rows.flatMap((row) => [
+    WHERE t.id > ${after} ORDER BY t.id`,
+    (row: {
+      cursor: number;
+      credit: string;
+      stored: string | null;
+      albumCredit: string | null;
+      albumStored: string | null;
+    }) => [
       ...readCredits(row.credit, row.stored),
       ...(row.albumCredit === null ? [] : readCredits(row.albumCredit, row.albumStored)),
-    ]),
-    next: limit === null ? null : (rows.at(-1)?.id ?? null),
-  };
-};
+    ],
+  );
 /** Every Library song's credits, as `mixCreditNamesPage` pages them. */
 export const mixCreditNames = (db: LibraryDatabase): string[] =>
   mixCreditNamesPage(db, 0, null).rows;
 
-export const mixPlaylistedPage = (db: LibraryDatabase, after: number, limit: Rows = 128) => {
-  const rows = db.all<{ id: number; song: string; addedAt: number }>(sql`
-    SELECT pi.id, pi.yt_song AS song, pi.added_at AS addedAt
+export const mixPlaylistedPage = (db: LibraryDatabase, after: number, limit: Rows = 128) =>
+  readPage(
+    db,
+    limit,
+    sql`SELECT pi.id AS cursor, pi.yt_song AS song, pi.added_at AS addedAt
     FROM playlist_items pi JOIN playlists p ON p.id = pi.playlist_id
     WHERE pi.id > ${after} AND pi.yt_song IS NOT NULL AND NOT pi.deleted AND NOT p.deleted
-    ORDER BY pi.id ${limited(limit)}`);
-  return {
-    rows: rows.flatMap((row) => {
+    ORDER BY pi.id`,
+    (row: { cursor: number; song: string; addedAt: number }) => {
       const song = readPlaylistEntrySong(row.song);
       return song === null ? [] : [{ song, addedAt: row.addedAt }];
-    }),
-    next: limit === null ? null : (rows.at(-1)?.id ?? null),
-  };
-};
+    },
+  );
 /** Every playlist entry that isn't a Library song, as `mixPlaylistedPage` pages them. */
 export const mixPlaylisted = (db: LibraryDatabase) => mixPlaylistedPage(db, 0, null).rows;
 

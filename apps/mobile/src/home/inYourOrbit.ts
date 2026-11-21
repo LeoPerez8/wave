@@ -6,9 +6,7 @@ import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { startMagicQueueFrom, startStreamedMagicQueueFrom } from "./magicQueueSection";
 import { useSnapshotted } from "./homeSnapshot";
-import { mostListenedRecentlyQuery, useMostListenedRecently } from "./mostListenedRecently";
-
-export { mostListenedRecentlyQuery };
+import { useMostListenedRecently } from "./mostListenedRecently";
 
 /** Songs played from In your orbit with YT Music off are queued from it. */
 const IN_YOUR_ORBIT_CONTEXT = { kind: "home", id: "in-your-orbit" } as const;

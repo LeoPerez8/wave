@@ -34,6 +34,7 @@ import {
 import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL, grid } from "@/catalog/grid";
+import { useResetAfterRender } from "@/components/resetAfterRender";
 import { handleHold } from "@/motion/handleHold";
 import { measureRect, type Measurable } from "@/motion/measureRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
@@ -305,21 +306,14 @@ export function useDownloadsDrag({
   );
 
   // Rows drop into place in the same frame the new order renders.
-  const resetAfterRender = useRef(false);
-  useLayoutEffect(() => {
-    if (!resetAfterRender.current) return;
-    resetAfterRender.current = false;
-    from.set(-1);
-    to.set(-1);
-    travel.set(0);
-  });
+  const resetAfterRender = useResetAfterRender(from, to, travel);
 
   const drop = useCallback(
     (canceled: boolean) => {
       const current = session.current;
       session.current = null;
       scopeHeights.set([]);
-      resetAfterRender.current = true;
+      resetAfterRender();
       setDrag(null);
       if (current === null || canceled) return;
       const from = current.ids[current.from] ?? "";
@@ -329,7 +323,7 @@ export function useDownloadsDrag({
           : { kind: "group", from, to: current.over },
       );
     },
-    [land, scopeHeights],
+    [land, scopeHeights, resetAfterRender],
   );
 
   // The dragged row left the list under the drag (its song started, or was cancelled): its

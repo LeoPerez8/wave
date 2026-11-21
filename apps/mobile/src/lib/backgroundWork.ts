@@ -63,7 +63,7 @@ runReplayPassesWith((run) => inSlice("Library read replay", run));
  * Runs [run], [name]'s asynchronous work, saying to the block log that it runs until its promise
  * settles: a block meanwhile with no slice of its own is put down to it.
  */
-export const namedWork = <A>(name: string, run: () => Promise<A>): Promise<A> => {
+export const namedAsyncWork = <A>(name: string, run: () => Promise<A>): Promise<A> => {
   const ended = blocks.workBegan(name, performance.now());
   const end = () => ended(performance.now());
   return run().finally(end);

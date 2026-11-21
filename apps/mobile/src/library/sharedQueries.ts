@@ -142,7 +142,7 @@ export const keepLibraryQuery = <A>(query: LibraryQuery<A>): (() => void) => {
 };
 
 /** How many pushed screens opened last stay kept for a quick return (`keepRecentlyOpened`). */
-export const RECENT_SCREENS_KEPT = 8;
+const RECENT_SCREENS_KEPT = 8;
 
 const recentQueries = new Map<string, AnyQuery>();
 const recentKeeps = createRecentKeeps<string>({

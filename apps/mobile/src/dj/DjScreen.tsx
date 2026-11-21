@@ -29,7 +29,16 @@ import {
   IconSearch,
   IconX,
 } from "@tabler/icons-react-native";
-import { type ComponentRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ComponentRef,
+  type ReactNode,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ActivityIndicator, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -256,6 +265,38 @@ function TilesSkeleton({ size, fontScale }: { size: number; fontScale: number })
 }
 
 /**
+ * A tile's card, [label] to a screen reader, checked once [selected]; dimmed and out of reach
+ * while not [selectable], when the seed has no room for it.
+ */
+function SelectableTile({
+  size,
+  label,
+  selected,
+  selectable,
+  onPress,
+  children,
+}: {
+  size: number;
+  label: string;
+  selected: boolean;
+  selectable: boolean;
+  onPress: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <View
+      style={{ opacity: selectable ? 1 : 0.4 }}
+      pointerEvents={selectable ? "auto" : "none"}
+      accessibilityState={{ disabled: !selectable }}
+    >
+      <CardTile width={size} label={label} checked={selected} onPress={onPress}>
+        {children}
+      </CardTile>
+    </View>
+  );
+}
+
+/**
  * An artist tile: a circle with the artist's image and the name under it,
  * with "New to you" under the name for an artist the Library doesn't have
  * (Core's `djNewToYou`). Once selected, the circle is ringed and checked
@@ -283,29 +324,24 @@ const ArtistTile = memo(function ArtistTile({
     artist ?? { id: tile.key, online: true, name: tile.name, thumbPath: null, artworkPath: null },
   );
   return (
-    <View
-      style={{ opacity: selectable ? 1 : 0.4 }}
-      pointerEvents={selectable ? "auto" : "none"}
-      accessibilityState={{ disabled: !selectable }}
+    <SelectableTile
+      size={size}
+      label={strings.dj.artistTile(tile.name)}
+      selected={selected}
+      selectable={selectable}
+      onPress={() => onToggle(tile.key)}
     >
-      <CardTile
-        width={size}
-        label={strings.dj.artistTile(tile.name)}
-        checked={selected}
-        onPress={() => onToggle(tile.key)}
-      >
-        <DjTilePicture
-          size={size}
-          round
-          selected={selected}
-          picture={(inner) => <ArtistImage artist={image} size={inner} large />}
-        />
-        <View className="items-center" style={{ paddingTop: CELL }}>
-          <CardTitle centred>{tile.name}</CardTitle>
-          {djNewToYou(tile) && <CardDetail size="footnote">{strings.dj.newToYou}</CardDetail>}
-        </View>
-      </CardTile>
-    </View>
+      <DjTilePicture
+        size={size}
+        round
+        selected={selected}
+        picture={(inner) => <ArtistImage artist={image} size={inner} large />}
+      />
+      <View className="items-center" style={{ paddingTop: CELL }}>
+        <CardTitle centred>{tile.name}</CardTitle>
+        {djNewToYou(tile) && <CardDetail size="footnote">{strings.dj.newToYou}</CardDetail>}
+      </View>
+    </SelectableTile>
   );
 });
 
@@ -330,31 +366,26 @@ const AlbumTile = memo(function AlbumTile({
 }) {
   const { strings } = useLocalisation();
   return (
-    <View
-      style={{ opacity: selectable ? 1 : 0.4 }}
-      pointerEvents={selectable ? "auto" : "none"}
-      accessibilityState={{ disabled: !selectable }}
+    <SelectableTile
+      size={size}
+      label={strings.dj.albumTile(tile.name, tile.artist)}
+      selected={selected}
+      selectable={selectable}
+      onPress={() => onToggle(tile.key)}
     >
-      <CardTile
-        width={size}
-        label={strings.dj.albumTile(tile.name, tile.artist)}
-        checked={selected}
-        onPress={() => onToggle(tile.key)}
-      >
-        <DjTilePicture
-          size={size}
-          round={false}
-          selected={selected}
-          picture={(inner) => (
-            <Artwork uri={tile.cover ?? undefined} size={inner} radius={DJ_TILE_RADIUS} />
-          )}
-        />
-        <View style={{ paddingTop: CELL }}>
-          <CardTitle>{tile.name}</CardTitle>
-          <CardDetail size="footnote">{tile.artist}</CardDetail>
-        </View>
-      </CardTile>
-    </View>
+      <DjTilePicture
+        size={size}
+        round={false}
+        selected={selected}
+        picture={(inner) => (
+          <Artwork uri={tile.cover ?? undefined} size={inner} radius={DJ_TILE_RADIUS} />
+        )}
+      />
+      <View style={{ paddingTop: CELL }}>
+        <CardTitle>{tile.name}</CardTitle>
+        <CardDetail size="footnote">{tile.artist}</CardDetail>
+      </View>
+    </SelectableTile>
   );
 });
 
@@ -374,37 +405,32 @@ const GenreTile = memo(function GenreTile({
 }) {
   const { strings } = useLocalisation();
   return (
-    <View
-      style={{ opacity: selectable ? 1 : 0.4 }}
-      pointerEvents={selectable ? "auto" : "none"}
-      accessibilityState={{ disabled: !selectable }}
+    <SelectableTile
+      size={size}
+      label={strings.dj.genreTile(tile.name)}
+      selected={selected}
+      selectable={selectable}
+      onPress={() => onToggle(tile.key)}
     >
-      <CardTile
-        width={size}
-        label={strings.dj.genreTile(tile.name)}
-        checked={selected}
-        onPress={() => onToggle(tile.key)}
-      >
-        <DjTilePicture
-          size={size}
-          round={false}
-          selected={selected}
-          picture={(inner) => (
-            <View
-              className="bg-fill items-center justify-center"
-              style={{
-                width: inner,
-                height: inner,
-                borderRadius: DJ_TILE_RADIUS,
-                padding: CELL * 2,
-              }}
-            >
-              <CardTitle centred>{tile.name}</CardTitle>
-            </View>
-          )}
-        />
-      </CardTile>
-    </View>
+      <DjTilePicture
+        size={size}
+        round={false}
+        selected={selected}
+        picture={(inner) => (
+          <View
+            className="bg-fill items-center justify-center"
+            style={{
+              width: inner,
+              height: inner,
+              borderRadius: DJ_TILE_RADIUS,
+              padding: CELL * 2,
+            }}
+          >
+            <CardTitle centred>{tile.name}</CardTitle>
+          </View>
+        )}
+      />
+    </SelectableTile>
   );
 });
 

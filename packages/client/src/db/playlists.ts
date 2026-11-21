@@ -1400,6 +1400,12 @@ const entriesTotals = (entries: readonly PlaylistEntry[]): PlaylistTotals => {
 /** Playlists the owner has: not deleted (tombstones). */
 const livePlaylist = eq(schema.playlists.deleted, false);
 
+/** Plays whose context is a playlist. */
+const playedFromPlaylist = and(
+  eq(schema.playEvents.contextType, "playlist"),
+  isNotNull(schema.playEvents.contextId),
+);
+
 /**
  * When a song last started playing from each playlist (a play whose context
  * is the playlist, streamed songs' included), by playlist id, for sorting the Playlists list by Recently
@@ -1410,7 +1416,7 @@ export const selectPlaylistsLastPlayed = (db: LibraryDatabase): Map<number, numb
   const rows = db
     .select({ id: playEvents.contextId, at: sql<number>`max(${playEvents.startedAt})` })
     .from(playEvents)
-    .where(and(eq(playEvents.contextType, "playlist"), isNotNull(playEvents.contextId)))
+    .where(playedFromPlaylist)
     .groupBy(playEvents.contextId)
     .all();
   const lastPlayed = new Map<number, number>();
@@ -1445,7 +1451,7 @@ export const selectPlaylistPlays = (db: LibraryDatabase, now: number): PlaylistP
         >`max(CASE WHEN ${playEvents.counted} THEN ${playEvents.startedAt} END)`,
       })
       .from(playEvents)
-      .where(and(eq(playEvents.contextType, "playlist"), isNotNull(playEvents.contextId)))
+      .where(playedFromPlaylist)
       .groupBy(playEvents.contextId)
       .all();
   // Two spellings of one number ("7", "07") are one playlist.

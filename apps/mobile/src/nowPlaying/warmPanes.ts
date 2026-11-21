@@ -17,14 +17,14 @@ export type WarmPanesEvent =
   | { readonly type: "cooled" }
   | { readonly type: "memoryWarning" };
 
-export interface WarmPanes {
+interface WarmPanes {
   readonly warm: boolean;
   readonly shown: boolean;
 }
 
-export const initialWarmPanes: WarmPanes = { warm: false, shown: false };
+const initialWarmPanes: WarmPanes = { warm: false, shown: false };
 
-export const stepWarmPanes = (state: WarmPanes, event: WarmPanesEvent): WarmPanes => {
+const stepWarmPanes = (state: WarmPanes, event: WarmPanesEvent): WarmPanes => {
   switch (event.type) {
     case "settled":
       return { warm: true, shown: true };

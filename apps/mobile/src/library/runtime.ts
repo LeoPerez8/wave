@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { AppState } from "react-native";
 
-import { namedWork, whenFree } from "@/lib/backgroundWork";
+import { namedAsyncWork, whenFree } from "@/lib/backgroundWork";
 import { appLog } from "@/log/appLog";
 import * as MagicQueue from "@/playback/MagicQueue";
 import * as PlaybackPersistence from "@/playback/PlaybackPersistence";
@@ -63,7 +63,7 @@ export const appRuntime = ManagedRuntime.make(appLayer);
  * screen settles, named in the JS block log. A failure is logged; the next start tries again.
  */
 export const runLibraryUpkeep = (): void =>
-  void namedWork("Library upkeep", () =>
+  void namedAsyncWork("Library upkeep", () =>
     appRuntime.runPromiseExit(
       Effect.flatMap(LibraryStore.LibraryStore, (store) => store.startupUpkeep),
     ),

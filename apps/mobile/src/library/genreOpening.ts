@@ -5,7 +5,7 @@ import { LibraryStore } from "./LibraryStore";
 import { libraryQuery, type LibraryQuery } from "./sharedQueries";
 
 /** The key of genre [id]'s opening in [sort]: one shared query per genre and sort. */
-export const genreOpeningKey = (id: number, sort: LibrarySongSort): string =>
+const genreOpeningKey = (id: number, sort: LibrarySongSort): string =>
   `genreOpening:${id}:${sort.key}:${sort.descending ? "desc" : "asc"}`;
 
 /**

@@ -176,7 +176,7 @@ export const noteCarouselPage = (page: number): void => {
 };
 
 /** Saves what Home shows now; a snapshot over its bound, or with nothing in it, is removed. */
-export const saveHomeSnapshot = (): void => {
+const saveHomeSnapshot = (): void => {
   const sections = { ...coldStart()?.sections, ...live };
   const stored = storedHomeSnapshot<HomeSnapshotSections>({
     savedAt: Date.now(),

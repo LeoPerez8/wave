@@ -7,7 +7,7 @@ import { WaveYtDownloads, type NativeYtAlbum } from "@/native/waveYtDownloads";
  * a few dozen songs' rows, and an album's downloads finish long before this
  * many other albums are opened.
  */
-export const YT_ALBUM_PAGES_KEPT = 24;
+const YT_ALBUM_PAGES_KEPT = 24;
 
 /** Album pages read this session, by browse id; a failed read is forgotten so it's asked again. */
 const pages = knownPages<Promise<NativeYtAlbum>>(YT_ALBUM_PAGES_KEPT);

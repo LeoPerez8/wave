@@ -16,7 +16,7 @@
  *
  *   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON apps/mobile/bench/keptTotalsTriggers.ts [--quick]
  */
-import { EMPTY_SYNC_TABLES, normalizeTrack, recordingKey, type SyncPlayRow } from "@wave/core";
+import { EMPTY_SYNC_TABLES, recordingKey, type SyncPlayRow } from "@wave/core";
 import { sql } from "drizzle-orm";
 import { performance } from "node:perf_hooks";
 
@@ -26,38 +26,23 @@ import { keptTotalsSteps } from "@wave/client/db/keptPlayTotals";
 import { saveBatch } from "@wave/client/db/save";
 import { applyPulledPage } from "@wave/client/db/syncRows";
 import { openTestDatabase, type TestDatabase } from "@wave/client/testing";
+import { scannedFile } from "./scannedFile.ts";
 
 const quick = process.argv.includes("--quick");
 const SONGS = quick ? 1_000 : 12_000;
 const PLAYS = quick ? 5_000 : 60_000;
 /** The scanner's batch (`LibraryScanner.batchSize`), and a pull page's plays. */
 const BATCH = 500;
-const ROOT = "/storage/emulated/0/Music";
 const DAY = 86_400_000;
 const NOW = 1_800_000_000_000;
 
 const splits = creditSplits();
 
-const file = (n: number): IndexedTrack => ({
-  ...normalizeTrack({
-    path: `${ROOT}/Artist ${n % 300}/Album ${n % 900}/${n} Song ${n}.flac`,
-    title: `Song ${n}`,
-    artist: n % 4 === 0 ? `Artist ${n % 300} feat. Artist ${(n + 7) % 300}` : `Artist ${n % 300}`,
-    album: `Album ${n % 900}`,
-    albumArtist: `Artist ${n % 300}`,
-    trackNumber: String((n % 12) + 1),
-    genre: `Genre ${n % 25}`,
-    year: String(1970 + (n % 50)),
-    durationMs: 180_000 + (n % 120_000),
-  }),
-  sizeBytes: 20_000_000 + n,
-  modifiedAt: 1_700_000_000_000 + n,
-  sampleRate: 44_100,
-  bitrateKbps: 900,
-  artworkHash: null,
-  hasLyrics: false,
-  explicit: "unknown",
-});
+const file = (n: number): IndexedTrack =>
+  scannedFile(
+    n,
+    n % 4 === 0 ? `Artist ${n % 300} feat. Artist ${(n + 7) % 300}` : `Artist ${n % 300}`,
+  );
 const files = Array.from({ length: SONGS }, (_, n) => file(n));
 const keys = files.map((track) => recordingKey(track));
 

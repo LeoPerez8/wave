@@ -12,7 +12,7 @@ import { appRuntime } from "./runtime";
 const EMPTY: ListeningHistoryPage = { rows: [], next: null, newer: null };
 
 /** At most this many plays of the history's head are kept for its next opening. */
-export const HISTORY_KEPT_ROWS = 100;
+const HISTORY_KEPT_ROWS = 100;
 
 /**
  * The whole history's head as last read, kept for the session so Settings ›

@@ -49,24 +49,24 @@ import { keepLibraryQuery, libraryQueryResult, type LibraryQuery } from "./share
 import { settingSongSortNow } from "./songSort";
 
 /** Playlists whose page is kept ahead. */
-export const PLAYLISTS_AHEAD = 8;
+const PLAYLISTS_AHEAD = 8;
 /** A playlist longer than this is kept only once opened. */
-export const PLAYLIST_ENTRIES_AHEAD = 1000;
+const PLAYLIST_ENTRIES_AHEAD = 1000;
 /**
  * Library artists whose saved YouTube Music answer (Fans might also like,
  * About) is read ahead into this session's answers (`knownYtArtists`, 16 at
  * most): the opening period's most played.
  */
-export const ARTIST_PAGES_AHEAD = 8;
+const ARTIST_PAGES_AHEAD = 8;
 /** Genres whose opening is kept ahead, the first in Library › Genres. */
-export const GENRES_AHEAD = 12;
+const GENRES_AHEAD = 12;
 
 const releases: (() => void)[] = [];
 let started = false;
 let stopped = false;
 
 /** Keeps [queries] ready, one per free turn, in order (#1353 adds Home's). */
-export const keepReady = (name: string, queries: readonly LibraryQuery<unknown>[]): void => {
+const keepReady = (name: string, queries: readonly LibraryQuery<unknown>[]): void => {
   const queue = [...queries];
   const next = (): void => {
     if (stopped) return;

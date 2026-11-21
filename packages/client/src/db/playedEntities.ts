@@ -326,6 +326,20 @@ interface StreamedAlbum {
 }
 
 /**
+ * Each of [streams] with its album: a downloaded song's is its file's album ([trackAlbums]), any
+ * other's what [credited] gives it (none leaves it out).
+ */
+const albumsOfStreams = (
+  streams: readonly StreamedListeningTotal[],
+  trackAlbums: ReadonlyMap<number, number>,
+  credited: (entry: StreamedListeningTotal) => StreamedAlbum[],
+): StreamedAlbum[] =>
+  streams.flatMap((entry): StreamedAlbum[] => {
+    const downloaded = entry.trackId === null ? undefined : trackAlbums.get(entry.trackId);
+    return downloaded === undefined ? credited(entry) : [{ entry, album: downloaded }];
+  });
+
+/**
  * The album of each of [streams] it has one for: a downloaded song's Library
  * album (its id), or the album its credits name (a Library album's id or an
  * online album). [resolver] gives the credit resolver, knowing every streamed
@@ -364,9 +378,7 @@ const streamedAlbums = (
     credited.length === 0
       ? undefined
       : resolver([...songs.values()].some((song) => song.albumId == null && song.album !== null));
-  return streams.flatMap((entry): StreamedAlbum[] => {
-    const downloaded = entry.trackId === null ? undefined : trackAlbums.get(entry.trackId);
-    if (downloaded !== undefined) return [{ entry, album: downloaded }];
+  return albumsOfStreams(streams, trackAlbums, (entry) => {
     const song = songs.get(entry.videoId);
     const resolved = song === undefined || resolve === undefined ? null : resolve(song).album;
     if (resolved === null) return [];
@@ -404,9 +416,7 @@ const keptStreamedAlbums = (
         row.videoId,
         /^\d+$/u.test(row.entity) ? Number(row.entity) : (JSON.parse(row.item!) as OnlineAlbum),
       );
-  return streams.flatMap((entry): StreamedAlbum[] => {
-    const downloaded = entry.trackId === null ? undefined : trackAlbums.get(entry.trackId);
-    if (downloaded !== undefined) return [{ entry, album: downloaded }];
+  return albumsOfStreams(streams, trackAlbums, (entry) => {
     const album = entry.trackId === null ? albums.get(entry.videoId) : undefined;
     return album === undefined ? [] : [{ entry, album }];
   });

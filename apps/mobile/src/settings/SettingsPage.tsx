@@ -19,7 +19,7 @@ export const SECTION_GAP = 48;
  * A short Settings section's height (a row and its note), for mounting a page's
  * sections across frames; short, so the first frame fills the screen.
  */
-export const SECTION_ESTIMATE = grid.row + CELL * 4;
+const SECTION_ESTIMATE = grid.row + CELL * 4;
 
 /**
  * A page of Settings, one of Settings › Layout's, or a page one of them opens

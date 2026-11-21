@@ -34,7 +34,7 @@ const builtNow = (): Built | null => {
 };
 
 /** The pages over the rows in memory now, made once per change of the rows; null before. */
-export const libraryDetailsNow = (): LibraryDetails<SongRow, AlbumRow, ArtistRow> | null =>
+const libraryDetailsNow = (): LibraryDetails<SongRow, AlbumRow, ArtistRow> | null =>
   builtNow()?.details ?? null;
 
 /** Artist [id]'s row as the Artists list shows it, from memory; undefined when it can't say. */

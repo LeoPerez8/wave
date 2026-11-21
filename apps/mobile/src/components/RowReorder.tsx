@@ -10,6 +10,8 @@ import { CELL, grid } from "@/catalog/grid";
 import { handleHold } from "@/motion/handleHold";
 import { useThemeColor } from "@/theme/useThemeColor";
 
+import { useResetAfterRender } from "./resetAfterRender";
+
 /**
  * Dragging a row of a list up or down by its handle (the arrangement editors),
  * with every row mounted: the dragged row lifts and follows the finger, the
@@ -96,14 +98,7 @@ export const useRowReorder = <Id,>({
   }, []);
 
   // Rows drop into place in the same frame the new order renders.
-  const resetAfterRender = useRef(false);
-  useLayoutEffect(() => {
-    if (!resetAfterRender.current) return;
-    resetAfterRender.current = false;
-    from.set(-1);
-    to.set(-1);
-    travel.set(0);
-  });
+  const resetAfterRender = useResetAfterRender(from, to, travel);
 
   const pickUp = useCallback(
     (index: number) => {
@@ -137,17 +132,20 @@ export const useRowReorder = <Id,>({
     },
     [to, heightOf],
   );
-  const drop = useCallback((canceled: boolean) => {
-    const current = dragNow.current;
-    dragNow.current = null;
-    resetAfterRender.current = true;
-    setDragging(false);
-    if (current === null || canceled || current.over === current.id) return;
-    const { ids: rows, move: moveNow } = latest.current;
-    const start = rows.indexOf(current.id);
-    const end = rows.indexOf(current.over);
-    if (start !== -1 && end !== -1 && start !== end) moveNow(start, end);
-  }, []);
+  const drop = useCallback(
+    (canceled: boolean) => {
+      const current = dragNow.current;
+      dragNow.current = null;
+      resetAfterRender();
+      setDragging(false);
+      if (current === null || canceled || current.over === current.id) return;
+      const { ids: rows, move: moveNow } = latest.current;
+      const start = rows.indexOf(current.id);
+      const end = rows.indexOf(current.over);
+      if (start !== -1 && end !== -1 && start !== end) moveNow(start, end);
+    },
+    [resetAfterRender],
+  );
 
   return useMemo(
     () => ({
