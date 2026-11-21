@@ -58,8 +58,8 @@ test("files opened with Wave play: at launch, and handed to the running window w
   const loose = join(elsewhere, "Loose Tape.wav");
   const other = join(elsewhere, "Second Tape.wav");
   const notes = join(elsewhere, "notes.txt");
-  // The Library's song is a second long, so its play counts when it plays through.
-  silence(inLibrary, 1);
+  // The Library's song is three seconds long, so its play counts when it plays through.
+  silence(inLibrary, 3);
   silence(loose, 60);
   silence(other, 60);
   writeFileSync(notes, "not a song");
@@ -130,7 +130,9 @@ test("files opened with Wave play: at launch, and handed to the running window w
         return [now.title, now.outside, now.library];
       })
       .toEqual(["Library Song", false, ["Library Song"]]);
-    await expect.poll(async () => (await playing(page)).state, { timeout: 15_000 }).toBe("ended");
+    await expect.poll(async () => (await playing(page)).state).toBe("playing");
+    // The queue plays out and stops.
+    await expect.poll(async () => (await playing(page)).state, { timeout: 15_000 }).toBe("paused");
     await app.close();
     closed = true;
     const plays = await Effect.runPromise(
