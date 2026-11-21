@@ -166,6 +166,7 @@ export {
   findLyricMatch,
   normalizeSearchText,
   rememberSearch,
+  searchKindOrder,
 } from "./search.ts";
 export type {
   LyricSearchMatch,
@@ -652,6 +653,7 @@ export {
   glassTintAlpha,
   isDefaultGlassSettings,
   readGlassSettings,
+  writeGlassSettings,
 } from "./glassSettings.ts";
 export type { GlassLevelSetting, GlassSettings } from "./glassSettings.ts";
 export {
@@ -747,6 +749,21 @@ export { concentricRadius } from "./corners.ts";
 export type { InsetSquare } from "./corners.ts";
 export { LOGO_WAVES, logoIconPaths, logoWaveY } from "./logo.ts";
 export type { LogoIconBox, LogoIconPaths, LogoWave } from "./logo.ts";
+export {
+  TITLE_MARK_TOKENS,
+  titleMarkColours,
+  titleMarkFontScale,
+  titleMarkLayout,
+  titleMarkPlacement,
+} from "./titleMark.ts";
+export type {
+  TitleLine,
+  TitleMarkColours,
+  TitleMarkDrawn,
+  TitleMarkLayout,
+  TitleMarkRoom,
+  TitleMarkType,
+} from "./titleMark.ts";
 export { LISTENING_WAVE, UNDERLINE_WAVE, underlineMotion, wavePath } from "./wavyUnderline.ts";
 export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
 export {
@@ -2408,6 +2425,8 @@ export { DOUBLE_TAP_MS, coverDoubleTap, createCoverTaps } from "./coverGestures.
 export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
 export { createStarPop } from "./starPop.ts";
 export type { StarPop } from "./starPop.ts";
+export { playingStarSubject } from "./playingStar.ts";
+export type { PlayingStarAnswer, PlayingStarSubject } from "./playingStar.ts";
 export { discoverLevelLabel } from "./discoverMixLevels.ts";
 export {
   DISCOVER_ROWS,

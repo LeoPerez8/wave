@@ -287,6 +287,8 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+      // A pressed Favorite star stays on the song it was pressed on.
+      AutoModes.state.playing(mediaItem?.mediaId)
       val player = exoPlayer ?: return
       if ((reconnectWait ?: reconnectAttempt)?.key != mediaItem?.mediaId) cancelReconnect()
       player.setWakeMode(if (streams(mediaItem)) C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL)
@@ -364,6 +366,8 @@ class PlaybackService : MediaLibraryService() {
     player.setWakeMode(if (streams(player.currentMediaItem)) C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL)
     sessionListeners.forEach(player::addListener)
     exoPlayer = player
+    // A crossfade's handoff changes the song without a transition on this player.
+    AutoModes.state.playing(player.currentMediaItem?.mediaId)
   }
 
   /** Whether [item] is a streamed YT Music song. */
@@ -653,11 +657,11 @@ class PlaybackService : MediaLibraryService() {
     expo.modules.wavenative.locale.NativeLanguage.init(this)
     stopLanguage = NativeText.listen {
       shown?.refresh()
-      showModes(AutoModes.state.current)
+      showModes(AutoModes.state.shown)
       triggerNotificationUpdate()
       for (parent in languageParents.toList()) session?.notifyChildrenChanged(parent, Int.MAX_VALUE, null)
     }
-    showModes(AutoModes.state.current)
+    showModes(AutoModes.state.shown)
     var savedModes = AutoModes.state.current
     stopModes = AutoModes.state.listen { modes ->
       showModes(modes)
@@ -669,7 +673,7 @@ class PlaybackService : MediaLibraryService() {
     }
     stopLyrics = AutoLyrics.state.listen {
       shown?.refresh()
-      showModes(AutoModes.state.current)
+      showModes(AutoModes.state.shown)
     }
     carConnection = CarConnection(this).type.also { it.observeForever(carConnectionObserver) }
     AutoLibrary.onChildrenRecovered = { parentId ->
@@ -1009,14 +1013,21 @@ class PlaybackService : MediaLibraryService() {
         AutoLyrics.state.toggle()
         return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
       }
-      // A shuffle or repeat button: JS's queue engine changes the mode and reports it back.
+      // A shuffle or Favorite button: JS changes the mode or the star and reports it back.
       // More from this artist: JS's queue engine adds the songs.
       val action = customCommand.customAction
       (AutoModes.request(action) ?: MoreFromArtist.request(action))?.let { request ->
         if (session.isAutoCompanionController(controller) || session.isAutomotiveController(controller)) {
           keepJsFor(controller)
         }
-        return AutoLibrary.command(request)
+        val answer = AutoLibrary.command(request)
+        if (action == AutoModes.FAVORITE_ACTION) {
+          // The star flips now. JS's report of the toggled star is posted to the main thread
+          // before its answer, so posting the answer there too keeps the two in order.
+          val press = AutoModes.state.pressStar()
+          answer.addListener({ AutoModes.state.starAnswered(press) }, mainExecutor)
+        }
+        return answer
       }
       val code = when (action) {
         SleepTimerSession.START.customAction ->

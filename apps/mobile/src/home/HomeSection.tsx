@@ -360,7 +360,7 @@ const seedTiles = (seeds: readonly MagicQueueSeed<PlayableSongRow>[], size: numb
  * 14 days, and Discoveries holds [discoveries], songs never played. The Magic
  * Queue page holds the Library's songs and the playlists'
  * YT Music entries, or with neither, streamed songs of the Artist mixes, with
- * placeholder tiles while the first mixes build; a new list each visit. Alone,
+ * placeholder tiles while the first mixes build; a new list each app start. Alone,
  * it brings other songs when pulled right past its start, with Undo; after
  * another page that pull is the swipe back, so a refresh button sits by the
  * dots. Each place crossfades its tile when its song changes. Hidden with YT
