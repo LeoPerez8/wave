@@ -83,6 +83,7 @@ import {
   type MiniPlayerCalls,
 } from "./system/miniPlayerHandlers.ts";
 import { statsHandlers } from "./statsHandlers.ts";
+import { historyHandlers } from "./historyHandlers.ts";
 import { lyricsAndTagsHandlers } from "./lyricsAndTagsHandlers.ts";
 import { HomeFollow } from "./follows/homeFollow.ts";
 import { homeFollowHandlers } from "./follows/homeFollowHandlers.ts";
@@ -793,6 +794,7 @@ const createHandlers = (
     ...playlistHandlers(validTarget),
     ...homeHandlers,
     ...statsHandlers,
+    ...historyHandlers,
     ...lyricsAndTagsHandlers,
     ...homeFollowHandlers,
     ...miniPlayerHandlers(miniPlayer),

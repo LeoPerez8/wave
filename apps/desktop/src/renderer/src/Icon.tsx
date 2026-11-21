@@ -36,6 +36,7 @@ const paths: Record<string, string> = {
   playlist: "M3 4h12M3 9h12M3 14h6M15 20V9l6-1M15 20c0 2.7-4 2.7-4 0s4-2.7 4 0",
   close: "M6 6l12 12M6 18 18 6",
   stats: "M4 20h16M6 16v-4m6 4V5m6 11V9",
+  history: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2",
   /** A small window over a large one. */
   miniPlayer: "M3 4h18v16H3ZM12 12h6v5h-6Z",
   /** Out to the corners: back to the main window. */
