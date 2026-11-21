@@ -268,16 +268,21 @@ const MIGRATIONS: readonly Migration[] = [
     ],
   },
   {
+    // When Restore or Undo last brought an entry back (Core's `mergePlaylistEntries`).
+    id: "0014_playlist_entry_restores",
+    statements: ["ALTER TABLE playlist_entries ADD COLUMN restored_at INTEGER"],
+  },
+  {
     // The Google account's name, as the members of a collaborative playlist see the account
     // (`@wave/core`'s `accountName`); null until a sign-in or `PUT /v1/account/name` gives one.
-    id: "0014_account_name",
+    id: "0015_account_name",
     statements: ["ALTER TABLE accounts ADD COLUMN name TEXT"],
   },
   {
     // A collaborative playlist's record (src/collaborations.ts): its owner, in whose account
     // the playlist's rows stay, its members with when each joined (the owner is one), and, for
     // an account that left or for which it ended, why and when.
-    id: "0015_collaborations",
+    id: "0016_collaborations",
     statements: [
       `CREATE TABLE collaborations (
         playlist_id TEXT PRIMARY KEY,

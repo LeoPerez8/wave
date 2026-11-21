@@ -1569,11 +1569,14 @@ export {
   findRecording,
   joinLibraries,
   mergePlays,
+  mergePlaylistEntries,
   mergeRows,
+  mergeTableRows,
   recordingKey,
   signOutPlan,
   syncsPreference,
   vanishedFile,
+  withinServiceClock,
 } from "./sync.ts";
 export type {
   FilledSong,
@@ -1589,6 +1592,7 @@ export type {
   RecordingTags,
   SignOutPlan,
   StreamedEntry,
+  SyncEntryRow,
   SyncPlay,
   SyncRow,
   TrackEntry,
@@ -1619,9 +1623,11 @@ export {
   pushBatches,
   pushBody,
   readPullPage,
+  readPushAnswer,
   syncFieldFits,
 } from "./syncWire.ts";
 export type {
+  CorrectedChangeTime,
   SyncDismissedSuggestion,
   SyncFavorite,
   SyncFieldKind,
@@ -1629,6 +1635,7 @@ export type {
   SyncHiddenRelease,
   SyncNotifiedShow,
   SyncPullPage,
+  SyncPushAnswer,
   SyncPlayEnd,
   SyncPlayRow,
   SyncPlaylist,

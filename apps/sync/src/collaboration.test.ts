@@ -471,7 +471,7 @@ describe("deleting an account", () => {
 
 describe("the migration", () => {
   test("adds tables and leaves the ones there were, and their rows, as they are", async () => {
-    const db = await freshDatabase({ until: "0014_account_name" });
+    const db = await freshDatabase({ until: "0015_account_name" });
     const before = await harness({}, db);
     const ana = await before.signIn({ name: "Ana Souza" });
     await push(before, ana, {
@@ -492,7 +492,7 @@ describe("the migration", () => {
       );
     const held = await rows();
 
-    assert.deepEqual(await migrate(db, { until: "0015_collaborations" }), ["0015_collaborations"]);
+    assert.deepEqual(await migrate(db, { until: "0016_collaborations" }), ["0016_collaborations"]);
 
     const added = (await schema()).filter(([name]) => !tables.some(([known]) => known === name));
     assert.deepEqual(
