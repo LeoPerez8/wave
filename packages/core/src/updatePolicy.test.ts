@@ -990,7 +990,12 @@ describe("the update action in Settings' Version History row", () => {
       ] as const) {
         assert.equal(updateButtonLook({ ...apkReady, installTap }), "installing");
         assert.equal(
-          updateButtonAction({ ...apkReady, installTap, downloadingApk: false }),
+          updateButtonAction({
+            ...apkReady,
+            installTap,
+            downloadingApk: false,
+            gesture: "installNow",
+          }),
           "none",
         );
       }
