@@ -236,6 +236,7 @@ export interface BridgeContract
   readonly "account.signOutEverywhere": { readonly args: readonly []; readonly result: void };
   readonly "account.deleteAccount": { readonly args: readonly []; readonly result: void };
   readonly "account.answerInvitation": { readonly args: readonly []; readonly result: void };
+  readonly "account.answerBringYourMusic": { readonly args: readonly []; readonly result: void };
 
   readonly "settings.appearance": { readonly args: readonly []; readonly result: Appearance };
   readonly "settings.language": { readonly args: readonly []; readonly result: LanguageView };
@@ -667,6 +668,7 @@ export const BRIDGE_CALLS = [
   "account.signOutEverywhere",
   "account.deleteAccount",
   "account.answerInvitation",
+  "account.answerBringYourMusic",
   "collections.actions",
   "collections.run",
   "collections.selectionActions",
@@ -938,6 +940,8 @@ export interface WaveBridge {
     /** Delete Account, once confirmed: resolves when it ended, however it did. */
     readonly deleteAccount: () => Promise<void>;
     readonly answerInvitation: () => Promise<void>;
+    /** Continue, Not Now or Escape on Bring your music: it never shows again on this computer. */
+    readonly answerBringYourMusic: () => Promise<void>;
   };
   /** Playlists' edits, images, Graveyard and M3U import. */
   readonly collections: {
@@ -1098,6 +1102,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     signOutEverywhere: () => invoke("account.signOutEverywhere"),
     deleteAccount: () => invoke("account.deleteAccount"),
     answerInvitation: () => invoke("account.answerInvitation"),
+    answerBringYourMusic: () => invoke("account.answerBringYourMusic"),
   },
   collections: {
     actions: (target, options) => invoke("collections.actions", target, options),

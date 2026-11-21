@@ -2857,6 +2857,7 @@ export type {
 } from "./typedReleaseDate.ts";
 export {
   FIRST_RUN_TOUR_CARDS,
+  desktopBringYourMusic,
   firstRunCardAtLaunch,
   nextFirstRunStep,
   signInInvitationAtLaunch,
