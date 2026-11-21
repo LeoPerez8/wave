@@ -232,11 +232,14 @@ export function NowPlayingSheet() {
   // Related rises over them.
   const pages = useScreenPages();
   const { screen, editing, page, turning, send } = pages;
+  // Related needs YouTube Music: turned off, it goes in this render, ahead of
+  // the effect that takes the screens back to the player.
   // Settled, Related covers the pages: what is under it rests until it moves.
-  const covered = screen === "related" && !pages.relatedMoving;
+  const covered = ytMusic && screen === "related" && !pages.relatedMoving;
   // Related stays drawn, with its songs, while its panel leaves.
-  const relatedMounted = screen === "related" || pages.relatedMoving;
+  const relatedMounted = ytMusic && (screen === "related" || pages.relatedMoving);
   const { videoId, findAgain } = usePlayingVideoId(relatedMounted ? trackId : null, ytSong);
+  const playerPageInSight = (page === "player" || turning) && !covered;
   const leaveQueue = useCallback(() => void send({ type: "headerTap" }), [send]);
   // Where the pages sit on the sheet, for the Queue's sticky bar.
   const [pagesTop, setPagesTop] = useState(0);
@@ -294,7 +297,7 @@ export function NowPlayingSheet() {
     transform: [{ translateY: sheetOffset.get() }],
   }));
 
-  // The Queue slot's button and the edge mark open the Queue screen.
+  // The Queue slot's button and the edge mark open the Queue screen (a swipe times its own open).
   const openQueue = () => {
     if (item === null) return;
     if (screen !== "queue") beginTiming("queue", "Queue");
@@ -444,22 +447,27 @@ export function NowPlayingSheet() {
                 </DismissArea>
               ) : (
                 <>
+                  {/*
+                   * Hidden while the Queue or Related covers it, Lyrics stays open but follows
+                   * no playhead, and Back goes to the screens first.
+                   */}
                   {view === "lyrics" && (
-                    <LyricsView
-                      file={lyricsFile}
-                      nonDTrackId={nonDTrackId}
-                      item={item}
-                      palette={palette}
-                      gradient={gradient}
-                      onShowPlayer={showPlayer}
-                    />
+                    <Activity
+                      mode={playerPageInSight ? "visible" : "hidden"}
+                      name={strings.playbackText.lyrics}
+                    >
+                      <LyricsView
+                        file={lyricsFile}
+                        nonDTrackId={nonDTrackId}
+                        item={item}
+                        palette={palette}
+                        gradient={gradient}
+                        onShowPlayer={showPlayer}
+                      />
+                    </Activity>
                   )}
                   <Activity
-                    mode={
-                      view === "player" && (page === "player" || turning) && !covered
-                        ? "visible"
-                        : "hidden"
-                    }
+                    mode={view === "player" && playerPageInSight ? "visible" : "hidden"}
                     name="Player"
                   >
                     <PlayerPane item={item} details={details} playing={playing} />

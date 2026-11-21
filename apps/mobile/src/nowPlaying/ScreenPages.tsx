@@ -21,6 +21,7 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL, grid } from "@/catalog/grid";
+import { beginTiming } from "@/lib/timing";
 import { handleSwipeSlop } from "@/motion/handleHold";
 import { useListScrollable } from "@/motion/heldTouch";
 import { Press } from "@/motion/Press";
@@ -63,6 +64,11 @@ export type ScreenPages = {
   readonly related: SharedValue<number>;
   /** The panel is rising, leaving or under a finger: the page under it is in sight. */
   readonly relatedMoving: boolean;
+  /**
+   * The screen is Related, as of the last event: a finger on the panel moves
+   * it only while this holds, so a screen that leaves mid-drag takes the panel.
+   */
+  readonly relatedHere: SharedValue<boolean>;
   /** Takes the screens through [event]; true when Now Playing itself should close. */
   readonly send: (event: NowPlayingScreensEvent) => boolean;
   /** A swipe from the page of [from] started, and ended (dp, dp/s; negative is left). */
@@ -88,6 +94,7 @@ export const useScreenPages = (): ScreenPages => {
   const [relatedMoving, setRelatedMoving] = useState(false);
   const position = useSharedValue(0);
   const related = useSharedValue(0);
+  const relatedHere = useSharedValue(false);
   // What the handlers step from: the screens as of the last event, ahead of the render.
   const latest = useRef(screens);
 
@@ -145,6 +152,8 @@ export const useScreenPages = (): ScreenPages => {
       latest.current = step.screens;
       setScreens(step.screens);
       const { screen } = step.screens;
+      // Ahead of the panel's own move, so a finger still on it stops moving it.
+      relatedHere.set(screen === "related");
       if (screen === "queue") setQueueMounted(true);
       if (screen === "related") {
         // Asked for with Now Playing closed, the sheet rises already on it.
@@ -161,7 +170,7 @@ export const useScreenPages = (): ScreenPages => {
       else if (screen !== before.screen) turnTo(screen, 0, !still);
       return step.close;
     },
-    [turnTo, movePanel, still],
+    [turnTo, movePanel, still, relatedHere],
   );
 
   const swipeBegan = useCallback(() => {
@@ -172,17 +181,26 @@ export const useScreenPages = (): ScreenPages => {
   const swipeEnded = useCallback(
     (from: NowPlayingPage, translationX: number, velocityX: number) => {
       const to = settleScreenSwipe({ from, translationX, velocityX, width });
+      // Most ways into the Queue are a swipe: its open is timed like the button's.
+      if (to === "queue" && latest.current.screen !== "queue") beginTiming("queue", "Queue");
       // The pages move against the finger: a drag left raises the position.
       send({ type: "swipe", to }, width > 0 ? -velocityX / width : 0);
     },
     [send, width],
   );
 
-  const relatedDragBegan = useCallback(() => setRelatedMoving(true), []);
+  const relatedDragBegan = useCallback(() => {
+    if (latest.current.screen === "related") setRelatedMoving(true);
+  }, []);
 
   const relatedDragEnded = useCallback(
     (translationY: number, velocityY: number) => {
-      if (latest.current.screen !== "related") return;
+      // The screen left Related under the finger (Back, the queue ending, YT Music
+      // off): the panel goes the rest of the way and rests, wherever the drag left it.
+      if (latest.current.screen !== "related") {
+        movePanel(false, 0, !still && isNowPlayingShown());
+        return;
+      }
       // The panel leaves by the travel and speed that dismiss the sheet.
       const drag = { from: "open", offset: translationY, velocity: velocityY, height } as const;
       // The panel's position falls as the finger goes down.
@@ -203,6 +221,7 @@ export const useScreenPages = (): ScreenPages => {
       position,
       related,
       relatedMoving,
+      relatedHere,
       send,
       swipeBegan,
       swipeEnded,
@@ -218,6 +237,7 @@ export const useScreenPages = (): ScreenPages => {
       position,
       related,
       relatedMoving,
+      relatedHere,
       send,
       swipeBegan,
       swipeEnded,

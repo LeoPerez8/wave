@@ -10,6 +10,7 @@ import {
 import { useReducedMotion } from "react-native-reanimated";
 
 import { CELL, grid } from "@/catalog/grid";
+import { ClearRowsContext } from "@/catalog/SwipeableRow";
 import { useLocalisation } from "@/localisation/localisation";
 import { useListScrollable } from "@/motion/heldTouch";
 import { useSongRows, type SongRowsOptions } from "@/songs/useSongRows";
@@ -26,7 +27,8 @@ const ADJUST = [{ name: "increment" }, { name: "decrement" }] as const;
 /**
  * Related's songs as pages turned sideways: each page is [pageSize] of
  * [options]' songs, in order, as rows without swipe actions (a sideways swipe
- * always turns the page), which have no background of their own. With more than one
+ * always turns the page), which have no background of their own
+ * (`ClearRowsContext`), so Now Playing's colours show through. With more than one
  * page the next one's edge shows on the right and dots under the pages mark
  * the one in sight. [width] is the space between the screen's side margins.
  *
@@ -76,7 +78,7 @@ export function RelatedCarousel<T>({
     [page, last, interval, still],
   );
   return (
-    <>
+    <ClearRowsContext value>
       <ScrollView
         ref={scroll}
         horizontal
@@ -130,6 +132,6 @@ export function RelatedCarousel<T>({
           ))}
         </View>
       )}
-    </>
+    </ClearRowsContext>
   );
 }

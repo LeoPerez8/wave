@@ -78,7 +78,7 @@ export function RelatedDragArea({
   const still = useReducedMotion();
   // A long-pressed finger slides onto its menu's entries; it doesn't drag the panel.
   const draggable = useListScrollable();
-  const { related, relatedDragBegan, relatedDragEnded } = pages;
+  const { related, relatedHere, relatedDragBegan, relatedDragEnded } = pages;
   const pan = usePanGesture({
     enabled: draggable,
     // Only a drag down claims the touch; up never does.
@@ -90,7 +90,8 @@ export function RelatedDragArea({
     },
     onUpdate: (event) => {
       "worklet";
-      if (still || height <= 0) return;
+      // Once the screen leaves Related its panel moves on its own.
+      if (still || height <= 0 || !relatedHere.get()) return;
       related.set(Math.min(1, Math.max(0, 1 - event.translationY / height)));
     },
     onDeactivate: (event) => {
