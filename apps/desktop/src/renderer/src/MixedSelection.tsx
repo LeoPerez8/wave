@@ -12,6 +12,7 @@ import {
 } from "@wave/core";
 import { useEffect, useMemo, useState } from "react";
 import type { BrowseScope } from "../../shared/browse.ts";
+import type { SongTarget } from "../../shared/songActions.ts";
 import type {
   CollectionPick,
   CollectionTarget,
@@ -72,6 +73,12 @@ const picked = (picks: CollectionPicks): CollectionPick[] =>
     const ids = [...selection.ids];
     return selection.all ? [{ kind, all: true, except: ids }] : [{ kind, ids }];
   });
+
+/** The checked songs [songs] with [picks], as one selection's target. */
+export const selectionWithPicks = (
+  picks: CollectionPicks,
+  songs: SongTarget | null,
+): SelectionTarget => ({ ...(songs ? { songs } : {}), collections: picked(picks) });
 
 /** The one collection checked on its own, which keeps its own bar. */
 export const onlyCollection = (

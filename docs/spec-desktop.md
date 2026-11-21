@@ -367,6 +367,13 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   songs has no file; Fix Songs when the checked items are one kind of collection. Favorite and
   the other song entries show only while songs alone are checked (Core's
   `desktopSelectionActions`, the phone's mixed selection rules).
+- A song row drags onto a playlist in the sidebar, wide or collapsed to icons, to add it there;
+  onto an Up Next row, the playing row or the end of the Queue tab, to go in Up Next at that
+  place (#1217); or onto the player bar's Queue button, for Add to Queue. A checked row brings
+  every checked song, and on Search the collections checked with them, in the order shown.
+  Streamed songs drag the same way. A target is highlighted only while it can take the drop,
+  dragging over the Queue tab opens it, and the toasts are the menu entries' own. Add to
+  Playlist and Add to Queue stay in the menus for the keyboard.
 - Home shows the phone's sections in the phone's order, following the account's synced
   arrangement: shelves of tiles, Most played as a table. Edit Home, on Home and under Settings ›
   Home, is the phone's editor: the sections shown, Discover's rows under Discover, then the ones
@@ -401,6 +408,12 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   quiet line saying they come back online, and downloads pause. A missing song is dimmed, with
   no × (a download on its way shows its progress on the row); the × marks only a file that failed
   to play.
+- A YT Music album page has Play, Shuffle and Download, and a YT Music artist page Play and
+  Shuffle, as on the phone. Download follows Core's album rule (Download, Cancel, Retry Failed,
+  Downloaded) and the head counts the songs saved while they're on their way; the songs land
+  as one album, tagged from its page. A page YT Music didn't answer has Try Again on its quiet
+  line. On an artist page's Albums and Singles & EPs, a release the Library has opens the
+  Library's album page.
 - No chips, no filled Play button, no card around the top result (Quiet Catalog, as on the
   phone).
 

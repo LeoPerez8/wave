@@ -229,6 +229,13 @@ input::placeholder {
 .nav-item[aria-current="page"] svg {
   color: var(--color-accent);
 }
+/* A sidebar playlist or the Queue button while songs dragged over it can drop there. */
+.nav-item.drop-over,
+.icon-button.drop-over {
+  background: var(--color-fill);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  border-radius: 6px;
+}
 .nav-heading {
   font-size: 11px;
   font-weight: 600;
@@ -464,6 +471,12 @@ h2 {
   padding: 14px 12px;
   font-size: 13px;
 }
+/* Try Again on the quiet line: read the page again. */
+.yt-quiet-again {
+  margin-left: 8px;
+  color: var(--color-accent);
+  font-size: 13px;
+}
 /* YouTube Music's pages (Discover, Magic Queue, artist and album pages) scroll as one. */
 .yt-page {
   flex: 1;
@@ -609,6 +622,10 @@ h2 {
 }
 .hero-actions button:disabled {
   opacity: 0.65;
+}
+/* Downloaded: the Library has every song; it stays tinted and a click does nothing. */
+.hero-actions button.downloaded {
+  cursor: default;
 }
 .scan-progress {
   display: flex;

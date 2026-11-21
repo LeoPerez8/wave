@@ -98,6 +98,7 @@ export {
 export type {
   PendingMove,
   UpNextMove,
+  UpNextPlace,
   QueueCommand,
   QueueContext,
   QueueEntry,
