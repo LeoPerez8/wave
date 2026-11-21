@@ -68,7 +68,7 @@ jobs:
     env:
       HEAD_SHA: ${{ inputs.source_sha }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.source_sha }}
           persist-credentials: false
@@ -78,21 +78,21 @@ jobs:
         id: checked
         run: echo "source=$(git rev-parse HEAD)" | tee -a "$GITHUB_OUTPUT"
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           package-manager-cache: false
 
       - uses: ./.github/actions/pnpm-store
 
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-disabled: true
 
@@ -101,7 +101,7 @@ jobs:
       # and CI › Caches). Main saves a new key's entry after the build; PRs only read it.
       - name: Restore Gradle's caches
         id: gradle_cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.gradle/caches
@@ -139,7 +139,7 @@ jobs:
 
       - name: Save Gradle's caches
         if: github.ref == 'refs/heads/main' && steps.gradle_cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.gradle/caches
@@ -154,7 +154,7 @@ jobs:
 
       - name: Keep the report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-report-native-tests
           path: ${{ runner.temp }}/ci-report
@@ -211,7 +211,7 @@ jobs:
       KEPT_APK: ${{ github.workspace }}/.cache/kept-apk
       WAVE_CI_BUNDLE_MANIFEST: ${{ github.workspace }}/../wave-ci-bundle.json
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.source_sha }}
           persist-credentials: false
@@ -221,9 +221,9 @@ jobs:
         id: checked
         run: echo "source=$(git rev-parse HEAD)" | tee -a "$GITHUB_OUTPUT"
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           package-manager-cache: false
@@ -253,7 +253,7 @@ jobs:
       # Expo's in metro.config.js.
       - name: Restore Metro's cache
         id: metro_cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /tmp/metro-cache
           key: mobile-metro-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
@@ -310,7 +310,7 @@ jobs:
       - name: Keep the over-the-air update
         if: steps.export_update.outcome == 'success'
         continue-on-error: true
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: update-${{ inputs.release_tag }}
           path: ${{ runner.temp }}/update
@@ -318,7 +318,7 @@ jobs:
 
       - name: Restore the kept APK
         id: kept
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.KEPT_APK }}
           key: ${{ steps.key.outputs.key }}
@@ -338,7 +338,7 @@ jobs:
         id: kept_download
         if: steps.kept_artifact.outputs.runId != ''
         continue-on-error: true
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           github-token: ${{ github.token }}
           run-id: ${{ steps.kept_artifact.outputs.runId }}
@@ -366,13 +366,13 @@ jobs:
           scripts/ci/step.sh "Repack the kept APK" scripts/ci/repack.sh "$KEPT_APK" "$RUNNER_TEMP/repacked.apk"
           echo "BUILT_APK=$RUNNER_TEMP/repacked.apk" >> "$GITHUB_ENV"
 
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         if: env.APK_BUILD == 'full'
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         if: env.APK_BUILD == 'full'
         with:
           cache-disabled: true
@@ -382,7 +382,7 @@ jobs:
       - name: Restore Gradle's caches
         id: gradle_cache
         if: env.APK_BUILD == 'full'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.gradle/caches
@@ -396,7 +396,7 @@ jobs:
       - name: Restore ccache
         id: ccache
         if: env.APK_BUILD == 'full'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
           key: mobile-ccache-${{ hashFiles('pnpm-lock.yaml') }}
@@ -408,7 +408,7 @@ jobs:
 
       - name: Save Metro's cache
         if: github.ref == 'refs/heads/main'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /tmp/metro-cache
           key: ${{ steps.metro_cache.outputs.cache-primary-key }}
@@ -453,14 +453,14 @@ jobs:
 
       - name: Save ccache
         if: github.ref == 'refs/heads/main' && env.APK_BUILD == 'full' && steps.ccache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
           key: ${{ steps.ccache.outputs.cache-primary-key }}
 
       - name: Save Gradle's caches
         if: github.ref == 'refs/heads/main' && env.APK_BUILD == 'full' && steps.gradle_cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.gradle/caches
@@ -482,14 +482,14 @@ jobs:
 
       - name: Save the kept APK
         if: github.ref == 'refs/heads/main' && env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.KEPT_APK }}
           key: ${{ steps.key.outputs.key }}
 
       - name: Keep main's full APK for when the cache misses
         if: github.ref == 'refs/heads/main' && env.APK_BUILD == 'full'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kept-${{ steps.key.outputs.key }}
           path: ${{ env.KEPT_APK }}
@@ -533,7 +533,7 @@ jobs:
           cat "$RUNNER_TEMP/app-size.md" >> "$GITHUB_STEP_SUMMARY"
 
       # For the release job to sign. No phone installs it as it is.
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.apk.outputs.artifact }}
           path: ${{ steps.apk.outputs.path }}
@@ -541,7 +541,7 @@ jobs:
 
       - name: Keep the report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-report-android
           path: ${{ runner.temp }}/ci-report
@@ -569,7 +569,7 @@ jobs:
     outputs:
       sha: ${{ steps.admit.outputs.sha }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.source_sha }}
           sparse-checkout: |
@@ -577,7 +577,7 @@ jobs:
             apps/updates
           persist-credentials: false
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           package-manager-cache: false
@@ -612,7 +612,7 @@ jobs:
           node -e 'console.log(`sha=${JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).source}`)' \
             "$RUNNER_TEMP/provenance.json" | tee -a "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-provenance
           path: ${{ runner.temp }}/provenance.json
@@ -654,7 +654,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-gate.outputs.sha }}
           persist-credentials: false
@@ -662,18 +662,18 @@ jobs:
             scripts/ci
             apps/updates
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           package-manager-cache: false
 
       # The gate's provenance record (docs/release-provenance.md).
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-provenance
           path: ${{ runner.temp }}/provenance
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.android.outputs.artifact }}
           path: ${{ runner.temp }}/unsigned
@@ -703,7 +703,7 @@ jobs:
           node scripts/ci/release-gate.ts seal "$RUNNER_TEMP/provenance/provenance.json"             "$RUNNER_TEMP/release/$APK_NAME" > "$RUNNER_TEMP/provenance/sealed.json"
           cat "$RUNNER_TEMP/provenance/sealed.json"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-provenance-sealed
           path: ${{ runner.temp }}/provenance/sealed.json
@@ -712,7 +712,7 @@ jobs:
       # Where this release's source is (docs/release-source.md). Off until the owner sets the
       # repository variable RELEASE_SOURCE_DELIVERY to `on`. Once on, a manifest that doesn't
       # check out against the tag stops the release before anything is published.
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: vars.RELEASE_SOURCE_DELIVERY == 'on' && inputs.release_tag != ''
         with:
           ref: ${{ needs.release-gate.outputs.sha }}
@@ -732,7 +732,7 @@ jobs:
           echo "SOURCE_MANIFEST_FILE=$out/manifest.json" >> "$GITHUB_ENV"
           echo "SOURCE_DIRECTIONS_FILE=$out/directions.md" >> "$GITHUB_ENV"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ needs.android.outputs.apk }}
           path: ${{ runner.temp }}/release/${{ needs.android.outputs.apk }}
@@ -818,7 +818,7 @@ jobs:
       - name: Fetch the over-the-air update
         if: env.UPDATES_CONFIGURED == 'true' && steps.published.outputs.url != ''
         continue-on-error: true
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: update-${{ inputs.release_tag }}
           path: ${{ runner.temp }}/update
