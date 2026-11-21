@@ -2907,6 +2907,13 @@ export {
 } from "./languageChoice.ts";
 export { displayTag } from "./displayTag.ts";
 export {
+  openedAudioFiles,
+  openedFilePath,
+  openedFileTitle,
+  openedFileTrackId,
+  openedFilesQueue,
+} from "./openedFiles.ts";
+export {
   floatingWindowPosition,
   readFloatingWindowPosition,
   storedFloatingWindowPosition,

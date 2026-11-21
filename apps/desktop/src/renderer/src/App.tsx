@@ -401,20 +401,24 @@ export function App() {
   });
   /** A YouTube Music page's or the Queue's song menu: a streamed song's, or a Library song's. */
   const ytSongMenu = (row: BrowseRow, event: MouseEvent<HTMLElement>) =>
-    row.videoId !== undefined
-      ? actions.openItems(
-          text.desktopLibrary.songMenu(row.title),
-          streamed.items(row.videoId),
-          event.currentTarget,
-        )
-      : actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, {
-          x: event.clientX,
-          y: event.clientY,
-        });
+    // A file outside the Library has none of a song's actions.
+    row.outside
+      ? undefined
+      : row.videoId !== undefined
+        ? actions.openItems(
+            text.desktopLibrary.songMenu(row.title),
+            streamed.items(row.videoId),
+            event.currentTarget,
+          )
+        : actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, {
+            x: event.clientX,
+            y: event.clientY,
+          });
   /** The song playing's menu, from the player bar. */
   const playingMenu = (element: HTMLElement) => {
     const song = playback.view?.current;
-    if (song === null || song === undefined) return;
+    // A file outside the Library has none of a song's actions.
+    if (song === null || song === undefined || song.outside) return;
     if (song.videoId !== undefined)
       return actions.openItems(
         text.desktopLibrary.songMenu(song.title),
@@ -435,7 +439,7 @@ export function App() {
     Math.floor((playback.view?.status.positionMs ?? 0) / 2000),
   );
   /** Now Playing's Add to Playlist and Download, for a streamed song or a Library one. */
-  const nowPlayingActions = playingSong && (
+  const nowPlayingActions = playingSong && !playingSong.outside && (
     <NowPlayingSongActions
       download={
         playingSong.videoId !== undefined
@@ -1202,7 +1206,7 @@ export function App() {
             onError={failed}
             notify={notify}
             onMenu={(row, at) => {
-              if (row.unavailable) return;
+              if (row.unavailable || row.outside) return;
               if (row.videoId === undefined) {
                 actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at);
               } else {
