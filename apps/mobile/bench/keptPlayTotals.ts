@@ -6,8 +6,8 @@
  * plays added (300 videos, 6,000 plays over the same 90 days, a third of them
  * crediting a Library artist). Checks both give the same totals, then prints
  * each read's median time. Then what the kept totals cost: a play as the
- * player writes it, and an upgrade's history summed in startup steps (the
- * longest step and how many).
+ * player writes it, and an upgrade's history summed in the startup job's
+ * steps (the longest step of each kind, and the longest 6 ms slice).
  *
  * Desktop numbers: Node with sql.js (SQLite compiled to WebAssembly), not the
  * phone's SQLite. Run from the repo root:
@@ -15,6 +15,7 @@
  *   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON apps/mobile/bench/keptPlayTotals.ts [--quick]
  */
 import {
+  runStepSlice,
   followSuggestionsWindow,
   inYourOrbitWindow,
   recentPlaysWindow,
@@ -32,7 +33,8 @@ import {
   keptCreditedPlayTotals,
   keptPlayedTotals,
   keptSongPlayTotals,
-  settleKeptTotals,
+  keptTotalsSteps,
+  settleKeptTotalsSteps,
 } from "@wave/client/db/keptPlayTotals";
 import { endPlay, homePlays, recordPlay, updatePlay } from "@wave/client/db/playHistory";
 import { summedPlayedTotals } from "@wave/client/db/playedEntities";
@@ -61,6 +63,36 @@ const addStreamedPlays = (db: TestDatabase, now: number) =>
       180000, 180000, 'completed', x % 5 <> 0, 'phone', 'yt-rec-' || (x % 300), 'stream-' || x,
       CASE WHEN x % 4 = 0 THEN 'playlist' END, CASE WHEN x % 4 = 0 THEN CAST(x % 9 AS text) END
     FROM n`);
+
+/** The Library store's step (`KEPT_TOTALS_STEP` in `LibraryStore.ts`). */
+const KEPT_TOTALS_STEP = { songs: 2, plays: 250, days: 24 };
+
+/** The app's pace (`GENTLE_STEPS` in `lib/stepped.ts`). */
+const GENTLE_STEPS = { sliceMs: 6, maxSteps: 512 };
+
+/** Drops every kept total, as a database upgraded to 0069 with this history has them. */
+const asUpgrade = (db: TestDatabase) => {
+  for (const table of [
+    "play_credits",
+    "credited_buckets",
+    "play_buckets",
+    "played_songs",
+    "played_entities",
+    "played_recordings",
+    "playlist_play_buckets",
+  ])
+    db.run(sql.raw(`DELETE FROM ${table}`));
+  db.run(sql`UPDATE kept_totals_state SET generation = generation + 1, seeded_through = 0,
+    seed_until = coalesce((SELECT max(id) FROM play_events), 0)`);
+};
+
+/** What the next settle piece does, for the longest step of each. */
+const pieceOf = (db: TestDatabase): string => {
+  const kept = db.get<{ seeding: number; summing: number }>(sql`SELECT
+    seeded_through < seed_until AS seeding,
+    EXISTS (SELECT 1 FROM played_songs WHERE state = 0) AS summing FROM kept_totals_state`);
+  return kept.seeding === 1 ? "seed plays" : kept.summing === 1 ? "sum songs" : "credit songs";
+};
 
 /** Makes the kept totals owe a step, so the readers sum from the history as before. */
 const unsettled = <A>(db: TestDatabase, read: () => A): A => {
@@ -105,16 +137,52 @@ for (const size of quick ? ([1000] as const) : ([1000, 12000] as const)) {
   const fixture = await createFastAgainFixture(size);
   const { db, now } = fixture;
   addStreamedPlays(db, now);
+  // Each step as the app's slices run it: one `next()` of the settle's steps, at the store's size.
+  asUpgrade(db);
   const steps: number[] = [];
-  for (;;) {
-    const before = performance.now();
-    const done = settleKeptTotals(db, { songs: 16, plays: 1_000 });
-    steps.push(performance.now() - before);
-    if (done) break;
+  const longest = new Map<string, number>();
+  const byPiece: Record<string, number[]> = {};
+  for (let done = false; !done;) {
+    const piece = pieceOf(db);
+    const settling = settleKeptTotalsSteps(db, KEPT_TOTALS_STEP);
+    for (let index = 0; ; index++) {
+      const before = performance.now();
+      const next = settling.next();
+      const ms = performance.now() - before;
+      steps.push(ms);
+      const kind = index === 0 ? piece : "build the resolver";
+      longest.set(kind, Math.max(longest.get(kind) ?? 0, ms));
+      (byPiece[kind] ??= []).push(ms);
+      if (next.done === true) {
+        done = next.value;
+        break;
+      }
+    }
   }
   console.log(
-    `\n${size} songs, ${fixture.playEvents + STREAMED_PLAYS} plays: settled from scratch in ` +
-      `${steps.length} steps, longest ${Math.max(...steps).toFixed(1)} ms, median ${median(steps)} ms`,
+    `
+${size} songs, ${fixture.playEvents + STREAMED_PLAYS} plays: an upgrade settled in ` +
+      `${steps.length} steps, longest ${Math.max(...steps).toFixed(1)} ms, median ${median(steps)} ms, ` +
+      `${steps.filter((ms) => ms > 8).length} past 8 ms`,
+  );
+  for (const [kind, times] of Object.entries(byPiece))
+    console.log(
+      `  ${kind}: ${times.length} steps, median ${median(times)} ms, ` +
+        `longest ${longest.get(kind)!.toFixed(1)} ms, ${times.filter((ms) => ms > 8).length} past 8 ms`,
+    );
+  // The same through Core's slices at the app's pace (6 ms planned, 512 steps at most).
+  asUpgrade(db);
+  const slices: number[] = [];
+  const all = keptTotalsSteps(db, KEPT_TOTALS_STEP);
+  for (;;) {
+    const before = performance.now();
+    const slice = runStepSlice(all, { now: () => performance.now(), ...GENTLE_STEPS });
+    slices.push(performance.now() - before);
+    if (slice.done) break;
+  }
+  console.log(
+    `  in 6 ms slices: ${slices.length} slices, longest ${Math.max(...slices).toFixed(1)} ms, ` +
+      `${slices.filter((ms) => ms > 8).length} past 8 ms`,
   );
   const windows: [string, StatsWindow][] = [
     ["Stats week", statsWindow("week", now)],

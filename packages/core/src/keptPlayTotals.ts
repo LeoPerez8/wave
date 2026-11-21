@@ -7,7 +7,9 @@
  */
 import type { StatsWindow } from "./stats.ts";
 
-const DAY_MS = 86_400_000;
+/** A kept day's length: plays sum into UTC days. */
+export const KEPT_DAY_MS = 86_400_000;
+const DAY_MS = KEPT_DAY_MS;
 
 /** How many UTC days one kept block sums. */
 export const KEPT_BLOCK_DAYS = 32;

@@ -8,14 +8,18 @@
  * of Expo so the store tests run it against a real SQLite (`testDatabase.ts`).
  */
 import {
+  finishSteps,
+  KEPT_BLOCK_DAYS,
   keptTotalsPlan,
   rankEntityPlays,
   releaseTitle,
   sortKey,
+  streamedCreditResolverSteps,
   type CreditedPlayTotals,
   type KeptTotalsPlan,
   type SongPlayTotals,
   type StatsWindow,
+  type StreamedCreditResolver,
   type YtAlbumSong,
 } from "@wave/core";
 import { sql, type SQL } from "drizzle-orm";
@@ -24,7 +28,7 @@ import type { AlbumRow, ArtistRow } from "../types.ts";
 import { selectAlbums } from "./albums.ts";
 import { selectArtists } from "./artists.ts";
 import type { LibraryDatabase } from "./database.ts";
-import { songKeySql } from "./keptTotalsMigration.ts";
+import { BLOCK_MS, DAY_MS, songKeySql } from "./keptTotalsMigration.ts";
 import type {
   OnlineAlbum,
   OnlineArtist,
@@ -33,13 +37,9 @@ import type {
   PlayedEntityTotal,
   PlayedEntityTotals,
 } from "./playedEntities.ts";
-import { playedLibraryRows, playedResolver, type PlayedLibraryRows } from "./playedLibrary.ts";
+import { playedLibraryRowsSteps } from "./playedLibrary.ts";
 import * as schema from "./schema.ts";
 import { streamedSongsOf } from "./streamedSongs.ts";
-
-// Written into the statements: bound, a block's length (past 2^31) would be a real and divide exactly.
-const DAY_MS = 86_400_000;
-const BLOCK_MS = 32 * DAY_MS;
 
 /** What a song's plays count for: an album, an artist, a Stats credit row or a ranked song. */
 export type CreditKind = "album" | "artist" | "credit" | "song";
@@ -75,7 +75,8 @@ const owedSongs = (db: LibraryDatabase, state: 0 | 1, limit: number): string[] =
  */
 export const keptTotalsSettled = (db: LibraryDatabase): boolean =>
   db.get<{ settled: number }>(sql`SELECT seeded_through >= seed_until
-      AND NOT EXISTS (SELECT 1 FROM played_songs WHERE state < 2) AS settled
+      AND NOT EXISTS (SELECT 1 FROM played_songs WHERE state < 2)
+      AND NOT EXISTS (SELECT 1 FROM owed_days) AS settled
     FROM kept_totals_state WHERE id = 1`).settled === 1;
 
 /** Names the songs of the plays after the last one seeded, up to [rows] plays (an upgrade's history). */
@@ -108,8 +109,12 @@ const seed = (db: LibraryDatabase, kept: KeptState, rows: number) => {
   });
 };
 
-/** The plays of the song [key], through the index its kind has. */
-const playsOf = (key: string): SQL => {
+/**
+ * The plays of the song [key], through the index its kind has. A `r:` song
+ * has none of its own: with [inTime], a read bounded by start time, it goes
+ * through the starts instead of every play without a Library song.
+ */
+const playsOf = (key: string, inTime = false): SQL => {
   const rest = key.slice(2);
   if (key.startsWith("t:")) return sql`e.track_id = ${Number(rest)}`;
   if (key.startsWith("v:")) {
@@ -117,7 +122,9 @@ const playsOf = (key: string): SQL => {
     return sql`e.video_id = ${rest.slice(0, bar)}
       AND coalesce(e.recording_key, '') = ${rest.slice(bar + 1)}`;
   }
-  return sql`e.track_id IS NULL AND e.video_id IS NULL AND e.recording_key = ${rest}`;
+  return inTime
+    ? sql`+e.track_id IS NULL AND +e.video_id IS NULL AND e.recording_key = ${rest}`
+    : sql`e.track_id IS NULL AND e.video_id IS NULL AND e.recording_key = ${rest}`;
 };
 
 /** Sums each of [songs]' days and blocks again from their counted plays. */
@@ -125,6 +132,7 @@ const sumSongs = (db: LibraryDatabase, songs: readonly string[]) => {
   db.transaction((tx) => {
     for (const song of songs) {
       tx.run(sql`DELETE FROM play_buckets WHERE song = ${song}`);
+      tx.run(sql`DELETE FROM owed_days WHERE song = ${song}`);
       tx.run(sql`INSERT INTO play_buckets (song, span, bucket, counted_plays, listened_ms, latest_play_at)
         SELECT ${song}, 0, e.started_at / ${sql.raw(String(DAY_MS))}, count(*), sum(e.listened_ms), max(e.started_at)
         FROM play_events AS e WHERE e.counted AND ${playsOf(song)} GROUP BY 3
@@ -137,13 +145,103 @@ const sumSongs = (db: LibraryDatabase, songs: readonly string[]) => {
   });
 };
 
-/** Core's resolver as the Library stood at a generation, with every streamed song's release. */
-interface Resolver {
+interface Sums {
+  readonly song: string;
+  readonly bucket: number;
+  readonly plays: number;
+  readonly listened: number;
+  readonly latest: number;
+}
+
+/**
+ * Writes [sums] as `play_buckets` rows of [span] in one statement, and drops
+ * that span's rows of [gone]: a statement whatever their number, since each
+ * one compiles the credit triggers. An unchanged row isn't written, so its
+ * credits aren't summed again.
+ */
+const writeBuckets = (
+  tx: LibraryDatabase,
+  span: 0 | 1,
+  sums: readonly Sums[],
+  gone: readonly { song: string; bucket: number }[],
+) => {
+  if (sums.length > 0)
+    tx.run(sql`INSERT INTO play_buckets (song, span, bucket, counted_plays, listened_ms, latest_play_at)
+      SELECT json_extract(value, '$.song'), ${span}, json_extract(value, '$.bucket'), json_extract(value, '$.plays'), json_extract(value, '$.listened'),
+        json_extract(value, '$.latest')
+      FROM json_each(${JSON.stringify(sums)}) WHERE true
+      ON CONFLICT (song, span, bucket) DO UPDATE SET counted_plays = excluded.counted_plays,
+        listened_ms = excluded.listened_ms, latest_play_at = excluded.latest_play_at
+      WHERE counted_plays <> excluded.counted_plays OR listened_ms <> excluded.listened_ms
+        OR latest_play_at <> excluded.latest_play_at`);
+  if (gone.length > 0)
+    tx.run(sql`DELETE FROM play_buckets WHERE span = ${span} AND (song, bucket) IN
+      (SELECT json_extract(value, '$.song'), json_extract(value, '$.bucket') FROM json_each(${JSON.stringify(gone)}))`);
+};
+
+/**
+ * Counts up to [limit] of the days the history's triggers marked owed again
+ * from their counted plays, then their blocks from their days, in one
+ * transaction; returns how many days.
+ */
+const recountDays = (db: LibraryDatabase, limit: number): number => {
+  const owed = db.all<{ song: string; day: number }>(
+    sql`SELECT song, day FROM owed_days LIMIT ${limit}`,
+  );
+  if (owed.length === 0) return 0;
+  db.transaction((tx) => {
+    const sums = (
+      rows: readonly { song: string; bucket: number }[],
+      read: (row: { song: string; bucket: number }) => SQL,
+    ) => {
+      const kept: Sums[] = [];
+      const gone: { song: string; bucket: number }[] = [];
+      for (const row of rows) {
+        const sum = tx.get<{ plays: number; listened: number | null; latest: number | null }>(
+          read(row),
+        );
+        if (sum.plays > 0)
+          kept.push({
+            ...row,
+            plays: sum.plays,
+            listened: sum.listened ?? 0,
+            latest: sum.latest ?? 0,
+          });
+        else gone.push(row);
+      }
+      return { kept, gone };
+    };
+    const days = sums(
+      owed.map(({ song, day }) => ({ song, bucket: day })),
+      ({ song, bucket }) => sql`SELECT count(*) AS plays, sum(e.listened_ms) AS listened,
+        max(e.started_at) AS latest FROM play_events AS e WHERE e.counted AND ${playsOf(song, true)}
+        AND e.started_at BETWEEN ${bucket * DAY_MS} AND ${bucket * DAY_MS + DAY_MS - 1}`,
+    );
+    writeBuckets(tx, 0, days.kept, days.gone);
+    const blocks = new Map<string, { song: string; bucket: number }>();
+    for (const { song, day } of owed) {
+      const bucket = Math.floor(day / KEPT_BLOCK_DAYS);
+      blocks.set(`${bucket}|${song}`, { song, bucket });
+    }
+    const sum = sums(
+      [...blocks.values()],
+      ({ song, bucket }) => sql`SELECT
+        coalesce(sum(counted_plays), 0) AS plays, sum(listened_ms) AS listened,
+        max(latest_play_at) AS latest FROM play_buckets
+      WHERE song = ${song} AND span = 0
+        AND bucket BETWEEN ${bucket * KEPT_BLOCK_DAYS} AND ${bucket * KEPT_BLOCK_DAYS + KEPT_BLOCK_DAYS - 1}`,
+    );
+    writeBuckets(tx, 1, sum.kept, sum.gone);
+    tx.run(sql`DELETE FROM owed_days WHERE (song, day) IN
+      (SELECT json_extract(value, '$.song'), json_extract(value, '$.day') FROM json_each(${JSON.stringify(owed)}))`);
+  });
+  return owed.length;
+};
+
+/** Core's resolver as the Library stood at a generation, knowing every streamed song's release. */
+interface Resolver extends StreamedCreditResolver {
   readonly generation: number;
-  readonly rows: PlayedLibraryRows;
-  readonly releases: YtAlbumSong[];
   readonly known: Set<string>;
-  resolve: ReturnType<typeof playedResolver>;
 }
 
 const resolvers = new WeakMap<object, Resolver>();
@@ -157,34 +255,42 @@ const releaseOf = (song: YtAlbumSong): string | null =>
     ? null
     : `${releaseTitle(song.album)}|${song.albumId}`;
 
-/** The resolver of [generation]: kept between settles, built again (a whole-Library read) when it moved. */
-const resolverOf = (db: LibraryDatabase, generation: number): Resolver => {
-  const cached = resolvers.get(connectionOf(db));
-  if (cached?.generation === generation) return cached;
+/** How many played videos' streamed songs one step of `resolverSteps` reads. */
+const VIDEOS_STEP = 100;
+
+/**
+ * Builds the resolver of [generation] (a whole-Library read) in steps: each
+ * read on its own, then Core's resolver a credit, artist, album or release
+ * at a time. Kept between settles until the Library changes.
+ */
+function* resolverSteps(db: LibraryDatabase, generation: number): Generator<void, Resolver> {
   const videos = db
     .all<{ videoId: string }>(
       sql`SELECT DISTINCT video_id AS "videoId" FROM played_songs WHERE video_id IS NOT NULL`,
     )
     .map((row) => row.videoId);
-  const releases = [...streamedSongsOf(db, videos).values()].filter(
-    (song) => releaseOf(song) !== null,
-  );
-  const rows = playedLibraryRows(db);
+  yield;
+  const releases: YtAlbumSong[] = [];
+  for (let from = 0; from < videos.length; from += VIDEOS_STEP) {
+    for (const song of streamedSongsOf(db, videos.slice(from, from + VIDEOS_STEP)).values())
+      if (releaseOf(song) !== null) releases.push(song);
+    yield;
+  }
+  const rows = yield* playedLibraryRowsSteps(db);
   const resolver: Resolver = {
+    ...(yield* streamedCreditResolverSteps({ ...rows, releases })),
     generation,
-    rows,
-    releases,
     known: new Set(releases.map((song) => releaseOf(song)!)),
-    resolve: playedResolver(rows, releases),
   };
   resolvers.set(connectionOf(db), resolver);
   return resolver;
-};
+}
 
-/** Whether crediting [songs] would build Core's resolver: a whole-Library read. */
-const needsResolver = (db: LibraryDatabase, songs: readonly string[], generation: number) =>
-  songs.some((song) => song.startsWith("v:")) &&
-  resolvers.get(connectionOf(db))?.generation !== generation;
+/** The resolver of [generation], when it was built and the Library hasn't changed since. */
+const builtResolver = (db: LibraryDatabase, generation: number): Resolver | undefined => {
+  const cached = resolvers.get(connectionOf(db));
+  return cached?.generation === generation ? cached : undefined;
+};
 
 /** An online album, artist or song as the latest played song crediting it names it. */
 interface OnlineEntity {
@@ -279,8 +385,16 @@ const streamedTracks = (
           .flatMap((row) => (row.trackId === null ? [] : [[row.song, row.trackId] as const])),
   );
 
-/** Credits [songs] owe, writes them and marks them settled. */
-const creditSongs = (db: LibraryDatabase, songs: readonly string[], generation: number) => {
+/**
+ * Credits [songs] owe, writes them and marks them settled. False, with
+ * nothing written, when a streamed song the Library hasn't needs Core's
+ * resolver and [resolver] is not given: build it first (`resolverSteps`).
+ */
+const creditSongs = (
+  db: LibraryDatabase,
+  songs: readonly string[],
+  resolver: Resolver | undefined,
+): boolean => {
   const settled = new Map<string, Settled>();
   const online: OnlineEntity[] = [];
   const library = songs.filter((song) => song.startsWith("t:"));
@@ -320,6 +434,7 @@ const creditSongs = (db: LibraryDatabase, songs: readonly string[], generation: 
     videoId: string;
     key: string;
   }[];
+  if (unmapped.length > 0 && resolver === undefined) return false;
   const metadata = streamedSongsOf(
     db,
     unmapped.map((entry) => entry.videoId),
@@ -336,22 +451,17 @@ const creditSongs = (db: LibraryDatabase, songs: readonly string[], generation: 
           .map((row) => [row.videoId, row.playedAt]),
   );
   const hinted: string[] = [];
-  let resolver: Resolver | undefined;
-  if (unmapped.length > 0) {
-    resolver = resolverOf(db, generation);
+  if (resolver !== undefined) {
     // A song naming its release can give another song of that album its id: theirs owe again.
     const fresh = [...metadata.values()].filter((song) => {
       const release = releaseOf(song);
-      return release !== null && !resolver!.known.has(release);
+      return release !== null && !resolver.known.has(release);
     });
-    if (fresh.length > 0) {
-      for (const song of fresh) {
-        resolver.known.add(releaseOf(song)!);
-        resolver.releases.push(song);
-        hinted.push(releaseTitle(song.album!));
-      }
-      resolver.resolve = playedResolver(resolver.rows, resolver.releases);
+    for (const song of fresh) {
+      resolver.known.add(releaseOf(song)!);
+      hinted.push(releaseTitle(song.album!));
     }
+    resolver.learn(fresh);
   }
   for (const entry of others) {
     const credits = new Map<string, Credit>();
@@ -458,6 +568,7 @@ const creditSongs = (db: LibraryDatabase, songs: readonly string[], generation: 
     });
   }
   writeCredits(db, settled, online, hinted);
+  return true;
 };
 
 const sameCredit = (a: Credit, b: Credit) =>
@@ -509,7 +620,7 @@ const writeCredits = (
           played_at = excluded.played_at
         WHERE excluded.played_at >= played_entities.played_at`);
     for (const hint of new Set(hinted))
-      tx.run(sql`UPDATE played_songs SET state = 1 WHERE state = 2 AND album_hint = ${hint}`);
+      tx.run(sql`UPDATE played_songs SET state = 1 WHERE album_hint = ${hint} AND +state = 2`);
   });
 };
 
@@ -518,18 +629,24 @@ export interface SettleStep {
   readonly songs?: number;
   /** At most this many plays are seeded in one step. */
   readonly plays?: number;
+  /** At most this many owed days (and their blocks) are counted again in one step. */
+  readonly days?: number;
 }
 
 /**
- * One bounded step of what the kept totals owe: seed the next plays of an
- * upgrade's history, sum a few songs' days and blocks, or credit a few songs
- * (building Core's resolver first when the Library changed). True once
- * nothing is owed. What the startup job runs on settled turns.
+ * One bounded piece of what the kept totals owe, as steps for work that runs
+ * in slices: seed the next plays of an upgrade's history, sum a few songs'
+ * days and blocks, count again the days a write to the history marked
+ * owed and their blocks, or credit a few songs. When the Library changed since
+ * Core's resolver was built, it builds it again first, a read or a few
+ * hundred credits, artists or albums per step, and credits on the next
+ * piece. Each step is one transaction at most. Returns true once nothing is
+ * owed. What the startup job runs on settled turns.
  */
-export const settleKeptTotals = (
+export function* settleKeptTotalsSteps(
   db: LibraryDatabase,
-  { songs = 50, plays = 2_000 }: SettleStep = {},
-): boolean => {
+  { songs = 50, plays = 2_000, days = 200 }: SettleStep = {},
+): Generator<void, boolean> {
   const kept = keptState(db);
   if (kept.seededThrough < kept.seedUntil) {
     seed(db, kept, plays);
@@ -540,10 +657,34 @@ export const settleKeptTotals = (
     sumSongs(db, unsummed);
     return false;
   }
+  if (recountDays(db, days) > 0) return false;
   const uncredited = owedSongs(db, 1, songs);
-  if (uncredited.length > 0) creditSongs(db, uncredited, kept.generation);
+  if (uncredited.length > 0 && !creditSongs(db, uncredited, builtResolver(db, kept.generation))) {
+    yield;
+    // Built under the generation read before it: a change meanwhile builds it again.
+    yield* resolverSteps(db, kept.generation);
+    return false;
+  }
   return keptTotalsSettled(db);
-};
+}
+
+/**
+ * Every piece `settleKeptTotalsSteps` owes, one after another, until nothing
+ * is: what the app's job runs in the scheduler's slices. Each step is one
+ * transaction at most, so the app's other writes come between them; a piece
+ * reads what's owed again when it starts.
+ */
+export function* keptTotalsSteps(
+  db: LibraryDatabase,
+  step: SettleStep = {},
+): Generator<void, true> {
+  while (!(yield* settleKeptTotalsSteps(db, step))) yield;
+  return true;
+}
+
+/** `settleKeptTotalsSteps` run whole: for tests and desktop benches. */
+export const settleKeptTotals = (db: LibraryDatabase, step: SettleStep = {}): boolean =>
+  finishSteps(settleKeptTotalsSteps(db, step));
 
 const keeping = new WeakSet<object>();
 
@@ -558,24 +699,34 @@ const keepsTotals = (db: LibraryDatabase): boolean => {
   return found;
 };
 
-/** How many songs a play's write credits itself: past this, or without the resolver, the job does. */
+/** How many songs a play's write credits itself: the rest wait for the job's slices. */
 const WRITE_SONGS = 8;
+/** How many owed days a play's write counts itself (its own is one). */
+const WRITE_DAYS = 8;
 
 /**
- * Credits the few songs a play just written owes, within its write, when
- * that needs no whole-Library read; otherwise they wait for the startup job.
+ * Counts the days a play's write marked owed (and their blocks) and credits a few of
+ * the songs owed (the play's among them, as a play owes little), within its
+ * write, when that needs no whole-Library read. What's left, past
+ * [WRITE_DAYS] and [WRITE_SONGS] or a streamed song that needs Core's
+ * resolver built again, the startup job settles in its slices: the play's
+ * Library change wakes it.
  */
-export const creditPlayedSongs = (db: LibraryDatabase): void => {
+export const settlePlayWrite = (db: LibraryDatabase): void => {
   if (!keepsTotals(db)) return;
   const kept = keptState(db);
   if (kept.seededThrough < kept.seedUntil) return;
-  const owed = db.all<{ song: string; state: number }>(
-    sql`SELECT song, state FROM played_songs WHERE state < 2 LIMIT ${WRITE_SONGS + 1}`,
-  );
-  if (owed.length === 0 || owed.length > WRITE_SONGS || owed.some((row) => row.state === 0)) return;
-  const songs = owed.map((row) => row.song);
-  if (needsResolver(db, songs, kept.generation)) return;
-  creditSongs(db, songs, kept.generation);
+  recountDays(db, WRITE_DAYS);
+  const resolver = builtResolver(db, kept.generation);
+  const songs = db
+    .all<{ song: string }>(
+      resolver === undefined
+        ? // Without the resolver, a streamed song may need it: those wait.
+          sql`SELECT song FROM played_songs WHERE state = 1 AND song NOT LIKE 'v:%' LIMIT ${WRITE_SONGS}`
+        : sql`SELECT song FROM played_songs WHERE state = 1 LIMIT ${WRITE_SONGS}`,
+    )
+    .map((row) => row.song);
+  if (songs.length > 0) creditSongs(db, songs, resolver);
 };
 
 /**

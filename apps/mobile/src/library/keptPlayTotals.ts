@@ -1,12 +1,13 @@
 /**
  * The app's settler of the kept play totals (#1349, `keptTotalsSettler.ts`):
- * started after the first screen settles, it takes one store step per
- * settled turn.
+ * started after the first screen settles, it waits for a settled turn, then
+ * runs what the totals owe in the scheduler's slices (#1350), one small
+ * store step at a time, each slice on a free turn.
  */
 import * as Effect from "effect/Effect";
 
-import { settledTurnEffect } from "@/lib/backgroundWork";
-import { namedWork } from "@/lib/stepped";
+import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
+import { namedWork, runSteps } from "@/lib/stepped";
 import { appLog } from "@/log/appLog";
 
 import { startKeptTotalsSettler } from "./keptTotalsSettler";
@@ -19,7 +20,8 @@ export const startKeptPlayTotals = (): (() => void) =>
     turn: () => Effect.runPromise(settledTurnEffect.pipe(namedWork("kept play totals"))),
     step: () =>
       appRuntime.runPromise(
-        Effect.flatMap(LibraryStore, (store) => store.settleKeptTotals).pipe(
+        Effect.flatMap(LibraryStore, (store) => store.keptTotalsSteps).pipe(
+          Effect.flatMap((steps) => runSteps(steps, freeTurnEffect)),
           namedWork("kept play totals"),
         ),
       ),

@@ -23,6 +23,7 @@ import {
   keptSongPlayTotals,
   keptTotalsSettled,
   settleKeptTotals,
+  settleKeptTotalsSteps,
 } from "./keptPlayTotals.ts";
 import { homePlays, recordPlay, updatePlay } from "./playHistory.ts";
 import {
@@ -209,6 +210,38 @@ test("plays pulled from another phone are in the kept totals once settled", asyn
   assertSameTotals(db);
 });
 
+test("a write to the history only marks its plays' days owed, for the settler to count", async () => {
+  const { db, solo } = await library();
+  settle(db);
+  const owed = () => db.get<{ n: number }>(sql`SELECT count(*) AS n FROM owed_days`).n;
+  const buckets = () => db.get<{ n: number }>(sql`SELECT count(*) AS n FROM play_buckets`).n;
+  const before = buckets();
+  // Plays written as a pull or an import writes them: no play write of the player's.
+  for (const [index, startedAt] of [
+    NOW - 3 * DAY,
+    NOW - 3 * DAY - 60_000,
+    NOW - 400 * DAY,
+  ].entries())
+    db.run(sql`INSERT INTO play_events (track_id, snapshot, recording_key, started_at, listened_ms,
+        duration_ms, end_reason, counted, source, sync_id)
+      VALUES (${solo}, '{}', 'solo-key', ${startedAt}, 180000, 180000, 'completed', 1, 'phone',
+        ${`written-${index}`})`);
+  db.run(sql`DELETE FROM play_events WHERE id = (SELECT min(id) FROM play_events)`);
+  assert.equal(buckets(), before, "the write sums nothing itself");
+  assert.ok(owed() > 0);
+  assert.equal(keptTotalsSettled(db), false, "readers sum from the history until it's counted");
+  const triggers = db.all<{ body: string }>(
+    sql`SELECT sql AS body FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'play_events'`,
+  );
+  for (const { body } of triggers) assert.doesNotMatch(body, /play_buckets/);
+  // A day per step: the same totals from bounded steps.
+  let steps = 0;
+  while (!settleKeptTotals(db, { songs: 50, days: 1 })) assert.ok(++steps < 100);
+  assert.ok(steps >= 2, "each owed day is a step of its own");
+  assert.equal(owed(), 0);
+  assertSameTotals(db);
+});
+
 test("a deleted song keeps counting for its album and artists, as today's sum counts it", async () => {
   const { db, duet } = await library();
   settle(db);
@@ -284,8 +317,59 @@ test("an upgrade sums its history after startup in bounded steps, reading today'
     );
     if (step.result) break;
   }
-  // 1,850 plays seeded 500 at a time, six songs summed and credited two at a time.
-  assert.equal(steps, 4 + 3 + 3 - 1);
+  // 1,850 plays seeded 500 at a time, six songs summed and credited two at a time, after one
+  // step builds the streamed songs' resolver.
+  assert.equal(steps, 4 + 3 + 1 + 3 - 1);
+  assertSameTotals(db);
+});
+
+test("a Library change rebuilds the resolver in steps of one read or a little of Core's work", async () => {
+  const { db } = await library();
+  settle(db);
+  // Forty more artists, each with a song: what Core matches streamed songs against changed.
+  for (let index = 0; index < 40; index++)
+    addTrack(db, { title: `Song ${index}`, artist: `Artist ${index}`, album: `Album ${index}` });
+  relinkCredits(db, creditSplits());
+  assert.equal(keptTotalsSettled(db), false);
+  const statements: number[] = [];
+  for (let piece = 0; piece < 1_000; piece++) {
+    const steps = settleKeptTotalsSteps(db, { songs: 50 });
+    let next: IteratorResult<void, boolean>;
+    do {
+      const step = traceQueries(db, () => steps.next());
+      next = step.result;
+      statements.push(step.queries.length);
+    } while (next.done !== true);
+    if (next.value) break;
+  }
+  // The rebuild yields at least once per Library artist, and its steps run one read at most.
+  const rebuild = statements.filter((count) => count <= 1);
+  assert.ok(rebuild.length >= 43, `${rebuild.length} steps of one read at most`);
+  assertSameTotals(db);
+});
+
+test("a play credits a few owed songs within its write and leaves the rest owed, past eight", async () => {
+  const { db } = await library();
+  const more = Array.from({ length: 12 }, (_, index) =>
+    String(addTrack(db, { title: `More ${index}`, artist: "A", album: "First" })),
+  );
+  relinkCredits(db, creditSplits());
+  for (const id of more) recordPlay(db, play(id, NOW - 7_200_000), false);
+  settle(db);
+  // Each of them owes its credits again, as after a Library change.
+  db.run(
+    sql`UPDATE played_songs SET state = 1 WHERE song IN (${sql.join(
+      more.map((id) => sql`${`t:${id}`}`),
+      sql`, `,
+    )})`,
+  );
+  const owed = () =>
+    db.get<{ owed: number }>(sql`SELECT count(*) AS owed FROM played_songs WHERE state = 1`).owed;
+  assert.equal(owed(), 12);
+  recordPlay(db, play(more[0]!, NOW - 600_000), false);
+  assert.equal(owed(), 4);
+  recordPlay(db, play(more[1]!, NOW - 300_000), false);
+  assert.equal(owed(), 0);
   assertSameTotals(db);
 });
 
@@ -407,5 +491,29 @@ test("the kept reads replay off the JS thread with the same totals", async () =>
   ]) {
     const replayed = await replayRead(reads, read as (d: LibraryDatabase) => unknown, () => 0);
     assert.deepEqual(replayed.value, read(db));
+  }
+});
+
+test("marking songs owed looks them up by their key, never through every settled song", async () => {
+  const db = await openTestDatabase();
+  const owing = (body: string) =>
+    body.match(/UPDATE played_songs SET state = 1 WHERE[^;]*;/g) ?? [];
+  const triggers = db.all<{ name: string; body: string }>(
+    sql`SELECT name, sql AS body FROM sqlite_master WHERE type = 'trigger'`,
+  );
+  const statements = triggers.flatMap(({ name, body }) =>
+    owing(body).map((statement) => ({ name, statement })),
+  );
+  assert.ok(statements.length > 20);
+  for (const { name, statement } of statements) {
+    const plain = statement.replace(/\b(new|old)\.\w+/g, "1").replace(/;$/, "");
+    const plan = db
+      .all<{ detail: string }>(sql.raw(`EXPLAIN QUERY PLAN ${plain}`))
+      .map((row) => row.detail)
+      .join(" | ");
+    assert.doesNotMatch(plan, /played_songs_state_idx|SCAN played_songs/, `${name}: ${plan}`);
+    // A song with no Library song isn't a key either: that is most streamed songs.
+    if (!/song_track (=|IN)/.test(plain))
+      assert.doesNotMatch(plan, /song_track_idx/, `${name}: ${plan}`);
   }
 });
