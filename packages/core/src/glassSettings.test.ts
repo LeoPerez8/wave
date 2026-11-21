@@ -12,6 +12,7 @@ import {
   readGlassSettings,
   sliderValueAt,
   stepSlider,
+  writeGlassSettings,
 } from "./index.ts";
 
 /** Wave's glass before it could be tuned: 24 dp blur, 12 dp refraction, tint alpha B8, full rim. */
@@ -24,13 +25,14 @@ describe("readGlassSettings", () => {
   });
 
   test("stored values come back", () => {
-    const stored = JSON.stringify({ blur: 36, refraction: 0, tint: 86, rim: 50 });
+    const stored = JSON.stringify({ blur: 36, refraction: 0, tint: 86, rim: true, rimLevel: 50 });
     assert.deepEqual(readGlassSettings(stored), { blur: 36, refraction: 0, tint: 86, rim: 50 });
   });
 
   test("missing, mistyped or unreadable values fall back to their defaults one by one", () => {
     assert.deepEqual(readGlassSettings(JSON.stringify({ blur: 48 })), { ...TODAY, blur: 48 });
     assert.deepEqual(readGlassSettings(JSON.stringify({ tint: "lots", rim: "lots" })), TODAY);
+    assert.deepEqual(readGlassSettings(JSON.stringify({ rim: 50, rimLevel: "lots" })), TODAY);
     assert.deepEqual(readGlassSettings("{not json"), TODAY);
     assert.deepEqual(readGlassSettings("[1,2]"), TODAY);
   });
@@ -56,15 +58,72 @@ describe("readGlassSettings", () => {
     assert.deepEqual(readGlassSettings(stored), { blur: 24, refraction: 0, tint: 86, rim: 100 });
   });
 
-  test("the old stored switch reads as the shipped rim or as off", () => {
-    assert.deepEqual(readGlassSettings(JSON.stringify({ rim: 100 })), TODAY);
+  test("the switch an older build stores reads as the shipped rim or as off", () => {
+    assert.deepEqual(readGlassSettings(JSON.stringify({ rim: true })), TODAY);
     assert.deepEqual(readGlassSettings(JSON.stringify({ rim: false })), { ...TODAY, rim: 0 });
   });
 
-  test("stored rim strengths land on their nearest level", () => {
-    assert.deepEqual(readGlassSettings(JSON.stringify({ rim: 74 })), { ...TODAY, rim: 50 });
-    assert.deepEqual(readGlassSettings(JSON.stringify({ rim: 75 })), { ...TODAY, rim: 50 });
-    assert.deepEqual(readGlassSettings(JSON.stringify({ rim: 76 })), { ...TODAY, rim: 100 });
+  test("stored rim levels land on their nearest level", () => {
+    const rimOf = (rimLevel: number) => readGlassSettings(JSON.stringify({ rim: true, rimLevel }));
+    assert.deepEqual(rimOf(74), { ...TODAY, rim: 50 });
+    assert.deepEqual(rimOf(75), { ...TODAY, rim: 50 });
+    assert.deepEqual(rimOf(76), { ...TODAY, rim: 100 });
+    assert.deepEqual(rimOf(900), { ...TODAY, rim: 200 });
+  });
+
+  test("the rim level is read without the switch beside it", () => {
+    assert.deepEqual(readGlassSettings(JSON.stringify({ rimLevel: 150 })), { ...TODAY, rim: 150 });
+    assert.deepEqual(readGlassSettings(JSON.stringify({ rimLevel: 0 })), { ...TODAY, rim: 0 });
+  });
+
+  test("a switch that contradicts the level is an older build's later write, so it wins", () => {
+    const off = JSON.stringify({ rim: false, rimLevel: 150 });
+    assert.deepEqual(readGlassSettings(off), { ...TODAY, rim: 0 });
+    const on = JSON.stringify({ rim: true, rimLevel: 0 });
+    assert.deepEqual(readGlassSettings(on), { ...TODAY, rim: 100 });
+  });
+
+  test("a switch that agrees with the level leaves the level alone", () => {
+    const stored = JSON.stringify({ rim: true, rimLevel: 200 });
+    assert.deepEqual(readGlassSettings(stored), { ...TODAY, rim: 200 });
+    const none = JSON.stringify({ rim: false, rimLevel: 0 });
+    assert.deepEqual(readGlassSettings(none), { ...TODAY, rim: 0 });
+  });
+});
+
+describe("writeGlassSettings", () => {
+  test("the rim level is stored beside the switch older builds read", () => {
+    assert.deepEqual(JSON.parse(writeGlassSettings({ ...TODAY, blur: 36, rim: 150 })), {
+      blur: 36,
+      refraction: 12,
+      tint: 72,
+      rim: true,
+      rimLevel: 150,
+    });
+    const off = JSON.parse(writeGlassSettings({ ...TODAY, rim: 0 }));
+    assert.equal(off.rim, false);
+    assert.equal(off.rimLevel, 0);
+    assert.equal(JSON.parse(writeGlassSettings({ ...TODAY, rim: 50 })).rim, true);
+  });
+
+  test("what is written reads back as it was", () => {
+    for (const rim of GLASS_SETTINGS.rim.levels) {
+      const glass = { blur: 48, refraction: 0, tint: 61, rim };
+      assert.deepEqual(readGlassSettings(writeGlassSettings(glass)), glass);
+    }
+  });
+
+  test("values off the levels are written as their nearest level", () => {
+    const written = writeGlassSettings({ blur: 30.5, refraction: 4, tint: 90, rim: 74 });
+    assert.deepEqual(readGlassSettings(written), { blur: 36, refraction: 6, tint: 86, rim: 50 });
+    assert.equal(JSON.parse(written).rimLevel, 50);
+  });
+
+  test("an older build's rewrite keeps the rim on or off, at the shipped strength", () => {
+    // An older build reads any switch but `false` as on, and writes back only what it knows.
+    const { rim } = JSON.parse(writeGlassSettings({ ...TODAY, rim: 150 }));
+    const rewritten = JSON.stringify({ blur: 16, refraction: 12, tint: 72, rim: rim !== false });
+    assert.deepEqual(readGlassSettings(rewritten), { ...TODAY, blur: 16, rim: 100 });
   });
 });
 

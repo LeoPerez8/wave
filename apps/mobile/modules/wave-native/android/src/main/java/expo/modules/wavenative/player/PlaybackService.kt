@@ -287,6 +287,8 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+      // A pressed Favorite star stays on the song it was pressed on.
+      AutoModes.state.playing(mediaItem?.mediaId)
       val player = exoPlayer ?: return
       if ((reconnectWait ?: reconnectAttempt)?.key != mediaItem?.mediaId) cancelReconnect()
       player.setWakeMode(if (streams(mediaItem)) C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL)
@@ -364,6 +366,8 @@ class PlaybackService : MediaLibraryService() {
     player.setWakeMode(if (streams(player.currentMediaItem)) C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL)
     sessionListeners.forEach(player::addListener)
     exoPlayer = player
+    // A crossfade's handoff changes the song without a transition on this player.
+    AutoModes.state.playing(player.currentMediaItem?.mediaId)
   }
 
   /** Whether [item] is a streamed YT Music song. */
@@ -1020,8 +1024,8 @@ class PlaybackService : MediaLibraryService() {
         if (action == AutoModes.FAVORITE_ACTION) {
           // The star flips now. JS's report of the toggled star is posted to the main thread
           // before its answer, so posting the answer there too keeps the two in order.
-          AutoModes.state.pressStar()
-          answer.addListener({ AutoModes.state.starAnswered() }, mainExecutor)
+          val press = AutoModes.state.pressStar()
+          answer.addListener({ AutoModes.state.starAnswered(press) }, mainExecutor)
         }
         return answer
       }

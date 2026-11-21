@@ -653,6 +653,7 @@ export {
   glassTintAlpha,
   isDefaultGlassSettings,
   readGlassSettings,
+  writeGlassSettings,
 } from "./glassSettings.ts";
 export type { GlassLevelSetting, GlassSettings } from "./glassSettings.ts";
 export {

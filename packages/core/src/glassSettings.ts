@@ -82,18 +82,28 @@ const readLevel = (value: unknown, setting: GlassLevelSetting): number =>
     ? glassLevelValue(setting, glassLevel(setting, value))
     : GLASS_SETTINGS[setting].default;
 
-/** The rim's switch, as stored before it had levels: on is the shipped rim, off is level 1. */
-const readRim = (value: unknown): number =>
-  typeof value === "boolean"
-    ? value
-      ? GLASS_SETTINGS.rim.default
-      : GLASS_SETTINGS.rim.levels[0]
-    : readLevel(value, "rim");
+/**
+ * The rim's level from its two stored fields. `rimLevel` holds the level; `rim` is the switch
+ * the rim was before it had levels, which builds from then still read and write, so it is
+ * kept beside the level (off only at level 1). The level wins while the switch agrees with
+ * it. A switch that contradicts it was written later by such a build, so the switch wins: on
+ * is the shipped rim, off is level 1. Without a level the switch reads the same way.
+ */
+const readRim = (level: unknown, enabled: unknown): number => {
+  const off = GLASS_SETTINGS.rim.levels[0];
+  const fromSwitch =
+    typeof enabled === "boolean" ? (enabled ? GLASS_SETTINGS.rim.default : off) : undefined;
+  if (typeof level !== "number" || !Number.isFinite(level)) {
+    return fromSwitch ?? GLASS_SETTINGS.rim.default;
+  }
+  const rim = readLevel(level, "rim");
+  return fromSwitch === undefined || enabled === rim > off ? rim : fromSwitch;
+};
 
 /**
- * The glass settings from their stored JSON: a value off the levels (stored or
- * synced before them) is the nearest level, a rim stored as a switch is the
- * shipped rim or none, and anything missing or unreadable is its default.
+ * The glass settings from their stored JSON (`writeGlassSettings`): a value off the levels
+ * (stored or synced before them) is the nearest level, the rim is read from its level and
+ * its switch, and anything missing or unreadable is its default.
  */
 export const readGlassSettings = (stored: string | null): GlassSettings => {
   const record = readStoredRecord(stored);
@@ -101,8 +111,25 @@ export const readGlassSettings = (stored: string | null): GlassSettings => {
     blur: readLevel(record.blur, "blur"),
     refraction: readLevel(record.refraction, "refraction"),
     tint: readLevel(record.tint, "tint"),
-    rim: readRim(record.rim),
+    rim: readRim(record.rimLevel, record.rim),
   };
+};
+
+/**
+ * The glass settings as stored and synced, each on its nearest level. The rim's level goes
+ * in `rimLevel`, and `rim` stays the switch it was before the levels (false only when the rim
+ * is off): a phone on a build from before them reads a `rim` that isn't a boolean as on, and
+ * writes that back over the level.
+ */
+export const writeGlassSettings = (glass: GlassSettings): string => {
+  const rimLevel = readLevel(glass.rim, "rim");
+  return JSON.stringify({
+    blur: readLevel(glass.blur, "blur"),
+    refraction: readLevel(glass.refraction, "refraction"),
+    tint: readLevel(glass.tint, "tint"),
+    rim: rimLevel > GLASS_SETTINGS.rim.levels[0],
+    rimLevel,
+  });
 };
 
 /** A tint percentage as the two-digit hex alpha appended to the surface colour. */

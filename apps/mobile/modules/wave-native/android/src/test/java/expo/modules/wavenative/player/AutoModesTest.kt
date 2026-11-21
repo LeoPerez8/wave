@@ -121,8 +121,8 @@ class AutoModesTest {
     val shown = mutableListOf<PlaybackModes>()
     state.listen { shown += it }
 
-    state.pressStar()
-    state.starAnswered()
+    val press = state.pressStar()
+    state.starAnswered(press)
 
     assertEquals(listOf(PlaybackModes(starred = false), PlaybackModes(starred = true)), shown)
     assertEquals(PlaybackModes(starred = true), state.shown)
@@ -134,9 +134,9 @@ class AutoModesTest {
     val shown = mutableListOf<PlaybackModes>()
     state.listen { shown += it }
 
-    state.pressStar()
+    val press = state.pressStar()
     state.publish(PlaybackModes(starred = true))
-    state.starAnswered()
+    state.starAnswered(press)
 
     assertEquals(listOf(PlaybackModes(starred = true)), shown)
     assertEquals(PlaybackModes(starred = true), state.shown)
@@ -148,13 +148,13 @@ class AutoModesTest {
     val shown = mutableListOf<PlaybackModes>()
     state.listen { shown += it }
 
-    state.pressStar()
-    state.pressStar()
+    val first = state.pressStar()
+    val second = state.pressStar()
     // JS takes the presses in turn: it reports each toggle, then answers its press.
     state.publish(PlaybackModes(starred = true))
-    state.starAnswered()
+    state.starAnswered(first)
     state.publish(PlaybackModes(starred = false))
-    state.starAnswered()
+    state.starAnswered(second)
 
     assertEquals(listOf(PlaybackModes(starred = true), PlaybackModes(starred = false)), shown)
     assertEquals(PlaybackModes(starred = false), state.shown)
@@ -166,12 +166,92 @@ class AutoModesTest {
     val shown = mutableListOf<PlaybackModes>()
     state.listen { shown += it }
 
-    state.pressStar()
+    val press = state.pressStar()
     state.publish(PlaybackModes(starred = true))
-    state.starAnswered()
+    state.starAnswered(press)
     state.publish(PlaybackModes(starred = false))
 
     assertEquals(listOf(PlaybackModes(starred = true), PlaybackModes(starred = false)), shown)
     assertEquals(PlaybackModes(starred = false), state.shown)
+  }
+
+  @Test
+  fun `a pressed star stays on its song when the next one starts before JS answers`() {
+    val state = PlaybackModesState()
+    state.playing("a")
+    val shown = mutableListOf<PlaybackModes>()
+    state.listen { shown += it }
+
+    state.pressStar()
+    state.playing("b")
+
+    assertEquals(listOf(PlaybackModes(starred = true), PlaybackModes(starred = false)), shown)
+    assertEquals(PlaybackModes(starred = false), state.shown)
+  }
+
+  @Test
+  fun `the next song shows the star JS reports for it`() {
+    val state = PlaybackModesState()
+    state.playing("a")
+
+    state.pressStar()
+    state.playing("b")
+    state.publish(PlaybackModes(starred = true))
+
+    assertEquals(PlaybackModes(starred = true), state.shown)
+  }
+
+  @Test
+  fun `a late answer for the last song leaves a press on the new one alone`() {
+    val state = PlaybackModesState()
+    state.playing("a")
+    val late = state.pressStar()
+    state.playing("b")
+    val shown = mutableListOf<PlaybackModes>()
+    state.listen { shown += it }
+
+    val press = state.pressStar()
+    state.starAnswered(late)
+
+    assertEquals(PlaybackModes(starred = true), state.shown)
+
+    state.publish(PlaybackModes(starred = true))
+    state.starAnswered(press)
+
+    assertEquals(listOf(PlaybackModes(starred = true)), shown)
+    assertEquals(PlaybackModes(starred = true), state.shown)
+  }
+
+  @Test
+  fun `a late answer for the last song changes nothing on the new one`() {
+    val state = PlaybackModesState()
+    state.playing("a")
+    val late = state.pressStar()
+    state.playing("b")
+    state.publish(PlaybackModes(starred = true))
+    val shown = mutableListOf<PlaybackModes>()
+    state.listen { shown += it }
+
+    state.starAnswered(late)
+
+    assertEquals(emptyList<PlaybackModes>(), shown)
+    assertEquals(PlaybackModes(starred = true), state.shown)
+  }
+
+  @Test
+  fun `the same song reported again keeps its pressed star`() {
+    val state = PlaybackModesState()
+    state.playing("a")
+    val shown = mutableListOf<PlaybackModes>()
+    state.listen { shown += it }
+
+    val press = state.pressStar()
+    state.playing("a")
+
+    assertEquals(PlaybackModes(starred = true), state.shown)
+
+    state.starAnswered(press)
+
+    assertEquals(listOf(PlaybackModes(starred = true), PlaybackModes(starred = false)), shown)
   }
 }
