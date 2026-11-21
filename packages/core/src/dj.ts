@@ -414,11 +414,11 @@ export const djCells = (state: DjState): DjCell[] =>
 /** What a DJ seed is called; Up Next's label comes from the catalogue (`magicQueueLabel`). */
 const DJ_SEED_TITLE = "DJ";
 
-/** [tile] as a seed whose radio a batch may read: an artist tile reads that artist's radio. */
-const seedSongOf = (tile: DjTile, plays: number): MagicSeedSong => ({
-  id: tile.key,
-  title: tile.name,
-  artists: [tile.name],
+/** [artist]'s radio as a seed a batch may read, as an artist seed reads it. */
+const artistSeed = (artist: DjArtistTile, plays: number): MagicSeedSong => ({
+  id: artist.key,
+  title: artist.name,
+  artists: [artist.name],
   durationMs: null,
   kind: "artist",
   plays,
@@ -427,10 +427,14 @@ const seedSongOf = (tile: DjTile, plays: number): MagicSeedSong => ({
 /**
  * Starts a Magic Queue from a DJ seed, the selected [tiles] (`djSeedTiles`):
  * no seed song plays first, so the session has queued nothing and its first
- * batch of 10 is its whole queue. Each batch reads the radios of up to 3 of
- * the selected artists (`magicBatchRadios`), those with more counted plays
- * in [played] most often. It ranks with [settings], DJ's own, and starts at
- * their New music share. Null with no tile.
+ * batch of 10 is its whole queue. An artist tile contributes that artist's
+ * radio; an album tile its songs in [albumSongs] (`magicListSeedSongs`), as
+ * an album seed does, or its album artist's radio when none of its songs
+ * could be read. Each batch reads up to 3 of those radios by different
+ * artists (`magicBatchRadios`), artists and albums in one draw: the artists
+ * with more counted plays in [played], and the songs with more of their own,
+ * most often. It ranks with [settings], DJ's own, and starts at their New
+ * music share. Null when the tiles give no radio to read.
  */
 export const startDjQueue = (
   tiles: readonly DjTile[],
@@ -438,28 +442,47 @@ export const startDjQueue = (
     id,
     played = [],
     settings = DEFAULT_DJ_SETTINGS,
+    albumSongs = new Map(),
   }: {
     readonly id: string;
     readonly played?: readonly PlayedSeedArtist[];
     readonly settings?: DjSettings;
+    /** Each selected album's songs, by its tile's key; none for one that couldn't be read. */
+    readonly albumSongs?: ReadonlyMap<DjTileKey, readonly MagicSeedSong[]>;
   },
 ): MagicSession | null => {
-  if (tiles.length === 0) return null;
   const plays = new Map<string, number>();
   for (const artist of played) {
     const tile = djArtistTile(artist.name);
     if (tile !== null) plays.set(tile.key, (plays.get(tile.key) ?? 0) + artist.countedPlays);
   }
+  const seeds = new Map<string, MagicSeedSong>();
+  const artists = new Map<string, string>();
+  const credit = (name: string): void => {
+    const key = djArtistTile(name)?.key;
+    if (key !== undefined && !artists.has(key)) artists.set(key, name);
+  };
+  for (const tile of tiles) {
+    const songs = tile.kind === "album" ? (albumSongs.get(tile.key) ?? []) : [];
+    const artist = tile.kind === "album" ? djArtistTile(tile.artist) : tile;
+    if (artist !== null) credit(artist.name);
+    // A compilation is nobody's: its songs' own artists are the session's.
+    else for (const song of songs) if (song.artists[0] !== undefined) credit(song.artists[0]);
+    if (songs.length === 0 && artist !== null && !seeds.has(artist.key))
+      seeds.set(artist.key, artistSeed(artist, plays.get(artist.key) ?? 0));
+    for (const song of songs) if (!seeds.has(song.id)) seeds.set(song.id, song);
+  }
+  if (seeds.size === 0) return null;
   return {
     id,
     seed: { kind: "dj", id, title: DJ_SEED_TITLE },
     dj: settings,
-    seedSongs: tiles.map((tile) => seedSongOf(tile, plays.get(tile.key) ?? 0)),
+    seedSongs: [...seeds.values()],
     seedDraws: [],
     used: [],
     batches: 0,
     ytShare: djNewMusicShare(settings),
-    radioArtists: tiles.map((tile) => tile.name),
+    radioArtists: [...artists.values()],
     seedProfile: null,
     seedStyle: null,
     seedVideoIds: [],

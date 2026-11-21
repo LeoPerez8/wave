@@ -16,9 +16,14 @@ import {
   djSelected,
   djTileArtist,
   magicArtistKey,
+  magicBatchRadios,
+  parseMagicSession,
+  startDjQueue,
   type ArtistGraph,
   type DjState,
   type DjTile,
+  type MagicSeedSong,
+  type MagicSession,
   type TasteProfile,
 } from "./index.ts";
 
@@ -225,5 +230,120 @@ describe("selecting an album in DJ", () => {
     assert.equal(state.selected.length, DJ_MAX_SELECTED);
     assert.equal(djSelectable(state, air.key), false);
     assert.equal(djSelected(tap(state, air.key, null), air.key), false);
+  });
+});
+
+describe("an album in the DJ seed", () => {
+  const dummy = djAlbumTile({ title: "Dummy", artist: "Portishead", libraryId: 12 })!;
+  const song = (id: number, title: string, artist: string, plays = 0): MagicSeedSong => ({
+    id: `song:${id}`,
+    title,
+    artists: [artist],
+    durationMs: 200_000,
+    plays,
+  });
+  const dummySongs = [
+    song(1, "Mysterons", "Portishead", 4),
+    song(2, "Sour Times", "Portishead", 9),
+    song(3, "Glory Box", "Portishead"),
+  ];
+  /** The radios each of [batches] batches of [session] reads, by seed id. */
+  const radiosOf = (session: MagicSession, batches: number): string[][] => {
+    const drawn: string[][] = [];
+    let now = session;
+    for (let batch = 0; batch < batches; batch++) {
+      const next = magicBatchRadios(now, () => 0.5);
+      drawn.push(next.seeds.map((seed) => seed.id));
+      now = { ...next.session, batches: now.batches + 1 };
+    }
+    return drawn;
+  };
+
+  test("contributes its songs as list seed songs, as an album seed does", () => {
+    const session = startDjQueue([dummy], {
+      id: "s",
+      albumSongs: new Map([[dummy.key, dummySongs]]),
+    })!;
+    assert.deepEqual(session.seed, { kind: "dj", id: "s", title: "DJ" });
+    assert.deepEqual(session.seedSongs, dummySongs);
+    assert.deepEqual(session.radioArtists, ["Portishead"]);
+    assert.deepEqual(session.used, []);
+  });
+
+  test("each batch reads one of its songs' radios, a different one each time", () => {
+    const session = startDjQueue([dummy], {
+      id: "s",
+      albumSongs: new Map([[dummy.key, dummySongs]]),
+    })!;
+    const drawn = radiosOf(session, 3);
+    assert.deepEqual(
+      drawn.map((ids) => ids.length),
+      [1, 1, 1],
+    );
+    assert.deepEqual(new Set(drawn.flat()), new Set(["song:1", "song:2", "song:3"]));
+  });
+
+  test("artists and albums share the draw of up to 3 radios by different artists", () => {
+    const tiles = [
+      djArtistTile("Portishead")!,
+      dummy,
+      djArtistTile("Tricky")!,
+      djArtistTile("Air")!,
+      djArtistTile("Lamb")!,
+    ];
+    const session = startDjQueue(tiles, {
+      id: "s",
+      albumSongs: new Map([[dummy.key, dummySongs]]),
+    })!;
+    assert.equal(session.seedSongs!.length, 7);
+    const artistOf = new Map(session.seedSongs!.map((seed) => [seed.id, seed.artists[0]]));
+    for (const ids of radiosOf(session, 4)) {
+      assert.ok(ids.length <= 3);
+      const artists = ids.map((id) => artistOf.get(id));
+      assert.equal(new Set(artists).size, artists.length);
+    }
+    assert.equal(radiosOf(session, 1)[0]!.length, 3);
+  });
+
+  test("an album whose songs couldn't be read stands for its album artist's radio", () => {
+    const session = startDjQueue([dummy], { id: "s", played: [{ name: "Portishead", countedPlays: 6 }] })!;
+    assert.deepEqual(session.seedSongs, [
+      {
+        id: djArtistTile("Portishead")!.key,
+        title: "Portishead",
+        artists: ["Portishead"],
+        durationMs: null,
+        kind: "artist",
+        plays: 6,
+      },
+    ]);
+  });
+
+  test("an album and its selected artist give that artist's radio once", () => {
+    const session = startDjQueue([djArtistTile("Portishead")!, dummy], { id: "s" })!;
+    assert.equal(session.seedSongs!.length, 1);
+    assert.deepEqual(session.radioArtists, ["Portishead"]);
+  });
+
+  test("a compilation's songs bring their own artists to the session", () => {
+    const hits = djAlbumTile({ title: "Trip Hop Hits", artist: "Various Artists" })!;
+    const session = startDjQueue([hits], {
+      id: "s",
+      albumSongs: new Map([[hits.key, [song(5, "Teardrop", "Massive Attack"), song(6, "6 Underground", "Sneaker Pimps")]]]),
+    })!;
+    assert.deepEqual(session.radioArtists, ["Massive Attack", "Sneaker Pimps"]);
+  });
+
+  test("a seed with no radio to read starts nothing", () => {
+    const hits = djAlbumTile({ title: "Trip Hop Hits", artist: "Various Artists" })!;
+    assert.equal(startDjQueue([hits], { id: "s" }), null);
+  });
+
+  test("survives a restart with its album's songs", () => {
+    const session = startDjQueue([dummy, djArtistTile("Air")!], {
+      id: "s",
+      albumSongs: new Map([[dummy.key, dummySongs]]),
+    })!;
+    assert.deepEqual(parseMagicSession(JSON.parse(JSON.stringify(session))), session);
   });
 });
