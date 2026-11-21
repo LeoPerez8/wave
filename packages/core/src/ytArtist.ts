@@ -241,21 +241,45 @@ export const ytArtistSavedStands = <S extends YtSong>(
   now: number,
 ): saved is YtArtistSaved<S> => saved !== null && standsOnArtistPage(saved, now);
 
+/** [saved] with its page saying whether it has a description: null for none, never absent. */
+const withDescriptionRead = <S extends YtSong>(saved: YtArtistSaved<S>): YtArtistSaved<S> =>
+  saved.outcome !== "found" || saved.page.description !== undefined
+    ? saved
+    : { ...saved, page: { ...saved.page, description: null } };
+
 /**
- * What's saved for the artist once [answer] comes at [now], given what's
+ * What to save for the artist once [answer] comes at [now], given what's
  * saved meanwhile ([current]): the answer, unless it was read without the
- * artist's full list (a Library album's ask reads their page only) while
- * [current] stands on the artist page with it. Then [current] stays, and
- * the album finds its release in it all the same.
+ * artist's full list (a Library album's ask, or a Library artist's lookup,
+ * reads their page only) while [current] stands on the artist page with it.
+ * Then [current] stays, and the album finds its release in it all the same;
+ * when the answer is the same artist's page, its description, counts and
+ * similar artists join [current], which keeps what the answer leaves out.
+ * A page kept here always says whether it has a description (null for none),
+ * which tells it from one saved before the About was read. [current] itself
+ * comes back when nothing changes, so there is nothing to save.
  */
 export const ytArtistAnswerKept = <S extends YtSong>(
   current: YtArtistSaved<S> | null,
   answer: YtArtistSaved<S>,
   now: number,
-): YtArtistSaved<S> =>
-  current !== null && standsOnArtistPage(current, now) && !standsOnArtistPage(answer, now)
-    ? current
-    : answer;
+): YtArtistSaved<S> => {
+  if (current === null || !standsOnArtistPage(current, now) || standsOnArtistPage(answer, now))
+    return withDescriptionRead(answer);
+  if (current.outcome !== "found" || answer.outcome !== "found") return current;
+  if (current.browseId !== answer.browseId) return current;
+  const { description, subscribers, views, similar } = answer.page;
+  return {
+    ...current,
+    page: {
+      ...current.page,
+      description: description ?? current.page.description ?? null,
+      ...(subscribers == null ? {} : { subscribers }),
+      ...(views == null ? {} : { views }),
+      ...(similar === undefined ? {} : { similar }),
+    },
+  };
+};
 
 /** A Library album as matching a release to it sees it. */
 export interface LibraryAlbumKey {

@@ -48,8 +48,10 @@ export const fetchArtistAnswer = <S extends YtSong, E, R>(
       browseId === null
         ? { outcome: "unmatched", checkedAt }
         : { outcome: "found", checkedAt, browseId, page: yield* guarded(ports.page(browseId)) };
-    const kept = ytArtistAnswerKept(yield* ports.saved, answer, checkedAt);
-    if (kept !== answer) return kept;
-    yield* guarded(ports.save(answer));
-    return answer;
+    const current = yield* ports.saved;
+    const kept = ytArtistAnswerKept(current, answer, checkedAt);
+    // What's saved stands as it is: nothing to write.
+    if (kept === current) return kept;
+    yield* guarded(ports.save(kept));
+    return kept;
   });
