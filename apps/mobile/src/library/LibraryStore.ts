@@ -181,6 +181,7 @@ import {
   graphCatalogPage,
   graphSimilarPage,
   graphPlayPage,
+  graphPlays,
   type GraphPage,
   type GraphPlay,
   type GraphPlayCursor,
@@ -1569,6 +1570,8 @@ export class LibraryStore extends Context.Service<
     readonly graphPlayPage: (
       after: GraphPlayCursor,
     ) => Effect.Effect<GraphPage<GraphPlay, GraphPlayCursor>, LibraryStoreError>;
+    /** Every play as the artist graph reads it, in one read (Home's mix build, #1351). */
+    readonly graphPlays: Effect.Effect<readonly GraphPlay[], LibraryStoreError>;
     readonly candidateCatalog: Effect.Effect<readonly CatalogSong[], LibraryStoreError>;
     /**
      * Every saved YT Music artist page's artist with who "Fans might also
@@ -2439,6 +2442,7 @@ const make = Effect.gen(function* () {
     graphSimilarPage: (after) =>
       attempt("read a graph similar page", (db) => graphSimilarPage(db, after)),
     graphPlayPage: (after) => attempt("read a graph play page", (db) => graphPlayPage(db, after)),
+    graphPlays: attempt("read Home's graph plays", (db) => graphPlays(db)),
     candidateCatalog: attempt("read the candidate catalog", (db) => selectCandidateCatalog(db)),
 
     ytArtistSimilar: attempt("read the saved artist pages' similar artists", (db) =>

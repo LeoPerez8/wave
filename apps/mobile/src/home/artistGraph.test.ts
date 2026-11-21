@@ -55,28 +55,17 @@ const store = (counts: { reads: number }, catalog: CatalogSong[] = []): ArtistGr
           : [],
       next: null,
     }),
-  graphSimilarPage: (after) =>
-    Effect.succeed({
-      rows:
-        after === null
-          ? [
-              {
-                name: "Portishead",
-                similar: [{ name: "Beth Gibbons", browseId: "UCbeth", audience: null }],
-              },
-            ]
-          : [],
-      next: null,
-    }),
-  mixCreditNamesPage: () => Effect.succeed({ rows: [], next: null }),
-  graphPlayPage: () =>
-    Effect.succeed({
-      rows: [
-        { ...play("1", 0), artists: ["Massive Attack"] },
-        { ...play("2", 4 * MINUTE), artists: ["Burial", "Kode9"] },
-      ],
-      next: null,
-    }),
+  ytArtistSimilar: Effect.succeed([
+    {
+      name: "Portishead",
+      similar: [{ name: "Beth Gibbons", browseId: "UCbeth", audience: null }],
+    },
+  ]),
+  mixCreditNames: Effect.succeed([]),
+  graphPlays: Effect.succeed([
+    { ...play("1", 0), artists: ["Massive Attack"] },
+    { ...play("2", 4 * MINUTE), artists: ["Burial", "Kode9"] },
+  ]),
 });
 
 describe("the artist graph the app derives", () => {

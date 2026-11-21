@@ -13,9 +13,9 @@ class ReadFailed extends Data.TaggedError("LibraryStoreError")<{
 const emptyStore: ArtistGraphReads = {
   graphCatalogPage: () => Effect.succeed({ rows: [], next: null }),
   graphRadioPage: () => Effect.succeed({ rows: [], next: null }),
-  graphSimilarPage: () => Effect.succeed({ rows: [], next: null }),
-  mixCreditNamesPage: () => Effect.succeed({ rows: [], next: null }),
-  graphPlayPage: () => Effect.succeed({ rows: [], next: null }),
+  ytArtistSimilar: Effect.succeed([]),
+  mixCreditNames: Effect.succeed([]),
+  graphPlays: Effect.succeed([]),
 };
 
 test("a failed graph read is an error, and Try Again can obtain a fresh graph", async (t) => {
@@ -23,10 +23,11 @@ test("a failed graph read is an error, and Try Again can obtain a fresh graph", 
   const shared = shareArtistGraph(
     Effect.succeed({
       ...emptyStore,
-      graphPlayPage: () =>
+      graphPlays: Effect.suspend(() =>
         broken
           ? Effect.fail(new ReadFailed({ operation: "read graph", cause: "database unavailable" }))
-          : emptyStore.graphPlayPage([-1, 0]),
+          : emptyStore.graphPlays,
+      ),
     }),
     Effect.void,
     Effect.void,

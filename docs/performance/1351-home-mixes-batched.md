@@ -20,6 +20,12 @@
   catalog songs, a future play and radio songs that match and don't, the mix inputs, the catalog,
   the cold build's Library and its radio matches and the known videos serialise byte for byte the
   same before and after.
+- **The artist graph reads each source whole too.** Its similar artists (`ytArtistSimilar`), its
+  plays (`graphPlays`, one statement over `play_events_started_at_idx` in the paged walk's
+  `(started_at, id)` order) and, when a play was streamed, the Library's credit names
+  (`mixCreditNames`) are one read each. Building the graph from them still runs in stepped slices.
+  The catalog's pages remain only for a graph read without the snapshot's catalog, which Home
+  never does.
 - **Home only.** `home/homeWork.ts` is a gate on Home's sight (`useScreenSight` of the Home
   screen: focused, Now Playing not over it, Wave in front). Home's mix builds and re-ranks
   (`discoverMixes.ts`, `artistMixPools.ts`, `similarArtists.ts`), the snapshot reads they start
@@ -47,6 +53,16 @@ Before, by read at 1,000 songs: `mixHistoryPage` 80, `matchingSong` 100, `mixSon
 catalog's pages 4, the streamed and playlist pages 5, the playlist seed ids 2, and 3 others. At
 12,000: 423 history pages, 190 song pages and 1,200 song matches among them.
 
+`apps/mobile/src/library/databaseTests/artistGraphReads.test.ts` counts the artist graph's reads
+on the same fixture, with streamed plays credited to several artists and similar-artist pages
+(every ninth one a missing artist), and compares the graph with the old paged walk's. The names
+and edges serialise the same at both sizes.
+
+| Library                    | Graph reads before | Statements before | Reads after | Statements after |
+| -------------------------- | -----------------: | ----------------: | ----------: | ---------------: |
+| 1,000 songs, 10,000 plays  |                 91 |               171 |           3 |                3 |
+| 12,000 songs, 54,000 plays |                533 |               966 |           3 |                3 |
+
 The second test runs the real mix-input read with Home leaving sight after its third read: at
 most the read under way finishes while Home is out of sight, and the build ends with the same
 songs, plays and seed artists once Home is back. `home/homeWork.test.ts` covers the gate: closed
@@ -59,9 +75,6 @@ show what it costs on the phone.
 
 ## What this doesn't cover
 
-- The artist graph's own pages (`read a graph similar page`, `read a graph play page`) aren't in
-  the ticket's labels and still page; the graph now takes Home's turns, so it doesn't read off Home
-  unless something off Home waits for it.
 - A radio request already sent finishes off Home; the steps after it wait.
 - In your orbit, From your library and the carousel's pages are shared Library queries, which
   already pause out of sight (#722), with a few bounded reads each. New releases are checked by
@@ -86,7 +99,8 @@ few minutes, and pull the app log. Record here, for each run:
 
 - the count and total time of the `Read "…" held JS` lines for "read a mix song page", "read
   matching song", "read a page of the videos the owner knows", "read a mix playlist page" and
-  "read a mix streamed plays page" (expected after: none), and of the new "read Home's mix …" and
+  "read a mix streamed plays page", "read a graph similar page" and "read a graph play page"
+  (expected after: none), and of the new "read Home's mix …", "read Home's graph plays" and
   "read matching songs" lines (a few per build);
 - whether any of them appears on a route other than `/` (expected after: none, beyond one read
   under way when Home was left);
