@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
-import { ScrollView } from "react-native";
+import { ScrollView, useWindowDimensions } from "react-native";
+
+import { StagedSections } from "@/components/StagedSections";
 
 import { useListScrollable } from "@/motion/heldTouch";
 
@@ -12,9 +14,12 @@ export const COVER_ROW_TILE = CELL * 19;
  * A row that scrolls sideways, edge to edge, inside a screen that keeps the
  * side margin: Home's shelves and an artist page's album
  * shelves. Its tiles sit a gutter apart, the first one on the margin.
+ * `staged` mounts only the tiles on screen in its first frame and the rest in
+ * the frames after (#1355), for rows of `COVER_ROW_TILE` tiles.
  */
-export function CoverRow({ children }: { children: ReactNode }) {
+export function CoverRow({ children, staged = false }: { children: ReactNode; staged?: boolean }) {
   const scrollable = useListScrollable();
+  const { width } = useWindowDimensions();
   return (
     <ScrollView
       scrollEnabled={scrollable}
@@ -23,7 +28,13 @@ export function CoverRow({ children }: { children: ReactNode }) {
       style={{ marginHorizontal: -grid.margin }}
       contentContainerStyle={{ paddingHorizontal: grid.margin, gap: grid.gutter }}
     >
-      {children}
+      {staged ? (
+        <StagedSections estimate={COVER_ROW_TILE} gap={grid.gutter} viewport={width}>
+          {children}
+        </StagedSections>
+      ) : (
+        children
+      )}
     </ScrollView>
   );
 }

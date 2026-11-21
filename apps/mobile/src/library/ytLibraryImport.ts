@@ -219,7 +219,7 @@ const readSource = async (read: YtLibraryRead): Promise<SourceRead> => {
     const answer = await readSpotifyAccountPlaylist(
       read.source,
       async (request) => {
-        await startupTurn();
+        await startupTurn("YT Music library import");
         return askSpotifyAccount((spotify) =>
           request.kind === "likedSongs"
             ? spotify.likedSongs(request.offset)
@@ -282,7 +282,7 @@ const fill = async (read: YtLibraryRead): Promise<YtLibraryPauseReason | null> =
     queuedAt.get(read.playlistId) ?? readingSince ?? performance.now(),
   );
   try {
-    await startupTurn();
+    await startupTurn("YT Music library import");
     // A deletion/refresh while waiting for a turn must not send the stale source request.
     if (!isYtLibraryReadQueued(ytLibraryBatch.get(), read)) return null;
     timer.mark("waiting");
@@ -291,7 +291,7 @@ const fill = async (read: YtLibraryRead): Promise<YtLibraryPauseReason | null> =
       if (!isYtLibraryReadQueued(ytLibraryBatch.get(), read)) return null;
       timer.mark("reading");
       showImportProgress(read.playlistId, MATCHING_PROGRESS);
-      await startupTurn();
+      await startupTurn("YT Music library import");
       // Listed and indexed once for the playlists after it, while the Library stays as it was.
       let built = false;
       const index = await libraryIndex.current(() => {
@@ -310,12 +310,12 @@ const fill = async (read: YtLibraryRead): Promise<YtLibraryPauseReason | null> =
       const favorites = await appRuntime.runPromise(
         runSteps(ytLibraryFavoritesSteps(read, plan), startupTurnEffect),
       );
-      await startupTurn();
+      await startupTurn("YT Music library import");
       if (!isYtLibraryReadQueued(ytLibraryBatch.get(), read)) return null;
       // The pending favorites' stars then ask for their downloads, under Favorites (a star
       // means downloaded).
       const dispatched = await dispatchLibraryFavorites(favorites, {
-        turn: startupTurn,
+        turn: () => startupTurn("YT Music library import"),
         current: () => isYtLibraryReadQueued(ytLibraryBatch.get(), read),
         star: (ids) => setFavorites(ids, true),
         syncedStars: () => void downloadSyncedStars(),
@@ -389,7 +389,7 @@ const readBatch = async (): Promise<void> => {
   timingBackgroundChanged();
   try {
     await resumeLibraryReads({
-      turn: startupTurn,
+      turn: () => startupTurn("YT Music library import"),
       batch: ytLibraryBatch.get,
       prune,
       settle: settlePlaylistImport,

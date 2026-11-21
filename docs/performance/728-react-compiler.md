@@ -4,8 +4,8 @@ Ticket: #728 (parent #712). Branch `feat/728-react-compiler`, based on
 `origin/feat/712-faster-lighter` at a6333827.
 
 **The phone numbers are pending.** This ticket makes the compiler safe to turn on and makes the
-build that measures it. The decision waits for the owner's S24+ runs below. Nothing in this doc is a
-phone measurement.
+build that measures it. The decision waits for the owner's runs on the reference phone (see "On the
+reference phone (#1355)"). Nothing in this doc is a phone measurement.
 
 ## What changed
 
@@ -100,6 +100,48 @@ below pass. Otherwise it stays off and the spec says why.
 | every `all,glass` step, latency, frames  | **pending** | **pending** | —      |
 | screen-off soaks, JS wake-ups per minute | **pending** | **pending** | —      |
 | Hermes bundle size                       | **pending** | **pending** | —      |
+
+## On the reference phone (#1355)
+
+#1346 moved the decision to the reference phone (Xiaomi 25118PC98G, Android 15; `docs/spec.md` ›
+Fluidity), and #1355 runs it on its own commit, so the compiler is judged against the cheap first
+frames it would otherwise replace by hand. The compiler stays off until this run says otherwise.
+#1380 (Home and Now Playing) takes its decision from here.
+
+`scripts/perf/react-compiler-apks.sh` builds both perf APKs from the checked-out commit (arm64,
+each with a fresh bundle) into `perf-results/apks/`. Then, with the phone set up as #1347's run
+says (YouTube Music on, Home showing the Magic Queue carousel and the DJ card):
+
+```sh
+scripts/perf/react-compiler-apks.sh
+adb install -r perf-results/apks/wave-<commit>-compiler-off.apk
+node scripts/perf/perf.ts run --scenario reference-taps --label 728-ref-off-1 \
+  --artist "<Library artist on Artists' first screen>" --playlist "<playlist on Playlists' first screen>" \
+  --album "<album on Albums' first screen>" --yt-artist "<non-Library artist on its Similar artists row>"
+adb install -r perf-results/apks/wave-<commit>-compiler-on.apk
+node scripts/perf/perf.ts run --scenario reference-taps --label 728-ref-on-1 \
+  --artist "<same>" --playlist "<same>" --album "<same>" --yt-artist "<same>"
+node scripts/perf/perf.ts compare perf-results/728-ref-off-1-<time>.jsonl perf-results/728-ref-on-1-<time>.jsonl
+```
+
+Run each three times (`-2`, `-3`), alternating the installs, and check each run's first line says
+the build meant (`perf build (React Compiler on)`). `adb install -r` keeps the Library between
+them: both APKs carry the same signature. The rule to adopt it is the one above, with the tap
+kinds' first-frame p90 against the 50 ms budget as the deciding numbers, plus the behaviour checks
+below on the compiled build. If it's adopted, `app.config.ts` turns it on by default and the spec's
+React Compiler paragraph says so; otherwise the spec says why it stays off.
+
+### Phone run: pending
+
+| Measure (reference phone, `reference-taps`) | Off         | On          | Change |
+| ------------------------------------------- | ----------- | ----------- | ------ |
+| first frame p90, each tap kind              | **pending** | **pending** | —      |
+| response p90, each tap kind                 | **pending** | **pending** | —      |
+| JS blocks over 50 ms during the run         | **pending** | **pending** | —      |
+| PSS after the run                           | **pending** | **pending** | —      |
+| Hermes bundle size                          | **pending** | **pending** | —      |
+
+Decision: **pending**; the compiler is off.
 
 ## Behaviour checks on the compiled build
 

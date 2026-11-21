@@ -224,7 +224,7 @@ function AlbumShelfRow({
   const { strings } = useLocalisation();
   return (
     <View style={{ height }}>
-      <CoverRow>
+      <CoverRow staged>
         {cells.map((cell) => {
           switch (cell.kind) {
             case "library": {

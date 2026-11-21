@@ -5,6 +5,7 @@ import { currentLocalisation } from "@/localisation/localisation";
  * recommendations; with neither, nine streamed songs of the Artist mixes
  * (Core's `magicQueueRow`).
  */
+import { namedWork } from "@/lib/stepped";
 import {
   magicQueueMixPicks,
   magicQueueRow,
@@ -46,7 +47,9 @@ export interface MagicQueueSection {
 
 /** The row's playlist entries, read in pages between free turns: it's waiting to be shown. */
 const seedIds = createPlaylistSeedIdsRead(
-  Effect.flatMap(LibraryStore, (store) => readPlaylistSeedIds(store, freeTurnEffect)),
+  Effect.flatMap(LibraryStore, (store) => readPlaylistSeedIds(store, freeTurnEffect)).pipe(
+    namedWork("Home Magic Queue seeds"),
+  ),
 );
 onLibraryChange(seedIds.change);
 

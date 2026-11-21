@@ -37,8 +37,11 @@ import { applyPulledPage, selectAccountTrackIds, selectUnpushed } from "./syncRo
 import { deleteTracksById } from "./tracks.ts";
 import { migrateDatabase } from "../database.ts";
 import migrations from "./migrations.ts";
+import type { LibraryDatabase } from "./database.ts";
+import { readConnections, replayRead } from "./offThreadReads.ts";
 import {
   addTrack,
+  asyncReadClient,
   openTestDatabase,
   traceQueries,
   type TestDatabase,
@@ -356,4 +359,21 @@ test("the playlists' plays come from kept counts, also over an upgrade's history
     kept.queries.filter((query) => query.plan.some((step) => /play_events_context_idx/u.test(step))),
     [],
   );
+});
+
+test("the kept reads replay off the JS thread with the same totals", async () => {
+  const { db } = await library();
+  settle(db);
+  const reads = readConnections(async () => asyncReadClient(db));
+  const window = statsWindow("month", NOW);
+  for (const read of [
+    (d: LibraryDatabase) => playedEntityTotals(d, window),
+    (d: LibraryDatabase) => keptSongPlayTotals(d, window),
+    (d: LibraryDatabase) => keptCreditedPlayTotals(d, window),
+    (d: LibraryDatabase) => homePlays(d),
+    (d: LibraryDatabase) => selectPlaylistPlays(d, NOW),
+  ]) {
+    const replayed = await replayRead(reads, read as (d: LibraryDatabase) => unknown, () => 0);
+    assert.deepEqual(replayed.value, read(db));
+  }
 });

@@ -26,7 +26,7 @@ export const startLyricsSearchIndex = (): (() => void) => {
     withStore,
     readLyrics: readTrackLyrics,
     changed: notifyLyricsSearchIndexChanged,
-    freeTurn,
+    freeTurn: () => freeTurn("lyrics search index"),
   });
   const stopLibrary = onLibraryChange((change) => {
     if (change.kind !== "tracks") return;

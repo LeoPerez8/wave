@@ -25,7 +25,7 @@ import * as Result from "effect/Result";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useMemo } from "react";
 
-import { settledTurnEffect } from "@/lib/backgroundWork";
+import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
 import { withNetworkLog } from "@/lib/networkMeter";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { appRuntime } from "@/library/runtime";
@@ -107,6 +107,8 @@ const refresh = (current: string): void => {
     Effect.gen(function* () {
       const ytMusic = yield* YtMusic;
       const home = yield* ytMusic.homePlaylistShelves;
+      // The network wait isn't a slice; the JS handling its answer takes a free turn.
+      yield* freeTurnEffect;
       return keptCommunityPlaylists(kept.get(), home.shelves, {
         now: Date.now(),
         account: keyOf(home.account),

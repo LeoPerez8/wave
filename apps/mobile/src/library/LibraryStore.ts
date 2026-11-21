@@ -21,7 +21,20 @@ import {
   albumsByIds,
   linkEntries,
 } from "@wave/client/db/libraryQueries";
-import { songHasFile, Database as ClientDatabase, databaseLayer } from "@wave/client";
+import {
+  songHasFile,
+  Database as ClientDatabase,
+  SqliteDriver,
+  databaseLayer,
+  type LibraryDatabase,
+} from "@wave/client";
+import {
+  NotReplayable,
+  replayRead,
+  type ReadConnection,
+  type ReplayedRead,
+} from "@wave/client/db/offThreadReads";
+import { SyncLibraryReads } from "./syncLibraryReads.ts";
 import { sqliteDriverLayer } from "./sqliteDriver.ts";
 import type {
   AlbumDetail,
@@ -209,7 +222,11 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import { timeLibraryRead } from "@/log/slowLibraryReads";
+import {
+  heldLibraryRead,
+  libraryReadStaysHere as readsHere,
+  timeLibraryRead,
+} from "@/log/slowLibraryReads";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { syncCycle, type SyncCycleInput, type SyncCycleResult } from "@wave/client/sync/syncCycle";
 
@@ -1448,20 +1465,60 @@ const KEPT_TOTALS_STEP = { songs: 16, plays: 1_000 };
 const writeAttempt = <A>(operation: string, run: () => A): Effect.Effect<A, LibraryStoreError> =>
   Effect.try({ try: run, catch: (cause) => new LibraryStoreError({ operation, cause }) });
 
-// All synchronous reads share this boundary. Row counts are inspected only
-// on the slow path; named bundles count the rows they actually returned.
-const attempt = <A>(
-  operation: string,
-  run: () => A,
-  rows?: (result: A) => number,
-): Effect.Effect<A, LibraryStoreError> =>
-  Effect.try({
-    try: () => timeLibraryRead(operation, run, rows),
-    catch: (cause) => new LibraryStoreError({ operation, cause }),
-  });
+const now = () => performance.now();
 
 const make = Effect.gen(function* () {
   const db = yield* ClientDatabase;
+  // Library reads leave the JS thread on the read connections (#1348).
+  const { reads } = yield* SqliteDriver;
+
+  // A read on this connection, on the JS thread: tests and desktop benches, the reads
+  // that must finish in their task (`SyncLibraryReads`) and the few that can't replay.
+  const readHere = <A>(
+    operation: string,
+    run: (db: LibraryDatabase) => A,
+    rows?: (result: A) => number,
+  ): A => timeLibraryRead(operation, () => run(db), rows);
+
+  const readOffThread = async <A>(
+    connection: ReadConnection,
+    operation: string,
+    run: (db: LibraryDatabase) => A,
+    rows?: (result: A) => number,
+  ): Promise<A> => {
+    let replayed: ReplayedRead<A>;
+    try {
+      replayed = await replayRead(connection, run, now);
+    } catch (cause) {
+      // The synchronous read is the reference: it gives the result, or the error, it
+      // always did. A read that can't replay is named once in the app log.
+      if (cause instanceof NotReplayable) readsHere(operation, cause);
+      return readHere(operation, run, rows);
+    }
+    heldLibraryRead(operation, replayed.heldMs, replayed.value, rows);
+    return replayed.value;
+  };
+
+  // Every read shares this boundary: [run] reads through the database it's handed, which
+  // each read names `db` too, so the main connection is out of its reach.
+  // Row counts are inspected only on the slow path; named bundles count the rows
+  // they actually returned.
+  const attempt = <A>(
+    operation: string,
+    run: (db: LibraryDatabase) => A,
+    rows?: (result: A) => number,
+  ): Effect.Effect<A, LibraryStoreError> =>
+    Effect.flatMap(Effect.service(SyncLibraryReads), (here) =>
+      here || reads === undefined
+        ? Effect.try({
+            try: () => readHere(operation, run, rows),
+            catch: (cause) => new LibraryStoreError({ operation, cause }),
+          })
+        : Effect.tryPromise({
+            try: () => readOffThread(reads, operation, run, rows),
+            catch: (cause) => new LibraryStoreError({ operation, cause }),
+          }),
+    );
   // The Library's credits and their splitter, kept between saves.
   const splits = creditSplits();
   // Every write on this connection and others, as SQLite counts them: a scan's cleanup
@@ -1498,13 +1555,13 @@ const make = Effect.gen(function* () {
     writeAttempt(operation, run).pipe(Effect.tap(() => Effect.sync(historyChanged)));
 
   return LibraryStore.of({
-    followShowCache: attempt("read shows", () => readFollowShows(db)),
+    followShowCache: attempt("read shows", (db) => readFollowShows(db)),
     saveFollowShows: (row) => writeAttempt("save shows", () => saveFollowShows(db, row)),
     markShowNotified: (id) =>
       writeAttempt("claim show", () => markShowNotified(db, id, Date.now())).pipe(
         Effect.tap((claimed) => Effect.sync(() => claimed && followSaved())),
       ),
-    followReleaseCache: attempt("read follow release cache", () => readFollowReleases(db)),
+    followReleaseCache: attempt("read follow release cache", (db) => readFollowReleases(db)),
     saveFollowReleases: (key, releases, checkedAt) =>
       writeAttempt("save follow releases", () => saveFollowReleases(db, key, releases, checkedAt)),
     hideFollowRelease: (key) =>
@@ -1512,10 +1569,10 @@ const make = Effect.gen(function* () {
         Effect.tap(() => Effect.sync(followSaved)),
       ),
     followReleaseListening: (releases) =>
-      attempt("read release listening", () => followReleaseListening(db, releases)),
-    listFollows: attempt("list follows", () => selectFollows(db)),
-    countFollows: attempt("count follows", () => countFollows(db)),
-    getFollow: (name) => attempt("read follow", () => selectFollow(db, name)),
+      attempt("read release listening", (db) => followReleaseListening(db, releases)),
+    listFollows: attempt("list follows", (db) => selectFollows(db)),
+    countFollows: attempt("count follows", (db) => countFollows(db)),
+    getFollow: (name) => attempt("read follow", (db) => selectFollow(db, name)),
     setFollow: (target, level) =>
       writeAttempt("follow artist", () => saveFollow(db, target, level, Date.now())).pipe(
         Effect.tap((changed) => Effect.sync(() => changed && followSaved())),
@@ -1530,7 +1587,7 @@ const make = Effect.gen(function* () {
         Effect.tap((changed) => Effect.sync(() => changed && followSaved())),
         Effect.asVoid,
       ),
-    dismissedFollowSuggestions: attempt("read dismissed suggestions", () =>
+    dismissedFollowSuggestions: attempt("read dismissed suggestions", (db) =>
       selectDismissedFollowSuggestions(db),
     ),
     dismissFollowSuggestion: (key) =>
@@ -1546,14 +1603,14 @@ const make = Effect.gen(function* () {
     ensureDefaultRoot: (path) =>
       writeAttempt("set up scan roots", () => ensureDefaultRoot(db, path)),
 
-    listRoots: attempt("list music folders", () => listRoots(db)),
+    listRoots: attempt("list music folders", (db) => listRoots(db)),
 
     addRoot: (path, drop) => writeAttempt("add a music folder", () => addRoot(db, path, drop)),
 
     removeRoot: (path) =>
       writeAttempt("remove a music folder", () => removeRootSync(db, splits, path)),
 
-    excludedFolders: attempt("read excluded folders", () => excludedFolders(db)),
+    excludedFolders: attempt("read excluded folders", (db) => excludedFolders(db)),
 
     saveBatch: (tracks, artworkRows, moves = [], options) =>
       writeAttempt("save scanned tracks", () =>
@@ -1562,12 +1619,12 @@ const make = Effect.gen(function* () {
 
     linkPlaylistEntries: writeAttempt("link playlist entries", () => linkEntries(db, Date.now())),
 
-    playlistEntriesRevision: attempt("read the playlists' revision", () =>
+    playlistEntriesRevision: attempt("read the playlists' revision", (db) =>
       selectPlaylistEntriesRevision(db),
     ),
 
     hasUnscannedRoot: (roots) =>
-      attempt("read which folders were scanned", () => hasUnscannedRoot(db, roots)),
+      attempt("read which folders were scanned", (db) => hasUnscannedRoot(db, roots)),
 
     markScanned: (roots, at) =>
       writeAttempt("record the scan", () => {
@@ -1578,16 +1635,16 @@ const make = Effect.gen(function* () {
         if (pruned) prunedAt = writes();
       }),
 
-    countTracks: attempt("count tracks", () => countTracks(db)),
+    countTracks: attempt("count tracks", (db) => countTracks(db)),
 
-    countLibrary: attempt("count the library", () => libraryCounts(db)),
-    countSectionSongs: attempt("count the library's songs", () => sectionSongCounts(db)),
-    measureScale: attempt("measure the library", () => libraryScale(db)),
+    countLibrary: attempt("count the library", (db) => libraryCounts(db)),
+    countSectionSongs: attempt("count the library's songs", (db) => sectionSongCounts(db)),
+    measureScale: attempt("measure the library", (db) => libraryScale(db)),
 
     playlistRecommendationInput: (id) =>
       attempt(
         "read playlist recommendations",
-        () => selectPlaylistRecommendationInput(db, id),
+        (db) => selectPlaylistRecommendationInput(db, id),
         (result) =>
           result.playlist.length +
           result.librarySongs.length +
@@ -1595,15 +1652,15 @@ const make = Effect.gen(function* () {
           result.feedback.length,
       ),
     recommendationFlagsPage: (after) =>
-      attempt("read recommendation page", () => recommendationFlagsPage(db, after)),
+      attempt("read recommendation page", (db) => recommendationFlagsPage(db, after)),
     recommendationPendingPage: (after) =>
-      attempt("read recommendation page", () => recommendationPendingPage(db, after)),
+      attempt("read recommendation page", (db) => recommendationPendingPage(db, after)),
     recommendationEntriesPage: (id, after, includeTracks) =>
-      attempt("read recommendation page", () =>
+      attempt("read recommendation page", (db) =>
         recommendationEntriesPage(db, id, after, includeTracks),
       ),
     recommendationFeedbackPage: (id, after) =>
-      attempt("read recommendation page", () => recommendationFeedbackPage(db, id, after)),
+      attempt("read recommendation page", (db) => recommendationFeedbackPage(db, id, after)),
     dismissPlaylistRecommendation: (id, offer) =>
       writeAttempt("save playlist dismissal", () =>
         dismissPlaylistRecommendation(db, id, offer, Date.now()),
@@ -1612,68 +1669,68 @@ const make = Effect.gen(function* () {
       writeAttempt("add playlist recommendation", () =>
         acceptPlaylistRecommendation(db, id, offer, Date.now()),
       ),
-    matchingSong: (song) => attempt("read matching song", () => selectMatchingSong(db, song)),
+    matchingSong: (song) => attempt("read matching song", (db) => selectMatchingSong(db, song)),
     downloadsToForget: (jobs) =>
-      attempt("read downloaded files", () => selectDownloadsToForget(db, jobs)),
-    listSongs: attempt("list songs", () => listSongs(db)),
+      attempt("read downloaded files", (db) => selectDownloadsToForget(db, jobs)),
+    listSongs: attempt("list songs", (db) => listSongs(db)),
 
-    listSortedSongs: (sort) => attempt("list sorted songs", () => selectSortedSongs(db, sort)),
+    listSortedSongs: (sort) => attempt("list sorted songs", (db) => selectSortedSongs(db, sort)),
     listSongOrder: (sort) =>
       attempt(
         "order songs",
-        () => selectSongOrder(db, sort),
+        (db) => selectSongOrder(db, sort),
         (result) => result.ids.length,
       ),
 
-    songFindTexts: attempt("read songs to find", () => selectSongFindTexts(db)),
+    songFindTexts: attempt("read songs to find", (db) => selectSongFindTexts(db)),
 
-    songSummaries: (ids) => attempt("read songs", () => selectSongSummaries(db, ids)),
+    songSummaries: (ids) => attempt("read songs", (db) => selectSongSummaries(db, ids)),
 
-    songsWithIds: (ids) => attempt("read songs", () => selectSongsWithIds(db, ids)),
+    songsWithIds: (ids) => attempt("read songs", (db) => selectSongsWithIds(db, ids)),
 
-    listLibraryLookupSongs: attempt("list songs to look up", () => selectLibraryLookupSongs(db)),
+    listLibraryLookupSongs: attempt("list songs to look up", (db) => selectLibraryLookupSongs(db)),
 
-    listSongGenres: attempt("list song genres", () => selectSongGenres(db)),
+    listSongGenres: attempt("list song genres", (db) => selectSongGenres(db)),
 
     nowPlayingSong: (target) =>
-      attempt("read the Now Playing song", () => selectNowPlayingSong(db, target)),
+      attempt("read the Now Playing song", (db) => selectNowPlayingSong(db, target)),
 
-    trackDetails: (id) => attempt("read the playing track", () => trackDetails(db, id)),
+    trackDetails: (id) => attempt("read the playing track", (db) => trackDetails(db, id)),
 
-    listAlbums: attempt("list albums", () => selectAlbums(db, undefined)),
+    listAlbums: attempt("list albums", (db) => selectAlbums(db, undefined)),
 
     listAlbumsPage: (page) =>
-      attempt("list albums", () => selectAlbums(db, undefined, page, "files")),
+      attempt("list albums", (db) => selectAlbums(db, undefined, page, "files")),
 
     artistNamesForLink: (after) =>
-      attempt("read artist link names", () => selectArtistNamesForLink(db, after)),
+      attempt("read artist link names", (db) => selectArtistNamesForLink(db, after)),
 
-    listArtists: attempt("list artists", () => listArtistsSync(db)),
+    listArtists: attempt("list artists", (db) => listArtistsSync(db)),
 
     listArtistsPage: (page) =>
-      attempt("list artists", () => selectArtists(db, { page, scope: "files" })),
+      attempt("list artists", (db) => selectArtists(db, { page, scope: "files" })),
 
     listArtistSongsPage: (id, page) =>
-      attempt("list the artist's songs", () => selectArtistSongs(db, id, page, "files")),
+      attempt("list the artist's songs", (db) => selectArtistSongs(db, id, page, "files")),
 
     listPlaylistEntriesPage: (id, page) =>
-      attempt("list the playlist's songs", () => selectPlaylistEntries(db, id, page, "files")),
+      attempt("list the playlist's songs", (db) => selectPlaylistEntries(db, id, page, "files")),
 
-    artistCovers: (ids) => attempt("load artist covers", () => selectArtistCovers(db, ids)),
+    artistCovers: (ids) => attempt("load artist covers", (db) => selectArtistCovers(db, ids)),
 
-    listGenres: attempt("list genres", () => listGenres(db)),
+    listGenres: attempt("list genres", (db) => listGenres(db)),
 
     getAlbum: (id, scope) =>
       attempt(
         "open the album",
-        () => selectAlbumDetail(db, id, scope),
+        (db) => selectAlbumDetail(db, id, scope),
         (result) => (result === null ? 0 : 1 + result.tracks.length),
       ),
 
     getArtist: (id, scope) =>
       attempt(
         "open the artist",
-        () => selectArtistDetail(db, id, scope),
+        (db) => selectArtistDetail(db, id, scope),
         (result) =>
           result === null
             ? 0
@@ -1683,33 +1740,33 @@ const make = Effect.gen(function* () {
     openGenre: (id, sort) =>
       attempt(
         "open the genre",
-        () => selectGenreOpening(db, id, sort),
+        (db) => selectGenreOpening(db, id, sort),
         (result) => (result === null ? 0 : 1 + result.songs.length),
       ),
 
     genreOrderSlice: (id, sort, cursor) =>
       attempt(
         "order the genre",
-        () => selectGenreOrderSlice(db, id, sort, cursor),
+        (db) => selectGenreOrderSlice(db, id, sort, cursor),
         (result) => result?.ids.length ?? 0,
       ),
 
     getGenre: (id) =>
       attempt(
         "read the genre's songs",
-        () => getGenreSync(db, id),
+        (db) => getGenreSync(db, id),
         (result) => (result === null ? 0 : 1 + result.songs.length),
       ),
 
-    knownFiles: (roots) => attempt("read the library index", () => selectKnownFiles(db, roots)),
+    knownFiles: (roots) => attempt("read the library index", (db) => selectKnownFiles(db, roots)),
     skippedFiles: (roots) =>
-      attempt("read skipped voice notes", () => selectSkippedFiles(db, roots)),
+      attempt("read skipped voice notes", (db) => selectSkippedFiles(db, roots)),
     skipFiles: (files) =>
       writeAttempt("skip voice notes", () => skipFiles(db, splits, files, Date.now())),
     unskipFiles: (paths) =>
       writeAttempt("forget skipped voice notes", () => unskipFiles(db, paths)),
 
-    indexedFiles: (paths) => attempt("read missing files", () => indexedFiles(db, paths)),
+    indexedFiles: (paths) => attempt("read missing files", (db) => indexedFiles(db, paths)),
 
     filesGone: (paths) =>
       writeAttempt("update songs whose files are gone", () => {
@@ -1723,13 +1780,13 @@ const make = Effect.gen(function* () {
         removeSongs(db, splits, trackIds, Date.now()),
       ),
     inPlaylists: (trackIds) =>
-      attempt("read whether songs are in playlists", () => selectInPlaylists(db, trackIds)),
+      attempt("read whether songs are in playlists", (db) => selectInPlaylists(db, trackIds)),
     listDownloadMembers: (scope) =>
-      attempt("read download list membership", () => selectListDownloadMembers(db, scope)),
+      attempt("read download list membership", (db) => selectListDownloadMembers(db, scope)),
     missingSongs: (trackIds) =>
-      attempt("read missing songs", () => selectMissingSongs(db, trackIds)),
+      attempt("read missing songs", (db) => selectMissingSongs(db, trackIds)),
     albumsMissingSongs: (albumIds) =>
-      attempt("read albums' missing songs", () => selectAlbumsMissingSongs(db, albumIds)),
+      attempt("read albums' missing songs", (db) => selectAlbumsMissingSongs(db, albumIds)),
 
     addExcludedFolder: (path, drop) =>
       writeAttempt("exclude a folder", () => addExcludedFolder(db, path, drop)),
@@ -1740,48 +1797,48 @@ const make = Effect.gen(function* () {
       }),
 
     hasPlayableSongOutside: (ids) =>
-      attempt("probe Home pick growth", () => hasPlayableSongOutside(db, ids)),
+      attempt("probe Home pick growth", (db) => hasPlayableSongOutside(db, ids)),
 
-    playableSongIds: attempt("read Home seed ids", () => selectPlayableSongIds(db)),
+    playableSongIds: attempt("read Home seed ids", (db) => selectPlayableSongIds(db)),
     playlistEntryVideoIdsPage: (after) =>
-      attempt("read a page of Home's playlist seed ids", () =>
+      attempt("read a page of Home's playlist seed ids", (db) =>
         selectPlaylistEntryVideoIdsPage(db, after),
       ),
     playlistEntrySongs: (videoIds) =>
-      attempt("read Home's playlist seeds", () => selectPlaylistEntrySongs(db, videoIds)),
+      attempt("read Home's playlist seeds", (db) => selectPlaylistEntrySongs(db, videoIds)),
 
     songsByIds: (ids) =>
-      attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),
-    albumLoudness: (id) => attempt("read the album loudness", () => selectAlbumLoudness(db, id)),
-    songLoudness: (ids) => attempt("read the songs' loudness", () => selectSongLoudness(db, ids)),
+      attempt("read queued songs", (db) => selectPlayableSongs(db, ids).filter(songHasFile)),
+    albumLoudness: (id) => attempt("read the album loudness", (db) => selectAlbumLoudness(db, id)),
+    songLoudness: (ids) => attempt("read the songs' loudness", (db) => selectSongLoudness(db, ids)),
     songsToMeasure: (ids) =>
-      attempt("read the songs to measure", () => selectSongsToMeasure(db, ids)),
+      attempt("read the songs to measure", (db) => selectSongsToMeasure(db, ids)),
     saveMeasurement: (song, measurement) =>
       writeAttempt("save a song's measurement", () => saveMeasurement(db, song, measurement)),
-    libraryGains: attempt("read the Library's gains", () => selectLibraryGains(db)),
-    libraryToMeasure: attempt("read the Library's songs to measure", () =>
+    libraryGains: attempt("read the Library's gains", (db) => selectLibraryGains(db)),
+    libraryToMeasure: attempt("read the Library's songs to measure", (db) =>
       selectLibraryToMeasure(db),
     ),
     saveMeasurements: (measured) =>
       writeAttempt("save the songs' measurements", () => saveMeasurements(db, measured)),
 
-    leavingSong: (id) => attempt("read the song leaving", () => selectLeavingSong(db, id)),
-    videoIds: (ids) => attempt("read the songs' video ids", () => selectVideoIds(db, ids)),
+    leavingSong: (id) => attempt("read the song leaving", (db) => selectLeavingSong(db, id)),
+    videoIds: (ids) => attempt("read the songs' video ids", (db) => selectVideoIds(db, ids)),
     songWithVideo: (videoId) =>
-      attempt("read the song of a video", () => {
+      attempt("read the song of a video", (db) => {
         const id = selectSongWithVideo(db, videoId);
         return id === null ? null : (selectSongsWithIds(db, [id])[0] ?? null);
       }),
     songsWithVideos: (videoIds) =>
-      attempt("read the songs of videos", () => selectSongsWithVideos(db, videoIds)),
+      attempt("read the songs of videos", (db) => selectSongsWithVideos(db, videoIds)),
     countedPlays: (ids) =>
-      attempt("read the songs' counted plays", () => selectCountedPlays(db, ids)),
+      attempt("read the songs' counted plays", (db) => selectCountedPlays(db, ids)),
     songCountedPlays: (trackIds) =>
-      attempt("read the songs' counted plays", () => songCountedPlays(db, trackIds)),
+      attempt("read the songs' counted plays", (db) => songCountedPlays(db, trackIds)),
     shuffleSongs: (trackIds) =>
-      attempt("read the songs' artists, genres and albums", () => shuffleSongs(db, trackIds)),
+      attempt("read the songs' artists, genres and albums", (db) => shuffleSongs(db, trackIds)),
 
-    loadPlayback: attempt("read the saved queue", () => loadPlayback(db)),
+    loadPlayback: attempt("read the saved queue", (db) => loadPlayback(db)),
 
     saveQueue: (write) => writeAttempt("save the queue", () => savePlayback(db, write, Date.now())),
 
@@ -1790,7 +1847,7 @@ const make = Effect.gen(function* () {
         savePlayback(db, { positionMs }, Date.now()),
       ),
 
-    listRecentSearches: attempt("read recent searches", () => listRecentSearchesSync(db)),
+    listRecentSearches: attempt("read recent searches", (db) => listRecentSearchesSync(db)),
 
     rememberSearch: (query) =>
       writeAttempt("save the search", () => rememberSearchSync(db, query, Date.now())),
@@ -1800,29 +1857,29 @@ const make = Effect.gen(function* () {
     }),
 
     saveReleaseDate: (id, date) =>
-      attempt("save release date", () => saveReleaseDate(db, id, date)),
+      attempt("save release date", (db) => saveReleaseDate(db, id, date)),
     saveTypedReleaseDate: (id, date) =>
-      attempt("save typed release date", () => saveTypedReleaseDate(db, id, date)),
-    listPlaylists: attempt("list playlists", () => selectPlaylists(db)),
+      attempt("save typed release date", (db) => saveTypedReleaseDate(db, id, date)),
+    listPlaylists: attempt("list playlists", (db) => selectPlaylists(db)),
 
-    playlistsLastPlayed: attempt("read when playlists last played", () =>
+    playlistsLastPlayed: attempt("read when playlists last played", (db) =>
       selectPlaylistsLastPlayed(db),
     ),
 
     playlistPlays: (now) =>
-      attempt("count the playlists' plays", () => selectPlaylistPlays(db, now)),
+      attempt("count the playlists' plays", (db) => selectPlaylistPlays(db, now)),
 
-    unsearchedEntries: attempt("read the playlists' unsearched songs", () =>
+    unsearchedEntries: attempt("read the playlists' unsearched songs", (db) =>
       selectUnsearchedEntries(db),
     ),
 
     playlistGraveyard: (id) =>
-      attempt("read the playlist graveyard", () => selectPlaylistGraveyard(db, id)),
+      attempt("read the playlist graveyard", (db) => selectPlaylistGraveyard(db, id)),
 
     getPlaylist: (id, scope) =>
       attempt(
         "open the playlist",
-        () => selectPlaylist(db, id, scope),
+        (db) => selectPlaylist(db, id, scope),
         (result) => (result === null ? 0 : 1 + result.items.length),
       ),
 
@@ -1839,7 +1896,7 @@ const make = Effect.gen(function* () {
       writeAttempt("change the playlist's image", () => setPlaylistImage(db, id, files)),
 
     playlistImageOriginal: (id) =>
-      attempt("read the playlist's image", () => selectPlaylistImageOriginal(db, id)),
+      attempt("read the playlist's image", (db) => selectPlaylistImageOriginal(db, id)),
 
     removePlaylistImage: (id) =>
       writeAttempt("remove the playlist's image", () => removePlaylistImage(db, id)),
@@ -1894,38 +1951,38 @@ const make = Effect.gen(function* () {
         replacePlaylistSongs(db, playlistId, songs, Date.now()),
       ),
 
-    trackPaths: attempt("read the library's files", () => selectTrackPaths(db)),
+    trackPaths: attempt("read the library's files", (db) => selectTrackPaths(db)),
 
-    importTracks: attempt("read the library's songs", () => selectImportTracks(db)),
+    importTracks: attempt("read the library's songs", (db) => selectImportTracks(db)),
 
-    importedPlays: attempt("read the imported plays", () => importedPlays(db)),
+    importedPlays: attempt("read the imported plays", (db) => importedPlays(db)),
 
     saveImportedPlays: (plays) =>
       historyWrite("save the imported plays", () => saveImportedPlays(db, plays)),
 
-    playedRecordingKeys: attempt("read the songs played", () => playedRecordingKeys(db)),
+    playedRecordingKeys: attempt("read the songs played", (db) => playedRecordingKeys(db)),
 
     tasteHistory: attempt(
       "read the taste history",
-      () => tasteHistory(db),
+      (db) => tasteHistory(db),
       (result) => result.plays.length + result.favorites.length + result.downloads.length,
     ),
 
-    tasteRevision: attempt("read the taste source revision", () => tasteRevision(db)),
+    tasteRevision: attempt("read the taste source revision", (db) => tasteRevision(db)),
 
-    favoriteTrackIds: attempt("read favorites", () => selectFavoriteTrackIds(db)),
+    favoriteTrackIds: attempt("read favorites", (db) => selectFavoriteTrackIds(db)),
 
     setFavorites: (trackIds, on) =>
       writeAttempt(on ? "add favorites" : "remove favorites", () =>
         setFavorites(db, trackIds, on, Date.now()),
       ),
 
-    listFavorites: attempt("list favorites", () => listFavorites(db)),
+    listFavorites: attempt("list favorites", (db) => listFavorites(db)),
 
     addPendingFavorites: (songs) =>
       writeAttempt("keep pending favorites", () => addPendingFavorites(db, songs, Date.now())),
 
-    listPendingFavorites: attempt("read pending favorites", () => selectPendingFavorites(db)),
+    listPendingFavorites: attempt("read pending favorites", (db) => selectPendingFavorites(db)),
 
     removePendingFavorites: (videoIds) =>
       writeAttempt("forget pending favorites", () => removePendingFavorites(db, videoIds)),
@@ -1935,28 +1992,28 @@ const make = Effect.gen(function* () {
     removeDislikes: (keys) =>
       writeAttempt("forget dislikes", () => removeDislikes(db, keys, Date.now())),
 
-    listDislikes: attempt("read dislikes", () => selectDislikes(db)),
-    dislikedTracks: attempt("read the disliked songs' tracks", () => selectDislikedTracks(db)),
+    listDislikes: attempt("read dislikes", (db) => selectDislikes(db)),
+    dislikedTracks: attempt("read the disliked songs' tracks", (db) => selectDislikedTracks(db)),
 
-    qualityFiles: attempt("read the files' quality", () => selectQualityFiles(db)),
+    qualityFiles: attempt("read the files' quality", (db) => selectQualityFiles(db)),
     noBetterCopies: (direction) =>
-      attempt("read the songs with no better copy", () => selectNoBetterCopies(db, direction)),
+      attempt("read the songs with no better copy", (db) => selectNoBetterCopies(db, direction)),
     rememberNoBetterCopies: (songs) =>
       writeAttempt("remember the songs with no better copy", () =>
         rememberNoBetterCopies(db, songs),
       ),
     replacedTrack: (trackId) =>
-      attempt("read a song to replace", () => selectReplacedTrack(db, trackId)),
+      attempt("read a song to replace", (db) => selectReplacedTrack(db, trackId)),
     replaceTrackFile: (trackId, track, artworkRows) =>
       writeAttempt("replace a song's file", () =>
         replaceTrackFile(db, splits, trackId, track, artworkRows, Date.now()),
       ),
     recordFileDeletions: (paths) =>
       writeAttempt("record files to delete", () => recordFileDeletions(db, paths, Date.now())),
-    pendingFileDeletions: attempt("read the files to delete", () => pendingFileDeletions(db)),
+    pendingFileDeletions: attempt("read the files to delete", (db) => pendingFileDeletions(db)),
     forgetFileDeletions: (paths) =>
       writeAttempt("forget deleted files", () => forgetFileDeletions(db, paths)),
-    duplicateCheckFiles: attempt("read the files a replacement may have left twice", () =>
+    duplicateCheckFiles: attempt("read the files a replacement may have left twice", (db) =>
       selectDuplicateCheckFiles(db),
     ),
     fixReplacementDuplicate: (fix) =>
@@ -1973,7 +2030,7 @@ const make = Effect.gen(function* () {
     home: (scope) =>
       attempt(
         "read Home",
-        () => homeSections(db, scope),
+        (db) => homeSections(db, scope),
         (result) =>
           result.recentlyAdded.length +
           result.recentlyPlayed.length +
@@ -1982,106 +2039,108 @@ const make = Effect.gen(function* () {
       ),
     homeAdded: attempt(
       "read Recently Added",
-      () => homeAdded(db),
+      (db) => homeAdded(db),
       (result) => result.recentlyAdded.length,
     ),
     homePlays: attempt(
       "read Home's plays",
-      () => homePlays(db),
+      (db) => homePlays(db),
       (result) => result.recentlyPlayed.length + result.mostPlayed.length,
     ),
     homeFavorites: attempt(
       "read Home's favorites",
-      () => homeFavorites(db),
+      (db) => homeFavorites(db),
       (result) => result.favorites.length,
     ),
 
-    latestPlay: attempt("read the latest play", () => latestPlay(db)),
+    latestPlay: attempt("read the latest play", (db) => latestPlay(db)),
     listeningHistory: (before, query) =>
-      attempt("read listening history", () => listeningHistory(db, before, query)),
+      attempt("read listening history", (db) => listeningHistory(db, before, query)),
     newerListeningHistory: (after) =>
-      attempt("read newer listening history", () => newerListeningHistory(db, after)),
+      attempt("read newer listening history", (db) => newerListeningHistory(db, after)),
     listeningHistoryAround: (playId) =>
-      attempt("read listening history around a play", () => listeningHistoryAround(db, playId)),
+      attempt("read listening history around a play", (db) => listeningHistoryAround(db, playId)),
 
     trackPlayTotals: (window, trackIds) =>
-      attempt("sum up song plays", () => trackPlayTotals(db, window, trackIds)),
+      attempt("sum up song plays", (db) => trackPlayTotals(db, window, trackIds)),
 
-    songPlayTotals: (window) => attempt("sum up song plays", () => songPlayTotals(db, window)),
+    songPlayTotals: (window) => attempt("sum up song plays", (db) => songPlayTotals(db, window)),
 
     streamedSongsByIds: (videoIds) =>
-      attempt("read streamed songs", () => streamedSongsOf(db, videoIds)),
+      attempt("read streamed songs", (db) => streamedSongsOf(db, videoIds)),
 
     playedEntityTotals: (window) =>
-      attempt("sum up played albums and artists", () => playedEntityTotals(db, window)),
+      attempt("sum up played albums and artists", (db) => playedEntityTotals(db, window)),
     playedArtistTotals: (window) =>
-      attempt("sum up played artists", () => playedArtistTotals(db, window)),
-    keptArtistSongs: attempt("read the artists of kept songs", () => keptArtistSongs(db)),
-    streamedLibraryPlays: attempt("sum up the Library songs' streamed plays", () =>
+      attempt("sum up played artists", (db) => playedArtistTotals(db, window)),
+    keptArtistSongs: attempt("read the artists of kept songs", (db) => keptArtistSongs(db)),
+    streamedLibraryPlays: attempt("sum up the Library songs' streamed plays", (db) =>
       streamedLibraryPlays(db),
     ),
     playedArtistSongs: (artistId, now) =>
-      attempt("read the artist listening", () => playedArtistSongs(db, artistId, now)),
+      attempt("read the artist listening", (db) => playedArtistSongs(db, artistId, now)),
     recapPlays: (window, includeStreamedGenres = true) =>
-      attempt("sum up a Recap's plays", () => recapPlays(db, window, includeStreamedGenres)),
+      attempt("sum up a Recap's plays", (db) => recapPlays(db, window, includeStreamedGenres)),
     creditedPlayTotals: (window) =>
-      attempt("sum up album and artist plays", () => creditedPlayTotals(db, window)),
+      attempt("sum up album and artist plays", (db) => creditedPlayTotals(db, window)),
     settleKeptTotals: writeAttempt("settle the kept play totals", () =>
       settleKeptTotals(db, KEPT_TOTALS_STEP),
     ),
 
-    albumsByIds: (ids) => attempt("read ranked albums", () => albumsByIds(db, ids)),
+    albumsByIds: (ids) => attempt("read ranked albums", (db) => albumsByIds(db, ids)),
 
     artistsByIds: (ids) =>
-      attempt("read ranked artists", () => (ids.length === 0 ? [] : listArtistsSync(db, ids))),
+      attempt("read ranked artists", (db) => (ids.length === 0 ? [] : listArtistsSync(db, ids))),
 
     linkRows: (ids) =>
       attempt(
         "read linked rows",
-        () => selectLinkRows(db, ids),
+        (db) => selectLinkRows(db, ids),
         (result) => Number(result.album !== null) + Number(result.artist !== null),
       ),
 
-    listeningSums: attempt("sum up listening", () => listeningSums(db)),
+    listeningSums: attempt("sum up listening", (db) => listeningSums(db)),
 
     countedListeningPage: (after) =>
       attempt(
         "read counted listening page",
-        () => countedListeningPage(db, after),
+        (db) => countedListeningPage(db, after),
         (page) => page.rows.length,
       ),
-    countedListening: attempt("sum up counted listening", () => countedListening(db)),
+    countedListening: attempt("sum up counted listening", (db) => countedListening(db)),
 
     pendingStreamedGenres: (after) =>
-      attempt("read pending streamed genres", () => pendingStreamedGenres(db, after)),
+      attempt("read pending streamed genres", (db) => pendingStreamedGenres(db, after)),
     keepStreamedGenre: (videoId, genre) =>
       writeAttempt("save a streamed genre", () => keepStreamedGenre(db, videoId, genre)),
     songGenres: (ids, includeStreamedGenres = true) =>
-      attempt("read the songs' genres", () => songGenres(db, ids, includeStreamedGenres)),
+      attempt("read the songs' genres", (db) => songGenres(db, ids, includeStreamedGenres)),
 
     artistFirstPlays: (ids) =>
-      attempt("read the artists' first plays", () => artistFirstPlays(db, ids)),
+      attempt("read the artists' first plays", (db) => artistFirstPlays(db, ids)),
 
     artistPlays: (artistId, now) =>
       attempt(
         "sum up the artist's plays",
-        () => artistPlays(db, artistId, now),
+        (db) => artistPlays(db, artistId, now),
         (result) => result.songIds.length + result.listening.length + result.songPlays.length,
       ),
 
-    artistPhotoLookups: attempt("list artist photo lookups", () =>
-      selectArtistPhotoLookups(db, Date.now()),
-    ),
+    // The time is taken once: a replayed read must see the same statements on every pass.
+    artistPhotoLookups: Effect.suspend(() => {
+      const at = Date.now();
+      return attempt("list artist photo lookups", (db) => selectArtistPhotoLookups(db, at));
+    }),
 
     recordArtistPhoto: (artistKey, record) =>
       writeAttempt("record an artist photo", () => recordArtistPhoto(db, artistKey, record)),
 
-    listArtistPhotos: attempt("list artist photos", () => selectArtistPhotos(db)),
+    listArtistPhotos: attempt("list artist photos", (db) => selectArtistPhotos(db)),
 
     clearArtistPhotos: writeAttempt("clear artist photos", () => clearArtistPhotos(db)),
 
     ytArtist: (artistKey) =>
-      attempt("read an artist's YT Music section", () =>
+      attempt("read an artist's YT Music section", (db) =>
         selectYtArtist<NativeYtSong>(db, artistKey),
       ),
 
@@ -2102,7 +2161,7 @@ const make = Effect.gen(function* () {
 
     leaveAccount: writeAttempt("leave the Wave account", () => signOut(db, splits)),
 
-    savedLyrics: (videoId) => attempt("read saved lyrics", () => selectSavedLyrics(db, videoId)),
+    savedLyrics: (videoId) => attempt("read saved lyrics", (db) => selectSavedLyrics(db, videoId)),
 
     keepSavedLyrics: (videoId, saved) =>
       writeAttempt("save lyrics", () => {
@@ -2117,47 +2176,51 @@ const make = Effect.gen(function* () {
       }),
 
     lyricsSearchTrack: (trackId) =>
-      attempt("read the song's lyrics search", () => selectLyricsSearchTrack(db, trackId)),
+      attempt("read the song's lyrics search", (db) => selectLyricsSearchTrack(db, trackId)),
 
     keepLyricsMiss: (trackId, checkedAt) =>
       writeAttempt("remember the lyrics search", () => keepLyricsMiss(db, trackId, checkedAt)),
 
     lyricsIndexPage: (afterId, limit) =>
-      attempt("read a page of lyrics to index", () => selectLyricsIndexPage(db, afterId, limit)),
+      attempt("read a page of lyrics to index", (db) => selectLyricsIndexPage(db, afterId, limit)),
 
     lyricsIndexTarget: (trackId) =>
-      attempt("read lyrics index target", () => selectLyricsIndexTarget(db, trackId)),
+      attempt("read lyrics index target", (db) => selectLyricsIndexTarget(db, trackId)),
 
     staleLyricsIndexPage: (afterId, limit) =>
-      attempt("read stale lyrics index rows", () => selectStaleLyricsIndexPage(db, afterId, limit)),
+      attempt("read stale lyrics index rows", (db) =>
+        selectStaleLyricsIndexPage(db, afterId, limit),
+      ),
 
     lyricsTrackIdAtPath: (path) =>
-      attempt("find lyrics index track", () => selectLyricsTrackIdAtPath(db, path)),
+      attempt("find lyrics index track", (db) => selectLyricsTrackIdAtPath(db, path)),
 
     keepLyricsSearchText: (trackId, lyrics) =>
       writeAttempt("index lyrics for Search", () => keepLyricsSearchText(db, trackId, lyrics)),
 
     searchLyrics: (query) =>
-      attempt("search indexed lyrics", () => selectLyricsCandidates(db, query)),
+      attempt("search indexed lyrics", (db) => selectLyricsCandidates(db, query)),
 
     searchSavedLyrics: (query) =>
-      attempt("search saved lyrics", () => selectSavedLyricsCandidates(db, query)),
+      attempt("search saved lyrics", (db) => selectSavedLyricsCandidates(db, query)),
 
     savedLyricsSearchIndexPage: (afterVideoId, limit) =>
-      attempt("read saved lyrics to index", () =>
+      attempt("read saved lyrics to index", (db) =>
         selectSavedLyricsSearchIndexPage(db, afterVideoId, limit),
       ),
 
     indexSavedLyricsSearchText: (candidate) =>
       writeAttempt("index saved lyrics for Search", () => indexSavedLyrics(db, candidate)),
 
-    streamedSongs: attempt("read the songs streamed", () => selectStreamedSongs(db)),
+    streamedSongs: attempt("read the songs streamed", (db) => selectStreamedSongs(db)),
 
-    playlistedSongs: attempt("read the playlists' songs", () => selectPlaylistedSongs(db)),
+    playlistedSongs: attempt("read the playlists' songs", (db) => selectPlaylistedSongs(db)),
 
-    knownVideos: attempt("read the videos the owner knows", () => selectKnownVideos(db)),
+    knownVideos: attempt("read the videos the owner knows", (db) => selectKnownVideos(db)),
     knownVideosPage: (cursor) =>
-      attempt("read a page of the videos the owner knows", () => selectKnownVideosPage(db, cursor)),
+      attempt("read a page of the videos the owner knows", (db) =>
+        selectKnownVideosPage(db, cursor),
+      ),
 
     addCandidates: (page, at) =>
       writeAttempt("add to the candidate catalog", () => {
@@ -2166,35 +2229,38 @@ const make = Effect.gen(function* () {
       }),
 
     mixStreamedPage: (after) =>
-      attempt("read a mix streamed page", () => mixStreamedPage(db, after)),
+      attempt("read a mix streamed page", (db) => mixStreamedPage(db, after)),
     mixStreamedPlaysPage: (after) =>
-      attempt("read a mix streamed plays page", () => mixStreamedPlaysPage(db, after)),
+      attempt("read a mix streamed plays page", (db) => mixStreamedPlaysPage(db, after)),
     mixCreditNamesPage: (after) =>
-      attempt("read a mix credit names page", () => mixCreditNamesPage(db, after)),
+      attempt("read a mix credit names page", (db) => mixCreditNamesPage(db, after)),
     mixPlaylistedPage: (after) =>
-      attempt("read a mix playlist page", () => mixPlaylistedPage(db, after)),
-    mixCreditPage: (after) => attempt("read a mix credit page", () => mixCreditPage(db, after)),
+      attempt("read a mix playlist page", (db) => mixPlaylistedPage(db, after)),
+    mixCreditPage: (after) => attempt("read a mix credit page", (db) => mixCreditPage(db, after)),
     tasteArtistsPage: (after) =>
-      attempt("read a taste artist page", () => tasteArtistsPage(db, after)),
-    tastePlaysPage: (after) => attempt("read a taste play page", () => tastePlaysPage(db, after)),
+      attempt("read a taste artist page", (db) => tasteArtistsPage(db, after)),
+    tastePlaysPage: (after) => attempt("read a taste play page", (db) => tastePlaysPage(db, after)),
     tasteFavoritesPage: (after) =>
-      attempt("read a taste favorite page", () => tasteFavoritesPage(db, after)),
+      attempt("read a taste favorite page", (db) => tasteFavoritesPage(db, after)),
     tasteDownloadsPage: (after) =>
-      attempt("read a taste download page", () => tasteDownloadsPage(db, after)),
+      attempt("read a taste download page", (db) => tasteDownloadsPage(db, after)),
     mixSongsPage: (after, options) =>
-      attempt("read a mix song page", () => mixSongsPage(db, after, options)),
-    mixArtistsPage: (after) => attempt("read a mix artist page", () => mixArtistsPage(db, after)),
-    mixHistoryPage: (after) => attempt("read a mix history page", () => mixHistoryPage(db, after)),
-    mixCatalogPage: (after) => attempt("read a mix catalog page", () => mixCatalogPage(db, after)),
-    graphRadioPage: (after) => attempt("read a graph radio page", () => graphRadioPage(db, after)),
+      attempt("read a mix song page", (db) => mixSongsPage(db, after, options)),
+    mixArtistsPage: (after) => attempt("read a mix artist page", (db) => mixArtistsPage(db, after)),
+    mixHistoryPage: (after) =>
+      attempt("read a mix history page", (db) => mixHistoryPage(db, after)),
+    mixCatalogPage: (after) =>
+      attempt("read a mix catalog page", (db) => mixCatalogPage(db, after)),
+    graphRadioPage: (after) =>
+      attempt("read a graph radio page", (db) => graphRadioPage(db, after)),
     graphCatalogPage: (after) =>
-      attempt("read a graph catalog page", () => graphCatalogPage(db, after)),
+      attempt("read a graph catalog page", (db) => graphCatalogPage(db, after)),
     graphSimilarPage: (after) =>
-      attempt("read a graph similar page", () => graphSimilarPage(db, after)),
-    graphPlayPage: (after) => attempt("read a graph play page", () => graphPlayPage(db, after)),
-    candidateCatalog: attempt("read the candidate catalog", () => selectCandidateCatalog(db)),
+      attempt("read a graph similar page", (db) => graphSimilarPage(db, after)),
+    graphPlayPage: (after) => attempt("read a graph play page", (db) => graphPlayPage(db, after)),
+    candidateCatalog: attempt("read the candidate catalog", (db) => selectCandidateCatalog(db)),
 
-    ytArtistSimilar: attempt("read the saved artist pages' similar artists", () =>
+    ytArtistSimilar: attempt("read the saved artist pages' similar artists", (db) =>
       selectYtArtistSimilar(db),
     ),
   });

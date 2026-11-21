@@ -62,6 +62,8 @@ export interface FollowReleasesPorts<Y = unknown, R = never> {
   readonly checkShows: (context: FollowCheckContext) => Effect.Effect<boolean, unknown, R>;
   /** Waits for a quiet moment before each request. */
   readonly settle?: Effect.Effect<void>;
+  /** Waits for a free turn before the JS that handles each answer: a network wait isn't a slice. */
+  readonly answered?: Effect.Effect<void>;
   /**
    * Runs one YT Music read ([query] is what it asks for) under the device's allowance;
    * undefined when it may not run.
@@ -86,12 +88,16 @@ export interface FollowReleasesPorts<Y = unknown, R = never> {
  */
 export const followReleasesCheck = <Y = unknown, R = never>(ports: FollowReleasesPorts<Y, R>) => {
   const settle = ports.settle ?? Effect.void;
+  const answered = ports.answered ?? Effect.void;
   const json = (url: string) =>
     Effect.tryPromise(async (signal) => {
       const answer = await (ports.fetch ?? fetch)(url, { signal });
       if (!answer.ok) throw new Error(`HTTP ${answer.status}`);
       return (await answer.json()) as unknown;
-    }).pipe(Effect.timeout("20 seconds"));
+    }).pipe(
+      Effect.timeout("20 seconds"),
+      Effect.tap(() => answered),
+    );
   const allowed = () => ports.enabled();
   const ytAllowed = () => allowed() && ports.ytEnabled();
   const ytRead = <A>(query: string, read: Effect.Effect<A, Y>) =>
@@ -102,7 +108,9 @@ export const followReleasesCheck = <Y = unknown, R = never>(ports: FollowRelease
         if (!ytAllowed()) return undefined;
         return yield* read;
       });
-      return yield* ports.ytTurn ? ports.ytTurn(query, guarded) : guarded;
+      const answer = yield* ports.ytTurn ? ports.ytTurn(query, guarded) : guarded;
+      yield* answered;
+      return answer;
     });
   /** A YT Music read; failing for no connection it gives "offline", otherwise undefined. */
   const ytAnswer = <A>(query: string, read: Effect.Effect<A, Y>) =>
