@@ -9,6 +9,8 @@ import {
   DJ_DISCOVERIES,
   DJ_VARIETIES,
   djArtistTile,
+  djFirstRadioSong,
+  djGenreTile,
   djVarietyCandidates,
   magicDjFirstSong,
   magicArtistKey,
@@ -468,6 +470,107 @@ describe("Music discovery in a DJ session", () => {
     assert.deepEqual(
       djVarietyCandidates(read, graph, { seed: candidates, liked: [] }, 10),
       djVarietyCandidates(chosen, graph, { seed: candidates, liked: [] }, 10),
+    );
+  });
+});
+
+describe("the first song of a DJ queue from a radio", () => {
+  /** [song]'s YT Music song, as a radio page lists it. */
+  const page = (...songs: RankedRadioSong[]) => songs.map((song) => song.song!);
+  const noProfile = () => null;
+
+  test("takes the first song the batch could take", () => {
+    const [first, second] = page(songBy("Picked"), songBy("Picked"));
+    assert.equal(
+      djFirstRadioSong(session(), "artist:picked", [first!, second!], { profileOf: noProfile }),
+      first,
+    );
+  });
+
+  test("skips a video, a disliked song, a used song and a learned recording", () => {
+    const [video, disliked, used, learned, kept] = page(
+      songBy("Picked"),
+      songBy("Picked"),
+      songBy("Picked"),
+      songBy("Picked"),
+      songBy("Picked"),
+    );
+    const started = {
+      ...session(),
+      used: [ytTrackId(used!.videoId)],
+      likedRadios: [
+        {
+          id: "song:learned",
+          title: learned!.title,
+          artists: learned!.artists,
+          durationMs: learned!.durationMs,
+        },
+      ],
+    };
+    assert.equal(
+      djFirstRadioSong(
+        started,
+        "artist:picked",
+        [{ ...video!, video: true }, disliked!, used!, learned!, kept!],
+        { profileOf: noProfile, disliked: new Set([ytTrackId(disliked!.videoId)]) },
+      ),
+      kept,
+    );
+  });
+
+  test("keeps to Artist variety: Low takes only a selected artist's song", () => {
+    const [near, picked] = page(songBy("Near A"), songBy("Picked"));
+    assert.equal(
+      djFirstRadioSong(session({ variety: "low" }), "artist:picked", [near!, picked!], {
+        profileOf: noProfile,
+        graph,
+      }),
+      picked,
+    );
+    assert.equal(
+      djFirstRadioSong(session({ variety: "medium" }), "artist:picked", [near!, picked!], {
+        profileOf: noProfile,
+        graph,
+      }),
+      near,
+    );
+  });
+
+  test("with no song in reach, takes the nearest, as the batch fills", () => {
+    const [far, stranger, near] = page(songBy("Far A"), songBy("Stranger"), songBy("Near A"));
+    assert.equal(
+      djFirstRadioSong(session({ variety: "low" }), "artist:picked", [stranger!, far!, near!], {
+        profileOf: noProfile,
+        graph,
+      }),
+      near,
+    );
+  });
+
+  test("keeps a family tile's radio to its family", () => {
+    const family = { ...djGenreTile("Metal")!, artists: [{ id: 10, name: "Metal Act" }] };
+    const started = startDjQueue([family], {
+      id: "dj2",
+      settings: { ...DEFAULT_DJ_SETTINGS, variety: "high" },
+    })!;
+    const radio = started.seedSongs![0]!.id;
+    const [pop, metal] = page(songBy("Pop Band"), songBy("Metal Band"));
+    const profileOf = (artist: string) =>
+      artist === "Metal Band"
+        ? new Map([["metal", 1]])
+        : artist === "Pop Band"
+          ? new Map([["pop", 1]])
+          : null;
+    assert.equal(djFirstRadioSong(started, radio, [pop!, metal!], { profileOf }), metal);
+  });
+
+  test("gives none when the page has no song the batch could take", () => {
+    const [video] = page(songBy("Picked"));
+    assert.equal(
+      djFirstRadioSong(session(), "artist:picked", [{ ...video!, video: true }], {
+        profileOf: noProfile,
+      }),
+      null,
     );
   });
 });

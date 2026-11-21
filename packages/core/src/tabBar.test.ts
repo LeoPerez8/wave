@@ -77,6 +77,34 @@ describe("the saved tab bar", () => {
       "albums",
     ]);
   });
+
+  test("a saved bar of more than five never loses Home past the cut", () => {
+    assert.deepEqual(parseTabBar("library,playlists,albums,songs,index,search", null), [
+      "library",
+      "playlists",
+      "albums",
+      "index",
+      "search",
+    ]);
+    assert.deepEqual(parseTabBar("library,playlists,albums,songs,artists,index", null), [
+      "library",
+      "playlists",
+      "albums",
+      "songs",
+      "index",
+    ]);
+    const edited = editTabBar(parseTabBar("library,playlists,albums,songs,index,search", null), {
+      remove: "albums",
+    });
+    assert.deepEqual(edited, ["library", "playlists", "index", "search"]);
+    assert.deepEqual(editTabBar(edited, { add: "genres" }), [
+      "library",
+      "playlists",
+      "index",
+      "genres",
+      "search",
+    ]);
+  });
 });
 
 describe("editing the tab bar", () => {

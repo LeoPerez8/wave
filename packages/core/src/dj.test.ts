@@ -25,6 +25,8 @@ import {
   djReopened,
   genreMixDjCandidates,
   djSelected,
+  djSessionWithAlbumSongs,
+  magicSignal,
   startDjQueue,
   DEFAULT_DJ_SETTINGS,
   magicBatchRadios,
@@ -920,4 +922,49 @@ describe("DJ's grid marks", () => {
       ["Sua seleção · 2", "Toque em artistas para começar"],
     );
   });
+});
+
+test("an album page read after DJ started adds its songs and artists, keeping what the session learned", () => {
+  const tiles = [
+    djArtistTile("Portishead")!,
+    djAlbumTile({ title: "Hits", artist: "Various Artists", browseId: "MPREb_hits" })!,
+  ];
+  const local = startDjQueue(tiles, { id: "dj1" })!;
+  const drawn = magicBatchRadios(local, () => 0).session;
+  const started = {
+    ...magicDjFirstSong(drawn, ["Portishead"]),
+    used: ["5"],
+    likedRadios: [{ id: "song:liked", title: "Liked", artists: ["Liked Artist"], durationMs: 1 }],
+  };
+  const current = magicSignal(started, {
+    kind: "skip",
+    song: { trackId: "9", artists: [magicArtistKey("Skipped")], genre: null, style: null },
+  });
+  const albumSongs = new Map([
+    [
+      tiles[1]!.key,
+      [
+        {
+          id: "song:hit",
+          title: "Hit",
+          artists: ["Song Artist"],
+          durationMs: 1,
+          videoId: "hit",
+          plays: 0,
+        },
+      ],
+    ],
+  ]);
+  const refreshed = startDjQueue(tiles, { id: "dj1", albumSongs })!;
+  const merged = djSessionWithAlbumSongs(current, refreshed);
+  assert.deepEqual(merged.seedSongs, refreshed.seedSongs);
+  assert.deepEqual(merged.radioArtists, ["Portishead", "Song Artist"]);
+  assert.deepEqual(merged.used, current.used);
+  assert.deepEqual(merged.djStartedArtists, current.djStartedArtists);
+  assert.deepEqual(merged.radioSignals, current.radioSignals);
+  assert.deepEqual(merged.likedRadios, current.likedRadios);
+  assert.equal(merged.ytShare, current.ytShare);
+  assert.equal(merged.batches, 0);
+  // The first batch draws again, so the album's songs can be among its radios.
+  assert.ok(magicBatchRadios(merged, () => 0).seeds.some((seed) => seed.id === "song:hit"));
 });

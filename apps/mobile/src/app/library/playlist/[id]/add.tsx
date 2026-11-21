@@ -1,10 +1,10 @@
 import { useLocalisation } from "@/localisation/localisation";
 import {
   heldTracks,
-  holdPlaylistAddVisitSong,
   inLibraryUnlessHeld,
   playlistAddVisit,
   playlistSongKey,
+  settlePlaylistAddVisit,
   stepPlaylistAddVisit,
   ytSectionView,
   type PlaylistAddVisit,
@@ -114,8 +114,8 @@ export default function AddPlaylistSongsScreen() {
   );
 
   const [visit, setVisit] = useState<PlaylistAddVisit | null>(null);
+  // The visit every tap and settled write reads and updates, ahead of renders.
   const visitRef = useRef<PlaylistAddVisit | null>(null);
-  const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const initialVisit = useMemo(() => {
     if (detail?.items === undefined) return null;
     return playlistAddVisit(
@@ -130,46 +130,40 @@ export default function AddPlaylistSongsScreen() {
     );
   }, [detail]);
   const shownVisit = visit ?? initialVisit;
+  const updateVisit = useCallback((next: PlaylistAddVisit) => {
+    visitRef.current = next;
+    setVisit(next);
+  }, []);
 
   const toggle = useCallback(
     async (song: AddSong) => {
-      const current = visitRef.current ?? visit ?? initialVisit;
+      const current = visitRef.current ?? initialVisit;
       if (current === null) return;
-      const key = keyOf(song);
-      if (pending.has(key)) return;
       const playlistSong = asPlaylistSong(song);
       const step = stepPlaylistAddVisit(current, playlistSong);
       if (step.action === "none") return;
-      visitRef.current = step.visit;
-      setVisit(step.visit);
-      setPending((previous) => new Set(previous).add(key));
+      updateVisit(step.visit);
+      const settle = (outcome: "done" | "failed" | "held") => {
+        const now = visitRef.current;
+        if (now !== null) updateVisit(settlePlaylistAddVisit(now, playlistSong, outcome));
+      };
       try {
         if (step.action === "add") {
           const answer = await addToPlaylist(playlistId, [playlistSong]);
-          if (answer.added > 0)
+          if (answer.added > 0) {
+            settle("done");
             void showToast(strings.playlists.addedToPlaylist(playlist?.name ?? ""));
-          else {
-            const held = holdPlaylistAddVisitSong(step.visit, playlistSong);
-            visitRef.current = held;
-            setVisit(held);
-          }
+          } else settle("held");
         } else {
           await undoAddToPlaylist(playlistId, playlistSong);
+          settle("done");
         }
       } catch (error) {
-        const rollback = stepPlaylistAddVisit(step.visit, playlistSong);
-        visitRef.current = rollback.visit;
-        setVisit(rollback.visit);
+        settle("failed");
         void showError(strings.playlists.couldntAdd, error);
-      } finally {
-        setPending((previous) => {
-          const next = new Set(previous);
-          next.delete(key);
-          return next;
-        });
       }
     },
-    [pending, playlistId, playlist, strings, visit, initialVisit],
+    [initialVisit, playlistId, playlist, strings, updateVisit],
   );
 
   const selection = useMemo<SongListSelection<AddSong>>(
