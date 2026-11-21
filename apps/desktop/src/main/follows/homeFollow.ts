@@ -55,7 +55,7 @@ export interface HomeFollowDeps {
     readonly set: (key: string, value: string) => void;
   };
   readonly ytEnabled: () => boolean;
-  readonly pages: Pick<YtPagesShape, "findArtist" | "artist" | "album" | "catalog">;
+  readonly pages: Pick<YtPagesShape, "album" | "catalog">;
   /** Deezer's releases and covers. */
   readonly fetch: typeof fetch;
   /** The gap before each show request; a test shortens it. */
@@ -100,19 +100,10 @@ export const createHomeFollow = (deps: HomeFollowDeps): HomeFollowShape => {
     );
   /** The check's YT Music reads over the desktop's pages; anything but an answer fails. */
   const yt: FollowYt<YtReadFailed> = {
-    searchArtists: (name) =>
+    searchAlbums: (query) =>
       read(async () => {
-        const found = await pages.findArtist(name);
-        if (found.status !== "ok") return null;
-        // Already picked as the check picks (`pickYtArtist`), so it comes back named as asked.
-        return found.browseId === null ? [] : [{ name, browseId: found.browseId, audience: null }];
-      }),
-    artist: (browseId) =>
-      read(async () => {
-        const found = await pages.artist(browseId);
-        return found.status === "ok" && found.page !== null
-          ? { albums: found.page.albums, singles: found.page.singles }
-          : null;
+        const found = await pages.catalog(query);
+        return found.status === "ok" ? found.albums : null;
       }),
     album: (browseId) =>
       read(async () => {
@@ -165,6 +156,7 @@ export const createHomeFollow = (deps: HomeFollowDeps): HomeFollowShape => {
     const shown = homeFollowCards(known, {
       now,
       enabled: enabled(),
+      ytMusic: ytMusic(),
       blockExplicit: deps.setting(DONT_PLAY_EXPLICIT) === "on",
       country,
     });
@@ -241,18 +233,26 @@ export const createHomeFollow = (deps: HomeFollowDeps): HomeFollowShape => {
             const found = await pages.catalog(query);
             return found.status === "ok" ? found.albums : null;
           },
-          albumVideoIds: async (browseId) => {
+          album: async (browseId) => {
             const found = await pages.album(browseId);
-            return found.status === "ok" && found.album !== null
-              ? found.album.songs.map((song) => song.videoId)
-              : null;
+            if (found.status === "ok" && found.album !== null)
+              return { videoIds: found.album.songs.map((song) => song.videoId) };
+            // Only a page YT Music answered without the album is gone.
+            return found.status === "ok" || found.status === "failed" ? "failed" : "offline";
           },
         }),
       );
-      // "search" never leaves `openFollowRelease`.
+      // "search" and "gone" never leave `openFollowRelease`.
       return opening.kind === "open"
         ? { kind: "ytAlbum", browseId: opening.browseId }
-        : { kind: opening.kind === "search" ? "noAnswer" : opening.kind };
+        : {
+            kind:
+              opening.kind === "search"
+                ? "noAnswer"
+                : opening.kind === "gone"
+                  ? "notFound"
+                  : opening.kind,
+          };
     },
     artwork: async (key) => {
       const url = (await cards()).releaseCards.find((r) => r.key === key)?.artworkUrl ?? null;
