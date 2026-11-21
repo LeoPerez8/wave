@@ -35,3 +35,36 @@ export const stagedMounts = ({ estimates, viewport, gap = 0 }: StagedMountsInput
   }
   return counts.length === 0 ? [0] : counts;
 };
+
+export type PagerMountsInput = {
+  /** How many pages the row holds. */
+  readonly count: number;
+  /** The page in sight as the row first draws. */
+  readonly index: number;
+};
+
+/**
+ * How a sideways pager's pages mount across frames (#1380): the first frame
+ * draws only the page in sight, and each following frame the pages one step
+ * further out on both sides, so a swipe finds its next page already there.
+ * `order` is the pages in the order they mount, and `counts` how many of
+ * them are mounted in each frame, cumulative, ending with all of them.
+ */
+export const pagerMounts = ({
+  count,
+  index,
+}: PagerMountsInput): {
+  order: number[];
+  counts: number[];
+} => {
+  if (count <= 0) return { order: [], counts: [0] };
+  const first = Math.min(count - 1, Math.max(0, index));
+  const order = [first];
+  const counts = [1];
+  for (let step = 1; order.length < count; step++) {
+    if (first - step >= 0) order.push(first - step);
+    if (first + step < count) order.push(first + step);
+    counts.push(order.length);
+  }
+  return { order, counts };
+};

@@ -1,5 +1,5 @@
 import type { HomePlays, HomeSections } from "@wave/client/db/playHistory";
-import { STATS_FACT_LABELS, type HomeSectionId } from "@wave/core";
+import { STATS_FACT_LABELS, type HomeItem, type HomeSectionId } from "@wave/core";
 import { CELL, grid } from "../catalog/grid.ts";
 
 /** Unanswered slices stay undefined; an answered empty slice is content too. */
@@ -90,6 +90,36 @@ export const homePlaceholderHeight = (
     default:
       return 0;
   }
+};
+
+/** A section's heading as `TitledSection` draws it: its top margin, its line and the gap under it. */
+const SECTION_HEADING = CELL * 5 + CELL * 6 + CELL * 1.5;
+
+/**
+ * Sections that often draw nothing (no followed artists, no shows, signed
+ * out): their estimate is no height, so the sections after them still mount
+ * in Home's first frame when they don't show.
+ */
+const MAY_DRAW_NOTHING: ReadonlySet<HomeSectionId> = new Set([
+  "new-releases",
+  "upcoming-shows",
+  "community-playlists",
+]);
+
+/**
+ * How tall an item of Home is taken to be when its first frame decides what
+ * to mount (`StagedSections`, Core's `stagedMounts`, #1380): erring short, so
+ * the first frame never leaves the bottom of the screen empty. [width] is the
+ * window's. Discover counts only the Magic Queue's grid under its heading;
+ * the lines between sections count nothing.
+ */
+export const homeItemEstimate = (item: HomeItem, fontScale: number, width: number): number => {
+  if (typeof item === "string") return 0;
+  const { section } = item;
+  if (MAY_DRAW_NOTHING.has(section)) return 0;
+  const available = width - grid.margin * 2;
+  if (section === "discover") return SECTION_HEADING + magicQueueGrid(available, fontScale).height;
+  return SECTION_HEADING + homePlaceholderHeight(section, fontScale, available);
 };
 
 /** Stats values move below their labels at large system text sizes. */
