@@ -27,6 +27,21 @@ _Avoid_: song, file
 **non-D**:
 Short for non-downloaded; a song this device has no audio file for: YT Music songs, unsearched entries and missing songs.
 
+**Collaborative playlist**:
+A playlist that several Wave accounts edit. Distinct from Share, which copies a playlist out to YT Music or Spotify.
+_Avoid_: shared playlist
+
+**Member**:
+A Wave account in a Collaborative playlist, its Owner included. Every Member edits it.
+_Avoid_: collaborator, editor
+
+**Invite link**:
+The link an Owner sends so that other Wave accounts can join a Collaborative playlist. It is the only way to become a Member.
+_Avoid_: share link
+
+**Owner**:
+The Member who made the playlist collaborative, or the one it passed to when that Member's Wave account was deleted. Only the Owner invites, removes a Member, ends the collaboration or deletes the playlist.
+
 **Credit**:
 The artist tag of a Track as written, such as "Ariana Grande, Doja Cat". A credit names one or more Artists. Rows show the credit as written. A tag with several values gives a credit per value, each naming its own Artists, and rows show them joined with commas.
 _Avoid_: artist string
