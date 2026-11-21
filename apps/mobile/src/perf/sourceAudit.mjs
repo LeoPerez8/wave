@@ -520,3 +520,121 @@ export const unreadMemoDependencies = (files) => {
   }
   return found;
 };
+
+/** Handlers a gesture or a scroll runs every frame it moves. */
+const FRAME_HANDLERS = new Set(["onUpdate", "onChange", "onScroll"]);
+const JS_CALLS = new Set(["scheduleOnRN", "runOnJS"]);
+const SHORT_CIRCUITS = new Set([
+  ts.SyntaxKind.AmpersandAmpersandToken,
+  ts.SyntaxKind.BarBarToken,
+  ts.SyntaxKind.QuestionQuestionToken,
+]);
+
+/** Whether [statement] leaves its block early: `if (…) return;`. */
+const returnsEarly = (statement) =>
+  ts.isIfStatement(statement) &&
+  (ts.isReturnStatement(statement.thenStatement) ||
+    (ts.isBlock(statement.thenStatement) &&
+      statement.thenStatement.statements.some((inner) => ts.isReturnStatement(inner))));
+
+/**
+ * Whether [call], inside the frame handler [fn], runs only on a condition: under an `if`, a
+ * `?:`, `&&`, `||` or `??`, after an early return, or in a function of its own (a callback
+ * that runs on another event, such as an animation's end).
+ */
+const conditional = (call, fn) => {
+  for (let at = call; at !== fn && at.parent !== undefined; at = at.parent) {
+    const parent = at.parent;
+    if (parent === fn) return false;
+    if (ts.isFunctionLike(parent)) return true;
+    if (ts.isIfStatement(parent) && at !== parent.expression) return true;
+    if (ts.isConditionalExpression(parent) && at !== parent.condition) return true;
+    if (
+      ts.isBinaryExpression(parent) &&
+      at === parent.right &&
+      SHORT_CIRCUITS.has(parent.operatorToken.kind)
+    )
+      return true;
+    if (
+      ts.isBlock(parent) &&
+      parent.statements.slice(0, parent.statements.indexOf(at)).some(returnsEarly)
+    )
+      return true;
+  }
+  return false;
+};
+
+const functionOf = (value) =>
+  value !== undefined && (ts.isArrowFunction(value) || ts.isFunctionExpression(value))
+    ? value
+    : undefined;
+
+/** The functions at [node] a gesture or a scroll runs every frame it moves, each with its name. */
+const frameHandlers = (node) => {
+  const found = [];
+  // `{ onUpdate: (event) => … }`, `{ onScroll(event) { … } }`: a gesture's or a scroll's config.
+  if (ts.isPropertyAssignment(node) && FRAME_HANDLERS.has(node.name.getText())) {
+    const fn = functionOf(node.initializer);
+    if (fn !== undefined) found.push({ name: node.name.getText(), fn });
+  }
+  if (ts.isMethodDeclaration(node) && FRAME_HANDLERS.has(node.name.getText()))
+    found.push({ name: node.name.getText(), fn: node });
+  if (ts.isCallExpression(node)) {
+    const callee = node.expression;
+    const name = ts.isPropertyAccessExpression(callee) ? callee.name.text : callee.getText();
+    // `Gesture.Pan().onUpdate((event) => …)`.
+    if (ts.isPropertyAccessExpression(callee) && FRAME_HANDLERS.has(name)) {
+      const fn = functionOf(node.arguments[0]);
+      if (fn !== undefined) found.push({ name, fn });
+    }
+    // `useAnimatedScrollHandler((event) => …)`; its object form is a config, found above.
+    if (name === "useAnimatedScrollHandler") {
+      const fn = functionOf(node.arguments[0]);
+      if (fn !== undefined) found.push({ name, fn });
+    }
+    // `useAnimatedReaction(prepare, (next, previous) => …)`: it runs on every change of `prepare`.
+    if (name === "useAnimatedReaction") {
+      const fn = functionOf(node.arguments[1]);
+      if (fn !== undefined) found.push({ name, fn });
+    }
+  }
+  return found;
+};
+
+/**
+ * Every call into JS a gesture or a scroll makes on every frame it moves
+ * (Performance rule 7, #1380), as `file#owner: handler call(args)`: a
+ * `scheduleOnRN`/`runOnJS` in a gesture's `onUpdate`/`onChange`, an animated
+ * scroll handler or an animated reaction's callback that runs whatever the
+ * outcome. A call under a condition (the outcome changed) passes. A handler
+ * that calls a worklet of its own isn't followed into it.
+ */
+export const gestureJsCalls = (files) => {
+  const found = [];
+  for (const [path, text] of Object.entries(files)) {
+    if (!/\b(?:scheduleOnRN|runOnJS)\b/.test(text)) continue;
+    const kind = path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+    const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, kind);
+    const visit = (node) => {
+      for (const { name, fn } of frameHandlers(node)) {
+        const calls = (at) => {
+          if (
+            ts.isCallExpression(at) &&
+            JS_CALLS.has(at.expression.getText()) &&
+            !conditional(at, fn)
+          )
+            found.push(
+              `${path}#${memoOwner(fn)}: ${name} ${at.expression.getText()}(${at.arguments
+                .map((argument) => argument.getText())
+                .join(", ")})`,
+            );
+          ts.forEachChild(at, calls);
+        };
+        if (fn.body !== undefined) calls(fn.body);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return found;
+};
