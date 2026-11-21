@@ -14,6 +14,7 @@ import * as Result from "effect/Result";
 
 import { runSteps } from "../lib/stepped.ts";
 import { byTitleArtistPath } from "../library/binaryOrder.ts";
+import { withSyncLibraryReads } from "../library/syncLibraryReads.ts";
 import type { LibraryStore, LibraryStoreError } from "../library/LibraryStore.ts";
 import type { SongRow } from "@wave/client";
 
@@ -46,9 +47,12 @@ function* mapSongs(
 /** Checked attempts before the last one, which walks its sources in a single task. */
 const TASTE_SNAPSHOT_ATTEMPTS = 3;
 
-/** An effect run to its end in the current task: nothing else on this thread runs meanwhile. */
+/**
+ * An effect run to its end in the current task: nothing else on this thread runs meanwhile.
+ * Its Library reads stay on the JS thread for that (#1348).
+ */
 const inOneTask = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
-  Effect.suspend(() => Effect.runSyncExit(effect));
+  Effect.suspend(() => Effect.runSyncExit(withSyncLibraryReads(effect)));
 
 /**
  * Copies [walk]'s source rows as of one taste revision; the CPU work on the copy comes after,

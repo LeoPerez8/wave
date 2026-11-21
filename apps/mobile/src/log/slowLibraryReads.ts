@@ -42,3 +42,17 @@ export const connectLibraryReadLog = (sink: ReadLog): (() => void) => {
 };
 
 export const timeLibraryRead = timing.read;
+/** An off-thread read's JS time, measured by the read itself. */
+export const heldLibraryRead = timing.held;
+
+const namedHere = new Set<string>();
+/**
+ * A read that can't leave the JS thread (#1348: it writes, or asks the
+ * connection about itself) runs here instead; the app log names it once.
+ */
+export const libraryReadStaysHere = (operation: string, reason: Error): void => {
+  if (namedHere.has(operation)) return;
+  namedHere.add(operation);
+  // not UI text: the app log's line
+  log?.write(`Read "${operation}" runs on the JS thread: ${reason.message}`);
+};

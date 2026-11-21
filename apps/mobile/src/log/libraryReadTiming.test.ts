@@ -194,3 +194,23 @@ test("a continuous run of slow reads is reported in one-second windows", () => {
   c.wait(1_000);
   assert.equal(c.lines[1], 'Read "read third" held JS 20 ms (1 row) on /home');
 });
+
+test("an off-thread read reports only the JS time it held, in the same line", () => {
+  const c = clock();
+  // 600 ms in SQLite, 30 ms of it on the JS thread: only the 30 ms count.
+  c.wait(600);
+  c.timing.held("list songs", 30, [1, 2, 3]);
+  c.timing.held("read Home's plays", 20, { recentlyPlayed: [1] }, (r) => r.recentlyPlayed.length);
+  c.timing.held("count tracks", 2, 727);
+  c.wait(1_000);
+  assert.deepEqual(c.lines, [
+    'Read "list songs" held JS 30 ms (3 rows) on /home; Read "read Home\'s plays" held JS 20 ms (1 row) on /home',
+  ]);
+  assert.deepEqual(
+    c.slow.map((read) => [read.operation, read.durationMs]),
+    [
+      ["list songs", 30],
+      ["read Home's plays", 20],
+    ],
+  );
+});
