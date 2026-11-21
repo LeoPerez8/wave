@@ -279,7 +279,7 @@ jobs:
           if [ -s "$DESKTOP_RELEASE_NOTES_FILE" ]; then desktop="$(cat "$DESKTOP_RELEASE_NOTES_FILE")"; fi
           { echo "desktop<<WAVE_PATCH_NOTES"; echo "$desktop"; echo "WAVE_PATCH_NOTES"; } >> "$GITHUB_OUTPUT"
           { echo "# Patch notes"; echo; echo "${notes:-Nothing to list: no PR since the last version changes the app.}"; } >> "$GITHUB_STEP_SUMMARY"
-          { echo; echo "# Desktop patch notes"; echo; echo "${desktop:-Nothing to list: no PR since the desktop's last version changes it.}"; } >> "$GITHUB_STEP_SUMMARY"
+          { echo; echo "# Desktop patch notes"; echo; echo "${desktop:-Nothing to list: no PR since the last desktop version changes it.}"; } >> "$GITHUB_STEP_SUMMARY"
           if [ "$IS_BUMP" = "true" ] || [ "$IS_RELEASE" = "true" ]; then
             if earlier="$(scripts/ci/earlier-notes.sh)"; then
               echo "earlier=$earlier" >> "$GITHUB_OUTPUT"
