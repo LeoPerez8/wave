@@ -5,7 +5,7 @@ import { tracks } from "@wave/client/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { createDesktopLinks } from "./links.ts";
 import { createPlaylist } from "@wave/client/db/playlists";
-import { catalogueOf } from "@wave/core";
+import { catalogueOf, type DesktopShareItem } from "@wave/core";
 
 test("plain pasted text leaves playback and the clipboard alone", async () => {
   const db = await openTestDatabase();
@@ -386,15 +386,9 @@ const shareLinks = (
     ...fields,
   });
 
-const linkItems = (view: { readonly items: readonly { readonly kind: string }[] }) =>
-  view.items.flatMap((item) =>
-    item.kind === "link"
-      ? [
-          (item as { url: string | null; note: string | null }).url ??
-            (item as { note: string }).note,
-        ]
-      : [item.kind],
-  );
+/** Each Share item: a link's address, else why it has none, else the image item's kind. */
+const linkItems = (view: { readonly items: readonly DesktopShareItem[] }) =>
+  view.items.map((item) => (item.kind === "link" ? (item.url ?? item.note) : item.kind));
 
 test("Share gives a Library song's Copy Link, Spotify and YT Music addresses, and its card", async () => {
   const db = await openTestDatabase();
