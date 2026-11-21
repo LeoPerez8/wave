@@ -138,7 +138,11 @@ class ReplayPreparedQuery extends SQLitePreparedQuery<{
   execute: unknown;
 }> {
   static override readonly [entityKind]: string = "WaveReplayPreparedQuery";
-  declare joinsNotNullableMap: Record<string, boolean> | undefined;
+  /** Drizzle sets this after construction. Read through a cast: Metro's Babel rejects `declare` fields. */
+  private joins(): Record<string, boolean> | undefined {
+    return (this as unknown as { joinsNotNullableMap?: Record<string, boolean> })
+      .joinsNotNullableMap;
+  }
   private readonly fields: Fields;
   private readonly arrayMode: boolean;
   private readonly customResultMapper: ResultMapper | undefined;
@@ -171,7 +175,7 @@ class ReplayPreparedQuery extends SQLitePreparedQuery<{
       return [...answer(this.query.sql, this.params(placeholderValues), "objects")];
     const rows = this.values(placeholderValues);
     if (customResultMapper) return customResultMapper(rows);
-    return rows.map((row) => mapResultRow(fields, row, this.joinsNotNullableMap));
+    return rows.map((row) => mapResultRow(fields, row, this.joins()));
   }
 
   override get(placeholderValues?: Record<string, unknown>): unknown {
@@ -181,7 +185,7 @@ class ReplayPreparedQuery extends SQLitePreparedQuery<{
     const row = this.values(placeholderValues)[0];
     if (!row) return undefined;
     if (customResultMapper) return customResultMapper([row]);
-    return mapResultRow(fields, row, this.joinsNotNullableMap);
+    return mapResultRow(fields, row, this.joins());
   }
 
   override values(placeholderValues?: Record<string, unknown>): unknown[][] {
