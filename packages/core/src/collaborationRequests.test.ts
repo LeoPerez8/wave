@@ -190,14 +190,15 @@ describe("collaboration requests", () => {
   });
 
   test("a 2xx answer that isn't the route's shape is a failure", () => {
-    for (const [call, body] of [
+    const cases: readonly [CollaborationCall<unknown>, string][] = [
       [membersCall(LIST), "{}"],
       [joinInviteCall(TOKEN), "not json"],
       [createInviteCall(LIST), '{"url":1}'],
       [readInviteCall(LIST), "{}"],
       [lookUpInviteCall(TOKEN), '{"playlistId":"x"}'],
       [playlistPullCall(LIST, null), "{}"],
-    ] as const)
+    ];
+    for (const [call, body] of cases)
       assert.deepEqual(collaborationAnswer(call, 200, body), { type: "failed", status: 200 });
   });
 

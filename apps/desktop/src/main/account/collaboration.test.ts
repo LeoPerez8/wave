@@ -79,9 +79,11 @@ test("every collaborative playlist's route can be called from the desktop", asyn
 
   const pulled = await member.pull(LIST, null);
   assert.equal(pulled.type, "done");
-  assert.deepEqual(pulled.type === "done" && pulled.value.playlists.map(({ name }) => name), [
-    "Road trip",
-  ]);
+  assert.deepEqual(
+    pulled.type === "done" &&
+      pulled.value.playlists.map((row) => ("name" in row ? row.name : null)),
+    ["Road trip"],
+  );
   const renamed = JSON.stringify({
     playlists: [
       { id: LIST, changedAt: 2, phoneId: "bea", deleted: false, name: "Trip", createdAt: 1 },
