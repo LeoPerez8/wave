@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { changes, reachesUsers, releaseChanges } from "./changes.ts";
+import { changes, previousAppRelease, reachesUsers, releaseChanges } from "./changes.ts";
 
 const script = fileURLToPath(new URL("./changes.ts", import.meta.url));
 const run = (args: string[], stdin: string) =>
@@ -182,7 +182,7 @@ describe("changes", () => {
 });
 
 describe("releaseChanges", () => {
-  it("selects only the app reached by the changed paths", () => {
+  it("releases only the app the changed paths reach", () => {
     assert.deepEqual(releaseChanges(["apps/mobile/src/app/_layout.tsx"]), {
       phoneRelease: true,
       desktopRelease: false,
@@ -197,11 +197,59 @@ describe("releaseChanges", () => {
     );
   });
 
-  it("does not release either app for changes that only affect CI", () => {
-    assert.deepEqual(releaseChanges(["scripts/ci/changes.ts"]), {
+  it("releases neither app for a change to CI or docs alone", () => {
+    assert.deepEqual(releaseChanges(["scripts/ci/changes.ts", ".github/workflows/mobile.yml"]), {
       phoneRelease: false,
       desktopRelease: false,
     });
+    assert.deepEqual(releaseChanges([]), { phoneRelease: false, desktopRelease: false });
+  });
+});
+
+describe("previousAppRelease", () => {
+  const releases = [
+    { tagName: "v2.0.0-ti", assets: ["wave-2.0.0-ti.apk"] },
+    { tagName: "v1.9.0-ti", assets: ["wave-1.9.0-ti.apk", "wave-1.9.0-ti-win-x64.exe"] },
+    { tagName: "v1.10.0-ti", assets: ["wave-1.10.0-ti.provenance.json"] },
+    { tagName: "v1.8.0-ti", assets: ["wave-1.8.0-ti.apk", "wave-1.8.0-ti-linux-x64.AppImage"] },
+    { tagName: "v1.7.0", assets: ["wave-1.7.0.apk", "wave-1.7.0-linux-x64.AppImage"] },
+    { tagName: "ti-latest", assets: ["wave-ti.apk"] },
+  ];
+
+  it("is the newest release of the channel that published the app's own files", () => {
+    assert.equal(previousAppRelease(releases, "phone", "ti"), "v2.0.0-ti");
+    assert.equal(previousAppRelease(releases, "desktop", "ti"), "v1.9.0-ti");
+    assert.equal(previousAppRelease(releases, "phone", "main"), "v1.7.0");
+    assert.equal(previousAppRelease(releases, "desktop", "main"), "v1.7.0");
+  });
+
+  it("counts a version only once it published, so skipped versions don't hide changes", () => {
+    const skipped = [
+      { tagName: "v1.9.0-ti", assets: [] },
+      { tagName: "v1.8.0-ti", assets: ["wave-1.8.0-ti.apk"] },
+    ];
+    assert.equal(previousAppRelease(skipped, "phone", "ti"), "v1.8.0-ti");
+  });
+
+  it("looks back past stable releases on ti, and never at ti ones on main", () => {
+    const promoted = [
+      { tagName: "v1.8.0", assets: ["wave-1.8.0.apk"] },
+      { tagName: "v1.7.0-ti", assets: ["wave-1.7.0-ti.apk"] },
+      { tagName: "v1.9.0-ti", assets: ["wave-1.9.0-ti-linux-x64.AppImage"] },
+    ];
+    assert.equal(previousAppRelease(promoted, "phone", "ti"), "v1.8.0");
+    assert.equal(previousAppRelease(promoted, "desktop", "main"), undefined);
+  });
+
+  it("leaves out the run's own tag, which a re-run may already have published", () => {
+    assert.equal(previousAppRelease(releases, "phone", "ti", "v2.0.0-ti"), "v1.9.0-ti");
+  });
+
+  it("finds none when no release holds the app's files", () => {
+    assert.equal(
+      previousAppRelease([{ tagName: "v1.9.0-ti", assets: [] }], "desktop", "ti"),
+      undefined,
+    );
   });
 });
 
@@ -211,6 +259,19 @@ describe("changes.ts as a command", () => {
       run([], "docs/spec.md\npackages/core/src/queue.ts\n"),
       "app=false\ncore=true\nsync=false\nupdates=false\nworkspace=false\nci=false\nperf=false\ntsconfig=false\nnative=false\ndesktop=true\nallPackages=false\nnativeTests=false\ndesktopChecks=true\nphoneRelease=true\ndesktopRelease=true\n",
     );
+  });
+
+  it("names each app's previous release from GitHub's releases, one JSON line each", () => {
+    const releases = [
+      { tagName: "v1.9.0-ti", assets: ["wave-1.9.0-ti.apk"] },
+      { tagName: "v1.8.0-ti", assets: ["wave-1.8.0-ti-win-x64.exe"] },
+    ]
+      .map((release) => JSON.stringify(release))
+      .join("\n");
+    assert.equal(run(["--previous-release", "phone", "ti"], releases), "v1.9.0-ti\n");
+    assert.equal(run(["--previous-release", "desktop", "ti"], releases), "v1.8.0-ti\n");
+    assert.equal(run(["--previous-release", "phone", "ti", "v1.9.0-ti"], releases), "");
+    assert.equal(run(["--previous-release", "desktop", "main"], releases), "");
   });
 
   it("counts every area as changed with --all, as on pushes to main", () => {

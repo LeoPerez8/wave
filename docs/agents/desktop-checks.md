@@ -267,7 +267,7 @@ cookie in your home, so point `PULSE_COOKIE` at any 256-byte file
 silently. Without sudo, unpack `libasound2-dev` with `dpkg -x` and point `PKG_CONFIG_PATH` at its
 `alsa.pc`. Electron's binary downloads on the first run. CI runs
 the same set on `ubuntu-22.04` under `xvfb-run` and on `windows-latest` (the Desktop jobs in
-`.github/workflows/ci.yml`).
+`.github/workflows/desktop.yml`, which `ci.yml` calls).
 
 ## Packaging a release locally
 
