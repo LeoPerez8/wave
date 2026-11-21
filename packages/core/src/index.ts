@@ -993,6 +993,7 @@ export {
   MAGIC_SKIP_MS,
   isMagicQueue,
   magicArtistKey,
+  magicDjFirstSong,
   magicLibrarySongs,
   magicListSeedSongs,
   magicBatchRadios,
