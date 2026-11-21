@@ -735,13 +735,7 @@ export const registerBridge = (
   }),
   miniPlayer: MiniPlayerCalls = noMiniPlayer,
 ): void => {
-  const handlers = createHandlers(
-    onAppearance,
-    setLogin,
-    mediaBackend,
-    versionHistory,
-    miniPlayer,
-  );
+  const handlers = createHandlers(onAppearance, setLogin, mediaBackend, versionHistory, miniPlayer);
   for (const call of BRIDGE_CALLS) {
     const handler: (args: readonly unknown[]) => Effect.Effect<unknown, unknown, BridgeServices> =
       handlers[call];

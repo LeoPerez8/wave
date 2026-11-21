@@ -60,6 +60,15 @@ test("a stored position is read back, and anything else reads as never placed", 
     x: -12,
     y: 40,
   });
-  for (const stored of [undefined, null, "", "{", "[1,2]", '{"x":1}', '{"x":1.5,"y":2}', '{"x":"1","y":2}'])
+  for (const stored of [
+    undefined,
+    null,
+    "",
+    "{",
+    "[1,2]",
+    '{"x":1}',
+    '{"x":1.5,"y":2}',
+    '{"x":"1","y":2}',
+  ])
     assert.equal(readFloatingWindowPosition(stored), undefined);
 });

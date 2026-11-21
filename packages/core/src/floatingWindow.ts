@@ -44,7 +44,12 @@ export const floatingWindowPosition = (
   if (first === undefined) return saved ?? { x: 0, y: 0 };
   if (saved === undefined)
     return {
-      x: within(first.x + first.width - size.width - CORNER_MARGIN, size.width, first.x, first.width),
+      x: within(
+        first.x + first.width - size.width - CORNER_MARGIN,
+        size.width,
+        first.x,
+        first.width,
+      ),
       y: within(
         first.y + first.height - size.height - CORNER_MARGIN,
         size.height,

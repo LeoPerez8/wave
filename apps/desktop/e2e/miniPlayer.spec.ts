@@ -23,8 +23,13 @@ const windowState = (app: ElectronApplication, title: string) =>
   app.evaluate(({ BrowserWindow }, wanted) => {
     const found = BrowserWindow.getAllWindows().find((w) => w.getTitle() === wanted);
     if (found === undefined) return null;
+    // What the page really runs with; Electron has the call but doesn't type it.
     const { sandbox, contextIsolation, nodeIntegration, webviewTag } =
-      found.webContents.getLastWebPreferences() ?? {};
+      (
+        found.webContents as unknown as {
+          getLastWebPreferences: () => Electron.WebPreferences | null;
+        }
+      ).getLastWebPreferences() ?? {};
     return {
       visible: found.isVisible(),
       onTop: found.isAlwaysOnTop(),
@@ -108,9 +113,9 @@ test("the mini player opens from the player bar and the tray, controls playback 
     expect(floating?.preferences).toEqual(main?.preferences);
     expect(await policy(mini)).toBe(await policy(page));
     expect(await policy(mini)).toContain("default-src 'none'");
-    expect(
-      await mini.evaluate(() => "require" in globalThis || "process" in globalThis),
-    ).toBe(false);
+    expect(await mini.evaluate(() => "require" in globalThis || "process" in globalThis)).toBe(
+      false,
+    );
     await mini.screenshot({ path: join(shots, `mini-player-${process.platform}.png`) });
 
     // Its buttons skip, pause, play and star, and both windows follow.

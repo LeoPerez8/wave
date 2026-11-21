@@ -858,11 +858,11 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     releaseArtwork: (key) => invoke("home.releaseArtwork", key),
   },
   links: linkBridge(invoke),
-  miniPlayer: miniPlayerBridge(invoke),
   artistPage: artistPageBridge(invoke),
   streamed: streamedBridge(invoke),
   ytAccount: ytAccountBridge(invoke),
   spotifyAccount: spotifyAccountBridge(invoke),
+  miniPlayer: miniPlayerBridge(invoke),
   stats: {
     overview: (period) => invoke("stats.overview", period),
     ranking: (ranking, period) => invoke("stats.ranking", ranking, period),
