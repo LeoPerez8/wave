@@ -43,7 +43,7 @@ import { Crossfade } from "@/motion/Crossfade";
 import { openPlaylistActions, openTrackActions } from "@/playback/ActionsMenu";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import type { Ranked } from "@/stats/Stats";
-import { openDiscoverMix } from "@/ytmusic/routes";
+import { openDiscoverMix, openYtPlaylist } from "@/ytmusic/routes";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 import {
@@ -63,6 +63,7 @@ import {
   type MagicQueueSection,
   type MagicQueueShown,
 } from "./magicQueueSection";
+import { useCommunityPlaylists } from "./communityPlaylists";
 import { useFromYourLibrary } from "./fromYourLibrary";
 import { CarouselPageDots, MagicQueueCarousel } from "./MagicQueueCarousel";
 import { useDiscoveries } from "./discoveries";
@@ -597,6 +598,47 @@ function FromYourLibrary({ title }: SectionProps) {
   );
 }
 
+/** A community playlist YouTube Music lists no cover for. */
+const NO_COVERS: readonly string[] = [];
+
+/**
+ * Community playlists: the playlists of the shelves YouTube Music shows on
+ * the connected account's home, as playlist cards in one row (Core's
+ * `homeCommunityPlaylistsShown`), each with its author under its title. A tap
+ * opens the playlist's page. Left out signed out and with nothing kept; the
+ * kept list shows at once, so there is no skeleton.
+ */
+function CommunityPlaylists({ title }: SectionProps) {
+  const playlists = useCommunityPlaylists();
+  if (playlists.length === 0) return null;
+  return (
+    <TitledSection title={title}>
+      <CoverRow>
+        {playlists.map((playlist) => {
+          const author = playlist.author ?? "";
+          return (
+            <PlaylistCard
+              key={playlist.playlistId}
+              name={playlist.title}
+              detail={author}
+              label={author === "" ? playlist.title : undefined}
+              paths={playlist.artworkUrl === null ? NO_COVERS : [playlist.artworkUrl]}
+              size={COVER_ROW_TILE}
+              onPress={() =>
+                openYtPlaylist(playlist.playlistId, {
+                  title: playlist.title,
+                  line: author,
+                  artworkUrl: playlist.artworkUrl,
+                })
+              }
+            />
+          );
+        })}
+      </CoverRow>
+    </TitledSection>
+  );
+}
+
 /**
  * How each section of Core's catalogue (`HOME_SECTIONS`) is drawn: nothing
  * when it has nothing to show. A section added to the catalogue needs its
@@ -606,6 +648,7 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
   discover: Discover,
   "in-your-orbit": InYourOrbit,
   "from-your-library": FromYourLibrary,
+  "community-playlists": CommunityPlaylists,
   "new-releases": NewReleases,
   "upcoming-shows": UpcomingShows,
   "recently-added": ({ home, title }) =>
