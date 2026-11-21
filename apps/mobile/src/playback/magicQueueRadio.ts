@@ -25,8 +25,11 @@ import {
   type MixSliders,
   type TasteProfile,
   type YtArtistSaved,
+  type YtAlbumSong,
+  type RankedRadioSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
+import * as Deferred from "effect/Deferred";
 
 import { lookedUpProfileOf } from "@/home/artistGenres";
 import { freeTurnEffect } from "@/lib/backgroundWork";
@@ -40,6 +43,7 @@ import { WaveYtMusic } from "@/native/waveYtMusic";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import { YtMusic } from "@/ytmusic/YtMusic";
 import type { SongRadioSeed } from "./songRadioSession";
+import type { SongRadioRead } from "./songRadioReaders";
 import { createAppSongRadioReaders } from "./songRadioSetup";
 
 let found: readonly MagicSong[] = [];
@@ -297,6 +301,128 @@ export const magicQueueYtCandidates = (
       eligible: candidates.length + likedCandidates.length,
       refilled: read.every(({ page }) => page === null) ? null : songs,
     };
+  });
+
+/** The batch-ranked order for directly selected, playable DJ Library songs, without radio reads. */
+export const magicQueueDjLibraryRanking = (
+  session: MagicSession,
+  candidates: readonly SongRow[],
+  library: { readonly songs: readonly SongRow[]; readonly artists: readonly ArtistRow[] },
+  {
+    catalog,
+    graph,
+    taste,
+    profileOf,
+    sliders,
+  }: {
+    readonly catalog: readonly CatalogSong[];
+    readonly graph: ArtistGraph | null;
+    readonly taste: TasteProfile | null;
+    readonly profileOf: GenreProfileOf;
+    readonly sliders: MixSliders;
+  },
+) =>
+  Effect.gen(function* () {
+    const store = yield* LibraryStore;
+    const mood = session.dj?.mood ?? null;
+    const catalogVideos = catalog.map(({ song }) => song.videoId);
+    const moodFeatures =
+      mood === null
+        ? new Map()
+        : yield* store.djMoodFeatures(catalogVideos).pipe(Effect.orElseSucceed(() => new Map()));
+    const libraryMoodFeatures =
+      mood === null
+        ? new Map()
+        : yield* store.djLibraryMoodFeatures().pipe(Effect.orElseSucceed(() => new Map()));
+    const genreRows =
+      mood === null
+        ? []
+        : yield* store.songGenres(catalogVideos).pipe(Effect.orElseSucceed(() => []));
+    const moodGenres = new Map(genreRows.map(({ id, genre }) => [String(id), genre] as const));
+    savedPage = (name) => Effect.runPromise(store.ytArtist(identityKey(name)));
+    const releases = yield* Effect.promise(() => releasePages(session, graph));
+    yield* Effect.promise(loadDislikes);
+    const mapLibrary = magicLibrarySongs(library.artists);
+    const playable = candidates.filter(songHasFile);
+    const playableMagic = yield* runSteps(mapSteps(playable, mapLibrary), freeTurnEffect);
+    const ranked = yield* runSteps(
+      rankRadioSongsSteps(
+        {
+          artists: session.radioArtists,
+          profile: session.faithful
+            ? magicFaithfulGenreProfile(session, profileOf)
+            : magicSeedProfile(session, profileOf),
+        },
+        {
+          pages: [],
+          graph,
+          taste,
+          profileOf,
+          library: playableMagic,
+          signals: session.radioSignals ?? [],
+          disliked: dislikedSongsNow(),
+        },
+        {
+          ...sliders,
+          faithfulness: session.faithful ? 1 : sliders.faithfulness,
+          popularity: session.faithful ? 3 : sliders.popularity,
+          excludeIncompatible: session.faithful,
+          libraryFallback: true,
+        },
+      ),
+      freeTurnEffect,
+    );
+    const adjusted = djMoodRanked(
+      djNewReleasesRanked(session, ranked, releases, Date.now()),
+      mood,
+      moodFeatures,
+      moodGenres,
+      libraryMoodFeatures,
+    );
+    const varied = djVarietyCandidates(
+      session,
+      graph,
+      { seed: adjusted, liked: [] },
+      adjusted.length,
+    );
+    return varied.seed as readonly RankedRadioSong[];
+  });
+
+/** The first non-placeholder song from any selected radio, while its peers keep loading. */
+export const magicQueueFirstRadioSong = (
+  sessionId: string,
+  seeds: readonly SongRadioSeed[],
+  deadlineAt: number,
+  onSettled: () => void,
+) =>
+  Effect.gen(function* () {
+    const yt = yield* YtMusic;
+    const context = yield* Effect.context<LibraryStore>();
+    const readers = radioReaders(yt, context);
+    const first = yield* Deferred.make<YtAlbumSong | null>();
+    let chosen = false;
+    const onPage = ({ page }: SongRadioRead) => {
+      const song = page?.songs.find((candidate) => candidate.video !== true) ?? null;
+      if (song === null || chosen) return Effect.void;
+      chosen = true;
+      return Deferred.succeed(first, song).pipe(Effect.asVoid);
+    };
+    yield* Effect.forkDetach(
+      readers
+        .read(sessionId, seeds, {
+          online: ytMusicEnabled() && online(),
+          low: false,
+          deadlineAt,
+          onPage,
+        })
+        .pipe(
+          Effect.tap(() =>
+            chosen ? Effect.void : Deferred.succeed(first, null).pipe(Effect.asVoid),
+          ),
+          Effect.ensuring(Effect.sync(onSettled)),
+        ),
+    );
+    return yield* Deferred.await(first);
   });
 
 /** Signals use already known genres; this path never looks an artist up. */

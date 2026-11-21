@@ -73,6 +73,8 @@ export const playlistsEn = {
   nameTaken: "Another playlist already has this name.",
   nameTooLong: "Names can be up to 100 characters.",
   addToPlaylist: "Add to playlist",
+  addSongs: "Add Songs",
+  addedToPlaylist: (playlist: string): string => `Added to ${playlist}`,
   created: (name: string): string => `Created ${name}`,
   /** Toasts when an edit fails. */
   couldntList: "Couldn't list the playlists",

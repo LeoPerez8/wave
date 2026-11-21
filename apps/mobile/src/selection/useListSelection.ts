@@ -24,6 +24,8 @@ export interface ListSelection<T> {
   readonly start: (item: T) => void;
   /** Checks or unchecks [item]; unchecking the last one leaves selection mode. */
   readonly toggle: (item: T) => void;
+  /** Ends this list's selection if it owns the global selection. */
+  readonly end: () => void;
 }
 
 /**
@@ -41,7 +43,7 @@ export function useListSelection<T>({
   target,
   lookup,
 }: {
-  items: readonly T[];
+  items: readonly T[] | (() => readonly T[]);
   keyOf: (item: T) => string;
   target: (selected: readonly T[]) => ActionItems | null;
   lookup?: ((key: string) => T | undefined) | undefined;
@@ -53,10 +55,12 @@ export function useListSelection<T>({
 
   const source = useMemo<SelectionSource<T>>(
     () => ({
-      items:
-        lookup === undefined
-          ? () => items
-          : () => withSelectedKept(items, currentSelection(), keyOf, lookup),
+      items: () => {
+        const currentItems = typeof items === "function" ? items() : items;
+        return lookup === undefined
+          ? currentItems
+          : withSelectedKept(currentItems, currentSelection(), keyOf, lookup);
+      },
       keyOf,
       target,
     }),
@@ -81,6 +85,7 @@ export function useListSelection<T>({
     [owner, source, keyOf],
   );
   const toggle = useCallback((item: T) => toggleInSelection(keyOf(item)), [keyOf]);
+  const end = useCallback(() => endSelectionOf(owner), [owner]);
   const isChecked = useCallback(
     (item: T) => selection !== null && isSelected(selection, keyOf(item)),
     [selection, keyOf],
@@ -88,7 +93,7 @@ export function useListSelection<T>({
 
   // One object per change, so rows can depend on it (`selectableRow`).
   return useMemo(
-    () => ({ selecting, selection, isChecked, start, toggle }),
-    [selecting, selection, isChecked, start, toggle],
+    () => ({ selecting, selection, isChecked, start, toggle, end }),
+    [selecting, selection, isChecked, start, toggle, end],
   );
 }

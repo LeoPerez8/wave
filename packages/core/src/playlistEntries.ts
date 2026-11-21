@@ -177,6 +177,52 @@ export const planPlaylistSongs = <S extends YtSong>(
   };
 };
 
+/** The fixed and newly added songs a playlist's Add Songs search has checked. */
+export interface PlaylistAddVisit {
+  readonly alreadyIn: ReadonlySet<string>;
+  readonly added: ReadonlySet<string>;
+}
+
+/** Starts an Add Songs search: only entries already here at opening are inert. */
+export const playlistAddVisit = (existing: readonly PlaylistSong[]): PlaylistAddVisit => ({
+  alreadyIn: new Set(existing.map(playlistSongKey)),
+  added: new Set(),
+});
+
+/** Locks a song as pre-existing when a concurrent edit added it during this search. */
+export const holdPlaylistAddVisitSong = (
+  visit: PlaylistAddVisit,
+  song: PlaylistSong,
+): PlaylistAddVisit => {
+  const key = playlistSongKey(song);
+  const alreadyIn = new Set(visit.alreadyIn);
+  alreadyIn.add(key);
+  const added = new Set(visit.added);
+  added.delete(key);
+  return { alreadyIn, added };
+};
+
+/** Whether a song tap adds, undoes this visit's add, or leaves an older entry alone. */
+export const stepPlaylistAddVisit = (
+  visit: PlaylistAddVisit,
+  song: PlaylistSong,
+): {
+  readonly visit: PlaylistAddVisit;
+  readonly action: "add" | "remove" | "none";
+  readonly checked: boolean;
+} => {
+  const key = playlistSongKey(song);
+  if (visit.alreadyIn.has(key)) return { visit, action: "none", checked: true };
+  if (visit.added.has(key)) {
+    const added = new Set(visit.added);
+    added.delete(key);
+    return { visit: { ...visit, added }, action: "remove", checked: false };
+  }
+  const added = new Set(visit.added);
+  added.add(key);
+  return { visit: { ...visit, added }, action: "add", checked: true };
+};
+
 /** What a playlist's Play, Shuffle or a tap plays, and where it starts (undefined: the top, or shuffled). */
 export interface PlaylistPlay<S extends YtSong, L> {
   readonly playback: PagePlayback<S, L>;

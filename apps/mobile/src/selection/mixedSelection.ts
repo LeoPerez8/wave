@@ -13,6 +13,7 @@ const selectionOfItems = <T>(
   isChecked: (item) => page.isChecked(itemOf(item)),
   start: (item) => page.start(itemOf(item)),
   toggle: (item) => page.toggle(itemOf(item)),
+  end: page.end,
 });
 
 /** The artist page's shared selection as each kind of row sees it. */

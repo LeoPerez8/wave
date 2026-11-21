@@ -62,7 +62,7 @@ describe("matching a collaborative entry to a Track", () => {
         artists: ["Radiohead"],
         album: "OK Computer",
         durationMs: 284_000,
-        artworkUrl: null,
+        artworkUrl: "https://i.ytimg.com/vi/vid-1/hqdefault.jpg",
         explicit: false,
       },
     });

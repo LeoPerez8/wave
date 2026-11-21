@@ -35,7 +35,10 @@ import { newSongsOf, useDiscoverMix, useLibraryTracks } from "./discoverMixes";
  * Prepares local Library matches before opening the cached mix's menu, the
  * mix as the owner's level blends it.
  */
-export const openDiscoverMixActions = (mix: BlendedDiscoverMix): void => {
+export const openDiscoverMixActions = (
+  mix: BlendedDiscoverMix,
+  { onSelect }: { readonly onSelect?: (() => void) | undefined } = {},
+): void => {
   const anchor = pressedRect();
   void followUp(async () => {
     try {
@@ -43,7 +46,7 @@ export const openDiscoverMixActions = (mix: BlendedDiscoverMix): void => {
       openOverlay({
         label: discoverMixCaption(mix, currentLocalisation().strings).title,
         anchor,
-        render: (close) => <DiscoverMixActionsMenu mix={mix} close={close} />,
+        render: (close) => <DiscoverMixActionsMenu mix={mix} close={close} onSelect={onSelect} />,
       });
     } catch (error) {
       await showError(currentLocalisation().strings.discover.openMixFailed, error);
@@ -67,9 +70,11 @@ const saveAsPlaylist = (mix: BlendedDiscoverMix): void => {
 function DiscoverMixActionsMenu({
   mix: pressed,
   close,
+  onSelect,
 }: {
   mix: BlendedDiscoverMix;
   close: () => void;
+  onSelect: (() => void) | undefined;
 }) {
   const { strings } = useLocalisation();
   const find = useLibraryFinder();
@@ -108,11 +113,20 @@ function DiscoverMixActionsMenu({
   };
   const layout = menuLayout("discoverMix", discoverMixActions(download, strings));
   const cards = layout.cards.map((action) => ({ action, onPress: run(action) }));
-  const entries = layout.list.map((entry): MenuChoice => ({
+  const entries: MenuChoice[] = layout.list.map((entry): MenuChoice => ({
     action: entry.action,
     label: "label" in entry ? entry.label : strings.itemActions.playLabels.shuffle,
     onPress: run(entry.action),
   }));
+  if (onSelect !== undefined)
+    entries.push({
+      action: "select",
+      label: strings.itemActions.labels.select,
+      onPress: () => {
+        close();
+        onSelect();
+      },
+    });
 
   return (
     <>

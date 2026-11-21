@@ -50,6 +50,11 @@ export type DetailScreen = "album" | "artist" | "genre" | "playlist";
 export const detailPath = (from: string, screen: DetailScreen, id: number): string =>
   `${TAB_PATH[sectionTabOf(from) ?? "library"]}/${screen}/${id}`;
 
+/** The Add Songs child route on the same stack as the playlist page. */
+// not UI text: a route path
+export const playlistAddSongsPath = (from: string, id: number): string =>
+  `${detailPath(from, "playlist", id)}/add`;
+
 /** Whether `pathname` is detail screen `id`, on the Library stack or in a section tab. */
 export const isDetailPath = (pathname: string, screen: DetailScreen, id: number): boolean =>
   (["library", ...LIBRARY_SECTION_SLUGS] as const).some(

@@ -167,10 +167,18 @@ export function PlayedAlbumCard({
   album,
   detail,
   size,
+  selecting = false,
+  checked,
+  onPress,
+  onLongPress,
 }: {
   album: PlayedAlbum;
   detail?: string | undefined;
   size: number;
+  selecting?: boolean;
+  checked?: boolean | undefined;
+  onPress?: (() => void) | undefined;
+  onLongPress?: (() => void) | undefined;
 }) {
   const row = usePlayedAlbum(album);
   return (
@@ -184,14 +192,23 @@ export function PlayedAlbumCard({
         artist={[album.albumArtist, detail].filter(Boolean).join(" · ")}
         artworkUri={row.artworkUri}
         size={size}
-        onPress={row.open}
-        onLongPress={row.menu}
+        onPress={selecting ? (onPress ?? (() => undefined)) : (onPress ?? row.open)}
+        onLongPress={selecting ? undefined : (onLongPress ?? row.menu)}
+        checked={checked}
       />
     </View>
   );
 }
 
-export function PlayedArtistCard({ artist, size }: { artist: PlayedArtist; size: number }) {
+export function PlayedArtistCard({
+  artist,
+  size,
+  selecting = false,
+}: {
+  artist: PlayedArtist;
+  size: number;
+  selecting?: boolean;
+}) {
   const row = usePlayedArtist(artist);
   return (
     <View
@@ -203,8 +220,8 @@ export function PlayedArtistCard({ artist, size }: { artist: PlayedArtist; size:
         name={artist.name}
         artist={row.image}
         size={size}
-        onPress={row.open}
-        onLongPress={row.menu}
+        onPress={selecting ? () => undefined : row.open}
+        onLongPress={selecting ? undefined : row.menu}
       />
     </View>
   );

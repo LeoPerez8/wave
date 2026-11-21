@@ -1,12 +1,15 @@
 import {
   commonKind,
   unsearchedTrackId,
+  type BlendedDiscoverMix,
+  type FollowRelease,
   type MixedSong,
   type QueueSong,
   type YtArtistAlbum,
   type YtArtistShelf,
 } from "@wave/core";
-import type { AlbumRow, SongRow } from "@wave/client";
+import type { AlbumRow, PlaylistRow, SongRow } from "@wave/client";
+import type { OnlineAlbum } from "@wave/client/db/playedEntities";
 import type { NativeYtSong } from "../native/waveYtMusic.ts";
 import type { ActionItems, TrackItem } from "./actionTargets.ts";
 
@@ -14,10 +17,39 @@ import type { ActionItems, TrackItem } from "./actionTargets.ts";
 export type MixedItem =
   | { readonly kind: "track"; readonly item: TrackItem }
   | { readonly kind: "album"; readonly item: AlbumRow }
-  | { readonly kind: "ytAlbum"; readonly item: YtArtistAlbum };
+  | { readonly kind: "onlineAlbum"; readonly item: OnlineAlbum }
+  | { readonly kind: "ytAlbum"; readonly item: YtArtistAlbum }
+  | { readonly kind: "playlist"; readonly item: PlaylistRow }
+  | { readonly kind: "discoverMix"; readonly item: BlendedDiscoverMix }
+  | {
+      readonly kind: "followRelease";
+      readonly item: { readonly release: FollowRelease; readonly artist: string };
+    }
+  | {
+      readonly kind: "ytPlaylist";
+      readonly item: {
+        readonly playlistId: string;
+        readonly title: string;
+        readonly author: string;
+        readonly artworkUrl: string | null;
+      };
+    };
 
 export const albumItem = (item: AlbumRow): MixedItem => ({ kind: "album", item });
+export const onlineAlbumItem = (item: OnlineAlbum): MixedItem => ({ kind: "onlineAlbum", item });
 export const ytAlbumItem = (item: YtArtistAlbum): MixedItem => ({ kind: "ytAlbum", item });
+export const playlistItem = (item: PlaylistRow): MixedItem => ({ kind: "playlist", item });
+export const discoverMixItem = (item: BlendedDiscoverMix): MixedItem => ({
+  kind: "discoverMix",
+  item,
+});
+export const followReleaseItem = (release: FollowRelease, artist: string): MixedItem => ({
+  kind: "followRelease",
+  item: { release, artist },
+});
+export const ytPlaylistItem = (
+  item: Extract<MixedItem, { readonly kind: "ytPlaylist" }>,
+): MixedItem => item;
 export const trackItem = (song: SongRow): MixedItem => ({ kind: "track", item: { song } });
 export const ytTrackItem = (ytSong: NativeYtSong): MixedItem => ({
   kind: "track",
@@ -45,13 +77,25 @@ export const mixedItemKey = (item: MixedItem): string =>
     ? `album-${item.item.id}`
     : item.kind === "ytAlbum"
       ? `yt-album-${item.item.browseId}`
-      : `track-${trackItemKey(item.item)}`;
+      : item.kind === "onlineAlbum"
+        ? `online-album-${item.item.id}`
+        : item.kind === "playlist"
+          ? `playlist-${item.item.id}`
+          : item.kind === "discoverMix"
+            ? `discover-mix-${item.item.id}`
+            : item.kind === "followRelease"
+              ? `follow-release-${item.item.release.key}`
+              : item.kind === "ytPlaylist"
+                ? `yt-playlist-${item.item.playlistId}`
+                : `track-${trackItemKey(item.item)}`;
 
 /** Homogeneous Library items keep their actions; streamed releases share the mixed bar. */
 export const mixedTarget = (items: readonly MixedItem[]): ActionItems => {
-  if (items.some((item) => item.kind === "ytAlbum"))
+  if (items.some((item) => item.kind !== "track" && item.kind !== "album"))
     return { kind: "mixed", items, readOnAction: true };
-  const kind = commonKind(items.map((item) => (item.kind === "track" ? "track" : "album")));
+  const kind = commonKind(
+    items.map((item): "track" | "album" => (item.kind === "track" ? "track" : "album")),
+  );
   if (kind === "track")
     return { kind, items: items.flatMap((item) => (item.kind === "track" ? [item.item] : [])) };
   if (kind === "album")
