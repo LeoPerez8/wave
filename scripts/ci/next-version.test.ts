@@ -256,6 +256,55 @@ describe("bumpFor", () => {
   });
 });
 
+describe("a desktop-only push", () => {
+  const desktop = ["apps/desktop/src/main/index.ts", "packages/core/src/catalogue/desktopEn.ts"];
+  const push = { channel: "ti", version: "0.80.1-ti", tags: ["v0.80.1-ti"] } as const;
+  const release = (...pullRequests: MergedPr[]) => {
+    const commits = pullRequests.map((merged) => merged.mergeCommit);
+    return { commits, unreleased: commits, pullRequests };
+  };
+
+  it("bumps the minor for a desktop feat/ PR", () => {
+    const bump = bumpFor(release(pr(50, "feat/50-desktop-lyrics", { files: desktop })));
+    assert.deepEqual(bump, { size: "minor", pr: { number: 50, branch: "feat/50-desktop-lyrics" } });
+    assert.equal(nextVersion({ ...push, changed: desktop, bump }).version, "0.81.0-ti");
+  });
+
+  it("bumps the patch for a desktop fix/ PR", () => {
+    const bump = bumpFor(
+      release(
+        pr(51, "fix/51-desktop-tray", {
+          files: ["packages/kotlin-shared/stdio/src/main/kotlin/dev/leoperez/wave/stdio/Main.kt"],
+        }),
+      ),
+    );
+    assert.deepEqual(bump, { size: "patch" });
+    assert.equal(nextVersion({ ...push, changed: desktop, bump }).version, "0.80.2-ti");
+  });
+
+  it("bumps nothing when only CI or docs changed, desktop ones included", () => {
+    const changed = [
+      ".github/workflows/desktop.yml",
+      "docs/spec-desktop.md",
+      "apps/desktop/README.md",
+    ];
+    const bump = bumpFor(release(pr(52, "feat/52-desktop-ci", { files: changed })));
+    assert.deepEqual(bump, { size: "patch" });
+    assert.equal(nextVersion({ ...push, changed, bump }).version, undefined);
+  });
+
+  it("releases after a desktop-only version whose bump is the only change to the app's package.json", () => {
+    const decision = nextVersion({
+      ...push,
+      version: "0.81.0-ti",
+      tags: ["v0.80.1-ti", "v0.81.0-ti"],
+      changed: ["apps/mobile/package.json", ...desktop],
+      appPackage: { previous: appPackage("0.80.1-ti"), current: appPackage("0.81.0-ti") },
+    });
+    assert.equal(decision.version, "0.81.1-ti");
+  });
+});
+
 describe("next-version.ts", () => {
   const dir = mkdtempSync(join(tmpdir(), "next-version-"));
   const file = (name: string, lines: string[]) => {

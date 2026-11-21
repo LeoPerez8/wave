@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { changes, previousAppRelease, reachesUsers, releaseChanges } from "./changes.ts";
@@ -206,6 +209,38 @@ describe("releaseChanges", () => {
   });
 });
 
+describe("releaseChanges with the app's package.json", () => {
+  const appPackage = (version: string, extra = {}) =>
+    `${JSON.stringify({ name: "@wave/mobile", version, dependencies: { expo: "58.0.7" }, ...extra }, null, 2)}\n`;
+
+  it("doesn't release the phone for a version bump alone, as a desktop-only version makes", () => {
+    const paths = ["apps/mobile/package.json", "apps/desktop/src/main/index.ts"];
+    const bumpOnly = { previous: appPackage("0.80.1-ti"), current: appPackage("0.81.0-ti") };
+    assert.deepEqual(releaseChanges(paths, bumpOnly), {
+      phoneRelease: false,
+      desktopRelease: true,
+    });
+    assert.deepEqual(releaseChanges(["apps/mobile/package.json"], bumpOnly), {
+      phoneRelease: false,
+      desktopRelease: false,
+    });
+  });
+
+  it("releases the phone when its package.json changed more than its version", () => {
+    const newDependency = {
+      previous: appPackage("0.80.1-ti"),
+      current: appPackage("0.81.0-ti", { dependencies: { expo: "58.0.8" } }),
+    };
+    assert.equal(releaseChanges(["apps/mobile/package.json"], newDependency).phoneRelease, true);
+    assert.equal(releaseChanges(["apps/mobile/package.json"]).phoneRelease, true);
+  });
+
+  it("releases the phone when it had no package.json before", () => {
+    const added = { previous: "", current: appPackage("0.81.0-ti") };
+    assert.equal(releaseChanges(["apps/mobile/package.json"], added).phoneRelease, true);
+  });
+});
+
 describe("previousAppRelease", () => {
   const releases = [
     { tagName: "v2.0.0-ti", assets: ["wave-2.0.0-ti.apk"] },
@@ -272,6 +307,24 @@ describe("changes.ts as a command", () => {
     assert.equal(run(["--previous-release", "desktop", "ti"], releases), "v1.8.0-ti\n");
     assert.equal(run(["--previous-release", "phone", "ti", "v1.9.0-ti"], releases), "");
     assert.equal(run(["--previous-release", "desktop", "main"], releases), "");
+  });
+
+  it("leaves out a version bump of the app's package.json given both texts", () => {
+    const dir = mkdtempSync(join(tmpdir(), "changes-"));
+    const write = (name: string, version: string) => {
+      const path = join(dir, name);
+      writeFileSync(path, JSON.stringify({ name: "@wave/mobile", version }));
+      return path;
+    };
+    const args = [
+      "--app-package",
+      write("before.json", "1.8.0-ti"),
+      write("after.json", "1.9.0-ti"),
+    ];
+    const output = run(args, "apps/mobile/package.json\napps/desktop/src/main/index.ts\n");
+    assert.match(output, /^phoneRelease=false$/m);
+    assert.match(output, /^desktopRelease=true$/m);
+    assert.match(run([], "apps/mobile/package.json\n"), /^phoneRelease=true$/m);
   });
 
   it("counts every area as changed with --all, as on pushes to main", () => {
