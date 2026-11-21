@@ -37,7 +37,8 @@ import {
 import { usePagedSongs } from "./pagedSongs";
 import { songIdKey, useRowsNearScreen } from "./pagedSongRows";
 import { appRuntime } from "./runtime";
-import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
+import { genreOpeningQuery } from "./genreOpening";
+import { keepRecentlyOpened, useLibraryQuery } from "./sharedQueries";
 import { SongSortButton } from "./SongSortButton";
 import { ListIntroLayout, songCount } from "./TrackList";
 import { useLocalisation } from "@/localisation/localisation";
@@ -52,19 +53,10 @@ export const useGenreOpening = (
   id: number,
   sort: LibrarySongSort,
 ): GenreOpening | null | undefined => {
-  const key = `genreOpening:${id}:${sort.key}:${sort.descending ? "desc" : "asc"}`;
-  const query = useMemo(
-    (): LibraryQuery<GenreOpening | null> =>
-      libraryQuery(
-        key,
-        { tracks: true },
-        // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-        LibraryStore.use((store) => store.openGenre(id, sort)),
-      ),
-    // The key holds the id and the sort.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-    [key],
-  );
+  // The same query object for the same genre and sort (`genreOpeningQuery`).
+  const query = genreOpeningQuery(id, sort);
+  // Kept for a quick return among the screens opened last (#1352).
+  useEffect(() => keepRecentlyOpened(query), [query]);
   return useLibraryQuery<GenreOpening | null | undefined>(query, undefined);
 };
 

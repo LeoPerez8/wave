@@ -2,7 +2,6 @@ import {
   ARTIST_MIX_COUNT,
   djCanStart,
   djCells,
-  djGrid,
   djOpened,
   djOpeningGrid,
   djPagesNeeded,
@@ -11,9 +10,6 @@ import {
   djSeedTiles,
   djSelectable,
   djSelected,
-  djTileArtist,
-  genreMixDjCandidates,
-  type DjAlbum,
   type DjAlbumTile,
   type DjArtistTile,
   type DjGenreTile,
@@ -21,11 +17,9 @@ import {
   type DjState,
   type DjTile,
   type DjTileKey,
-  type GenreMixDjCandidate,
   identityKey,
 } from "@wave/core";
 import { IconArrowLeft, IconSearch, IconX } from "@tabler/icons-react-native";
-import * as Effect from "effect/Effect";
 import { type ComponentRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -42,14 +36,12 @@ import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { StagedSections } from "@/components/StagedSections";
 import { TextButton } from "@/components/TextButton";
 import { useBuiltArtistMixes } from "@/home/discoverMixes";
-import { magicProfileOf } from "@/home/artistGenres";
 import { magicQueueGrid } from "@/home/homeOpening";
 import type { MixIndexes } from "@/home/mixKnown";
 import { recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { savedYtArtist } from "@/home/ytArtistPage";
 import { useScreenContent } from "@/lib/screenTiming";
 import { router } from "@/lib/timingRouter";
-import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { useLocalisation } from "@/localisation/localisation";
 import { addScreenBackHandler } from "@/overlay/back";
@@ -63,7 +55,7 @@ import { fetchArtist } from "@/ytmusic/artistSection";
 import type { ArtistRow } from "@wave/client";
 
 import { DjAdjust } from "./DjAdjust";
-import { readDjAlbums } from "./djAlbums";
+import { gridSources, preparedDjOpening, readDjOpening, type DjOpeningRead } from "./djOpening";
 import { DjSearch } from "./DjSearch";
 import { djDone, type DjDone, type DjDoneRunner } from "./djDone";
 import { djRemembered } from "./djRemembered";
@@ -93,71 +85,6 @@ const similarOf = (name: string) =>
       appRuntime.runPromise(fetchArtist(name, identityKey(name), saved, { allSongs: false })),
     now: Date.now,
   });
-
-/** Genre mixes' families over [library] (`genreMixDjCandidates`): worked out once per Library snapshot. */
-const familiesOf = (library: MixIndexes): readonly GenreMixDjCandidate[] =>
-  genreMixDjCandidates({
-    artists: library.artists,
-    songs: library.songs,
-    plays: library.plays,
-    graph: recommendationSnapshot.peek().graph,
-    profileOf: magicProfileOf(library),
-  });
-
-/** What DJ's grid ranks its artists by, as Core's `djGrid` takes it, with [library]'s [families]. */
-const gridSources = (library: MixIndexes, families: readonly GenreMixDjCandidate[]) => ({
-  artists: library.artists,
-  taste: latestTasteProfile(),
-  played: library.topArtists,
-  graph: recommendationSnapshot.peek().graph,
-  genreCandidates: families,
-});
-
-/**
- * The albums DJ's grid may show over [library] (`readDjAlbums`), all read on
- * the phone: the Library's albums, each under its album artist's name and
- * with its cached cover (a compilation marked, so the grid leaves it out and
- * only a remembered one is found again among them), then the albums the saved
- * YT Music pages of the grid's artists list (the grid as it is without
- * albums, which holds every artist the one with albums shows).
- */
-const albumsOver = (
-  library: MixIndexes,
-  families: readonly GenreMixDjCandidate[],
-): Promise<DjAlbum[]> => {
-  const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
-  const artists = new Set(
-    djGrid(gridSources(library, families)).flatMap((tile) =>
-      tile.kind === "genre" ? tile.opens.map(djTileArtist) : [djTileArtist(tile)],
-    ),
-  );
-  return readDjAlbums([...artists], {
-    library: () =>
-      appRuntime.runPromise(
-        Effect.gen(function* () {
-          const albums = yield* (yield* LibraryStore).listAlbums;
-          return albums.map((album): DjAlbum => ({
-            title: album.title,
-            artist: names.get(album.albumArtistId) ?? album.albumArtist,
-            libraryId: album.id,
-            cover: album.artworkPath ?? album.thumbPath,
-            compilation: album.compilation,
-          }));
-        }),
-      ),
-    saved: async (artist) => {
-      const saved = await appRuntime.runPromise(savedYtArtist(artist));
-      return saved?.outcome === "found"
-        ? saved.page.albums.map((album) => ({
-            title: album.title,
-            artist,
-            browseId: album.browseId,
-            cover: album.artworkUrl,
-          }))
-        : [];
-    },
-  });
-};
 
 /**
  * DJ's grid, drawn once per opening from what the phone already has: no
@@ -198,18 +125,16 @@ const useDjGrid = () => {
       current = false;
     };
   }, [waiting]);
-  // The Library snapshot's families and albums, read once per snapshot outside render.
-  const [read, setRead] = useState<{
-    readonly library: MixIndexes;
-    readonly families: readonly GenreMixDjCandidate[];
-    readonly albums: readonly DjAlbum[];
-  } | null>(null);
+  // The Library snapshot's families and albums, read once per snapshot outside render; the
+  // one startup prepared opens DJ on its tiles (`djOpening.ts`, #1352).
+  const [read, setRead] = useState<DjOpeningRead | null>(() =>
+    library === null || library === "failed" ? null : preparedDjOpening(library),
+  );
   useEffect(() => {
     if (library === null || library === "failed") return;
     let current = true;
-    const families = familiesOf(library);
-    void albumsOver(library, families).then((albums) => {
-      if (current) setRead({ library, families, albums });
+    void readDjOpening(library).then((opening) => {
+      if (current) setRead(opening);
     });
     return () => {
       current = false;
