@@ -10,7 +10,8 @@ import org.junit.Test
  * Real WEB_REMIX answers to `browse` of `FEmusic_home` (signed out: the first
  * page and the continuation it points to) and of `FEmusic_explore` (the same
  * carousels, with albums, chart rows and music videos), trimmed to a few
- * items per shelf (`fixtures/yt`).
+ * items per shelf (`fixtures/yt`). `home-playlists-*.json` are a newer
+ * recording of the signed-out home, read for its playlist shelves.
  */
 class YtHomeParserTest {
   private fun home(name: String) = YtHomeParser.home(Fixtures.file("yt/$name").readText())
@@ -88,41 +89,59 @@ class YtHomeParserTest {
   private fun playlistShelves(name: String) =
     YtHomeParser.playlistShelves(Fixtures.file("yt/$name").readText())
 
+  // `home-playlists-*.json`: the signed-out home recorded in November 2026 (its first page and the
+  // continuation it points to), three tiles a shelf, tracking and menus left out.
+
   @Test
-  fun keepsOnlyTheShelvesOfPlaylists() {
-    // Quick picks is songs and the taste builder a prompt: both are discarded.
-    val page = playlistShelves("home-signed-out.json")
-    assertEquals(listOf("Trending community playlists"), page.shelves.map { it.title })
+  fun keepsOnlyTheShelvesOfPlaylists_recordedHome() {
+    // Song mixes is a shelf of songs and the taste builder a prompt: both are discarded.
+    val page = playlistShelves("home-playlists-signed-out.json")
+    assertEquals(listOf("Late night classics"), page.shelves.map { it.title })
     assertTrue("a token for the next page", page.continuation!!.isNotEmpty())
-    // Albums, chart songs, music videos, moods and episodes: no shelf of playlists.
+    val more = playlistShelves("home-playlists-continuation.json")
+    assertEquals(
+      listOf("Viva a sexta-feira", "Trending community playlists", "Today's biggest hits"),
+      more.shelves.map { it.title },
+    )
+    // The older recordings: Quick picks (songs) goes, and Explore's albums, chart songs, music
+    // videos, moods and episodes give no shelf of playlists.
+    assertEquals(listOf("Trending community playlists"), playlistShelves("home-signed-out.json").shelves.map { it.title })
     assertEquals(emptyList<YtPlaylistShelf>(), playlistShelves("explore-shelves.json").shelves)
   }
 
   @Test
-  fun readsEachPlaylistWithItsAuthorAndCover() {
-    val playlists = playlistShelves("home-signed-out.json").shelves[0].playlists
+  fun readsEachPlaylistWithItsAuthorAndCover_recordedHome() {
+    val community = playlistShelves("home-playlists-continuation.json").shelves[1].playlists
     assertEquals(
       listOf(
         "PLGRY1G015gD0Wn9cQuJqHwyrikKyPb7dZ",
-        "PLNYhPY7m84cvguXIoAQTA0Mu7hGS4L0XQ",
-        "PLCwAHfhr-Gc_REDM1H19x_ZO0zbPsZIhk",
+        "PL7U9M7TbUtgE1k5RY2HO6JGfZQof204xJ",
+        "PL6yJF7E4GFau-_2S5j_7KSWpV1uQgMpBJ",
       ),
-      playlists.map { it.playlistId },
+      community.map { it.playlistId },
     )
-    val first = playlists[0]
+    val first = community[0]
     assertEquals("2000's", first.title)
     assertEquals("Casa de Rodapé 🐱", first.author)
     assertTrue(first.artworkUrl!!.endsWith("=s576"))
+    assertEquals("Rayssa Mello", community[2].author)
   }
 
   @Test
-  fun anEditorialPlaylistIsKeptWithoutAnAuthor() {
-    val page = playlistShelves("home-continuation.json")
-    assertEquals(listOf("Calm tunes", "Throwbacks"), page.shelves.map { it.title })
-    val relax = page.shelves[0].playlists[1]
-    assertEquals("RDCLAK5uy_m6NvYpXUfCq6apREWwehPCDLji5YxnagQ", relax.playlistId)
-    assertEquals("Relax FM", relax.title)
+  fun anEditorialPlaylistIsKeptWithoutAnAuthor_recordedHome() {
+    val shelf = playlistShelves("home-playlists-signed-out.json").shelves.single()
+    assertEquals(
+      listOf("Presenting Pink Floyd", "80s and 90s Pop", "I Grew Up in the 80s"),
+      shelf.playlists.map { it.title },
+    )
+    val first = shelf.playlists[0]
+    assertEquals("RDCLAK5uy_nPN5nGhNWMuq-NC1COQ7_tMl2r5SxSgKE", first.playlistId)
     // Its line lists artists, none of them linked: nobody to credit.
+    assertNull(first.author)
+    assertTrue("a cover", first.artworkUrl!!.startsWith("https://"))
+    // The older continuation's editorial Relax FM reads the same way.
+    val relax = playlistShelves("home-continuation.json").shelves[0].playlists[1]
+    assertEquals("RDCLAK5uy_m6NvYpXUfCq6apREWwehPCDLji5YxnagQ", relax.playlistId)
     assertNull(relax.author)
   }
 
@@ -169,12 +188,12 @@ class YtHomeParserTest {
 
   @Test
   fun readsTheFirstPagesOfTheHomeAndNoFurther() {
-    val first = Fixtures.file("yt/home-signed-out.json").readText()
-    val more = Fixtures.file("yt/home-continuation.json").readText()
+    val first = Fixtures.file("yt/home-playlists-signed-out.json").readText()
+    val more = Fixtures.file("yt/home-playlists-continuation.json").readText()
     val asked = mutableListOf<String>()
     val shelves = YtHomeParser.readPlaylistShelves({ first }, { token -> asked += token; more }, pages = 2)
     assertEquals(
-      listOf("Trending community playlists", "Calm tunes", "Throwbacks"),
+      listOf("Late night classics", "Viva a sexta-feira", "Trending community playlists", "Today's biggest hits"),
       shelves.map { it.title },
     )
     assertEquals(listOf(YtHomeParser.home(first).continuation), asked)
@@ -185,7 +204,7 @@ class YtHomeParserTest {
     YtHomeParser.readPlaylistShelves({ first }, { endless() })
     assertEquals(2, continuations)
     val onePage = YtHomeParser.readPlaylistShelves({ first }, { error("no second page is asked") }, pages = 1)
-    assertEquals(listOf("Trending community playlists"), onePage.map { it.title })
+    assertEquals(listOf("Late night classics"), onePage.map { it.title })
   }
 
   @Test
