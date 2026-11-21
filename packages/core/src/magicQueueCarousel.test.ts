@@ -10,7 +10,10 @@ import {
   magicQueueCarouselRestarts,
   mostListenedRecently,
   inYourOrbitSongs,
+  inYourOrbitTap,
+  inYourOrbitTileUnavailable,
   recentPlaysWindow,
+  type MagicQueueSeed,
   type SongPlayTotals,
   type TrackRef,
 } from "./index.ts";
@@ -86,7 +89,7 @@ describe("mostListenedRecently", () => {
 describe("inYourOrbitSongs", () => {
   test("shows the nine most listened songs when at least nine have counted plays", () => {
     const totals = Array.from({ length: 10 }, (_, index) => plays(library(index + 1), index + 1));
-    assert.deepEqual(inYourOrbitSongs(totals), [
+    assert.deepEqual(inYourOrbitSongs(mostListenedRecently(totals)), [
       library(10),
       library(9),
       library(8),
@@ -101,7 +104,52 @@ describe("inYourOrbitSongs", () => {
 
   test("leaves the section out when fewer than nine songs have counted plays", () => {
     const totals = Array.from({ length: 8 }, (_, index) => plays(library(index + 1), index + 1));
-    assert.deepEqual(inYourOrbitSongs(totals), []);
+    assert.deepEqual(inYourOrbitSongs(mostListenedRecently(totals)), []);
+  });
+
+  test("counts only the songs that can show, in their order", () => {
+    const shown = ["a", "b", "c", "d", "e", "f", "g", "h"];
+    assert.deepEqual(inYourOrbitSongs(shown), []);
+    assert.deepEqual(inYourOrbitSongs([...shown, "i", "j"]), [...shown, "i"]);
+  });
+});
+
+describe("inYourOrbitTap", () => {
+  type Song = { readonly id: number };
+  const own = (id: number): MagicQueueSeed<Song> => ({ source: "library", song: { id } });
+  const stream = (videoId: string): MagicQueueSeed<Song> => ({
+    source: "stream",
+    song: { videoId, title: videoId, artists: [], album: null, artworkUrl: null } as never,
+  });
+  const tiles = [own(1), stream("x"), own(2), own(3), stream("y"), own(4)];
+
+  test("starts a Magic Queue from the tapped song with YT Music on", () => {
+    assert.deepEqual(inYourOrbitTap(tiles, 1, true), { kind: "magicQueue", seed: tiles[1] });
+    assert.deepEqual(inYourOrbitTap(tiles, 2, true), { kind: "magicQueue", seed: tiles[2] });
+  });
+
+  test("with YT Music off, plays the grid's Library songs in order from the tapped one", () => {
+    assert.deepEqual(inYourOrbitTap(tiles, 2, false), {
+      kind: "play",
+      songs: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }],
+      start: 1,
+    });
+    assert.deepEqual(inYourOrbitTap(tiles, 5, false), {
+      kind: "play",
+      songs: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }],
+      start: 3,
+    });
+  });
+
+  test("with YT Music off, a streamed tile can't play: it shows unavailable and a tap does nothing", () => {
+    assert.deepEqual(inYourOrbitTap(tiles, 1, false), { kind: "none" });
+    assert.equal(inYourOrbitTileUnavailable(tiles[1]!, false), true);
+    assert.equal(inYourOrbitTileUnavailable(tiles[1]!, true), false);
+    assert.equal(inYourOrbitTileUnavailable(tiles[0]!, false), false);
+  });
+
+  test("a tap past the grid does nothing", () => {
+    assert.deepEqual(inYourOrbitTap(tiles, 9, true), { kind: "none" });
   });
 });
 

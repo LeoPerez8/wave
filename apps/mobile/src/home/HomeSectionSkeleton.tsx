@@ -9,7 +9,7 @@ import { Fragment } from "react";
 import { Text, View, useWindowDimensions } from "react-native";
 
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
-import { CELL } from "@/catalog/grid";
+import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { SkeletonLine } from "@/catalog/SkeletonLine";
 import {
@@ -54,13 +54,14 @@ export function HomeSectionSkeleton({ id }: { id: HomeSectionId }) {
   const songs = id === "most-played" || id === "favorites";
   const orbit = id === "in-your-orbit";
   const artists = id === "most-played-artists";
-  const orbitGrid = magicQueueGrid(width - 2 * (CELL * 3), Math.min(fontScale, 1));
+  const available = width - grid.margin * 2;
+  const orbitGrid = magicQueueGrid(available, fontScale);
   return (
     <TitledSection
       title={homeSectionTitle(id, strings)}
       {...(id === "stats" ? { action: statsSeeAllAction(strings) } : {})}
     >
-      <View style={{ minHeight: homePlaceholderHeight(id, fontScale) }}>
+      <View style={{ minHeight: homePlaceholderHeight(id, fontScale, available) }}>
         {orbit ? (
           <SkeletonGroup label={strings.library.loadingSongs}>
             <View

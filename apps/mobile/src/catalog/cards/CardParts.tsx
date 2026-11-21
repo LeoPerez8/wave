@@ -114,6 +114,7 @@ export function CardTile({
   onPress,
   onLongPress,
   checked,
+  unavailable = false,
   accessibilityActions,
   onAccessibilityAction,
   children,
@@ -123,6 +124,8 @@ export function CardTile({
   onPress: () => void;
   onLongPress?: (() => void) | undefined;
   checked?: boolean | undefined;
+  /** Dimmed and read as disabled, as an unavailable row is: its song can't play now. */
+  unavailable?: boolean | undefined;
   /** Actions for screen readers beyond a tap and a long press (Move up, Move down). */
   accessibilityActions?: PressableProps["accessibilityActions"];
   onAccessibilityAction?: PressableProps["onAccessibilityAction"];
@@ -133,13 +136,13 @@ export function CardTile({
     <Press
       accessibilityRole={selecting ? "checkbox" : "button"}
       accessibilityLabel={label}
-      accessibilityState={selecting ? { checked } : undefined}
+      accessibilityState={selecting ? { checked } : unavailable ? { disabled: true } : undefined}
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityActions={accessibilityActions}
       onAccessibilityAction={onAccessibilityAction}
       depth={0.02}
-      style={{ width }}
+      style={{ width, opacity: unavailable ? 0.4 : 1 }}
     >
       {children}
     </Press>

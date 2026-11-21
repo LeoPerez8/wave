@@ -152,6 +152,35 @@ describe("magicQueuePages", () => {
     assert.notEqual(after[1]![4], gone);
     assert.equal(new Set(after.flat()).size, 27);
   });
+
+  test("a kept page left too short takes later pages' songs, so no page moves", () => {
+    const before = [range(1, 9), range(10, 9), range(19, 9)];
+    // Seven songs of the middle page leave the pool, and nothing new is left to fill them.
+    const pool: MagicQueuePagesPool = {
+      trackIds: [...range(1, 9), 10, 11, ...range(19, 9)],
+      videoIds: [],
+    };
+    const after = magicQueuePages(pool, draw(3), before);
+    assert.deepEqual(after[0], before[0]);
+    assert.deepEqual(after[1]!.slice(0, 2), [10, 11]);
+    assert.deepEqual(
+      after.map((page) => page.length),
+      [9, 9],
+    );
+    assert.equal(new Set(after.flat()).size, 18);
+  });
+
+  test("an emptied first page takes later pages' songs rather than the second moving up", () => {
+    const before = [range(1, 9), range(10, 9), range(19, 9)];
+    const pool: MagicQueuePagesPool = { trackIds: range(10, 18), videoIds: [] };
+    const after = magicQueuePages(pool, draw(3), before);
+    assert.deepEqual(after[1], before[1]);
+    assert.deepEqual(
+      after.map((page) => page.length),
+      [9, 9],
+    );
+    assert.deepEqual(new Set(after[0]), new Set(before[2]));
+  });
 });
 
 describe("redrawMagicQueuePage", () => {

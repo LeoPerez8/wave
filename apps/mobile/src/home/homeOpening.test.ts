@@ -246,28 +246,32 @@ test("leaving Home before either frame cancels its read-backed mount", () => {
 
 test("Home reserves matching shelf, list and adaptive Magic Queue dimensions at both text sizes", () => {
   for (const scale of [1, 1.3]) {
-    assert.equal(homePlaceholderHeight("most-played", scale), 560);
-    assert.equal(homePlaceholderHeight("favorites", scale), 560);
-    assert.equal(homePlaceholderHeight("recently-added", scale), scale === 1 ? 200 : 212);
+    assert.equal(homePlaceholderHeight("most-played", scale, 312), 560);
+    assert.equal(homePlaceholderHeight("favorites", scale, 312), 560);
+    assert.equal(homePlaceholderHeight("recently-added", scale, 312), scale === 1 ? 200 : 212);
     assert.equal(
-      homePlaceholderHeight("recently-played", scale),
-      homePlaceholderHeight("recently-added", scale),
+      homePlaceholderHeight("recently-played", scale, 312),
+      homePlaceholderHeight("recently-added", scale, 312),
     );
     assert.equal(
-      homePlaceholderHeight("most-played-albums", scale),
-      homePlaceholderHeight("recently-added", scale),
+      homePlaceholderHeight("most-played-albums", scale, 312),
+      homePlaceholderHeight("recently-added", scale, 312),
     );
-    assert.equal(homePlaceholderHeight("most-played-artists", scale), scale === 1 ? 182 : 188.6);
     assert.equal(
-      homePlaceholderHeight("in-your-orbit", scale),
-      homePlaceholderHeight("most-played-artists", scale),
+      homePlaceholderHeight("most-played-artists", scale, 312),
+      scale === 1 ? 182 : 188.6,
+    );
+    // In your orbit's 3×3 grid reserves the Magic Queue grid's height, columns dropping at large text.
+    assert.equal(
+      homePlaceholderHeight("in-your-orbit", scale, 312),
+      magicQueueGrid(312, scale).height,
     );
     // A playlist card is an album card with its sleeves' room above the cover.
     assert.equal(
-      homePlaceholderHeight("from-your-library", scale),
-      homePlaceholderHeight("recently-added", scale) + 10,
+      homePlaceholderHeight("from-your-library", scale, 312),
+      homePlaceholderHeight("recently-added", scale, 312) + 10,
     );
-    assert.equal(Math.round(homePlaceholderHeight("stats", scale)!), scale === 1 ? 288 : 439);
+    assert.equal(Math.round(homePlaceholderHeight("stats", scale, 312)!), scale === 1 ? 288 : 439);
   }
   assert.equal(magicQueueGrid(312, 1).columns, 3);
   assert.equal(magicQueueGrid(312, Math.fround(1.3)).columns, 2);
@@ -278,7 +282,14 @@ test("sections with nothing kept to show draw themselves before Home paints, nev
   // Left out signed out or with nothing kept: a skeleton would flash its header and go.
   for (const id of ["community-playlists", "new-releases", "upcoming-shows"] as const)
     assert.equal(homePlaceholderSkeleton(id), false, id);
-  for (const id of ["recently-added", "from-your-library", "favorites", "stats"] as const)
+  // Local reads that can come back empty still show their skeleton while they first load.
+  for (const id of [
+    "recently-added",
+    "from-your-library",
+    "in-your-orbit",
+    "favorites",
+    "stats",
+  ] as const)
     assert.equal(homePlaceholderSkeleton(id), true, id);
 });
 
