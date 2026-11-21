@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { COLLABORATIVE_TEXT_MAX_LENGTH, collaborativeRow } from "./index.ts";
+import { COLLABORATIVE_TEXT_MAX_LENGTH, collaborativeRow, memberPlaylistFields } from "./index.ts";
 
 const ytSong = (overrides: Readonly<Record<string, unknown>> = {}): string =>
   JSON.stringify({
@@ -151,5 +151,23 @@ describe("collaborativeRow", () => {
     assert.equal(song.title, "t".repeat(COLLABORATIVE_TEXT_MAX_LENGTH));
     assert.equal(song.artworkUrl, null);
     assert.equal(song.unsearched, true);
+  });
+});
+
+describe("a member's change to a collaborative playlist's row", () => {
+  const stored = { name: "Road trip", createdAt: 1_700_000_000_000 };
+
+  test("takes the member's name and keeps every other field as stored", () => {
+    assert.deepEqual(memberPlaylistFields(stored, { name: "Road trip 2", createdAt: 5 }), {
+      name: "Road trip 2",
+      createdAt: 1_700_000_000_000,
+    });
+  });
+
+  test("keeps a field the stored row has and the member's row leaves out", () => {
+    assert.deepEqual(memberPlaylistFields(stored, { name: "Road trip 2" }), {
+      name: "Road trip 2",
+      createdAt: 1_700_000_000_000,
+    });
   });
 });

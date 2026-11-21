@@ -1033,6 +1033,7 @@ export {
   COLLABORATIVE_TEXT_MAX_LENGTH,
   collaborativeRow,
   isCollaborativeCoverUrl,
+  memberPlaylistFields,
 } from "./collaborativeRows.ts";
 export {
   accountNameCall,

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { describe, test } from "node:test";
 import { catalogueOf, sha256Hex } from "@wave/core";
 import { addMember } from "./collaborations.ts";
@@ -490,6 +492,40 @@ describe("the invite page", () => {
     assert.equal(response.headers.get("referrer-policy"), "no-referrer");
     assert.match(response.headers.get("x-robots-tag") ?? "", /noindex/);
     assert.match(response.headers.get("content-security-policy") ?? "", /default-src 'none'/);
+  });
+});
+
+describe("Android's check that invite links are Wave's", () => {
+  test("names Wave's package and the release key's certificate, with no session", async () => {
+    const service = await harness();
+    const response = await service.request("GET", "/.well-known/assetlinks.json");
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") ?? "", /^application\/json/);
+    const statements = (await response.json()) as readonly {
+      readonly relation: readonly string[];
+      readonly target: {
+        readonly namespace: string;
+        readonly package_name: string;
+        readonly sha256_cert_fingerprints: readonly string[];
+      };
+    }[];
+    assert.equal(statements.length, 1);
+    const [statement] = statements;
+    assert.deepEqual(statement?.relation, ["delegate_permission/common.handle_all_urls"]);
+    assert.equal(statement?.target.namespace, "android_app");
+    assert.equal(statement?.target.package_name, "dev.leoperez.wave");
+    const fingerprints = statement?.target.sha256_cert_fingerprints ?? [];
+    assert.equal(fingerprints.length, 1);
+    assert.match(fingerprints[0] ?? "", /^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+    // The key the release job signs every APK with (scripts/ci/sign-apk.sh), and no other.
+    const signing = await readFile(
+      fileURLToPath(new URL("../../../scripts/ci/sign-apk.sh", import.meta.url)),
+      "utf8",
+    );
+    const pinned = /release_signer="\$\{WAVE_RELEASE_SIGNER_SHA256:-([0-9a-f]{64})\}"/.exec(
+      signing,
+    )?.[1];
+    assert.equal(fingerprints[0]?.replaceAll(":", "").toLowerCase(), pinned);
   });
 });
 

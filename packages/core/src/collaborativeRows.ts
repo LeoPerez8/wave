@@ -79,3 +79,17 @@ export const collaborativeRow = <T extends Row>(
   const song = boundStoredSong(ytSong);
   return song === ytSong ? fields : { ...fields, ytSong: song };
 };
+
+/** The fields of a collaborative playlist's row that a member writes; the owner keeps the rest. */
+const MEMBER_PLAYLIST_FIELDS: readonly string[] = ["name"];
+
+/**
+ * The fields a collaborative playlist's row keeps after a member's change [pushed] to it,
+ * stored as [stored]: the member renames it (docs/spec.md, Collaborative playlists), and every
+ * other field, such as when it was made, stays as stored.
+ */
+export const memberPlaylistFields = <T extends Row>(stored: T, pushed: Row): T => {
+  const out: Record<string, unknown> = { ...stored };
+  for (const name of MEMBER_PLAYLIST_FIELDS) if (name in pushed) out[name] = pushed[name];
+  return out as T;
+};

@@ -251,6 +251,37 @@ type Refusal = (typeof REFUSALS)[number];
 /** What `POST /v1/session` gives: base64url of 32 random bytes. */
 const SESSION_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 
+/**
+ * The SHA-256 of the certificate of Wave's release key, which signs every APK phones install
+ * (docs/spec.md, APK signing; pinned in scripts/ci/sign-apk.sh).
+ */
+const RELEASE_CERTIFICATE_SHA256 =
+  "80cee0c33afc558f4b130433c78035bba0f966f1c8f0fce422f587e245fcde65";
+
+/**
+ * `GET /.well-known/assetlinks.json`: Android's App Link check, so an invite link opens Wave
+ * (the `/invite` filter in apps/mobile/app.config.ts) with nothing to turn on in Open by default.
+ * Only an APK signed with the release key passes it.
+ */
+const assetLinks = (): Response =>
+  new Response(
+    JSON.stringify([
+      {
+        relation: ["delegate_permission/common.handle_all_urls"],
+        target: {
+          namespace: "android_app",
+          package_name: "dev.leoperez.wave",
+          sha256_cert_fingerprints: [
+            RELEASE_CERTIFICATE_SHA256.toUpperCase().replaceAll(/(..)(?!$)/g, "$1:"),
+          ],
+        },
+      },
+    ]),
+    {
+      headers: { "content-type": "application/json", "cache-control": "public, max-age=3600" },
+    },
+  );
+
 /** The page an invite link opens in a browser: nothing of the playlist, and no script. */
 const invitePage = (acceptLanguage: string | null): Response => {
   const language = resolveAppLanguage(acceptedLanguages(acceptLanguage));
@@ -1013,6 +1044,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     "POST /v1/invite": lookUpInvite,
     "POST /v1/invite/join": joinWithInvite,
     "GET /invite": async ({ request }) => invitePage(request.headers.get("accept-language")),
+    "GET /.well-known/assetlinks.json": async () => assetLinks(),
     "POST /v1/collaboration/push": pushPlaylist,
     "GET /v1/collaboration/pull": pullPlaylist,
     "PUT /v1/soulseek": putSoulseek,

@@ -7,7 +7,13 @@
  */
 
 import type { Client, InStatement, InValue, Transaction } from "@libsql/client";
-import { collaborativeRow, mergePlays, mergeTableRows, withinServiceClock } from "@wave/core";
+import {
+  collaborativeRow,
+  memberPlaylistFields,
+  mergePlays,
+  mergeTableRows,
+  withinServiceClock,
+} from "@wave/core";
 import {
   type Membership,
   endOwnedCollaboration,
@@ -540,8 +546,11 @@ const outsidePlaylist = (batch: PushBatch, playlistId: string): PlaylistPushRefu
 /**
  * A member's push of collaborative playlist [playlistId]: [batch] is merged
  * into the owner's rows as [accountId] wrote it, as `pushRows` merges, when
- * it holds only that playlist's row and entries. A removal of an entry the
- * service never held is dropped, since nothing says which playlist it was in.
+ * it holds only that playlist's row and entries. An entry the owner holds
+ * outside the playlist, or in none, is dropped, and so is a removal of an
+ * entry the service never held, since nothing says which playlist it was in.
+ * The member's change to the playlist's row takes its name alone; its other
+ * fields stay as stored (Core's `memberPlaylistFields`).
  */
 export const pushPlaylistRows = (
   db: Client,
@@ -574,15 +583,36 @@ export const pushPlaylistRows = (
 
     const entries = batch.get(ENTRIES) ?? [];
     const places = await entryPlaces(tx, ownerId, [...new Set(entries.map((row) => row.id))]);
-    if ([...places.values()].some((place) => place !== playlistId)) {
-      return { invalid: "playlistEntries holds another playlist's entry" };
-    }
     const scoped = new Map(batch);
     if (entries.length > 0) {
       scoped.set(
         ENTRIES,
-        entries.filter((row) => row.values !== null || places.has(row.id)),
+        entries.filter((row) => {
+          const place = places.get(row.id);
+          return place === undefined ? row.values !== null : place === playlistId;
+        }),
       );
+    }
+    const renames = batch.get(PLAYLISTS) ?? [];
+    if (renames.some((row) => row.values !== null)) {
+      const stored = await tx.execute({
+        sql: "SELECT * FROM playlists WHERE account_id = ? AND id = ?",
+        args: [ownerId, playlistId],
+      });
+      const storedRow = stored.rows[0];
+      if (storedRow !== undefined) {
+        const storedFields = wireRow(PLAYLISTS, storedRow);
+        scoped.set(
+          PLAYLISTS,
+          renames.map((row) =>
+            withFields(
+              PLAYLISTS,
+              row,
+              memberPlaylistFields(storedFields, rowFields(PLAYLISTS, row)),
+            ),
+          ),
+        );
+      }
     }
     return mergeAndStore(tx, ownerId, scoped, limits, now, accountId);
   });

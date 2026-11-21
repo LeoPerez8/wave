@@ -1573,6 +1573,8 @@ test("the invitation to sign in shows once the first scan finished, until it's a
 test("the account's language applies on sign-in and later pulls, and desktop changes sync back", async () => {
   await withFile(async (file) => {
     const app = await desktop();
+    // Both apps stamp a change with the real time, which the service's clock mustn't be behind.
+    app.service.now = Math.max(app.service.now, Date.now() + 60 * 60_000);
     const phone = await app.service.signIn();
     const phoneDb = await openTestDatabase();
     const values = new Map<string, string>([["settings.language", "pt-BR"]]);
