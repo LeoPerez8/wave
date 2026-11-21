@@ -1,3 +1,5 @@
+import type { OutputDevice } from "./playback.ts";
+
 /**
  * Settings › Playback as the window shows it: the account-wide synced Crossfade, Normalize
  * Volume and Buffer (docs/spec.md, stories 22a–22c), Don't Play Explicit and Continue with
@@ -13,4 +15,17 @@ export interface PlaybackSettings {
   readonly dontPlayExplicit: boolean;
   /** A queue that runs out continues as a Magic Queue; on by default. */
   readonly continueQueue: boolean;
+}
+
+/**
+ * Settings › Playback › Output: where this computer plays. Kept on the desktop, never synced.
+ */
+export interface OutputSettings {
+  /** The outputs the system has now. */
+  readonly outputs: readonly OutputDevice[];
+  /**
+   * The output picked, or null for the system's default. While it isn't `connected` Wave plays
+   * on the system's default, and goes back to it when it returns.
+   */
+  readonly chosen: (OutputDevice & { readonly connected: boolean }) | null;
 }

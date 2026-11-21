@@ -210,7 +210,12 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
 - The PCM carries its song's identity up to the gain stage, so a per-song gain switches on the
   first frame of the song. Measured: no mismatching sample across 619,534 frames.
 - Loudness measurement for Normalize Volume runs in the engine, which already decodes.
-- Output device: the system default, following changes. Picking a device is later.
+- Output device: the system default, following changes, unless Settings › Playback › Output
+  picks another (#1230). The list is the system's outputs, System default first, read again
+  every second. Picking one moves the stream to it and the song goes on from where it is. While
+  the picked device is away the engine plays on the system default and returns to the device
+  when the system lists it again; the same holds for a device that won't open. The choice is
+  this computer's: its id and name are in `desktop_settings` (`outputDevice`), never synced.
 - Streaming: the Kotlin resolver returns the stream address and its headers. The engine fetches
   the bytes by range, writes them to the bounded audio cache (1 GB, as on the phone) and asks the
   main process to resolve again on a 403 or 410.
@@ -245,6 +250,12 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
   that brought stars or songs, and as Wave starts. Unstarring it before the file arrives cancels
   the download only the star asked for. What the stars asked is kept on this computer
   (`downloads.syncedStars`, `downloads.starAsked`), never synced.
+- The Downloads page is the phone's (`docs/spec.md`, Downloads): the line counting the songs
+  downloading and waiting, the run's panel with the paused line while YouTube limits downloads,
+  the waiting songs under their source's header, and the failed section folded until shown,
+  grouped by reason. It is one virtual list. A group's header drags among the groups and a
+  waiting song among its group's songs, with the mouse or with Move Up and Move Down on the row,
+  and the queue downloads in the order shown.
 - Play and Shuffle on a list with missing songs play what can play (Core's `listPlay`): the
   songs with a file and, with YT Music on, the missing songs downloaded from a YouTube Music
   video, streamed in their place. A toast counts the ones left out and offers Download Missing
@@ -336,7 +347,10 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
 - Scrollbars are Wave's own everywhere: an 8 px rounded thumb with no track and no arrow buttons.
 - Theme: the phone's tokens, light and dark following the system or the Appearance setting. The
   accent follows the synced theme, so the default theme gives a white accent in dark and the ink
-  colour in light, as on the phone.
+  colour in light, as on the phone. Settings › Appearance edits that theme as the phone does: a
+  background for each mode, Primary and Secondary from Default, the saved colours or a custom
+  one, and Reset to defaults. Each row of swatches is one tab stop the arrows move through; a
+  saved colour has a Remove button where the phone has a long press. The app icon isn't offered.
 - Tables: 40 px rows. Songs show title (with a thumbnail with 4 px corners), artist, album, the
   star and time; album pages show the track number instead of the thumbnail; on an artist's page
   the artist column shows only featured artists. A selected row has its own tint, separate from
