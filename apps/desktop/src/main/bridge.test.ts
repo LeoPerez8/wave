@@ -2921,3 +2921,148 @@ test("playlist, artist and genre pages download their missing songs in page orde
     }
   });
 });
+
+test("Home's editor reorders, removes and adds sections at once, and main refuses a bad edit", async () => {
+  await withFile(async (file) => {
+    const first = connect(file);
+    const wave = first.exposed.get("wave") as WaveBridge;
+    try {
+      const start = await wave.home.arrangement();
+      assert.deepEqual(start.sections.slice(0, 3), ["new-releases", "upcoming-shows", "discover"]);
+      const removed = await wave.home.edit({ remove: "stats" });
+      assert.ok(!removed.sections.includes("stats"));
+      const moved = await wave.home.edit({
+        move: { from: removed.sections.indexOf("favorites"), to: 0 },
+      });
+      assert.equal(moved.sections[0], "favorites");
+      assert.deepEqual(await wave.home.arrangement(), moved);
+      // Home reads the same arrangement: with no songs it lists the sections that need none.
+      assert.deepEqual(
+        (await wave.home.view()).items.map((section) => section.id),
+        ["new-releases", "upcoming-shows", "discover"],
+      );
+      await wave.home.edit({ remove: "discover" });
+      assert.deepEqual(
+        (await wave.home.view()).items.map((section) => section.id),
+        ["new-releases", "upcoming-shows"],
+      );
+      const rows = await wave.home.edit({ discover: { remove: "genre-mixes" } });
+      assert.deepEqual(rows.discoverRows, ["magic-queue", "artist-mixes"]);
+      for (const bad of [{ remove: "karaoke" }, { move: { from: -1, to: 0 } }, "stats", null])
+        await assert.rejects(first.handlers.get("home.edit")!(trusted, bad), /refused/i);
+      assert.deepEqual(await wave.home.arrangement(), rows);
+    } finally {
+      await first.runtime.dispose();
+    }
+    const second = connect(file);
+    try {
+      const reopened = second.exposed.get("wave") as WaveBridge;
+      const kept = await reopened.home.arrangement();
+      assert.equal(kept.sections[0], "favorites");
+      assert.ok(!kept.sections.includes("stats"));
+      const added = await reopened.home.edit({ add: "stats" });
+      assert.equal(added.sections.at(-1), "stats");
+    } finally {
+      await second.runtime.dispose();
+    }
+  });
+});
+
+test("Home's arrangement syncs with a phone both ways, and an edit keeps a section only the phone draws", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const phone = await app.service.signIn();
+    const phoneDb = await openTestDatabase();
+    const KEY = "settings.homeArrangement";
+    // A newer phone shows a section this Wave doesn't have, between Favorites and Stats.
+    const values = new Map<string, string>([
+      [
+        KEY,
+        JSON.stringify({
+          shown: ["favorites", "karaoke", "stats", "most-played"],
+          hidden: [
+            "new-releases",
+            "upcoming-shows",
+            "discover",
+            "recently-added",
+            "recently-played",
+            "most-played-albums",
+            "most-played-artists",
+          ],
+        }),
+      ],
+    ]);
+    const phoneSync = () =>
+      syncCycle({
+        db: phoneDb,
+        splits: creditSplits(),
+        account: "ana@example.com",
+        transport: {
+          request: async (method, path, body) => {
+            const response = await app.service.request(method, path, {
+              session: phone,
+              ...(body === null ? {} : { body, headers: { "content-type": "application/json" } }),
+            });
+            return { status: response.status, body: await response.text() };
+          },
+        },
+        preferences: {
+          value: (key) => values.get(key) ?? null,
+          apply: (key, value) => {
+            if (value === null) values.delete(key);
+            else values.set(key, value);
+          },
+        },
+        now: Date.now,
+        songsChanged: false,
+        wait: async () => {},
+      });
+    const phoneShown = () =>
+      (JSON.parse(values.get(KEY) ?? "{}") as { shown?: string[] }).shown ?? [];
+    stampPreference(phoneDb, KEY, Date.now());
+    await phoneSync();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed } = connect(file, undefined, { service: app.open(), clock });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await wave.account.signIn();
+      await until(async () => (await wave.home.arrangement()).sections[0] === "favorites");
+      assert.deepEqual((await wave.home.arrangement()).sections, [
+        "favorites",
+        "stats",
+        "most-played",
+      ]);
+      await wave.home.edit({ move: { from: 2, to: 0 } });
+      await pass(10_000);
+      await until(async () => {
+        await phoneSync();
+        return phoneShown()[0] === "most-played";
+      });
+      assert.deepEqual(phoneShown(), ["most-played", "favorites", "karaoke", "stats"]);
+      // The phone removes a section; the desktop's Home follows on the next timed pull.
+      values.set(
+        KEY,
+        JSON.stringify({
+          shown: ["most-played", "karaoke", "stats"],
+          hidden: [
+            "new-releases",
+            "upcoming-shows",
+            "discover",
+            "recently-added",
+            "recently-played",
+            "most-played-albums",
+            "most-played-artists",
+            "favorites",
+          ],
+        }),
+      );
+      stampPreference(phoneDb, KEY, Date.now() + 1000);
+      await phoneSync();
+      await pass(15 * 60_000);
+      await until(async () => (await wave.home.arrangement()).sections.length === 2);
+      assert.deepEqual((await wave.home.arrangement()).sections, ["most-played", "stats"]);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});

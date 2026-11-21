@@ -224,6 +224,19 @@ stay in memory. Rebuild the JAR with `pnpm --filter @wave/desktop build:jvm` aft
 JVM, and a live YouTube download with its tags read back and its Library entry visible. The live
 check stops after search on CI; inspect its annotations if YouTube refuses the machine.
 
+## Home's editor
+
+`e2e/homeEditor.spec.ts` edits Home from its Edit Home dialog with the keyboard alone (Move Up,
+Remove, Add, Discover's rows), drags a row, then edits again under Settings › Home. It checks
+Home's headings after each change and, once the app has closed, that a section this Wave doesn't
+draw kept its place in the stored arrangement. Screenshots are `home-editor-<platform>-light.png`,
+`-dark.png` and `-settings.png`.
+
+`home.arrangement()` gives Core's `HomeArrangement`; `home.edit(edit)` takes one
+`HomeArrangementEdit`, which main checks with `readHomeArrangementEdit`, applies to the synced
+`settings.homeArrangement` with `editStoredHomeArrangement` (`src/main/homeArrangement.ts`) and
+stamps for sync. `bridge.test.ts` syncs it with a phone both ways.
+
 ## Links
 
 `e2e/links.spec.ts` pastes and drops each kind of link the phone opens (a YT Music song and

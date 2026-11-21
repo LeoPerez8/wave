@@ -23,6 +23,7 @@ import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseKind, BrowseScope, BrowsePage, BrowseRow } from "./browse.ts";
 import type { YtSearchPage, YtStatus } from "./yt.ts";
 import type { SearchOnline } from "@wave/core";
+import type { HomeArrangement, HomeArrangementEdit } from "@wave/core";
 import type {
   DiscoverMixesView,
   DiscoverSettings,
@@ -395,6 +396,11 @@ export interface BridgeContract
     readonly args: readonly [key: string];
     readonly result: string | null;
   };
+  readonly "home.arrangement": { readonly args: readonly []; readonly result: HomeArrangement };
+  readonly "home.edit": {
+    readonly args: readonly [edit: HomeArrangementEdit];
+    readonly result: HomeArrangement;
+  };
   readonly "stats.overview": {
     readonly args: readonly [period: StatsPeriod];
     readonly result: StatsOverview;
@@ -530,6 +536,8 @@ export const BRIDGE_CALLS = [
   "home.followCheck",
   "home.openRelease",
   "home.releaseArtwork",
+  "home.arrangement",
+  "home.edit",
   ...LINK_CALLS,
   ...ARTIST_PAGE_CALLS,
   ...STREAMED_CALLS,
@@ -578,6 +586,10 @@ export interface WaveBridge {
     readonly openRelease: (key: string) => Promise<HomeReleaseOpening>;
     /** A release card's cover as a data URL, or null. */
     readonly releaseArtwork: (key: string) => Promise<string | null>;
+    /** Home's sections and Discover rows as the account arranges them, for Home's editor. */
+    readonly arrangement: () => Promise<HomeArrangement>;
+    /** Makes one change of Home's editor to the synced arrangement and gives it as it is then. */
+    readonly edit: (edit: HomeArrangementEdit) => Promise<HomeArrangement>;
   };
   readonly playback: PlaybackTransport & {
     readonly view: () => Promise<PlayerView>;
@@ -869,6 +881,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     followCheck: () => invoke("home.followCheck"),
     openRelease: (key) => invoke("home.openRelease", key),
     releaseArtwork: (key) => invoke("home.releaseArtwork", key),
+    arrangement: () => invoke("home.arrangement"),
+    edit: (edit) => invoke("home.edit", edit),
   },
   links: linkBridge(invoke),
   artistPage: artistPageBridge(invoke),

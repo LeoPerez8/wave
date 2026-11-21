@@ -5,6 +5,7 @@ import type { HomeSectionView, HomeView } from "../../shared/home.ts";
 import type { CollectionTarget } from "../../shared/collectionActions.ts";
 import type { MenuPoint } from "./Menu.tsx";
 import { HomeDiscover } from "./HomeDiscover.tsx";
+import { HomeEditButton } from "./HomeEditor.tsx";
 import { HomeNewReleases, HomeUpcomingShows, useHomeFollow } from "./HomeFollow.tsx";
 import { Shelf } from "./YtLists.tsx";
 import type { YtRoute } from "./YtPages.tsx";
@@ -104,6 +105,11 @@ export function Home({
   };
   return (
     <div className="home-page" data-testid="home">
+      <HomeEditButton
+        revision={revision}
+        onChanged={() => setAttempt((value) => value + 1)}
+        onError={onError}
+      />
       {readFailed && (
         <div className="home-retry" role="alert">
           <p>{text.desktopLibrary.actionFailed}</p>
