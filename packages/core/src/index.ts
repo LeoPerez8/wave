@@ -896,6 +896,24 @@ export type {
   ArtistPageItem,
   ArtistPageShelf,
 } from "./artistPage.ts";
+export {
+  ARTIST_PAGE_KEPT_MS,
+  NO_ARTIST_PAGE_LOOKUP_FAILURES,
+  artistPageKept,
+  artistPageLookupDue,
+  artistPageLookupFailedAt,
+  artistPageLookupLine,
+  artistPageLookupReads,
+  parseArtistPageLookupFailures,
+  storedArtistPageLookupFailures,
+  withArtistPageLookupEnded,
+} from "./artistPageLookup.ts";
+export type {
+  ArtistPageKept,
+  ArtistPageLookupContext,
+  ArtistPageLookupEnd,
+  ArtistPageLookupFailures,
+} from "./artistPageLookup.ts";
 export { similarArtistLinks } from "./similarArtistLinks.ts";
 export type { SimilarArtistLink } from "./similarArtistLinks.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";

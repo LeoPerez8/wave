@@ -22,8 +22,6 @@ import { Text, useWindowDimensions, View } from "react-native";
 
 import { AlbumTile } from "@/catalog/AlbumTile";
 import { SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
-import { ArtistCard } from "@/catalog/cards/ArtistCard";
-import { CAPTION_TOP, titleLineHeight } from "@/catalog/cards/CardParts";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, ListAction } from "@/catalog/PlayShuffle";
@@ -44,8 +42,9 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { TextButton } from "@/components/TextButton";
 import { albumRowHeight, toAlbumSummary } from "@/library/AlbumGrid";
 import { ArtistAbout } from "@/library/ArtistAbout";
+import { SimilarArtistsRow, similarArtistsRowHeight } from "@/library/SimilarArtistsRow";
 import type { AlbumRow, ArtistRow, SongRow } from "@wave/client";
-import { openAlbum, openArtist } from "@/library/routes";
+import { openAlbum } from "@/library/routes";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openAlbumActions } from "@/playback/ActionsMenu";
@@ -67,7 +66,7 @@ import { SongList } from "@/songs/SongList";
 import { occurrenceKeys } from "@/songs/songRowState";
 import { ytArtistNote, YtReleaseTile } from "@/ytmusic/YtArtistSection";
 import { useLocalisation } from "@/localisation/localisation";
-import { openYtArtist, YT_ARTIST_BY_NAME } from "@/ytmusic/routes";
+import { YT_ARTIST_BY_NAME } from "@/ytmusic/routes";
 
 type Song = DiscoverSong<NativeYtSong, SongRow>;
 type Release = YtArtistRelease<AlbumRow>;
@@ -84,13 +83,6 @@ type Item = ArtistPageItem<Cover, Song, Similar, YtArtistAbout>;
 
 /** Height of a shelf's row, the gap under it included. */
 const SHELF_ROW = albumRowHeight(COVER_ROW_TILE);
-
-/**
- * Height of the Fans might also like row at [fontScale], the gap under it
- * included: an artist's circle, then their name on one line.
- */
-const similarRowHeight = (fontScale: number): number =>
-  COVER_ROW_TILE + CAPTION_TOP + titleLineHeight(fontScale) + CELL * 3;
 
 const NO_SONGS: readonly Song[] = [];
 
@@ -124,8 +116,6 @@ const pageItems = (
   );
 
 const itemType = (item: Item): Item["type"] => item.type;
-
-const ignore = (): void => {};
 
 /**
  * A shelf as one row of covers that scrolls sideways: a release the Library
@@ -164,53 +154,6 @@ function ReleaseRow({
                 () => openAlbum(library.id, library, { integrated: true }),
                 (options) => openAlbumActions(library, options),
               )}
-            />
-          ),
-        )}
-      </CoverRow>
-    </View>
-  );
-}
-
-/**
- * Fans might also like as one row of artists that scrolls sideways, laid out
- * as Home's artists are: a similar artist the Library has is its artist and
- * opens the Library's page; the others open their YouTube Music page. While
- * the page selects, they hold still.
- */
-function SimilarRow({
-  artists,
-  height,
-  selecting,
-}: {
-  artists: readonly Similar[];
-  height: number;
-  selecting: boolean;
-}) {
-  return (
-    <View style={{ height }}>
-      <CoverRow>
-        {artists.map(({ artist, library }) =>
-          library === null ? (
-            <ArtistCard
-              key={artist.browseId}
-              name={artist.name}
-              artist={{
-                name: artist.name,
-                thumbPath: null,
-                artworkPath: null,
-                imageUrl: artist.artworkUrl,
-              }}
-              size={COVER_ROW_TILE}
-              onPress={selecting ? ignore : () => openYtArtist(artist.browseId, artist.name)}
-            />
-          ) : (
-            <ArtistCard
-              key={artist.browseId}
-              name={library.name}
-              artist={library}
-              size={COVER_ROW_TILE}
-              onPress={selecting ? ignore : () => openArtist(library.id, library)}
             />
           ),
         )}
@@ -350,7 +293,7 @@ function YtArtistList({
   const bottomInset = useChromeInset();
   const { list, listProps } = useCompactTitleTopList();
   const { fontScale } = useWindowDimensions();
-  const similarRow = similarRowHeight(fontScale);
+  const similarRow = similarArtistsRowHeight(fontScale);
   const songs = view?.songs ?? NO_SONGS;
   const selectable = useMemo(
     () => (view === null ? [] : artistSelectionItems(view.shelves, view.songs)),
@@ -435,7 +378,11 @@ function YtArtistList({
         return <ReleaseRow key={item.label} covers={item.covers} selection={selection} />;
       if (item.type === "similar")
         return (
-          <SimilarRow artists={item.artists} height={similarRow} selecting={selection.selecting} />
+          <SimilarArtistsRow
+            artists={item.artists}
+            height={similarRow}
+            selecting={selection.selecting}
+          />
         );
       if (item.type === "about") return <ArtistAbout about={item.about} />;
       return null;
