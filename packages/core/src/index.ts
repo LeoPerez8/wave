@@ -2320,14 +2320,16 @@ export {
   CAROUSEL_PAGE_MIN_SONGS,
   carouselPageSongs,
   MAGIC_QUEUE_CAROUSEL_PAGES,
+  magicQueueCarouselKeptPage,
   magicQueueCarouselPage,
   magicQueueCarouselPageLabel,
   magicQueueCarouselPageTitle,
   magicQueueCarouselPages,
+  magicQueueCarouselRestarts,
   mostListenedRecently,
   recentPlaysWindow,
 } from "./magicQueueCarousel.ts";
-export type { MagicQueueCarouselPageId } from "./magicQueueCarousel.ts";
+export type { MagicQueueCarouselPageId, MagicQueueCarouselRow } from "./magicQueueCarousel.ts";
 export { discoveries } from "./discoveries.ts";
 export type {
   DiscoveriesInput,
