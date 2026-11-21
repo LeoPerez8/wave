@@ -48,6 +48,11 @@ export interface FakeDeviceOptions {
   readonly playlist?: string;
   /** Draws its glass as shipped whatever probe the launch asks for (a build without #316). */
   readonly ignoresGlassProbe?: boolean;
+  /**
+   * `am start` with only the package can't resolve the launcher (an emulator's data with
+   * several launcher-icon aliases enabled); naming the component still works.
+   */
+  readonly launcherByPackageFails?: boolean;
 }
 
 // The simulated app's code, as ART profile rules: what a launch runs, what its screens run.
@@ -84,6 +89,7 @@ export class FakeDevice implements Device {
   private readonly artist: string;
   private readonly playlist: string;
   private readonly ignoresGlassProbe: boolean;
+  private readonly launcherByPackageFails: boolean;
   private glassProbe = "live";
   private running = false;
   private recorder: PerfRecorder | null = null;
@@ -131,6 +137,7 @@ export class FakeDevice implements Device {
     this.artist = options.artist ?? "Radiohead";
     this.playlist = options.playlist ?? "Favorites";
     this.ignoresGlassProbe = options.ignoresGlassProbe ?? false;
+    this.launcherByPackageFails = options.launcherByPackageFails ?? false;
   }
 
   async sleep(ms: number): Promise<void> {
@@ -248,6 +255,8 @@ export class FakeDevice implements Device {
   }
 
   private launch(command: string): string {
+    if (this.launcherByPackageFails && / -p \S+/.test(command))
+      return "Starting: Intent { act=android.intent.action.MAIN }\nError: Activity not started, unable to resolve Intent\n";
     const probe = / --es wave\.perf\.glass (\S+)/.exec(command)?.[1];
     this.glassProbe = this.ignoresGlassProbe || probe === undefined ? "live" : probe;
     this.running = true;
@@ -701,6 +710,11 @@ export class FakeDevice implements Device {
         this.advance(180);
         return "Starting: Intent { act=android.intent.action.MAIN }\nStatus: ok\nLaunchState: HOT\nActivity: dev.leoperez.wave/.MainActivity\nTotalTime: 164\nWaitTime: 170\nComplete\n";
       },
+    ],
+    [
+      /^cmd package resolve-activity --brief -a android\.intent\.action\.MAIN -c android\.intent\.category\.LAUNCHER (\S+)$/,
+      (match) =>
+        `priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=false\n${match[1]}/.LauncherIcon_teal_ember\n`,
     ],
     [/^input keyevent 3$/, () => ""],
     [

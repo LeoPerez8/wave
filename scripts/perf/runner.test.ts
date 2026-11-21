@@ -550,6 +550,17 @@ describe("runPerf on the simulated phone", () => {
     for (const launch of launches) assert.match(launch, / --es wave\.perf\.glass off\b/);
   });
 
+  it("launches the launcher component by name, where the package alone resolves nothing", async () => {
+    // An emulator whose data holds several enabled launcher-icon aliases: `am start -p` fails.
+    const device = new FakeDevice({ launcherByPackageFails: true });
+    const { out } = await runPerf(device, options("aliases", { scenarios: ["push-settings"] }));
+    const results = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(results.errors, []);
+    const launches = device.commands.filter((command) => command.startsWith("am start -W"));
+    assert.ok(launches.length > 0);
+    for (const launch of launches) assert.match(launch, / -n dev\.leoperez\.wave\/\.LauncherIcon_teal_ember\b/);
+  });
+
   it("stops before measuring when the app didn't take the glass probe", async () => {
     await assert.rejects(
       runPerf(
