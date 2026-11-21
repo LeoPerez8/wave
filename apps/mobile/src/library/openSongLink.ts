@@ -93,8 +93,9 @@ const linkEnding = (link: SongLink, signal: AbortSignal): Promise<Ending> =>
  * toast says "Finding song…" while the song is found: a Spotify or Deezer
  * short link is followed first, and a Spotify one that lands on a playlist
  * opens its import card ([openPlaylist]) instead. The Library's copy plays when it has one, else
- * the YT Music song streams, each as its Magic Queue (the previous queue
- * goes), and Now Playing opens. A song found nowhere opens the Couldn't find
+ * the YT Music song streams, each with related songs after it (a Magic Queue
+ * session Up Next heads "Related · from <song>"; the previous queue goes),
+ * and Now Playing opens. A song found nowhere opens the Couldn't find
  * card; anything else that plays nothing says why. YT Music off was said
  * before this.
  */
@@ -132,12 +133,12 @@ export const openSongLink = async (
   }
   const start =
     ending.from === "library"
-      ? startMagicQueue(ending.seed, [ending.track])
-      : startStreamedMagicQueue(ending.song);
+      ? startMagicQueue(ending.seed, [ending.track], [], undefined, { plainPlay: true })
+      : startStreamedMagicQueue(ending.song, { plainPlay: true });
   try {
     await appRuntime.runPromise(start);
     openNowPlaying();
   } catch (error) {
-    void showError(strings.playbackText.couldntStartTheMagicQueue, error);
+    void showError(strings.playbackText.couldntPlayTheSong, error);
   }
 };

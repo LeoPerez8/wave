@@ -255,6 +255,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   ofTime: "de",
   couldntLoadRecommendations: "Não foi possível carregar as recomendações.",
   magicQueueFrom: (title: string) => `Fila Mágica · a partir de ${title}`,
+  relatedFrom: (title: string) => `Relacionadas · de ${title}`,
   newQueuePlaying: "Nova fila em reprodução",
   undo: "Desfazer",
   actions: "Ações",

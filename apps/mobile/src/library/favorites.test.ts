@@ -3,16 +3,18 @@ import { registerHooks } from "node:module";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
-import { normalizeTrack } from "@wave/core";
+import { normalizeTrack, playingStarSubject } from "@wave/core";
 import { loadLibraryStore, loadWorktreeModule } from "../../bench/fastAgain/store.ts";
 import { closeTestDatabase, openTestDatabase } from "@wave/client/testing";
 import type { LibraryStore } from "./LibraryStore.ts";
 
-test("cold scoped stars follow optimistic gestures and restore the saved star after a failed write without loading global lists", async () => {
+/**
+ * The real favorite adapter, Effect service and SQLite store over a Library of one song. Only
+ * the Android app runtime boundary is replaced; no React hooks or native downloads are run.
+ */
+const openFavorites = async () => {
   const root = fileURLToPath(new URL("../../../../", import.meta.url));
   const db = await openTestDatabase();
-  // Replace only the Android app runtime boundary; use the real favorite adapter,
-  // Effect service and SQLite store. No React hooks or native downloads are run.
   const storeUrl = new URL("./LibraryStore.ts", import.meta.url).href;
   const runtimeUrl = `data:text/javascript,${encodeURIComponent(`
     import * as Effect from ${JSON.stringify(import.meta.resolve("effect/Effect"))};
@@ -42,6 +44,10 @@ test("cold scoped stars follow optimistic gestures and restore the saved star af
       return nextResolve(specifier, context);
     },
   });
+  const close = (): void => {
+    hooks.deregister();
+    closeTestDatabase(db);
+  };
   try {
     const store = await loadLibraryStore(root, db);
     const { LibraryStoreError } = await loadWorktreeModule<typeof import("./LibraryStore.ts")>(
@@ -72,6 +78,23 @@ test("cold scoped stars follow optimistic gestures and restore the saved star af
       ),
     );
     const track = Effect.runSync(store.listSongs)[0]!;
+    const runtime = (await import(runtimeUrl)) as {
+      provide: (service: LibraryStore["Service"]) => void;
+    };
+    const favorites = await loadWorktreeModule<typeof import("./favorites.ts")>(
+      root,
+      "apps/mobile/src/library/favorites.ts",
+    );
+    return { store, LibraryStoreError, track, provide: runtime.provide, favorites, close };
+  } catch (error) {
+    close();
+    throw error;
+  }
+};
+
+test("cold scoped stars follow optimistic gestures and restore the saved star after a failed write without loading global lists", async () => {
+  const { store, LibraryStoreError, track, provide, favorites, close } = await openFavorites();
+  try {
     Effect.runSync(store.setFavorites([track.id], true));
     let globalReads = 0;
     let fail = true;
@@ -79,10 +102,7 @@ test("cold scoped stars follow optimistic gestures and restore the saved star af
     let gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const runtime = (await import(runtimeUrl)) as {
-      provide: (service: LibraryStore["Service"]) => void;
-    };
-    runtime.provide({
+    provide({
       ...store,
       favoriteTrackIds: Effect.suspend(() => {
         globalReads++;
@@ -101,10 +121,6 @@ test("cold scoped stars follow optimistic gestures and restore the saved star af
           ),
         ),
     });
-    const favorites = await loadWorktreeModule<typeof import("./favorites.ts")>(
-      root,
-      "apps/mobile/src/library/favorites.ts",
-    );
     const saved = { favorite: true, pendingFavorite: false };
     favorites.rememberSongFavorite(track.id, saved.favorite);
     const unstar = favorites.setFavorites([track.id], false);
@@ -166,7 +182,31 @@ test("cold scoped stars follow optimistic gestures and restore the saved star af
     assert.deepEqual(Effect.runSync(store.listDislikes), []);
     assert.equal(favorites.isFavorite(track.id), true);
   } finally {
-    hooks.deregister();
-    closeTestDatabase(db);
+    close();
+  }
+});
+
+test("Now Playing's star is on for a favorite Library song before the song is read", async () => {
+  const { store, track, provide, favorites, close } = await openFavorites();
+  try {
+    provide(store);
+    Effect.runSync(store.setFavorites([track.id], true));
+    // The notification's star reads the stars into memory as the app starts.
+    const loaded = new Promise<void>((resolve) => {
+      const stop = favorites.subscribeSongStars(() => {
+        if (!favorites.isFavorite(track.id)) return;
+        stop();
+        resolve();
+      });
+    });
+    favorites.loadStars();
+    await loaded;
+    // The first frame Now Playing draws: the sheet hasn't read the song yet.
+    const first = playingStarSubject(String(track.id), undefined);
+    assert.equal(favorites.scopedSongStarredNow(first.track, first.video, first.saved), true);
+    await favorites.setFavorites([track.id], false);
+    assert.equal(favorites.scopedSongStarredNow(first.track, first.video, first.saved), false);
+  } finally {
+    close();
   }
 });

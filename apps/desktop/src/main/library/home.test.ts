@@ -117,3 +117,96 @@ test("Home keeps missing Library songs, bounds shelves and explains an empty or 
     ["favorites", "recently-added"],
   );
 });
+
+test("In your orbit follows Discover with the artists played in the last 14 days", async () => {
+  const db = await openTestDatabase();
+  const drake = addTrack(db, { title: "Road", album: "Pink Moon", artist: "Nick Drake" });
+  const young = addTrack(db, { title: "Harvest", album: "Harvest", artist: "Neil Young" });
+  const old = addTrack(db, { title: "Blue", album: "Blue", artist: "Joni Mitchell" });
+  const day = 86_400_000;
+  const now = Date.now();
+  for (const [trackId, startedAt] of [
+    [young, now - day],
+    [young, now - 2 * day],
+    [drake, now - 13 * day],
+    [old, now - 15 * day],
+    [old, now - 16 * day],
+    [old, now - 17 * day],
+  ] as const)
+    recordPlay(db, {
+      trackId: String(trackId),
+      startedAt,
+      counted: true,
+      listenedMs: 180000,
+      durationMs: 180000,
+      endReason: "completed",
+      source: "desktop",
+      context: null,
+    });
+  const home = readHome(db, null);
+  const ids = home.items.map((s) => s.id);
+  assert.equal(ids[ids.indexOf("discover") + 1], "in-your-orbit");
+  const orbit = home.items.find((s) => s.id === "in-your-orbit")!;
+  assert.equal(orbit.kind, "artist");
+  assert.deepEqual(
+    orbit.rows.items.map((r) => r.title),
+    ["Neil Young", "Nick Drake"],
+  );
+  assert.equal(
+    home.items.find((s) => s.id === "most-played-artists")!.rows.items[0]?.title,
+    "Joni Mitchell",
+  );
+});
+
+test("In your orbit holds ten Library artists though online artists were played more", async () => {
+  const db = await openTestDatabase();
+  const now = Date.now();
+  for (let i = 0; i < 12; i++) {
+    recordPlay(
+      db,
+      {
+        trackId: `yt:online-${i}`,
+        startedAt: now - i,
+        listenedMs: 60_000,
+        durationMs: 180_000,
+        endReason: "completed",
+        counted: true,
+        source: "desktop",
+        context: null,
+      },
+      false,
+      {
+        videoId: `online-${i}`,
+        title: `Online ${i}`,
+        artists: [`Online artist ${i}`],
+        album: null,
+        durationMs: 180_000,
+        artworkUrl: null,
+        explicit: false,
+        albumId: null,
+      },
+    );
+  }
+  const expected: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const id = addTrack(db, { title: `Local ${i}`, artist: `Local artist ${i}` });
+    expected.push(`Local artist ${i}`);
+    recordPlay(db, {
+      trackId: String(id),
+      startedAt: now - 100 - i,
+      listenedMs: 60_000,
+      durationMs: 180_000,
+      endReason: "completed",
+      counted: true,
+      source: "desktop",
+      context: null,
+    });
+  }
+  const home = readHome(db, null);
+  assert.deepEqual(
+    home.items
+      .find((section) => section.id === "in-your-orbit")
+      ?.rows.items.map((row) => row.title),
+    expected,
+  );
+});

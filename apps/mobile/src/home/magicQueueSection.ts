@@ -1,6 +1,6 @@
 import { currentLocalisation } from "@/localisation/localisation";
 /**
- * Home draws nine random seeds on each visit, from the Library's playable
+ * Home draws nine random seeds when it first opens, from the Library's playable
  * songs and the playlists' YT Music entries together, independently of
  * recommendations; with neither, nine streamed songs of the Artist mixes
  * (Core's `magicQueueRow`).
@@ -18,8 +18,7 @@ import {
   type YtAlbumSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { freeTurnEffect } from "@/lib/backgroundWork";
 import { currentDislikedSongs, useDislikedSongs } from "@/library/dislikes";
@@ -60,8 +59,9 @@ type Seed = MagicQueueSeed<PlayableSongRow>;
  * Nine random seeds (Library songs and playlist entries) through the same
  * immediate local-query path as the rest of Home: no saved daily picks,
  * taste profile, recommendation deadline, settlement or free turns. Null
- * until they're first read. A focus after leaving Home draws again; ordinary
- * re-renders and Now Playing covering the screen keep this visit's seeds.
+ * until they're first read. Only the owner's refresh draws again: re-renders,
+ * Now Playing covering the screen, and leaving Home for another screen and
+ * coming back keep the seeds (#1251).
  */
 const usePoolPicks = (enabled: boolean) => {
   const [read, setRead] = useState(() => randomMagicQueueRead(Math.random));
@@ -98,27 +98,16 @@ const usePoolPicks = (enabled: boolean) => {
  * The row's songs and their refresh: nine seeds of the Library's songs with
  * a file and the playlists' YT Music entries when there are any, else nine
  * of [artistMixes]' streamed songs (what the Artist mixes row shows), drawn
- * again on each visit and kept in their places while the mixes rebuild or
- * re-rank. Hidden while [ytMusic] is off.
+ * once when Home first opens and kept in their places while the mixes
+ * rebuild or re-rank. Hidden while [ytMusic] is off.
  */
 export const useMagicQueueSection = (
   ytMusic: boolean,
   artistMixes: DiscoverMixesSection,
 ): MagicQueueSection => {
   const { seeds, setRead } = usePoolPicks(ytMusic);
-  // Null: draw afresh from the mixes on the next render.
+  // Null until the mixes are first drawn from.
   const [mixPicks, setMixPicks] = useState<MagicQueueMixPicks | null>(null);
-  const opened = useRef(false);
-  useFocusEffect(
-    useCallback(() => {
-      if (!ytMusic) return;
-      if (opened.current) {
-        setRead(randomMagicQueueRead(Math.random));
-        setMixPicks(null);
-      }
-      opened.current = true;
-    }, [setRead, ytMusic]),
-  );
   const row = magicQueueRow({ ytMusic, seeds, artistMixes });
   const { shown, picks } = magicQueueShown(row, mixPicks, Math.random);
   // Kept for the next render: the same mixes keep these songs.

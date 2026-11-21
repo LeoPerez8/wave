@@ -177,6 +177,12 @@ export const magicListSeedSongs = (
 export interface MagicSession {
   /** Search starts and automatic queue continuations keep to their seed. */
   readonly faithful?: boolean;
+  /**
+   * Began as a plain play of its seed song (a tap in Search, an opened song
+   * link), not as a Magic Queue the owner asked for: Up Next names it
+   * Related (`magicQueueLabel`). Sessions saved before have none.
+   */
+  readonly plainPlay?: boolean;
   /** Continued from an ordinary queue: the first batch adds ten songs after it. */
   readonly continuation?: boolean;
   readonly radioSeed?: MagicSongRadioSeed;
@@ -310,8 +316,9 @@ export const magicQueueShare = (level: DiscoverMixLevel): number =>
  * itself for a song seed): it plays that song, or a random one of the
  * seed's otherwise. Its YouTube Music radio grows from [radio] (none
  * without). YouTube Music's share of a batch starts at [ytShare]
- * (`magicQueueShare`, kept within 20-100%), half without. Null when the seed
- * has no songs.
+ * (`magicQueueShare`, kept within 20-100%), half without. [plainPlay] marks
+ * a session a plain play of the song began (`MagicSession.plainPlay`). Null
+ * when the seed has no songs.
  */
 export const startMagicQueue = (
   seed: MagicSeed,
@@ -322,12 +329,14 @@ export const startMagicQueue = (
     radio,
     ytShare = YT_SHARE_START,
     faithful = false,
+    plainPlay = false,
   }: {
     readonly id: string;
     readonly random: RandomSource;
     readonly radio?: MagicRadioSeed;
     readonly ytShare?: number;
     readonly faithful?: boolean;
+    readonly plainPlay?: boolean;
   },
 ): { readonly session: MagicSession; readonly first: string } | null => {
   const pick =
@@ -339,6 +348,7 @@ export const startMagicQueue = (
     session: {
       id,
       ...(faithful ? { faithful: true } : {}),
+      ...(plainPlay ? { plainPlay: true } : {}),
       seed,
       ...(radio?.song === undefined ? {} : { radioSeed: radio.song }),
       ...(radio?.songs === undefined || radio.songs.length === 0
@@ -495,11 +505,13 @@ export const startStreamedMagicQueue = (
     id,
     ytShare,
     faithful = false,
+    plainPlay = false,
     firstTrackId,
   }: {
     readonly id: string;
     readonly ytShare?: number;
     readonly faithful?: boolean;
+    readonly plainPlay?: boolean;
     /** Queue id of a local file that will play for this streamed seed. */
     readonly firstTrackId?: string;
   },
@@ -512,6 +524,7 @@ export const startStreamedMagicQueue = (
       id,
       random: () => 0,
       faithful,
+      plainPlay,
       radio: {
         song: {
           id: `song:${trackId}`,
@@ -861,9 +874,15 @@ export const magicRadioArtists = (
 /** A YouTube Music candidate of a Magic Queue: a song it weighs, with the radio's [song] it is. */
 export type MagicYtCandidate<S extends DiscoverRadioSong> = MagicSong & { readonly song: S };
 
-/** What Up Next says over a Magic Queue: "Magic Queue · from <seed>". */
+/**
+ * What Up Next says over a Magic Queue: "Magic Queue · from <seed>", or
+ * "Related · from <song>" over one a plain play of a song began
+ * (`MagicSession.plainPlay`).
+ */
 export const magicQueueLabel = (session: MagicSession, catalogue: Catalogue = en): string =>
-  catalogue.playbackText.magicQueueFrom(session.seed.title);
+  session.plainPlay === true
+    ? catalogue.playbackText.relatedFrom(session.seed.title)
+    : catalogue.playbackText.magicQueueFrom(session.seed.title);
 
 const isStrings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string");
@@ -930,6 +949,7 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
     ...(validSeed ? { radioSeed: radioSeed as unknown as MagicSongRadioSeed } : {}),
     ...(value["continuation"] === true ? { continuation: true } : {}),
     ...(value["faithful"] === true ? { faithful: true } : {}),
+    ...(value["plainPlay"] === true ? { plainPlay: true } : {}),
     ...(Array.isArray(likedRadios) && likedRadios.every(isRadioSeed)
       ? { likedRadios: likedRadios as unknown as readonly MagicSongRadioSeed[] }
       : {}),

@@ -31,6 +31,7 @@ export const LIBRARY_SEEDS = [
   "library/hooks.ts#songs",
   "library/hooks.ts#artists",
   "library/hooks.ts#useArtists",
+  "library/hooks.ts#useLoadedArtists",
   ...[
     "currentLibraryFinder",
     "useLoadedLibraryFinder",
@@ -189,6 +190,13 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "Once per Discover Magic Queue tile press; the indexed query returns one matching song.",
     reason:
       "The explicit start uses the indexed recording match to resolve its picked stream to a Library file before playback, while keeping the session seeded by the stream. The matchingSong.test.ts fixture checks the indexed query returns fewer than ten rows in a 1,000-track Library.",
+    capabilities: ["library/LibraryStore.ts#matchingSong"],
+  },
+  "home/discoveriesRead.ts#readDiscoveries": {
+    howOften:
+      "Once per catalog song the Discoveries page is about to show, eighteen at most a batch, on a background read; each indexed query finds one match.",
+    reason:
+      "Discoveries passes over a catalog song whose recording the Library has, since its plays are credited to the Library song and the play history can't tell it was heard. Only the ranked songs about to fill the nine tiles are asked, never the whole catalog. Covered by home/discoveriesRead.test.ts.",
     capabilities: ["library/LibraryStore.ts#matchingSong"],
   },
   "home/mixBuildLibrary.ts#readMixBuildLibrary": {
@@ -359,6 +367,15 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "library/hooks.ts#useArtists",
     ],
   },
+  "ytmusic/artistPage.ts#useSimilarArtists": {
+    howOften: FOLLOWED_FINDER,
+    reason:
+      "Only a settled artist page (YT Music's, or the Library's through useArtistKeptPage) that lists similar artists reads the Library's artists, to tell which Fans might also like tiles open a Library page. It runs offline too, where the shelf of a page seen before still shows. No request is made. See ytArtistPageOpening.test.ts, artistPageLookup.test.ts and similarArtistLinks.test.ts.",
+    capabilities: [
+      "../../../packages/core/src/ytArtist.ts#libraryArtistFinder",
+      "library/hooks.ts#useLoadedArtists",
+    ],
+  },
   "ytmusic/artistPage.ts#useYtArtistPage": {
     howOften: FOLLOWED_FINDER,
     reason:
@@ -455,6 +472,26 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     reason:
       "The explicitly opened result card follows download membership only for a streamed result and rechecks identity before saving, so a completed download is not offered again or saved as a streamed duplicate.",
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedInLibrary"],
+  },
+  "recognize/recognizedStar.ts#useRecognizedStarred": {
+    howOften: FOLLOWED_FINDER,
+    reason:
+      "The explicitly opened result card and Genius result menu read a streamed song's star as Now Playing does, Library copy first, so the star shows what a tap would change.",
+    capabilities: ["ytmusic/libraryFinder.ts#useLibraryFinder"],
+  },
+  "recognize/recognizedStar.ts#currentRecognizedStarred": {
+    howOften:
+      "Once per tile match settled and per star button tap on its notification; never while listening.",
+    reason:
+      "The notification's star button reads the song's star once, as its label, without a screen to follow the finder; finder reads are shared per Library version.",
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+  },
+  "recognize/recognizedStar.ts#starRecognized": {
+    howOften:
+      "Once per explicit star tap on the card, the Genius result menu or the match notification.",
+    reason:
+      "A streamed song with a Library copy stars that copy, so the star write resolves Library identity at tap time as starSongs does elsewhere.",
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
   },
   "recognize/resolveRecognitionSave.ts#resolveRecognitionSave": {
     howOften:
@@ -649,6 +686,16 @@ export const OPENING_REQUESTS: Record<string, Exception> = {
         "packages/core/src/ytPopularRead.test.ts",
         "apps/mobile/src/ytmusic/artistPopular.test.ts",
       ],
+    },
+  },
+  "ytmusic/artistKeptPage.ts#useArtistKeptPage": {
+    kind: "opening",
+    reason:
+      "The Library artist page's Fans might also like and About (#1280): one lookup of the artist's YouTube Music page per opening, only when Core's artistPageLookupDue says so (never looked up, no match a week ago, a failure a day ago, a kept page 30 days old) after local content and screen settlement. The Artists search takes a low-priority turn in the shared allowance; every request rechecks sight, settlement, the YT Music switch and Android connectivity when it runs, and leaving the page aborts it with nothing saved.",
+    deferred: {
+      settlement: "screen",
+      connectivity: "android",
+      tests: ["packages/core/src/artistPageLookup.test.ts"],
     },
   },
   "ytmusic/albumSection.ts#useYtAlbumSection": {

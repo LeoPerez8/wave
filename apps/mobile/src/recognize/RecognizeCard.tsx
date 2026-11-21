@@ -9,12 +9,20 @@ import {
   type RecognizeMatch,
 } from "@wave/core";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { IconStar, IconStarFilled } from "@tabler/icons-react-native";
 import { AppState, Linking, Text, View } from "react-native";
-import { useReducedMotion } from "react-native-reanimated";
+import Animated, {
+  ReduceMotion,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 
 import { Artwork } from "@/catalog/Artwork";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
+import { IconButton } from "@/components/IconButton";
 import { TextButton } from "@/components/TextButton";
 import { NativeWaveUnderline } from "@/glass/waveGlass";
 import type { SongRow } from "@wave/client";
@@ -31,12 +39,19 @@ import { useLoadedInLibrary } from "@/ytmusic/libraryFinder";
 import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "@/ytmusic/YtDownloads";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openOverlay } from "@/overlay/overlay";
+import { STAR_POP } from "@/nowPlaying/CoverPress";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { resolveRecognitionSave } from "./resolveRecognitionSave";
 import { hasMicrophone } from "./microphone";
 import { createRecognizeEntry } from "./recognizeEntry";
 import { recognizeDeps } from "./recognizeDeps";
+import {
+  recognizedSong,
+  starRecognized,
+  useRecognizedStarred,
+  type RecognizedSong,
+} from "./recognizedStar";
 import { startRecognizeSession, type RecognizeNative, type RecognizeRun } from "./recognizeSession";
 import { cancelRecognizeTile, trackCardSession, recognizeTileResult } from "./startRecognizeTile";
 
@@ -193,6 +208,8 @@ function RecognizeCard({
   const result = card.kind === "resolved" ? card.result : null;
   const status = useYtDownloadStatus(result?.kind === "stream" ? result.song.videoId : "");
   const inLibrary = useLoadedInLibrary(result?.kind === "stream");
+  const song = recognizedSong(result);
+  const starred = useRecognizedStarred(song);
   const labels = recognizeCardActionLabels(strings);
   const view = recognizeCardView(
     card,
@@ -200,9 +217,15 @@ function RecognizeCard({
       ytMusic,
       status,
       inLibrary: result?.kind === "stream" && inLibrary(result.song),
+      starred,
     },
     strings,
   );
+  // Core offers the star only for a song Wave can play; it sits beside the title, not in the rows.
+  const star =
+    song !== null && (view.actions.includes("favorite") || view.actions.includes("unfavorite"))
+      ? song
+      : null;
 
   const press = (action: RecognizeCardAction): void => {
     switch (action) {
@@ -329,6 +352,7 @@ function RecognizeCard({
               </Text>
             ))}
           </View>
+          {star !== null && <RecognizedStar song={star} title={view.title} starred={starred} />}
         </View>
         {view.listening && <ListeningWave />}
       </View>
@@ -372,6 +396,61 @@ function RecognizeCard({
         </View>
       )}
     </>
+  );
+}
+
+/** How small the star starts its pop from as it fills (Now Playing's). */
+const STAR_POP_FROM = 0.6;
+
+/**
+ * The recognized song's star, as Now Playing's: in the highlight colour, only its fill
+ * changes, and filling it pops it (it just fills under reduce motion). It confirms itself,
+ * so no toast; the card stays open.
+ */
+function RecognizedStar({
+  song,
+  title,
+  starred,
+}: {
+  song: RecognizedSong;
+  title: string;
+  starred: boolean;
+}) {
+  const { strings } = useLocalisation();
+  const reduceMotion = useReducedMotion();
+  const scale = useSharedValue(1);
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
+  const press = (): void => {
+    if (!starred && !reduceMotion) {
+      scale.set(STAR_POP_FROM);
+      scale.set(withSpring(1, { ...STAR_POP, reduceMotion: ReduceMotion.Never }));
+    }
+    void starRecognized(song, !starred, "recognize").catch((error: unknown) =>
+      showError(strings.playbackText.couldntUpdateTheSong, error),
+    );
+  };
+  return (
+    <IconButton
+      label={
+        starred
+          ? strings.playbackText.removeValueFromFavorites(title)
+          : strings.playbackText.favoriteValue(title)
+      }
+      accessibilityState={{ selected: starred }}
+      tone="highlight"
+      onPress={press}
+      haptic="impact"
+    >
+      {(highlight) => (
+        <Animated.View style={popStyle}>
+          {starred ? (
+            <IconStarFilled size={24} color={highlight} />
+          ) : (
+            <IconStar size={24} color={highlight} strokeWidth={1.5} />
+          )}
+        </Animated.View>
+      )}
+    </IconButton>
   );
 }
 

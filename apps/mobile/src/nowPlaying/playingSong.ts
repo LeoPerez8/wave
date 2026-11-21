@@ -6,6 +6,7 @@ import { confirmDeleteSongs } from "@/library/deleteSongs";
 import { dislikeSongs } from "@/library/dislikeSongs";
 import { LibraryStore } from "@/library/LibraryStore";
 import { type SongRow } from "@wave/client";
+import { subscribeAll } from "@wave/client/externalStore";
 import { appRuntime } from "@/library/runtime";
 import { starSongs } from "@/library/starSongs";
 import { showError } from "@/overlay/alert";
@@ -36,6 +37,13 @@ export const createPlayingSongLookup = (): ReturnType<typeof createNowPlayingSon
 };
 
 export const nowPlayingSongLookup = createPlayingSongLookup();
+
+/**
+ * The playing song as the media notification's star follows it (`startNotificationStar`): a
+ * YT Music song is read as it starts playing, with Now Playing closed too. Now Playing's star
+ * takes its answer until its own is read (`usePlayingStarAnswer`).
+ */
+export const followedSongLookup = createPlayingSongLookup();
 
 /** Now Playing's Download on a song with a file (`createDeletePlayingSong`). */
 const deletePlayingSong = createDeletePlayingSong<SongRow & { readonly path: string }>({
@@ -118,3 +126,16 @@ export const usePreparePlayingSong = (
 };
 export const usePlayingSongAnswer = (target: PlayingSongTarget | null) =>
   useSyncExternalStore(nowPlayingSongLookup.subscribe, () => nowPlayingSongLookup.get(target));
+
+const subscribeStarAnswer = subscribeAll(nowPlayingSongLookup, followedSongLookup);
+
+/**
+ * The answer Now Playing's star draws from. The sheet reads the song only once it has opened,
+ * so until then the star takes the answer the notification's star already holds, and shows
+ * the song's real star on its first frame.
+ */
+export const usePlayingStarAnswer = (target: PlayingSongTarget | null) =>
+  useSyncExternalStore(
+    subscribeStarAnswer,
+    () => nowPlayingSongLookup.get(target) ?? followedSongLookup.get(target),
+  );

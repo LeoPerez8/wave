@@ -119,6 +119,12 @@ export interface SyncPlayRow {
   readonly counted: boolean;
   readonly contextType: string | null;
   readonly contextId: string | null;
+  /**
+   * The playlist's sync id when the play context is a playlist: `contextId`
+   * is then the playlist's number on the device that recorded the play, which
+   * names another playlist elsewhere. Absent on older clients.
+   */
+  readonly contextPlaylistId?: string | null;
   readonly source: PlaySource;
   readonly importedFrom: "blackplayer" | null;
   /** What the play showed when it started; absent on older clients. */
@@ -220,6 +226,7 @@ export const SYNC_FIELDS: {
     counted: "bool",
     contextType: "text?",
     contextId: "text?",
+    contextPlaylistId: "text?",
     source: ["phone", "auto", "desktop"],
     importedFrom: ["blackplayer", null],
     snapshot: "snapshot?",

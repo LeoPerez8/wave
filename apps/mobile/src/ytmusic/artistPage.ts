@@ -2,18 +2,22 @@ import {
   identityKey,
   libraryAlbumFinder,
   libraryArtistFinder,
+  similarArtistLinks,
   ytArtistSavedStands,
   ytArtistPageView,
+  ytArtistPageWaiting,
+  type SimilarArtistLink,
   type YtArtistAlbum,
+  type YtArtistCandidate,
   type YtArtistPageView,
   type YtArtistSaved,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useAlbums, useArtists } from "@/library/hooks";
+import { useAlbums, useArtists, useLoadedArtists } from "@/library/hooks";
 import { LibraryStore } from "@/library/LibraryStore";
-import { type AlbumRow, type SongRow } from "@wave/client";
+import { type AlbumRow, type ArtistRow, type SongRow } from "@wave/client";
 import { useSettledOnce } from "@/lib/screenTiming";
 import { online } from "@/native/waveNative";
 import type { NativeYtSong } from "@/native/waveYtMusic";
@@ -90,6 +94,28 @@ const useLibraryReleases = (
   );
 };
 
+const NO_SIMILAR: readonly YtArtistCandidate[] = [];
+
+/**
+ * Fans might also like: [listed] (the page's similar artists), each with the
+ * Library artist of that name, whose page a tap opens (Core's
+ * `similarArtistLinks`), on the YT Music artist page and the Library's alike.
+ * The Library's artists are read only once the screen has settled ([settled])
+ * and only for a page that lists some; until they answer the shelf waits with
+ * no tile, so none is drawn as a YT Music artist and then swapped.
+ */
+export const useSimilarArtists = (
+  listed: readonly YtArtistCandidate[],
+  settled: boolean,
+): readonly SimilarArtistLink<ArtistRow>[] => {
+  const shown = settled ? listed : NO_SIMILAR;
+  const artists = useLoadedArtists(shown.length > 0);
+  return useMemo(
+    () => similarArtistLinks(shown, artists === null ? null : libraryArtistFinder(artists)),
+    [shown, artists],
+  );
+};
+
 export interface YtArtistPageShown {
   readonly browseId: string | null;
   /** The page's name, or the one the opener knew until it says; null with neither. */
@@ -101,6 +127,8 @@ export interface YtArtistPageShown {
    * online page waits for settled matching so local songs never show streamed first.
    */
   readonly view: YtArtistPageView<NativeYtSong, SongRow, AlbumRow> | null;
+  /** Fans might also like: the view's similar artists, each with the page a tap opens. */
+  readonly similar: readonly SimilarArtistLink<ArtistRow>[];
   /** Try Again: asks YouTube Music once more. */
   readonly retry: () => void;
 }
@@ -164,14 +192,16 @@ export const useYtArtistPage = (
     // Offline/failure/loading needs neither songs nor release identities. A found
     // page waits for matching so a downloaded song never first appears streamed.
     if (!work.finder) return work.view;
-    if (find === null) return { ...work.view, songs: [], shelves: [], note: "loading" as const };
+    if (find === null) return ytArtistPageWaiting(work.view);
     return ytArtistPageView(state, { enabled, now: openedAt, librarySong: find, libraryAlbum });
   }, [work.finder, work.view, find, state, enabled, openedAt, libraryAlbum]);
+  const similar = useSimilarArtists(view?.similar ?? NO_SIMILAR, settled);
   return {
     browseId: saved?.outcome === "found" ? saved.browseId : browseId,
     name: view?.name ?? knownName,
     contextId: browseId ?? `name:${knownName ?? ""}`,
     view,
+    similar,
     retry: useCallback(() => {
       setOfflineHint(false);
       setRetry((count) => count + 1);

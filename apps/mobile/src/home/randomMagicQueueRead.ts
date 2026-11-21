@@ -16,7 +16,7 @@ let nextRead = 0;
 /**
  * A fresh Home opening reads ids only (the Library's files, and the playlists'
  * YT Music entries as [videoIds] brings them), then metadata for its nine random seeds. A video whose
- * stored song can't be read leaves the pool for the visit, and its place is
+ * stored song can't be read leaves the pool until the next draw, and its place is
  * drawn again. Disliked songs ([disliked]) are never drawn.
  */
 export const randomMagicQueueRead = (
