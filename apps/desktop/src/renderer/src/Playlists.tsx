@@ -25,7 +25,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
-import type { ImageEdit, ImportAnswer } from "../../shared/playlists.ts";
+import type { ImageEdit, ImportAnswer, PlaylistInfo } from "../../shared/playlists.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
 import "./playlists.css";
 import { copyLink } from "./copyLink.ts";
@@ -46,6 +46,9 @@ interface Options {
   /** Reads the player, the rows and the sidebar again once an edit changed them. */
   readonly changed: () => void;
 }
+
+/** The menu entries that change a collaborative playlist for every member. */
+const EDITS: ReadonlySet<string> = new Set(["rename", "graveyard", "delete"]);
 
 type Naming =
   | { readonly kind: "create"; readonly initial: string; readonly target?: SongTarget }
@@ -122,10 +125,27 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
       .catch(() => failed(problem));
   };
 
-  /** A playlist's menu: Rename, its image, its Graveyard and Delete. */
+  /**
+   * A playlist's menu: Rename, its image, its Graveyard and Delete. A collaborative one keeps
+   * only what is this device's own (its image) and sharing: the desktop edits none of it.
+   */
   const playlistItems = async (playlistId: number): Promise<readonly MenuItem[]> => {
     const info = await window.wave.playlists.info(playlistId);
     if (info === null) return [{ key: "deleted", label: text.playlists.deleted, disabled: true }];
+    const items = allPlaylistItems(playlistId, info);
+    return info.collaborative
+      ? [
+          {
+            key: "collaborative",
+            label: text.desktopLibrary.collaborativeOnPhone,
+            disabled: true,
+          },
+          ...items.filter((item) => !EDITS.has(item.key)),
+        ]
+      : items;
+  };
+
+  const allPlaylistItems = (playlistId: number, info: PlaylistInfo): readonly MenuItem[] => {
     const labels = text.itemActions.labels;
     return [
       {

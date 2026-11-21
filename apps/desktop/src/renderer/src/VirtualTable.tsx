@@ -400,7 +400,11 @@ export function VirtualTable({
                     <span className="truncate">{tagTitle(row.title, scope.kind)}</span>
                   </div>
                   <div role="gridcell" className="truncate secondary">
-                    {songList ? artistName(row.artist) : labels.songCount(row.count)}
+                    {songList
+                      ? artistName(row.artist)
+                      : row.collaborative
+                        ? `${text.desktopLibrary.collaborative} · ${labels.songCount(row.count)}`
+                        : labels.songCount(row.count)}
                   </div>
                   {columns.third !== null && (
                     <div role="gridcell" className="album-column truncate secondary">

@@ -605,7 +605,9 @@ export function App() {
             <button
               key={row.id}
               className="nav-item"
-              aria-label={row.title}
+              aria-label={
+                row.collaborative ? `${row.title}, ${text.desktopLibrary.collaborative}` : row.title
+              }
               title={row.title}
               aria-current={route.kind === "playlist" && route.id === row.id ? "page" : undefined}
               onClick={() => go({ kind: "playlist", id: row.id })}
@@ -614,7 +616,7 @@ export function App() {
                 playlistEdits.openMenu(row.id, { x: event.clientX, y: event.clientY });
               }}
             >
-              <Icon name="playlist" />
+              <Icon name={row.collaborative ? "collaborative" : "playlist"} />
               <span className="nav-monogram" aria-hidden="true">
                 {Array.from(row.title.trim())[0]?.toLocaleUpperCase()}
               </span>
@@ -691,6 +693,7 @@ export function App() {
               <p className="hero-meta">
                 {[
                   labels[route.kind as "album" | "artist" | "playlist" | "genre"],
+                  hero.collaborative ? text.desktopLibrary.collaborative : null,
                   hero.genre,
                   hero.year,
                   labels.songCount(hero.count),
@@ -972,7 +975,10 @@ export function App() {
                               { scope, ids: [row.id] },
                               row.title,
                               at,
-                              scope.kind === "playlist" && scope.id !== undefined
+                              // A collaborative playlist's order is the members' to change, on a phone.
+                              scope.kind === "playlist" &&
+                                scope.id !== undefined &&
+                                !hero?.collaborative
                                 ? playlistEdits.moveItems(scope.id, row.id)
                                 : [],
                             )

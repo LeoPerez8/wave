@@ -69,6 +69,7 @@ import type {
 import type { SongTarget } from "../../shared/songActions.ts";
 import { Playback } from "../playback/playback.ts";
 import { browseSongs } from "./browse.ts";
+import { isCollaborative, refuseCollaborative } from "./collaborativePlaylists.ts";
 import { targetSongs } from "./songActions.ts";
 
 /** Reads and cuts photos for a playlist's image (Electron's `nativeImage` in the app). */
@@ -196,10 +197,12 @@ export const createPlaylists = (options: PlaylistOptions) => {
       return { id: made.playlistId, name: made.name, added: made.added };
     },
     rename: (playlistId: number, name: string): void => {
+      refuseCollaborative(db, playlistId);
       renamePlaylist(db, playlistId, name, now());
       changed();
     },
     delete: (playlistId: number): void => {
+      refuseCollaborative(db, playlistId);
       deletePlaylist(db, playlistId, now());
       deleteImages(takeDeletedPlaylistImages(db));
       changed();
@@ -214,10 +217,12 @@ export const createPlaylists = (options: PlaylistOptions) => {
             name: row.name,
             hasImage: row.hasImage === 1,
             graveyard: libraryGraveyard(playlistId).length,
+            collaborative: isCollaborative(db, playlistId),
           };
     },
     /** Remove from Playlist: every entry of [trackIds]; how many came out. */
     removeSongs: (playlistId: number, trackIds: readonly number[]): number => {
+      refuseCollaborative(db, playlistId);
       const named = new Set(trackIds);
       const items = libraryEntries(playlistId)
         .filter((entry) => named.has(entry.trackId))
@@ -230,11 +235,13 @@ export const createPlaylists = (options: PlaylistOptions) => {
     undoRemove: (): void => {
       const removal = lastRemoval;
       lastRemoval = undefined;
-      if (removal === undefined) return;
+      // It became collaborative since: it stays as the others have it.
+      if (removal === undefined || isCollaborative(db, removal.playlistId)) return;
       restorePlaylistItems(db, removal, now());
       changed();
     },
     move: (playlistId: number, trackId: number, direction: MoveDirection): void => {
+      refuseCollaborative(db, playlistId);
       const shown = libraryEntries(playlistId);
       const at = shown.findIndex((entry) => entry.trackId === trackId);
       const neighbour = shown[direction === "up" ? at - 1 : at + 1];
@@ -269,10 +276,12 @@ export const createPlaylists = (options: PlaylistOptions) => {
       };
     },
     restore: (playlistId: number, itemId: number): void => {
+      refuseCollaborative(db, playlistId);
       restoreGraveyardItem(db, playlistId, itemId, now());
       changed();
     },
     forget: (playlistId: number, itemId?: number): void => {
+      refuseCollaborative(db, playlistId);
       forgetGraveyardItems(db, playlistId, itemId, now());
       changed();
     },
@@ -282,6 +291,8 @@ export const createPlaylists = (options: PlaylistOptions) => {
       if (paths.length === 0) return null;
       const library = libraryPathIndex(selectTrackPaths(db));
       const playlists = livePlaylists();
+      // A collaborative playlist is never replaced: a file named as it makes a playlist of its own.
+      const replaceable = playlists.filter((playlist) => !isCollaborative(db, playlist.id));
       const files = paths.map((path): PendingFile => {
         const file = basename(path);
         if (!isM3uFileName(file)) return { outcome: { kind: "notPlaylist", file } };
@@ -297,7 +308,7 @@ export const createPlaylists = (options: PlaylistOptions) => {
         );
         if (plan.trackIds.length === 0)
           return { outcome: { kind: "nothingFound", file, missing: plan.missing } };
-        return { file, plan, clashId: importNameClash(plan.name, playlists)?.id };
+        return { file, plan, clashId: importNameClash(plan.name, replaceable)?.id };
       });
       pendingImport = files;
       return {
@@ -325,7 +336,7 @@ export const createPlaylists = (options: PlaylistOptions) => {
         const songs = songsOf(plan.trackIds);
         const playlists = livePlaylists();
         const clash = playlists.find((playlist) => playlist.id === clashId);
-        if (clash !== undefined && answers[i] === "replace") {
+        if (clash !== undefined && answers[i] === "replace" && !isCollaborative(db, clash.id)) {
           replacePlaylistSongs(db, clash.id, songs, now());
           playlistId = clash.id;
           return { ...imported(plan), name: clash.name, replaced: true };

@@ -54,6 +54,7 @@ import { ytSongs } from "../yt/ytMusic.ts";
 import type { OpenLinkResult, CopyLinkResult } from "../../shared/links.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
 import { preference, savePreference } from "../preferences.ts";
+import { isCollaborative } from "../library/collaborativePlaylists.ts";
 import { targetSongs } from "../library/songActions.ts";
 
 export interface LinksOptions {
@@ -297,9 +298,12 @@ export const createDesktopLinks = (options: LinksOptions) => {
       if (pending?.token !== token) throw new Error("No playlist import to save");
       const { plan } = pending;
       const playlists = selectPlaylists(options.db);
-      const clash = importNameClash(plan.name, playlists);
+      const found = importNameClash(plan.name, playlists);
+      // A collaborative playlist is never replaced: the import keeps both.
+      const clash =
+        found === undefined || isCollaborative(options.db, found.id) ? undefined : found;
       const name =
-        replace || clash === undefined
+        (replace && clash !== undefined) || found === undefined
           ? plan.name
           : keepBothName(
               plan.name,
