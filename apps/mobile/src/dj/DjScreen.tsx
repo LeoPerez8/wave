@@ -4,6 +4,7 @@ import {
   djCells,
   djOpened,
   djOpeningGrid,
+  djOpeningWork,
   djPagesNeeded,
   djReduce,
   djReopened,
@@ -130,16 +131,14 @@ const similarOf = (name: string) =>
 const useDjGrid = () => {
   const artistMixes = useBuiltArtistMixes();
   const [keptGrid] = useState(() => djGridMemory.get());
-  const [library, setLibrary] = useState<DjLibrary>(() =>
-    keptGrid === null ? recommendationSnapshot.peek().library : "failed",
-  );
+  const [library, setLibrary] = useState<DjLibrary>(() => recommendationSnapshot.peek().library);
   const [state, setState] = useState<DjState | null>(() =>
     keptGrid === null ? null : djRestoredGrid(keptGrid, djRemembered.get().tiles),
   );
   const waiting = library === null;
+  const work = djOpeningWork({ keptGrid: keptGrid !== null, libraryReady: !waiting });
   useEffect(() => {
-    if (keptGrid !== null) return;
-    if (!waiting) return;
+    if (!work.readLibrary) return;
     let current = true;
     void appRuntime
       .runPromise(recommendationSnapshot.library)
@@ -152,15 +151,14 @@ const useDjGrid = () => {
     return () => {
       current = false;
     };
-  }, [waiting, keptGrid]);
+  }, [work.readLibrary]);
   // The Library snapshot's families and albums, read once per snapshot outside render; the
   // one startup prepared opens DJ on its tiles (`djOpening.ts`, #1352).
   const [read, setRead] = useState<DjOpeningRead | null>(() =>
     library === null || library === "failed" ? null : preparedDjOpening(library),
   );
   useEffect(() => {
-    if (keptGrid !== null) return;
-    if (library === null || library === "failed") return;
+    if (!work.buildGrid || library === null || library === "failed") return;
     let current = true;
     void readDjOpening(library).then((opening) => {
       if (current) setRead(opening);
@@ -168,7 +166,7 @@ const useDjGrid = () => {
     return () => {
       current = false;
     };
-  }, [library, keptGrid]);
+  }, [library, work.buildGrid]);
   const ready = read !== null && read.library === library ? read : null;
   const opening = useMemo((): DjOpeningGrid | null => {
     if (library === null) return null;

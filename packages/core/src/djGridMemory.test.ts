@@ -5,6 +5,7 @@ import {
   djAlbumTile,
   djGenreTile,
   djRestoredGrid,
+  djOpeningWork,
   readDjGridMemory,
   storedDjGridMemory,
 } from "./index.ts";
@@ -34,4 +35,30 @@ test("an absent or unreadable kept grid means it has not been built yet", () => 
   assert.equal(readDjGridMemory(null), null);
   assert.equal(readDjGridMemory("not json"), null);
   assert.equal(readDjGridMemory('{"version":1,"tiles":[]}'), null);
+});
+
+test("kept DJ grids still read the Library but skip grid builds and startup preparation", () => {
+  assert.deepEqual(djOpeningWork({ keptGrid: true, libraryReady: false }), {
+    readLibrary: true,
+    buildGrid: false,
+    prepareStartup: false,
+  });
+  assert.deepEqual(djOpeningWork({ keptGrid: true, libraryReady: true }), {
+    readLibrary: false,
+    buildGrid: false,
+    prepareStartup: false,
+  });
+});
+
+test("an unbuilt DJ grid reads the Library and prepares the first grid", () => {
+  assert.deepEqual(djOpeningWork({ keptGrid: false, libraryReady: false }), {
+    readLibrary: true,
+    buildGrid: false,
+    prepareStartup: true,
+  });
+  assert.deepEqual(djOpeningWork({ keptGrid: false, libraryReady: true }), {
+    readLibrary: false,
+    buildGrid: true,
+    prepareStartup: true,
+  });
 });
