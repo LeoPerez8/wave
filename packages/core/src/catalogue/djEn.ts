@@ -30,6 +30,15 @@ export const djEn = {
   musicDiscovery: "Music discovery",
   /** Music discovery's steps: how much of the queue is new to the owner. */
   discoverySteps: { familiar: "Familiar", blend: "Blend", discover: "Discover" },
+  /** The grid's search button, and what a screen reader calls its field. */
+  search: "Search artists and albums",
+  /** What the empty search field says. */
+  searchPlaceholder: "Artists, albums",
+  /** The search's line when nothing matches what's typed. */
+  searchNoMatches: "No artists or albums match.",
+  /** Why no result can be added: the selection holds its most ([max]) tiles. */
+  searchFull: (max: number) =>
+    `You've picked ${max}, the most a queue can start from. Unselect one to add another.`,
   /** What Up Next says over a queue started from DJ. */
   magicQueueFromDj: "Magic Queue · from DJ",
 };

@@ -2900,3 +2900,6 @@ export { DJ_OPENED_TILES, djCells, djPageRead, djPagesNeeded } from "./dj.ts";
 export { djAlbumTile, djTileArtist } from "./dj.ts";
 export type { DjAlbum, DjAlbumTile } from "./dj.ts";
 export type { DjCell, DjPageRead, DjRow, DjSavedPage } from "./dj.ts";
+export { djSearchTiles } from "./djSearch.ts";
+export { djSeedFull } from "./dj.ts";
+export type { DjSearchFound } from "./djSearch.ts";

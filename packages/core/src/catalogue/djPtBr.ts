@@ -22,5 +22,10 @@ export const djPtBr: typeof djEn = {
   },
   musicDiscovery: "Descoberta de música",
   discoverySteps: { familiar: "Conhecidas", blend: "Misturar", discover: "Descobrir" },
+  search: "Buscar artistas e álbuns",
+  searchPlaceholder: "Artistas, álbuns",
+  searchNoMatches: "Nenhum artista ou álbum encontrado.",
+  searchFull: (max: number) =>
+    `Você escolheu ${max}, o máximo para iniciar uma fila. Desmarque um para adicionar outro.`,
   magicQueueFromDj: "Fila Mágica · de DJ",
 };
