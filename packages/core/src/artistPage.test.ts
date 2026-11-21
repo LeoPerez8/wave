@@ -85,4 +85,51 @@ describe("artistPageItems", () => {
       { type: "song", song: "t1", index: 0 },
     ]);
   });
+
+  test("Fans might also like is its heading then one row of artists, after the songs", () => {
+    const items = artistPageItems([{ label: "Albums", covers: ["a1"] }], ["t1"], "Songs", null, {
+      similar: { label: "Fans might also like", artists: ["Justice", "Air"] },
+    });
+    assert.deepEqual(items, [
+      { type: "section", label: "Albums" },
+      { type: "shelf", label: "Albums", covers: ["a1"] },
+      { type: "section", label: "Songs" },
+      { type: "song", song: "t1", index: 0 },
+      { type: "section", label: "Fans might also like" },
+      { type: "similar", label: "Fans might also like", artists: ["Justice", "Air"] },
+    ]);
+  });
+
+  test("a page with no similar artists has no Fans might also like", () => {
+    assert.deepEqual(
+      artistPageItems([], ["t1"], "Songs", null, {
+        similar: { label: "Fans might also like", artists: [] },
+      }),
+      [
+        { type: "section", label: "Songs" },
+        { type: "song", song: "t1", index: 0 },
+      ],
+    );
+  });
+
+  test("Fans might also like steps aside while Find in artist narrows the songs", () => {
+    assert.deepEqual(
+      artistPageItems([], ["t1", "t2"], "Songs", [1], {
+        similar: { label: "Fans might also like", artists: ["Justice"] },
+      }),
+      [{ type: "song", song: "t2", index: 1 }],
+    );
+  });
+
+  test("a page with no songs still shows Fans might also like", () => {
+    assert.deepEqual(
+      artistPageItems([], [], "Songs", null, {
+        similar: { label: "Fans might also like", artists: ["Justice"] },
+      }),
+      [
+        { type: "section", label: "Fans might also like" },
+        { type: "similar", label: "Fans might also like", artists: ["Justice"] },
+      ],
+    );
+  });
 });
