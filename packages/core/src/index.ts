@@ -754,9 +754,12 @@ export {
   titleMarkColours,
   titleMarkFontScale,
   titleMarkLayout,
+  titleMarkPlacement,
 } from "./titleMark.ts";
 export type {
+  TitleLine,
   TitleMarkColours,
+  TitleMarkDrawn,
   TitleMarkLayout,
   TitleMarkRoom,
   TitleMarkType,
