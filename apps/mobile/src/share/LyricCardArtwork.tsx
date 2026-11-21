@@ -1,14 +1,9 @@
 import { IconMusic } from "@tabler/icons-react-native";
-import {
-  LYRIC_CARD_LAYOUT,
-  logoIconPaths,
-  lyricCardInk,
-  lyricCardLayout,
-  withOpacity,
-} from "@wave/core";
+import { LYRIC_CARD_LAYOUT, lyricCardInk, lyricCardLayout, withOpacity } from "@wave/core";
 import type { ComponentRef, Ref } from "react";
 import { Image, Text, View } from "react-native";
-import Svg, { Path } from "react-native-svg";
+
+import { WaveMark } from "@/components/WaveMark";
 
 import type { LyricCardContent } from "./lyricCard";
 
@@ -28,25 +23,6 @@ type Props = {
   /** For drawing the card into an image (`writeViewPng`). */
   readonly ref?: Ref<ComponentRef<typeof View>>;
 };
-
-/** Wave's logo, its two waves stroked in [colour], in a [size] square. */
-export function WaveMark({ size, colour }: { size: number; colour: string }) {
-  const paths = logoIconPaths({ size, inset: 0 });
-  return (
-    <Svg width={size} height={size}>
-      {[paths.top, paths.bottom].map((d) => (
-        <Path
-          key={d}
-          d={d}
-          stroke={colour}
-          strokeWidth={paths.stroke}
-          strokeLinecap="round"
-          fill="none"
-        />
-      ))}
-    </Svg>
-  );
-}
 
 /**
  * The lyrics card (docs/spec.md, "Sharing lyrics"): as tall as its lines
