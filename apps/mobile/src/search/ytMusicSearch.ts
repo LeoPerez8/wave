@@ -26,6 +26,17 @@ const inTurn = <A, R>(
   search: Effect.Effect<A, YtMusicError, R>,
 ): Effect.Effect<A, YtMusicError, R> => (always ? withSearchTurn("search", query, search) : search);
 
+/** What a search embedded in another flow asks YT Music for, in place of the Search tab's. */
+export interface YtSearchScope {
+  /**
+   * Artists and albums alone, every query asked once typing pauses whatever
+   * Search online says (the flow has no Library | Online toggle).
+   */
+  readonly artistsAndAlbums: true;
+  /** Whether the phone is online now; offline, nothing is asked and the Library's results stand alone. */
+  readonly online: () => boolean;
+}
+
 /**
  * What Search has asked YT Music for [query] (its songs, artists and albums,
  * asked together), and what picking a segment of the Library | Online toggle
@@ -40,15 +51,20 @@ const inTurn = <A, R>(
  * the shared search allowance (`withSearchTurn`). When no song result matches
  * the query (Core's `ytSearchAsksVideos`), one Videos search follows, and its
  * matching official music videos show among the songs; a failed one shows none.
- * Off in Settings, it stays hidden and nothing is asked.
+ * Off in Settings, it stays hidden and nothing is asked. A [scope] narrows
+ * it for a search embedded in another flow (DJ's: `YtSearchScope`).
  */
 export const useYtMusicSection = (
   query: string,
   libraryHasResults: boolean,
+  scope?: YtSearchScope,
 ): readonly [YtSection<NativeYtSong>, (pick: YtPick) => void] => {
-  const enabled = useYtMusicEnabled();
+  const on = useYtMusicEnabled();
+  const enabled = on && (scope === undefined || scope.online());
   // A search visit lasts until the field is cleared.
-  const always = useSearchOnlineAlways(query === "");
+  const preferred = useSearchOnlineAlways(query === "");
+  const always = scope === undefined ? preferred : true;
+  const songless = scope !== undefined;
   const [section, dispatch] = useReducer(stepYtSection<NativeYtSong>, YT_SECTION_HIDDEN);
 
   // Choosing Always asks for what's typed now; On demand leaves what shows until the field is cleared.
@@ -67,18 +83,21 @@ export const useYtMusicSection = (
         Effect.gen(function* () {
           const found = yield* Effect.all(
             {
-              songs: inTurn(always, loading, ytMusic.searchSongs(loading)),
+              songs: songless
+                ? Effect.succeed({ songs: [] as NativeYtSong[] })
+                : inTurn(always, loading, ytMusic.searchSongs(loading)),
               artists: inTurn(always, loading, ytMusic.searchArtists(loading)),
               albums: inTurn(always, loading, ytMusic.searchAlbums(loading)),
             },
             { concurrency: "unbounded" },
           );
-          const videos = ytSearchAsksVideos(loading, found.songs.songs)
-            ? yield* inTurn(always, loading, ytMusic.searchVideos(loading)).pipe(
-                Effect.map((page) => page.songs),
-                Effect.orElseSucceed(() => []),
-              )
-            : undefined;
+          const videos =
+            !songless && ytSearchAsksVideos(loading, found.songs.songs)
+              ? yield* inTurn(always, loading, ytMusic.searchVideos(loading)).pipe(
+                  Effect.map((page) => page.songs),
+                  Effect.orElseSucceed(() => []),
+                )
+              : undefined;
           return { ...found, videos };
         }),
       );
@@ -93,7 +112,7 @@ export const useYtMusicSection = (
       });
     }, delayMs);
     return () => clearTimeout(timer);
-  }, [loading, delayMs, always]);
+  }, [loading, delayMs, always, songless]);
 
   const pick = useCallback((picked: YtPick) => dispatch({ type: "picked", pick: picked }), []);
   return [section, pick] as const;

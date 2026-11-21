@@ -17,12 +17,13 @@ import {
   type DjArtistTile,
   type DjOpeningGrid,
   type DjState,
+  type DjTile,
   type DjTileKey,
   identityKey,
 } from "@wave/core";
-import { IconArrowLeft, IconX } from "@tabler/icons-react-native";
+import { IconArrowLeft, IconSearch, IconX } from "@tabler/icons-react-native";
 import * as Effect from "effect/Effect";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ComponentRef, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -58,6 +59,7 @@ import type { ArtistRow } from "@wave/client";
 
 import { DjAdjust } from "./DjAdjust";
 import { readDjAlbums } from "./djAlbums";
+import { DjSearch } from "./DjSearch";
 import { runDjDone, type DjDone } from "./djDone";
 import { readDjSimilar } from "./djSimilar";
 
@@ -149,7 +151,9 @@ const albumsOver = (library: MixIndexes): Promise<DjAlbum[]> => {
  * selected for the first time, whichever source it came from, opens its
  * similar artists from the last artist graph; a row that isn't full reads the
  * artist's page once (Core's `djPagesNeeded`), and whatever comes of it
- * settles the row.
+ * settles the row. A result of the grid's search joins the grid selected
+ * ([add]), opening its row the same way; over a grid that has nothing to
+ * pick, it's the first tile.
  */
 const useDjGrid = () => {
   const artistMixes = useBuiltArtistMixes();
@@ -205,6 +209,15 @@ const useDjGrid = () => {
           library: libraryArtists,
         }),
     );
+  const add = (tile: DjTile): void =>
+    setState((current) =>
+      djReduce(current ?? djOpened([]), {
+        type: "add",
+        tile,
+        graph: recommendationSnapshot.peek().graph,
+        library: libraryArtists,
+      }),
+    );
   const asked = useRef(new Set<DjTileKey>());
   useEffect(() => {
     if (state === null) return;
@@ -225,7 +238,7 @@ const useDjGrid = () => {
       void similarOf(djTileArtist(tile)).then(settle, () => settle(null));
     }
   }, [state, libraryArtists]);
-  return { state, opening, artists, toggle };
+  return { state, opening, artists, toggle, add };
 };
 
 /**
@@ -375,7 +388,10 @@ function PlaceholderTile({ size, fontScale }: { size: number; fontScale: number 
  * first batch and plays it, then closes; Close leaves the queue as it is.
  * Adjust, beside Done, shows the Adjust screen in the grid's place: its back
  * arrow (and Android's Back) returns to the grid, which stayed as it was, and
- * Done starts the queue from either with the choices made there.
+ * Done starts the queue from either with the choices made there. The search
+ * button beside Close shows the search in the grid's place (`DjSearch`): a
+ * tapped result joins the grid selected and the grid comes back, at its top
+ * when the result is a new first tile.
  */
 export function DjScreen() {
   const { strings } = useLocalisation();
@@ -384,17 +400,21 @@ export function DjScreen() {
   const onAccent = useThemeColor("on-accent");
   const [available, setAvailable] = useState(width - grid.margin * 2);
   const { size } = magicQueueGrid(available, fontScale);
-  const { state: picked, opening, artists, toggle } = useDjGrid();
+  const { state: picked, opening, artists, toggle, add } = useDjGrid();
   const [done, setDone] = useState<DjDone>("idle");
   const [settings, setSettings] = useState(DEFAULT_DJ_SETTINGS);
   const [adjusting, setAdjusting] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const gridScroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  const aside = adjusting || searching;
   useEffect(() => {
-    if (!adjusting) return;
+    if (!aside) return;
     return addScreenBackHandler(() => {
       setAdjusting(false);
+      setSearching(false);
       return true;
     });
-  }, [adjusting]);
+  }, [aside]);
   useScreenContent(opening !== null);
   const state = picked ?? undefined;
   const seed = useMemo(() => (state === undefined ? [] : djSeedTiles(state)), [state]);
@@ -410,17 +430,42 @@ export function DjScreen() {
     );
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: insets.top + 4 }}>
-      <View style={{ paddingHorizontal: grid.margin - 12 }}>
-        {adjusting ? (
+      <View className="flex-row justify-between" style={{ paddingHorizontal: grid.margin - 12 }}>
+        {aside ? (
           <IconButton
             icon={IconArrowLeft}
             label={strings.dj.backToGrid}
-            onPress={() => setAdjusting(false)}
+            onPress={() => {
+              setAdjusting(false);
+              setSearching(false);
+            }}
           />
         ) : (
           <IconButton icon={IconX} label={strings.dj.close} onPress={() => router.back()} />
         )}
+        {/* With the grid, or over one with nothing to pick; not while placeholders stand for it. */}
+        {!aside && (state !== undefined || opening?.kind === "nothing") && (
+          <IconButton
+            icon={IconSearch}
+            label={strings.dj.search}
+            disabled={loading}
+            onPress={() => setSearching(true)}
+          />
+        )}
       </View>
+      {searching && (
+        <DjSearch
+          state={state}
+          onPick={(tile) => {
+            // A result the grid lacks becomes its first tile: the grid comes back there.
+            if (state?.tiles.every((each) => each.key !== tile.key) ?? true)
+              gridScroll.current?.scrollTo({ y: 0, animated: false });
+            setDone("idle");
+            add(tile);
+            setSearching(false);
+          }}
+        />
+      )}
       {adjusting && (
         <DjAdjust
           settings={settings}
@@ -433,8 +478,9 @@ export function DjScreen() {
         />
       )}
       <ScrollView
-        // Kept under Adjust, so the grid is where it was left on the way back.
-        style={adjusting ? { display: "none" } : undefined}
+        ref={gridScroll}
+        // Kept under Adjust and the search, so the grid is where it was left on the way back.
+        style={aside ? { display: "none" } : undefined}
         contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: CELL * 3 }}
       >
         <Text
@@ -493,6 +539,8 @@ export function DjScreen() {
       <View
         className="bg-background"
         style={{
+          // The search has the screen to itself, above the keyboard.
+          display: searching ? "none" : "flex",
           paddingHorizontal: grid.margin,
           paddingTop: CELL,
           paddingBottom: insets.bottom + CELL * 2,
