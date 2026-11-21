@@ -29,7 +29,13 @@ const shelf = () =>
       i % 2 === 0
         ? createElement(
             CardTile,
-            { key: i, width: 120, label: `Album ${i}`, onPress: noop, onLongPress: noop },
+            {
+              key: i,
+              width: 120,
+              label: `Album ${i}`,
+              onPress: noop,
+              onLongPress: noop,
+            } as Parameters<typeof CardTile>[0],
             createElement("text", null, `Album ${i}`),
           )
         : createElement(CardRow, {
@@ -43,7 +49,7 @@ const shelf = () =>
   );
 
 const pressables = (renderer: ReactTestRenderer) =>
-  renderer.root.findAll((node) => node.type === "pressable");
+  renderer.root.findAll((node) => (node.type as unknown) === "pressable");
 
 test(`mounting ${TILES} tiles and rows makes no press animation until one is touched`, async () => {
   resetAnimationCounts();
@@ -81,7 +87,11 @@ test("a press shown highlighted animates from its first frame", async () => {
   let renderer: ReactTestRenderer | undefined;
   await act(() => {
     renderer = create(
-      createElement(Press, { highlighted: true, onPress: noop }, createElement("text", null, "x")),
+      createElement(
+        Press,
+        { highlighted: true, onPress: noop } as Parameters<typeof Press>[0],
+        createElement("text", null, "x"),
+      ),
     );
   });
   try {

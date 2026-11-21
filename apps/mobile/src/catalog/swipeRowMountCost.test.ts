@@ -30,6 +30,8 @@ const [{ SwipeableRow }] = await loadWithStubs<[typeof import("./SwipeableRow.ts
   },
 );
 
+type RowProps = Parameters<typeof SwipeableRow>[0];
+
 const ROWS = 150;
 const side = (label: string) => ({
   action: "queue" as never,
@@ -45,7 +47,11 @@ const list = () =>
     "view",
     null,
     Array.from({ length: ROWS }, (_, i) =>
-      createElement(SwipeableRow, { key: i, swipe }, createElement("text", null, `Song ${i}`)),
+      createElement(
+        SwipeableRow,
+        { key: i, swipe } as RowProps,
+        createElement("text", null, `Song ${i}`),
+      ),
     ),
   );
 
@@ -86,7 +92,11 @@ test(`mounting ${ROWS} swipeable rows leaves what a swipe uncovers until one is 
 test("a demo swipe draws what it uncovers", async () => {
   let renderer: ReactTestRenderer | undefined;
   const row = (demo: number) =>
-    createElement(SwipeableRow, { swipe, sample: true, demo }, createElement("text", null, "x"));
+    createElement(
+      SwipeableRow,
+      { swipe, sample: true, demo } as RowProps,
+      createElement("text", null, "x"),
+    );
   await act(() => {
     renderer = create(row(0));
   });
