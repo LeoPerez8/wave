@@ -80,6 +80,11 @@ import {
   spotifyAccountBridge,
   type SpotifyAccountContract,
 } from "./spotifyAccount.ts";
+import {
+  SPOTIFY_IMPORT_CALLS,
+  spotifyImportBridge,
+  type SpotifyImportContract,
+} from "./spotifyImport.ts";
 export type Appearance = "system" | "light" | "dark";
 
 /** One window of a list, as a list call returns it. */
@@ -108,7 +113,8 @@ export interface BridgeContract
     StreamedContract,
     LyricsAndTagsContract,
     YtAccountContract,
-    SpotifyAccountContract {
+    SpotifyAccountContract,
+    SpotifyImportContract {
   readonly "system.mediaBackend": {
     readonly args: readonly [];
     readonly result: "native" | "chromium";
@@ -520,6 +526,7 @@ export const BRIDGE_CALLS = [
   ...STREAMED_CALLS,
   ...YT_ACCOUNT_CALLS,
   ...SPOTIFY_ACCOUNT_CALLS,
+  ...SPOTIFY_IMPORT_CALLS,
   "stats.overview",
   "stats.ranking",
   "stats.play",
@@ -541,6 +548,8 @@ export interface WaveBridge {
   /** The YouTube account: its session never reaches the window. */
   readonly ytAccount: ReturnType<typeof ytAccountBridge>;
   readonly spotifyAccount: ReturnType<typeof spotifyAccountBridge>;
+  /** Import Playlists › From Spotify: main reads the account, the window never sees a token. */
+  readonly spotifyImport: ReturnType<typeof spotifyImportBridge>;
   readonly stats: {
     readonly overview: (period: StatsPeriod) => Promise<StatsOverview>;
     readonly ranking: (ranking: StatsRanking, period: StatsPeriod) => Promise<Page<StatsRow>>;
@@ -850,6 +859,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   streamed: streamedBridge(invoke),
   ytAccount: ytAccountBridge(invoke),
   spotifyAccount: spotifyAccountBridge(invoke),
+  spotifyImport: spotifyImportBridge(invoke),
   stats: {
     overview: (period) => invoke("stats.overview", period),
     ranking: (ranking, period) => invoke("stats.ranking", ranking, period),

@@ -68,6 +68,7 @@ import { createYtSessions, ytSessionStore } from "./yt/ytSessionStore.ts";
 import { ytSignInSystem } from "./yt/ytSignInSystem.ts";
 import { spotifySessionStore } from "./spotify/spotifyAccount.ts";
 import { spotifyAccountLayer } from "./spotify/spotifyAccountLayer.ts";
+import { spotifyImportLayer } from "./spotify/spotifyImportLayer.ts";
 
 // %APPDATA%\Wave or ~/.config/Wave, from the product name; tests point it at a folder of their own.
 const dataFolder = process.env["WAVE_DATA_DIR"];
@@ -441,38 +442,42 @@ else {
               online: () => net.isOnline(),
               startSignIn: ytSignIn.start,
             }),
-            spotifyAccountLayer({
-              clientId: spotifyClientId,
-              store: spotifySessionStore({
-                box: safeStorage,
-                file: join(app.getPath("userData"), "spotify-session.bin"),
-                files: {
-                  ...sealedFiles,
-                  // A refresh can rotate the token. An interrupted write leaves the old file readable.
-                  write: (file, bytes) => {
-                    const temp = `${file}.tmp`;
-                    try {
-                      sealedFiles.write(temp, bytes);
-                      renameSync(temp, file);
-                    } finally {
-                      sealedFiles.remove(temp);
-                    }
-                  },
-                  remove: (file) => {
-                    sealedFiles.remove(`${file}.tmp`);
-                    sealedFiles.remove(file);
-                  },
-                },
-                platform: process.platform,
-              }),
-              openExternal: (url) => shell.openExternal(url),
-              online: () => net.isOnline(),
-              fetch: (input, init) => globalThis.fetch(input, init),
-              page: () => ({
-                title: text.desktopAccount.browserTitle,
-                message: text.desktopAccount.browserMessage,
-              }),
-            }),
+            spotifyImportLayer({ fetch: (input, init) => globalThis.fetch(input, init) }).pipe(
+              Layer.provideMerge(
+                spotifyAccountLayer({
+                  clientId: spotifyClientId,
+                  store: spotifySessionStore({
+                    box: safeStorage,
+                    file: join(app.getPath("userData"), "spotify-session.bin"),
+                    files: {
+                      ...sealedFiles,
+                      // A refresh can rotate the token. An interrupted write leaves the old file readable.
+                      write: (file, bytes) => {
+                        const temp = `${file}.tmp`;
+                        try {
+                          sealedFiles.write(temp, bytes);
+                          renameSync(temp, file);
+                        } finally {
+                          sealedFiles.remove(temp);
+                        }
+                      },
+                      remove: (file) => {
+                        sealedFiles.remove(`${file}.tmp`);
+                        sealedFiles.remove(file);
+                      },
+                    },
+                    platform: process.platform,
+                  }),
+                  openExternal: (url) => shell.openExternal(url),
+                  online: () => net.isOnline(),
+                  fetch: (input, init) => globalThis.fetch(input, init),
+                  page: () => ({
+                    title: text.desktopAccount.browserTitle,
+                    message: text.desktopAccount.browserMessage,
+                  }),
+                }),
+              ),
+            ),
           ).pipe(
             Layer.provideMerge(
               ytFeaturesLayer({ online: () => net.isOnline() }).pipe(
