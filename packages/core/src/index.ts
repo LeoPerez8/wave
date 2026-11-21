@@ -2316,6 +2316,18 @@ export type {
   MagicQueueSeed,
   MagicQueueShown,
 } from "./magicQueueRow.ts";
+export {
+  CAROUSEL_PAGE_MIN_SONGS,
+  carouselPageSongs,
+  MAGIC_QUEUE_CAROUSEL_PAGES,
+  magicQueueCarouselPage,
+  magicQueueCarouselPageLabel,
+  magicQueueCarouselPageTitle,
+  magicQueueCarouselPages,
+  mostListenedRecently,
+  recentPlaysWindow,
+} from "./magicQueueCarousel.ts";
+export type { MagicQueueCarouselPageId } from "./magicQueueCarousel.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios, discoverMixesOfRadiosSteps } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
