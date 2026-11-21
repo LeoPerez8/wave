@@ -8,6 +8,7 @@
  * module asks and reads; the app saves and lays out.
  */
 
+import type { ArtistPageAbout } from "./artistPage.ts";
 import type { YtPick } from "./onlineToggle.ts";
 import { artistPhotoName, artistPhotoQuery } from "./artistPhoto.ts";
 import { finishSteps } from "./buildSteps.ts";
@@ -108,7 +109,36 @@ export interface YtArtistPage<S extends YtSong = YtSong> {
    * it. Pages saved before it was read have none.
    */
   readonly similar?: readonly YtArtistCandidate[];
+  /**
+   * The artist's description as the page gives it (About), null or absent
+   * when it has none. Pages saved before it was read have none.
+   */
+  readonly description?: string | null;
+  /** The subscriber count as YouTube Music writes it ("7.19M"), without its unit. */
+  readonly subscribers?: string | null;
+  /** The view count as YouTube Music writes it ("6,030,217,324"), without its unit. */
+  readonly views?: string | null;
 }
+
+/** What the About part of an artist page shows, from a YouTube Music artist page. */
+export type YtArtistAbout = ArtistPageAbout;
+
+/**
+ * A page's About: its description with whichever counts came with it, each
+ * count null when YouTube Music gave none. Null without a description, so a
+ * count alone shows no About.
+ */
+export const ytArtistAbout = (
+  page: Pick<YtArtistPage, "description" | "subscribers" | "views">,
+): YtArtistAbout | null => {
+  const description = page.description?.trim();
+  if (!description) return null;
+  return {
+    description,
+    subscribers: page.subscribers?.trim() || null,
+    views: page.views?.trim() || null,
+  };
+};
 
 /** How reading an artist's songs playlist (`readYtPlaylist`) went. */
 export type YtArtistSongsRead<S extends YtSong = YtSong> =
@@ -949,6 +979,11 @@ export interface YtArtistPageView<S extends YtSong, L, A> {
    * line for a read that failed, the ones saved before still show.
    */
   readonly similar: readonly YtArtistCandidate[];
+  /**
+   * About: the artist's description and whichever counts YouTube Music
+   * supplied; null without a description. Shown wherever [similar] is.
+   */
+  readonly about: YtArtistAbout | null;
   readonly note: YtArtistPageNote | null;
   /** Whether Try Again is offered. */
   readonly retry: boolean;
@@ -982,7 +1017,16 @@ export const ytArtistPageView = <S extends YtSong, L, A>(
     note: YtArtistPageNote | null,
     retry = false,
     similar: readonly YtArtistCandidate[] = [],
-  ): YtArtistPageView<S, L, A> => ({ ...head, songs: [], shelves: [], similar, note, retry });
+    about: YtArtistAbout | null = null,
+  ): YtArtistPageView<S, L, A> => ({
+    ...head,
+    songs: [],
+    shelves: [],
+    similar,
+    about,
+    note,
+    retry,
+  });
   if (!context.enabled) return quiet("off");
   // Reading what was saved is part of the wait: it looks the same as asking.
   if (state.status === "reading" || state.status === "loading") return quiet("loading");
@@ -993,6 +1037,7 @@ export const ytArtistPageView = <S extends YtSong, L, A>(
       songs: discoverSongs(saved.page.allSongs ?? [], context.librarySong),
       shelves: pageShelves(saved.page, context.libraryAlbum),
       similar: saved.page.similar ?? [],
+      about: ytArtistAbout(saved.page),
       note: null,
       retry: false,
     };
@@ -1000,7 +1045,7 @@ export const ytArtistPageView = <S extends YtSong, L, A>(
   // Nothing standing: it asks on its own (`ytArtistPageAsks`) unless the last ask failed.
   return state.failure === null
     ? quiet("loading")
-    : quiet(state.failure, true, page?.similar ?? []);
+    : quiet(state.failure, true, page?.similar ?? [], page === null ? null : ytArtistAbout(page));
 };
 
 export function* libraryArtistFinderSteps<A extends { readonly name: string }>(

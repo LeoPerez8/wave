@@ -89,7 +89,17 @@ test("offline, the page keeps the similar artists saved with it over the offline
       outcome: "found" as const,
       checkedAt: 1000,
       browseId: "artist",
-      page: { name: "Air", songs: [], allSongs: [], albums: [], singles: [], similar: [justice] },
+      page: {
+        name: "Air",
+        songs: [],
+        allSongs: [],
+        albums: [],
+        singles: [],
+        similar: [justice],
+        description: "French electronic duo.",
+        subscribers: "7.19M",
+        views: "6,030,217,324",
+      },
     },
   };
   const nowhere = () => null;
@@ -116,6 +126,11 @@ test("offline, the page keeps the similar artists saved with it over the offline
     assert.equal(shown!.view.note, "offline");
     assert.deepEqual(shown!.view.songs, []);
     assert.deepEqual(shown!.view.similar, [justice]);
+    assert.deepEqual(shown!.view.about, {
+      description: "French electronic duo.",
+      subscribers: "7.19M",
+      views: "6,030,217,324",
+    });
   } finally {
     act(() => renderer?.unmount());
   }

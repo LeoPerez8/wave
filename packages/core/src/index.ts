@@ -890,7 +890,12 @@ export { artistSongOrder } from "./artistSongOrder.ts";
 export type { RankedArtistSong } from "./artistSongOrder.ts";
 export { ytArtistOpening, ytArtistOpeningState } from "./ytArtistOpening.ts";
 export { artistPageItems } from "./artistPage.ts";
-export type { ArtistPageAfter, ArtistPageItem, ArtistPageShelf } from "./artistPage.ts";
+export type {
+  ArtistPageAbout,
+  ArtistPageAfter,
+  ArtistPageItem,
+  ArtistPageShelf,
+} from "./artistPage.ts";
 export { similarArtistLinks } from "./similarArtistLinks.ts";
 export type { SimilarArtistLink } from "./similarArtistLinks.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
@@ -1295,6 +1300,7 @@ export {
   ytArtistSavedStands,
   ytArtistPageView,
   ytArtistQuery,
+  ytArtistAbout,
   ytArtistRelease,
   ytArtistIntegrated,
   ytArtistSectionAsks,
@@ -1314,6 +1320,7 @@ export type {
   YtArtistShelvesContext,
   YtArtistAlbum,
   YtArtistCandidate,
+  YtArtistAbout,
   YtArtistFullPage,
   YtArtistLookup,
   YtArtistPageContext,
