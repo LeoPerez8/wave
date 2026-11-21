@@ -122,3 +122,14 @@ test("Reset to Default over a row edited before the update holds across a restar
   const restarted = await loadPhone({ [ROW_KEY]: ROW, [KEY]: JSON.stringify(DEFAULT) });
   assert.deepEqual(restarted.buttons.savedNowPlayingButtons(), DEFAULT);
 });
+
+test("a choice another slot holds is captioned with that slot's place; the slot's own and free ones are not", async () => {
+  const { buttons } = await loadPhone();
+  const slots = ["lyrics", null, null, null, null, "shuffle", "repeat"] as const;
+  assert.equal(buttons.nowPlayingSlotCaption(slots, 6, "lyrics"), "In the footer");
+  assert.equal(buttons.nowPlayingSlotCaption(slots, 0, "shuffle"), "Beside Previous");
+  assert.equal(buttons.nowPlayingSlotCaption(slots, 0, "repeat"), "Beside Next");
+  assert.equal(buttons.nowPlayingSlotCaption(slots, 0, "lyrics"), undefined);
+  assert.equal(buttons.nowPlayingSlotCaption(slots, 0, "queue"), undefined);
+  assert.equal(buttons.nowPlayingSlotCaption(slots, 0, null), undefined);
+});

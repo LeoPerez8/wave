@@ -15,6 +15,7 @@ import { ChoiceRow } from "./ChoiceRow";
 import {
   editSavedNowPlayingButtons,
   nowPlayingSlotLabel,
+  nowPlayingSlotCaption,
   nowPlayingSlotTitle,
   useNowPlayingButtons,
 } from "./nowPlayingButtons";
@@ -72,7 +73,8 @@ const closePicker = (): void => {
 /**
  * Slot [slot]'s picker (0 for Slot 1): None, then each action, the one it
  * holds checked. A tap saves it at once and goes back; an action another
- * slot holds swaps into that slot's place. Back leaves it as it was.
+ * slot holds is captioned with that slot's place and swaps into it. Back
+ * leaves it as it was.
  */
 export function NowPlayingSlotPickerScreen({ slot }: { slot: number }) {
   const { strings } = useLocalisation();
@@ -91,6 +93,8 @@ export function NowPlayingSlotPickerScreen({ slot }: { slot: number }) {
               <ChoiceRow
                 key={label}
                 label={label}
+                line={nowPlayingSlotCaption(buttons, slot, choice)}
+                lineRead="label"
                 accessibilityLabel={
                   holder === -1 || holder === slot
                     ? `${label}, ${title}`
