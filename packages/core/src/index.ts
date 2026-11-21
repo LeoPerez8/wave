@@ -1317,6 +1317,7 @@ export {
   ytArtistPageAsks,
   ytArtistSavedStands,
   ytArtistPageView,
+  ytArtistPageWaiting,
   ytArtistQuery,
   ytArtistAbout,
   ytArtistRelease,

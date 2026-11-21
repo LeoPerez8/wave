@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ytArtistPageOpening, YT_ARTIST_SECTION_START } from "./index.ts";
+import {
+  ytArtistPageOpening,
+  ytArtistPageView,
+  ytArtistPageWaiting,
+  YT_ARTIST_SECTION_START,
+} from "./index.ts";
 
 const context = {
   enabled: true,
@@ -142,4 +147,19 @@ test("a saved page's About waits with its songs for settled Library matching", (
     settled: true,
   });
   assert.deepEqual(settled.view.about, about);
+});
+
+test("a page waiting for Library matching shows only its name over the loading rows", () => {
+  const found = ytArtistPageView(seenWithAbout(1000), context);
+  assert.deepEqual(found.about, about);
+  assert.deepEqual(ytArtistPageWaiting(found), {
+    name: "Air",
+    artworkUrl: null,
+    songs: [],
+    shelves: [],
+    similar: [],
+    about: null,
+    note: "loading",
+    retry: false,
+  });
 });
