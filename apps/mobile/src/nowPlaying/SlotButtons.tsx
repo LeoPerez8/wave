@@ -12,13 +12,14 @@ import {
   IconZzz,
 } from "@tabler/icons-react-native";
 import type { NowPlayingAction, NowPlayingSlot } from "@wave/core";
-import { useRef, type ComponentType, type ComponentRef } from "react";
+import { useCallback, type ComponentType } from "react";
 import { View, type AccessibilityActionEvent } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 
 import { CELL } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
+import type { Measurable } from "@/motion/measureRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { ACTION_ICONS } from "@/playback/actionIcons";
 import { cycleRepeat, toggleShuffle } from "@/playback/actions";
@@ -268,18 +269,16 @@ export function EditSlot({
 }) {
   const shuffle = useShuffleControl();
   const [foreground, tertiary, accent] = useThemeColor(["foreground", "tertiary", "accent"]);
-  const view = useRef<ComponentRef<typeof View>>(null);
+  // Measured as a drag begins, with the other slots and the sheet.
+  const { register } = drag;
+  const place = useCallback((view: Measurable | null) => register(slot, view), [register, slot]);
   const gesture = useSlotDragGesture(drag, slot);
   const strings = useLocalisation().strings;
   const Icon =
     action === null ? IconPlus : action === "shuffle" ? shuffle.icon : EDIT_ICONS[action];
   return (
     <GestureDetector gesture={gesture}>
-      <Animated.View
-        ref={view}
-        onLayout={() => drag.register(slot, view.current)}
-        style={{ opacity: drag.dragging === slot ? 0 : 1 }}
-      >
+      <Animated.View ref={place} style={{ opacity: drag.dragging === slot ? 0 : 1 }}>
         <IconButton
           label={`${nowPlayingSlotTitle(slot)}, ${nowPlayingSlotLabel(action)}`}
           onPressIn={drag.touched}

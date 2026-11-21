@@ -1,30 +1,34 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
 import { usePanGesture } from "react-native-gesture-handler";
 import { useSharedValue, type SharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
+import type { OverlayRect } from "@wave/core";
 
-import type { Measurable } from "@/motion/measureRect";
+import { measureRect, type Measurable } from "@/motion/measureRect";
 import { handleHold } from "@/motion/handleHold";
 
+import { slotRectsInFrame, slotUnderFinger } from "./slotHit";
 import { slotTapGuard } from "./slotTapGuard";
 
-type Rect = {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-};
 type SlotDragState = {
-  readonly rects: SharedValue<readonly (Rect | null)[]>;
+  /** The slots' places in the sheet's frame, measured as the drag began; empty until then. */
+  readonly rects: SharedValue<readonly (OverlayRect | null)[]>;
   readonly x: SharedValue<number>;
   readonly y: SharedValue<number>;
   readonly source: SharedValue<number>;
   readonly target: SharedValue<number>;
 };
 
-/** Slot rectangles and finger position shared by the seven edit-slot gestures. */
-export function useNowPlayingSlotDrag(onDrop: (from: number, to: number) => void) {
-  const rects = useSharedValue<readonly (Rect | null)[]>(Array(7).fill(null));
+/**
+ * Slot rectangles and finger position shared by the seven edit-slot gestures.
+ * [sheet] is the view the dragged button's preview is drawn in: the slots are
+ * measured against it.
+ */
+export function useNowPlayingSlotDrag(
+  onDrop: (from: number, to: number) => void,
+  sheet: RefObject<Measurable | null>,
+) {
+  const rects = useSharedValue<readonly (OverlayRect | null)[]>([]);
   const x = useSharedValue(0);
   const y = useSharedValue(0);
   const source = useSharedValue(-1);
@@ -33,28 +37,34 @@ export function useNowPlayingSlotDrag(onDrop: (from: number, to: number) => void
   const [dropTarget, setDropTarget] = useState<number | null>(null);
   // The release that ends a drag doesn't also open the slot's card.
   const [tap] = useState(slotTapGuard);
+  // The seven slots' views, measured with the sheet when a drag begins.
+  const views = useRef<(Measurable | null)[]>(Array.from({ length: 7 }, () => null));
+  // Which drag a measure belongs to, so one that lands after its drop writes nothing.
+  const drags = useRef(0);
 
-  const register = useCallback(
-    (slot: number, view: Measurable | null) => {
-      if (view === null) return;
-      view.measureInWindow((left, top, width, height) => {
-        const next = [...rects.get()];
-        next[slot] = { x: left, y: top, width, height };
-        rects.set(next);
-      });
-    },
-    [rects],
-  );
+  const register = useCallback((slot: number, view: Measurable | null) => {
+    views.current[slot] = view;
+  }, []);
   const began = useCallback(
     (slot: number) => {
       tap.dragged(slot);
       setDragging(slot);
+      // Measured now rather than at layout, so the places are where the slots are, and
+      // written once: a JS write reaches the UI thread later, so seven writes that each
+      // copied the array would keep only the last slot.
+      const current = ++drags.current;
+      void Promise.all([measureRect(sheet.current), ...views.current.map(measureRect)]).then(
+        ([place, ...slots]) => {
+          if (current === drags.current) rects.set(slotRectsInFrame(place, slots));
+        },
+      );
     },
-    [tap],
+    [tap, rects, sheet],
   );
   const hovered = useCallback((slot: number) => setDropTarget(slot < 0 ? null : slot), []);
   const dropped = useCallback(
     (from: number, to: number, canceled: boolean) => {
+      drags.current += 1;
       setDragging(null);
       setDropTarget(null);
       if (!canceled && to >= 0 && to !== from) onDrop(from, to);
@@ -70,6 +80,7 @@ export function useNowPlayingSlotDrag(onDrop: (from: number, to: number) => void
     state,
     dragging,
     dropTarget,
+    /** Where slot [slot]'s view is (its ref). */
     register,
     began,
     hovered,
@@ -91,6 +102,7 @@ export function useSlotDragGesture(drag: ReturnType<typeof useNowPlayingSlotDrag
       "worklet";
       source.set(slot);
       target.set(-1);
+      rects.set([]);
       x.set(event.absoluteX);
       y.set(event.absoluteY);
       scheduleOnRN(drag.began, slot);
@@ -99,21 +111,9 @@ export function useSlotDragGesture(drag: ReturnType<typeof useNowPlayingSlotDrag
       "worklet";
       x.set(event.absoluteX);
       y.set(event.absoluteY);
-      const bounds = rects.get();
-      let over = -1;
-      for (let index = 0; index < bounds.length; index += 1) {
-        const rect = bounds[index];
-        if (rect == null) continue;
-        if (
-          event.absoluteX >= rect.x &&
-          event.absoluteX <= rect.x + rect.width &&
-          event.absoluteY >= rect.y &&
-          event.absoluteY <= rect.y + rect.height
-        ) {
-          over = index;
-          break;
-        }
-      }
+      // The preview is drawn at the finger in the sheet's frame, so the slot under it
+      // is the one that takes the drop.
+      const over = slotUnderFinger(rects.get(), event.absoluteX, event.absoluteY);
       if (over !== target.get()) {
         target.set(over);
         scheduleOnRN(drag.hovered, over);

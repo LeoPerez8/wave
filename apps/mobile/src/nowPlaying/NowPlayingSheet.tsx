@@ -12,7 +12,7 @@ import {
   nowPlayingSongMenuShow,
   type NowPlayingSlotSong,
 } from "@wave/core";
-import type { ReactNode } from "react";
+import type { ComponentRef, ReactNode } from "react";
 import {
   Activity,
   memo,
@@ -20,6 +20,7 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -379,7 +380,9 @@ export function NowPlayingSheet() {
     (from: number, to: number) => moveSavedNowPlayingButton(from, to),
     [],
   );
-  const slotDrag = useNowPlayingSlotDrag(applySlotMove);
+  // The sheet the dragged slot's preview is drawn in, and the slots are measured against.
+  const sheet = useRef<ComponentRef<typeof View>>(null);
+  const slotDrag = useNowPlayingSlotDrag(applySlotMove, sheet);
   // A slot's button; null while the slot is None or its action hides for what's on.
   // In edit mode every slot shows, outlined, and opens its card instead.
   const slotButton = (slot: number) => {
@@ -405,6 +408,7 @@ export function NowPlayingSheet() {
 
   return (
     <Animated.View
+      ref={sheet}
       style={[StyleSheet.absoluteFill, sheetStyle]}
       // Out of sight, it takes no touches and screen readers skip it.
       pointerEvents={shown ? "auto" : "none"}
