@@ -113,6 +113,8 @@ const emulator = (log: (calls: readonly string[]) => string, rooted = true) => {
       if (command.startsWith("su 0 "))
         return rooted ? log(calls) : "/system/bin/sh: su: inaccessible or not found\n";
       if (command.startsWith("run-as ")) return rooted ? "" : log(calls);
+      if (command.startsWith("cmd package resolve-activity --brief"))
+        return "priority=0 preferredOrder=0 match=0x108000\ndev.leoperez.wave/.Main\n";
       return "";
     },
     pull: async () => {},
@@ -122,10 +124,11 @@ const emulator = (log: (calls: readonly string[]) => string, rooted = true) => {
 };
 
 describe("runEmulatorCheck", () => {
-  it("runs the scenario, sends Wave home so it writes its summary, then judges the log since the start", async () => {
+  it("runs the scenario, sends Wave home and back so it writes its summary, then judges the log since the start", async () => {
     let ran = false;
+    // Paused, Wave runs no JS timer: the summary waits for its return to the front.
     const { device, calls } = emulator((sent) =>
-      sent.includes("input keyevent 3")
+      sent.slice(sent.indexOf("input keyevent 3")).includes("am start -n dev.leoperez.wave/.Main")
         ? line("2026-11-21T09:00:00.000Z", "JS blocked 900 ms on / by sync") +
           line("2026-11-21T10:01:00.000Z", "JS blocked 64 ms on /dj by prepare a DJ batch") +
           line("2026-11-21T10:03:00.000Z", SUMMARY, "I")

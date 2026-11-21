@@ -202,9 +202,23 @@ export const runEmulatorCheck = async (
   const since = (await device.shell("date -u +%Y-%m-%dT%H:%M:%S.000Z")).trim();
   const avd = (await device.shell("getprop ro.boot.qemu.avd_name")).trim() || null;
   await options.runScenario();
-  // Leaving the screen is when the timing session writes its "Speed since" summary,
-  // and the log writes what's waiting a moment later.
+  // Leaving the screen is when the timing session ends its window with a "Speed since"
+  // summary. Paused, Wave runs no JS timer, so the summary and the log's next write wait
+  // for its return to the front.
   await device.shell("input keyevent 3");
+  await device.sleep(3_000);
+  const resolved = await device.shell(
+    `cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER ${options.package}`,
+  );
+  const component = resolved
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.startsWith(`${options.package}/`));
+  await device.shell(
+    component === undefined
+      ? `monkey -p ${options.package} -c android.intent.category.LAUNCHER 1`
+      : `am start -n ${component}`,
+  );
   let text = "";
   for (let waited = 0; waited <= (options.summaryWaitMs ?? 20_000); waited += POLL_MS) {
     text = await readAppLog(device, options.package);
