@@ -23,11 +23,14 @@ describe("checkLog", () => {
     );
     assert.equal(verdict.ok, false);
     assert.deepEqual(verdict.blocks, [
-      { at: "2026-11-21T10:01:00.000Z", durationMs: 72, screen: "/library", work: "build Home's mixes" },
+      {
+        at: "2026-11-21T10:01:00.000Z",
+        durationMs: 72,
+        screen: "/library",
+        work: "build Home's mixes",
+      },
     ]);
-    assert.deepEqual(verdict.failures, [
-      "JS blocked 72 ms on /library by build Home's mixes",
-    ]);
+    assert.deepEqual(verdict.failures, ["JS blocked 72 ms on /library by build Home's mixes"]);
   });
 
   it("reads each tap kind's first-frame p90 and fails one past its budget by more than the noise", () => {
@@ -38,7 +41,11 @@ describe("checkLog", () => {
       taps: [],
       measurements: [
         // tab: p90 70 ms, 20 over its 50 ms budget, within 25 ms of noise.
-        ...[30, 40, 70].map((firstFrameMs) => ({ kind: "tab" as const, firstFrameMs, responseMs: 20 })),
+        ...[30, 40, 70].map((firstFrameMs) => ({
+          kind: "tab" as const,
+          firstFrameMs,
+          responseMs: 20,
+        })),
         // Now Playing open: p90 1.2 s.
         { kind: "nowPlayingOpen", firstFrameMs: 1_240, responseMs: 30 },
         // Queue: only a response was seen.

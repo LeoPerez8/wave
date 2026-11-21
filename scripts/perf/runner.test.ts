@@ -558,7 +558,8 @@ describe("runPerf on the simulated phone", () => {
     assert.deepEqual(results.errors, []);
     const launches = device.commands.filter((command) => command.startsWith("am start -W"));
     assert.ok(launches.length > 0);
-    for (const launch of launches) assert.match(launch, / -n dev\.leoperez\.wave\/\.LauncherIcon_teal_ember\b/);
+    for (const launch of launches)
+      assert.match(launch, / -n dev\.leoperez\.wave\/\.LauncherIcon_teal_ember\b/);
   });
 
   it("goes on when a cold launch outlasts am start's wait but Wave comes up", async () => {

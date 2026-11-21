@@ -24,10 +24,10 @@
 
 ## Desktop checks
 
-| Check                                                       | Result |
-| ----------------------------------------------------------- | ------ |
+| Check                                                                                               | Result |
+| --------------------------------------------------------------------------------------------------- | ------ |
 | `scripts/perf` `emulatorCheck.test.ts`, `runner.test.ts`, `profileDevice.test.ts`, `device.test.ts` | pass   |
-| `tsc -p scripts/perf`                                       | pass   |
+| `tsc -p scripts/perf`                                                                               | pass   |
 
 ## Emulator run
 

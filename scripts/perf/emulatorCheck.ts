@@ -252,8 +252,6 @@ export const formatVerdict = (verdict: Verdict, noiseMs: number): string => {
     `JS blocks over ${JS_BLOCK_MS} ms while a screen was shown: ${verdict.blocks.length}`,
     ...blocks,
     "",
-    verdict.ok
-      ? "PASS"
-      : `FAIL\n${verdict.failures.map((failure) => `  ${failure}`).join("\n")}`,
+    verdict.ok ? "PASS" : `FAIL\n${verdict.failures.map((failure) => `  ${failure}`).join("\n")}`,
   ].join("\n");
 };

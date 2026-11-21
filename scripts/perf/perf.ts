@@ -527,10 +527,14 @@ const commands: Record<string, () => Promise<void>> = {
   "emulator-check": async () => {
     if (values["dry-run"])
       fail("The emulator check reads the app log on a real device: it has no dry run.");
-    const noiseMs = values["noise-ms"] === undefined ? DEFAULT_NOISE_MS : Number(values["noise-ms"]);
-    if (!Number.isFinite(noiseMs) || noiseMs < 0) fail(`--noise-ms takes milliseconds, not ${values["noise-ms"]}`);
+    const noiseMs =
+      values["noise-ms"] === undefined ? DEFAULT_NOISE_MS : Number(values["noise-ms"]);
+    if (!Number.isFinite(noiseMs) || noiseMs < 0)
+      fail(`--noise-ms takes milliseconds, not ${values["noise-ms"]}`);
     if (artist() === null || playlist() === null)
-      fail("reference-taps needs --artist and --playlist (on Artists' and Playlists' first screens).");
+      fail(
+        "reference-taps needs --artist and --playlist (on Artists' and Playlists' first screens).",
+      );
     const device = await pickDevice();
     if (values.apk !== undefined) await installApk(device.serial, values.apk);
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
