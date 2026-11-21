@@ -8,7 +8,7 @@
  */
 
 import type { Client } from "@libsql/client";
-import { geniusUpstreamUrl, sha256Hex, ticketmasterUpstreamUrl } from "@wave/core";
+import { accountName, geniusUpstreamUrl, sha256Hex, ticketmasterUpstreamUrl } from "@wave/core";
 import { type GoogleKeys, googleKeys, verifyGoogleIdToken } from "./google.ts";
 import { type SyncLimitName, type SyncLimits, SYNC_LIMITS } from "./limits.ts";
 import {
@@ -336,12 +336,13 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
           args: [at - SESSION_UNUSED_MS, identity.sub],
         },
         {
-          sql: "UPDATE accounts SET email = ? WHERE google_sub = ?",
-          args: [identity.email, identity.sub],
+          // A token without a name leaves the name there is.
+          sql: "UPDATE accounts SET email = ?, name = coalesce(?, name) WHERE google_sub = ?",
+          args: [identity.email, identity.name, identity.sub],
         },
         {
-          sql: `INSERT INTO accounts (id, google_sub, email, created_at)
-                SELECT ?, ?, ?, ?
+          sql: `INSERT INTO accounts (id, google_sub, email, name, created_at)
+                SELECT ?, ?, ?, ?, ?
                 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE google_sub = ?)
                   AND (SELECT count(*) FROM accounts) < ?
                   AND (SELECT count(*) FROM accounts WHERE created_at > ?) < ?`,
@@ -349,6 +350,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
             crypto.randomUUID(),
             identity.sub,
             identity.email,
+            identity.name,
             at,
             identity.sub,
             limits.maxAccounts,
@@ -365,9 +367,10 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
         },
         {
           sql: `SELECT EXISTS (SELECT 1 FROM accounts WHERE google_sub = ?) AS present,
+                       (SELECT name FROM accounts WHERE google_sub = ?) AS name,
                        (SELECT count(*) FROM accounts) AS total,
                        (SELECT min(created_at) FROM accounts WHERE created_at > ?) AS oldest`,
-          args: [identity.sub, at - DAY_MS],
+          args: [identity.sub, identity.sub, at - DAY_MS],
         },
       ],
       "write",
@@ -385,7 +388,12 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     }
     // The account's valid sessions stay as they are: none is ended to make room.
     if (made?.rowsAffected !== 1) throw overLimit("maxSessionsPerAccount", 403);
-    return json({ sessionToken, email: identity.email });
+    const name = account?.name;
+    return json({
+      sessionToken,
+      email: identity.email,
+      name: typeof name === "string" ? name : null,
+    });
   };
 
   /**
@@ -533,6 +541,23 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
       throw failure(401, "invalid_id_token");
     }
     await deleteAccount(db, session.accountId);
+    return new Response(null, { status: 204 });
+  });
+
+  /**
+   * Keeps the body's name for the session's account, as a sign-in keeps the
+   * ID token's: an app that signed in before names were kept sends it once.
+   */
+  const putAccountName = withSession(async ({ request }, session) => {
+    const body = await readJson(request);
+    const name = accountName(
+      typeof body === "object" && body !== null && "name" in body ? body.name : undefined,
+    );
+    if (name === null) throw failure(400, "bad_request");
+    await db.execute({
+      sql: "UPDATE accounts SET name = ? WHERE id = ?",
+      args: [name, session.accountId],
+    });
     return new Response(null, { status: 204 });
   });
 
@@ -727,6 +752,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     "POST /v1/push": pushChanges,
     "GET /v1/pull": pullChanges,
     "DELETE /v1/account": removeAccount,
+    "PUT /v1/account/name": putAccountName,
     "PUT /v1/soulseek": putSoulseek,
     "GET /v1/soulseek": getSoulseek,
     "GET /v1/genius/search": genius,

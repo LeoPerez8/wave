@@ -66,8 +66,13 @@ its Wave account (keyed by Google's `sub`).
 `200`:
 
 ```json
-{ "sessionToken": "<43 characters>", "email": "ana@example.com" }
+{ "sessionToken": "<43 characters>", "email": "ana@example.com", "name": "Ana Souza" }
 ```
+
+`name` is the name the service keeps for the account, `null` when it has none. Every sign-in
+stores the ID token's `name` claim, cleaned and cut to 100 characters by Core's `accountName`
+(`packages/core/src/accountName.ts`); a token without the claim leaves the name there is. The
+members of a collaborative playlist see the account by it, and nothing else of it.
 
 `401 { "error": "invalid_id_token" }` when the token doesn't check out,
 `403 { "error": "not_allowed" }` when `ALLOWED_EMAILS` is set and the email isn't on it,
@@ -283,6 +288,19 @@ The token must pass the `POST /v1/session` checks, have been issued (`iat`) with
 check), `401 { "error": "invalid_id_token" }` when it doesn't check out. Either way nothing is
 deleted and the session stays; the app tells these apart from `unauthorized`, which means the
 session itself ended.
+
+### `PUT /v1/account/name`
+
+Keeps a name for the session's account, as a sign-in keeps the ID token's: an app that signed
+in before names were kept sends its Google account name once.
+
+```json
+{ "name": "Ana Souza" }
+```
+
+`204`, no body. The name is cleaned and cut to 100 characters as a sign-in's is.
+`400 { "error": "bad_request" }` when `name` isn't text or is empty, and the name there was
+stays. Deleting the account deletes the name with it.
 
 ### `GET /v1/genius/search?q=<text>`, `GET /v1/genius/song?id=<id>`, `GET /v1/genius/referents?song=<id>&page=<n>`
 

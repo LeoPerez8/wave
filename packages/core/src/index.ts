@@ -946,6 +946,7 @@ export {
   writeDownloadArtistPhotos,
 } from "./artistPhotosSetting.ts";
 export type { AccountSession, AccountSignInEvent, AccountSignInState } from "./accountSignIn.ts";
+export { ACCOUNT_NAME_MAX_LENGTH, accountName } from "./accountName.ts";
 export {
   SPOTIFY_ACCOUNT_SIGNED_OUT,
   SPOTIFY_CHANGED_LINE,
