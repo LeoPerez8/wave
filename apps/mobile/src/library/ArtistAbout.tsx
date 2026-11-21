@@ -1,6 +1,6 @@
 import type { ArtistPageAbout } from "@wave/core";
 import { useState } from "react";
-import { Text, View, type TextLayoutEvent } from "react-native";
+import { Text, View } from "react-native";
 
 import { SectionHead } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
@@ -19,14 +19,16 @@ const FOLDED_LINES = 4;
  * (`artistPageItems`, `ytArtistAbout`).
  */
 export function ArtistAbout({ about }: { about: ArtistPageAbout }) {
+  // Another description (a lookup replacing the kept one) starts folded, its lines uncounted.
+  return <AboutCard key={about.description} about={about} />;
+}
+
+function AboutCard({ about }: { about: ArtistPageAbout }) {
   const { strings } = useLocalisation();
   const [expanded, setExpanded] = useState(false);
-  // The whole text is laid out once to count its lines, then folded.
+  // How many lines the whole text takes, counted by an unseen copy laid out at
+  // the same width, which counts again when the width or the font scale changes.
   const [lines, setLines] = useState<number | null>(null);
-  const onTextLayout = (event: TextLayoutEvent) => {
-    const count = event.nativeEvent.lines.length;
-    setLines((known) => (known === null || expanded ? count : known));
-  };
   const folds = lines !== null && lines > FOLDED_LINES;
   const counts = [
     about.subscribers === null ? null : strings.library.subscribersValue(about.subscribers),
@@ -39,13 +41,27 @@ export function ArtistAbout({ about }: { about: ArtistPageAbout }) {
         className="rounded-2xl bg-surface"
         style={{ padding: CELL * 2, marginBottom: CELL * 2 }}
       >
-        <Text
-          onTextLayout={onTextLayout}
-          numberOfLines={expanded || lines === null ? undefined : FOLDED_LINES}
-          className="font-sans text-body text-foreground"
-        >
-          {about.description}
-        </Text>
+        <View>
+          <Text
+            numberOfLines={expanded ? undefined : FOLDED_LINES}
+            className="font-sans text-body text-foreground"
+          >
+            {about.description}
+          </Text>
+          <View
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={{ position: "absolute", top: 0, left: 0, right: 0, opacity: 0 }}
+          >
+            <Text
+              onTextLayout={(event) => setLines(event.nativeEvent.lines.length)}
+              className="font-sans text-body"
+            >
+              {about.description}
+            </Text>
+          </View>
+        </View>
         {folds && (
           <TextButton
             label={expanded ? strings.library.showLess : strings.library.showMore}

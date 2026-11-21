@@ -5,6 +5,7 @@ import {
   similarArtistLinks,
   ytArtistSavedStands,
   ytArtistPageView,
+  ytArtistPageWaiting,
   type SimilarArtistLink,
   type YtArtistAlbum,
   type YtArtistCandidate,
@@ -14,7 +15,7 @@ import {
 import * as Effect from "effect/Effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useAlbums, useArtists } from "@/library/hooks";
+import { useAlbums, useArtists, useLoadedArtists } from "@/library/hooks";
 import { LibraryStore } from "@/library/LibraryStore";
 import { type AlbumRow, type ArtistRow, type SongRow } from "@wave/client";
 import { useSettledOnce } from "@/lib/screenTiming";
@@ -100,15 +101,19 @@ const NO_SIMILAR: readonly YtArtistCandidate[] = [];
  * Library artist of that name, whose page a tap opens (Core's
  * `similarArtistLinks`), on the YT Music artist page and the Library's alike.
  * The Library's artists are read only once the screen has settled ([settled])
- * and only for a page that lists some; until then the shelf waits.
+ * and only for a page that lists some; until they answer the shelf waits with
+ * no tile, so none is drawn as a YT Music artist and then swapped.
  */
 export const useSimilarArtists = (
   listed: readonly YtArtistCandidate[],
   settled: boolean,
 ): readonly SimilarArtistLink<ArtistRow>[] => {
   const shown = settled ? listed : NO_SIMILAR;
-  const artists = useArtists(shown.length > 0);
-  return useMemo(() => similarArtistLinks(shown, libraryArtistFinder(artists)), [shown, artists]);
+  const artists = useLoadedArtists(shown.length > 0);
+  return useMemo(
+    () => similarArtistLinks(shown, artists === null ? null : libraryArtistFinder(artists)),
+    [shown, artists],
+  );
 };
 
 export interface YtArtistPageShown {
@@ -187,8 +192,7 @@ export const useYtArtistPage = (
     // Offline/failure/loading needs neither songs nor release identities. A found
     // page waits for matching so a downloaded song never first appears streamed.
     if (!work.finder) return work.view;
-    if (find === null)
-      return { ...work.view, songs: [], shelves: [], similar: [], note: "loading" as const };
+    if (find === null) return ytArtistPageWaiting(work.view);
     return ytArtistPageView(state, { enabled, now: openedAt, librarySong: find, libraryAlbum });
   }, [work.finder, work.view, find, state, enabled, openedAt, libraryAlbum]);
   const similar = useSimilarArtists(view?.similar ?? NO_SIMILAR, settled);
