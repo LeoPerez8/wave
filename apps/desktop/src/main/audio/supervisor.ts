@@ -228,7 +228,9 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
         fetching ? streamCallTimeoutMs : callTimeoutMs,
       );
       waiting.set(id, { call, args, resolve, reject, restoring, timer });
-      if (call !== "status") process.stderr.write(`[TRACE] send ${call} ${JSON.stringify(args).slice(0, 80)} at ${Date.now()}
+      if (call !== "status")
+        process.stderr
+          .write(`[TRACE] send ${call} ${JSON.stringify(args).slice(0, 80)} at ${Date.now()}
 `);
       target.send({ id, call, args });
     });

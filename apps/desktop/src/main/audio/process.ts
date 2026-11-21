@@ -58,14 +58,19 @@ if (engine !== undefined) {
   let lastTick = Date.now();
   setInterval(() => {
     const tick = Date.now();
-    if (tick - lastTick > 250) process.stderr.write(`[ATRACE] tick gap ${tick - lastTick}ms at ${tick}
+    if (tick - lastTick > 250)
+      process.stderr.write(`[ATRACE] tick gap ${tick - lastTick}ms at ${tick}
 `);
     lastTick = tick;
     streams.pump();
     const event = playbackEvent(engine, reported, Date.now());
     if (event === undefined) return;
-    if (reported?.state !== event.status.state || Math.abs(event.status.positionMs - (reported?.positionMs ?? 0)) > 400)
-      process.stderr.write(`[ATRACE] event ${event.status.state} ${event.status.positionMs} at ${tick}
+    if (
+      reported?.state !== event.status.state ||
+      Math.abs(event.status.positionMs - (reported?.positionMs ?? 0)) > 400
+    )
+      process.stderr
+        .write(`[ATRACE] event ${event.status.state} ${event.status.positionMs} at ${tick}
 `);
     reported = event.status;
     process.parentPort.postMessage(event);

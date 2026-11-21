@@ -68,8 +68,11 @@ const shot = (page: Page, name: string) =>
 
 test("lyrics follow and seek, the queue moves by keyboard, Now Playing tints, the sleep timer runs", async () => {
   test.setTimeout(150_000);
-  appendFileSync(process.env["TRACE_LOG"] ?? "trace.log", `==== TRACE test start nowPlaying ${Date.now()}
-`);
+  appendFileSync(
+    process.env["TRACE_LOG"] ?? "trace.log",
+    `==== TRACE test start nowPlaying ${Date.now()}
+`,
+  );
   const data = mkdtempSync(join(tmpdir(), "wave-e2e-now-playing-"));
   const cover = join(
     appFolder,
@@ -114,8 +117,13 @@ test("lyrics follow and seek, the queue moves by keyboard, Now Playing tints, th
     // Nothing goes online: the sidecar is the only lyrics there are.
     env: { ...process.env, WAVE_DATA_DIR: data, WAVE_MUSIC_DIR: join(data, "Absent") },
   });
-  app.process().stderr?.on("data", (d) => appendFileSync(process.env["TRACE_LOG"] ?? "trace.log", `[${Date.now()}] ${String(d).trimEnd().split(String.fromCharCode(10)).join(" | ")}
-`));
+  app.process().stderr?.on("data", (d) =>
+    appendFileSync(
+      process.env["TRACE_LOG"] ?? "trace.log",
+      `[${Date.now()}] ${String(d).trimEnd().split(String.fromCharCode(10)).join(" | ")}
+`,
+    ),
+  );
   try {
     const page = await app.firstWindow();
     await page.getByRole("button", { name: "Songs", exact: true }).click();

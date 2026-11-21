@@ -251,7 +251,8 @@ export const createPlaybackSession = async (
   const accept = (next: AudioStatus, at = now()): boolean => {
     if (next.observedAtMs !== undefined) {
       if (next.observedAtMs < observedAt) {
-        (globalThis as { process?: { stderr?: { write: (text: string) => void } } }).process?.stderr?.write(`[TRACE] dropped status ${next.state} ${next.positionMs} at ${next.observedAtMs} < ${observedAt}
+        (globalThis as { process?: { stderr?: { write: (text: string) => void } } }).process?.stderr
+          ?.write(`[TRACE] dropped status ${next.state} ${next.positionMs} at ${next.observedAtMs} < ${observedAt}
 `);
         return false;
       }
