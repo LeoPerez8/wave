@@ -374,8 +374,9 @@ Refusals, besides the owner routes' `403 not_member` and `403 not_owner` and `40
 - `404 { "error": "not_found" }`: the token names no link, or isn't the shape of one. It counts
   as a failed lookup of the address (`maxFailedLookupsPerAddressPerMinute`), as an unknown
   session does.
-- `410 { "error": "invite_ended" }`: the link expired, was turned off or replaced, ended with a
-  removal, or its playlist was deleted. A finished link is kept until a new link of its
+- `410 { "error": "invite_ended" }`: the link expired, was turned off or replaced, or ended with a
+  removal. Deleting the playlist ends its collaboration, which deletes its links, so their tokens
+  answer `404`. A finished link is kept until a new link of its
   playlist is created after its expiry; then its token answers `404`.
 
 Migration `0018_collaboration_invites` adds `collaboration_invites`, and changes no table
