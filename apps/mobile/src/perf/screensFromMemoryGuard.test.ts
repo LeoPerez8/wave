@@ -104,6 +104,7 @@ test("each hook a screen draws keeps its data in memory as its entry says", () =
       case "recent":
         assert.ok(text.includes("keepRecentlyOpened"), `${source} isn't kept once opened`);
         assert.ok(text.includes(how.name), `${source}: ${how.name} isn't its query`);
+        assert.ok(how.reason.trim().length > 30, `${source} needs a reason to wait for its open`);
         break;
       case "snapshot":
         assert.ok(text.includes("useSnapshotted("), `${source} doesn't draw Home's snapshot`);
@@ -155,4 +156,31 @@ test("Home's first frame draws memory or its snapshot, never a local section's s
   assert.match(snapshot, /storedHomeSnapshot(<\w+>)?\(/);
   assert.match(snapshot, /AppState/);
   assert.match(textOf("library/readyScreens.ts"), /keepHomeReady\(/);
+});
+
+test("Search's index and the screens' data start whatever All files access says", () => {
+  // They read the database, not the music files: a phone without the grant still opens from memory.
+  const effects = textOf("app/_layout.tsx").split(/\buseEffect\(/);
+  for (const job of ["searchIndex", "readyScreens"]) {
+    const effect = effects.find((text) => text.includes(`afterFirstSettled("${job}"`));
+    assert.ok(effect !== undefined, `${job} no longer starts in the root layout`);
+    const body = effect.slice(0, effect.search(/\n {2}\}, \[[^\]]*\]\);/));
+    assert.doesNotMatch(body, /\bgranted\b/, `${job} waits on All files access`);
+  }
+});
+
+test("Stats opens from the queries kept at startup, with no skeleton", () => {
+  const hooks = textOf("stats/hooks.ts");
+  for (const hook of ["useRanking", "useTopGenres"]) {
+    const at = hooks.indexOf(`const ${hook} =`);
+    assert.ok(at >= 0, `${hook} is gone: update this guard`);
+    const body = hooks.slice(at, hooks.indexOf("\nexport ", at + 1));
+    assert.match(body, /\buseLibraryQuery\b/, `${hook} doesn't draw its kept query`);
+  }
+  for (const route of ["app/library/stats/index.tsx", "app/library/stats/[ranking].tsx"])
+    assert.doesNotMatch(textOf(route), /Skeleton/, `${route} draws a skeleton`);
+  assert.match(
+    textOf("library/readyScreens.ts"),
+    /keepReady\("Stats page", statsOpeningQueries\(\)\)/,
+  );
 });

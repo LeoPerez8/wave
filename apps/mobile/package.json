@@ -16,6 +16,7 @@
     "bench:playlist-fill": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/playlistFill.ts",
     "bench:queue-covers": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/queueCovers.ts",
     "bench:scan-batch": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/scanBatch.ts",
+    "bench:startup-upkeep": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/startupUpkeep.ts",
     "bench:songs-list": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/songsList.ts",
     "bench:fast-again": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/fastAgain.ts",
     "measure:splash": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/measure-launch-splash.ts"

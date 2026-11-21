@@ -193,25 +193,25 @@ export const useListDrag = ({
     endDrag();
   });
 
+  // Where an item dragged from [start] by (dx, dy) lands: the same choice on the UI thread and here.
+  const targetOf = (start: number, dx: number, dy: number, count: number): number => {
+    "worklet";
+    return columns === 1
+      ? reorderTarget({ from: start, distance: dy, rowHeight, count })
+      : reorderGridTarget({
+          from: start,
+          dx,
+          dy,
+          cellWidth: cells.width,
+          cellHeight: rowHeight,
+          columns,
+          count,
+        });
+  };
+
   const landOn = (dx: number, dy: number) => {
     if (from.current < 0) return;
-    const next =
-      columns === 1
-        ? reorderTarget({
-            from: from.current,
-            distance: dy,
-            rowHeight,
-            count: countRef.current,
-          })
-        : reorderGridTarget({
-            from: from.current,
-            dx,
-            dy,
-            cellWidth: cells.width,
-            cellHeight: rowHeight,
-            columns,
-            count: countRef.current,
-          });
+    const next = targetOf(from.current, dx, dy, countRef.current);
     if (next === target.current) return;
     target.current = next;
     drag.hover.set(next);
@@ -221,18 +221,7 @@ export const useListDrag = ({
     "worklet";
     const start = drag.active.get();
     if (start === -1) return;
-    const next =
-      columns === 1
-        ? reorderTarget({ from: start, distance: dy, rowHeight, count: itemCount.get() })
-        : reorderGridTarget({
-            from: start,
-            dx,
-            dy,
-            cellWidth: cells.width,
-            cellHeight: rowHeight,
-            columns,
-            count: itemCount.get(),
-          });
+    const next = targetOf(start, dx, dy, itemCount.get());
     if (next === (told.get() === -1 ? start : told.get())) return;
     told.set(next);
     scheduleOnRN(landOn, dx, dy);

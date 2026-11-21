@@ -937,7 +937,7 @@ export type {
   LibraryReads,
 } from "./libraryQueries.ts";
 export { BACKGROUND_WORK_LIMITS, createBackgroundWork, runStepSlice } from "./backgroundWork.ts";
-export { JS_BLOCK_MS, createJsBlockLog, jsBlockLine } from "./jsBlocks.ts";
+export { JS_BLOCK_MS, TURN_WORK_MS, createJsBlockLog, jsBlockLine } from "./jsBlocks.ts";
 export type { JsBlockLog, JsBlockLogPorts } from "./jsBlocks.ts";
 export type {
   BackgroundWork,

@@ -16,17 +16,20 @@ export type GraphPlayCursor = readonly [number, number];
 /**
  * The plays after [after] in (started_at, id) order, at most a page: [columns] read from
  * `play_events pe` and what [joins] adds, each row with its id and start for the next cursor.
+ * [whole] reads every play in one statement instead, in the same order (#1351).
  */
 export const playEventsPage = <R extends { readonly id: number; readonly startedAt: number }>(
   db: LibraryDatabase,
   after: GraphPlayCursor,
   columns: SQL,
   joins: SQL,
+  whole = false,
 ): GraphPage<R, GraphPlayCursor> => {
   const read = (where: SQL, limit: number) =>
     db.all<R>(sql`SELECT ${columns}
     FROM play_events pe INDEXED BY play_events_started_at_idx ${joins}
     WHERE ${where} ORDER BY pe.started_at, pe.id LIMIT ${limit}`);
+  if (whole) return { rows: read(sql`1`, -1), next: null };
   // A row-value predicate only seeks started_at in SQLite, rescanning equal-time prefixes.
   // Equality on the first key makes the implicit rowid a real second seek key.
   const rows = read(sql`pe.started_at = ${after[0]} AND pe.id > ${after[1]}`, GRAPH_PAGE_SIZE);
@@ -47,6 +50,7 @@ export type GraphPlay = ArtistGraphPlay & { readonly streamed?: boolean };
 export const graphPlayPage = (
   db: LibraryDatabase,
   after: GraphPlayCursor,
+  whole = false,
 ): GraphPage<GraphPlay, GraphPlayCursor> => {
   const { rows, next } = playEventsPage<{
     id: number;
@@ -76,6 +80,7 @@ export const graphPlayPage = (
         ${streamedTrack(sql`pe.video_id`, sql`pe.recording_key`)} END)
       LEFT JOIN artists a ON a.id = t.artist_id
       LEFT JOIN albums al ON al.id = t.album_id`,
+    whole,
   );
   return {
     rows: rows.flatMap((row) => {
@@ -96,6 +101,10 @@ export const graphPlayPage = (
     next,
   };
 };
+
+/** Every play as the graph reads it, in one statement (Home's mix build, #1351). */
+export const graphPlays = (db: LibraryDatabase): readonly GraphPlay[] =>
+  graphPlayPage(db, [-Number.MAX_VALUE, 0], true).rows;
 
 /** A page's limit for a page reader; null reads past the cursor to the end, as one page. */
 const pageLimit = (limit: number | null): SQL => (limit === null ? sql`` : sql`LIMIT ${limit}`);

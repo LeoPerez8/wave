@@ -5,7 +5,8 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { AppState } from "react-native";
 
-import { whenFree } from "@/lib/backgroundWork";
+import { namedWork, whenFree } from "@/lib/backgroundWork";
+import { appLog } from "@/log/appLog";
 import * as MagicQueue from "@/playback/MagicQueue";
 import * as PlaybackPersistence from "@/playback/PlaybackPersistence";
 import * as PlayHistory from "@/playback/PlayHistory";
@@ -56,6 +57,20 @@ export const appLayer = Layer.mergeAll(
 ).pipe(Layer.provideMerge(services));
 
 export const appRuntime = ManagedRuntime.make(appLayer);
+
+/**
+ * The Library's startup upkeep (`LibraryStore.startupUpkeep`): a startup job once the first
+ * screen settles, named in the JS block log. A failure is logged; the next start tries again.
+ */
+export const runLibraryUpkeep = (): void =>
+  void namedWork("Library upkeep", () =>
+    appRuntime.runPromiseExit(
+      Effect.flatMap(LibraryStore.LibraryStore, (store) => store.startupUpkeep),
+    ),
+  ).then((exit) => {
+    if (Exit.isFailure(exit))
+      appLog("warn", "library", `Library upkeep failed: ${Cause.pretty(exit.cause)}`);
+  });
 
 let optimizeOnLeave: { remove: () => void } | null = null;
 

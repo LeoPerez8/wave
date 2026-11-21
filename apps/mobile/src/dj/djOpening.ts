@@ -14,6 +14,7 @@ import {
 import * as Effect from "effect/Effect";
 
 import { magicProfileOf } from "@/home/artistGenres";
+import { inSlice } from "@/lib/backgroundWork";
 import type { MixIndexes } from "@/home/mixKnown";
 import { recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { savedYtArtist } from "@/home/ytArtistPage";
@@ -134,5 +135,6 @@ export const prepareDjOpening = async (): Promise<void> => {
   const library =
     recommendationSnapshot.peek().library ??
     (await appRuntime.runPromise(recommendationSnapshot.library));
-  await readDjOpening(library);
+  // Genre mixes' families and the grid run here, after an await: a named slice, not "startup".
+  await inSlice("DJ opening", () => readDjOpening(library));
 };

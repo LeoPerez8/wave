@@ -33,8 +33,15 @@ reference log shows Search's content taking 384 ms to 1.9 s.
 - Community playlists (#1298) come from the network and stay out of the index. They don't gate
   the first frame or a keystroke's local results.
 
-Not in the index: local lyrics search (`useLocalLyricsSearch`) still queries its FTS tables per
-deferred query. That query runs off the JS thread since #1348.
+Not in the index: local lyrics search (`useLocalLyricsSearch`) queries its word index (FTS),
+which runs off the JS thread since #1348. It used to run one query per keystroke. Now
+`search/lyricsQueries.ts` reads it only after typing pauses for 250 ms, or at once when the query
+is submitted or a recent search is picked. Every new keystroke drops an older read's answer, so an
+old answer never lands over a newer query. Until the new answer arrives, the last one stays in
+place, so the Lyrics section doesn't jump in and out while typing. A change to what Songs shows
+filters that answer again without a new read. `search/lyricsQueries.test.ts` and
+`search/lyricsSearch.test.ts` cover this: no read per keystroke, one read after the pause, a
+stale answer dropped, and clearing the field clearing Lyrics.
 
 ## Memory (counted in #1346's budget)
 
@@ -79,6 +86,8 @@ adb shell dumpsys meminfo dev.leoperez.wave | grep -E "TOTAL PSS|Native Heap|Dal
 Record here, for both runs:
 
 - Search's first-frame median and p90, and `search.typed` → `search.results` per keystroke.
+- How many `"search indexed lyrics"` reads the app log shows while typing (expected: one per
+  pause or submit).
 - Whether the app log shows `Read "list songs"`, `"list albums"` or `"list artists"` when Search
   opens or while typing. After the change, none should appear.
 - The `search` perf meta (`entries`, `prepared`, `complete`, `read`).

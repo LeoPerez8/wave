@@ -1,6 +1,7 @@
 import { useLocalisation } from "@/localisation/localisation";
 import type { PlayedAlbum, PlayedArtist } from "@wave/client/db/playedEntities";
 import {
+  STATS_SEE_ALL,
   STATS_TOP,
   homeRecapVisibility,
   startHomeRecap,
@@ -15,6 +16,12 @@ import { useCallback, useEffect, useState } from "react";
 import { AppState } from "react-native";
 
 import type { LibraryStoreError } from "@/library/LibraryStore";
+import {
+  libraryQuery,
+  libraryQueryResult,
+  useLibraryQuery,
+  type LibraryQuery,
+} from "@/library/sharedQueries";
 
 import { useFocusedVersion } from "@/lib/useFocusedVersion";
 import { appRuntime } from "@/library/runtime";
@@ -46,11 +53,8 @@ interface StatsReading<A> {
 const useStatsRead = <A>(
   read: (stats: Stats["Service"]) => Effect.Effect<A, LibraryStoreError>,
   sources: unknown = null,
-  /** What the reading is kept under for the session (`STATS_KEPT`), or none. */
-  keptAs?: string,
 ): A | undefined => {
   const { language } = useLocalisation();
-  const kept = keptAs === undefined ? undefined : `${keptAs}:${language}`;
   const plays = useFocusedVersion(playHistoryVersion);
   const [reading, setReading] = useState<StatsReading<A> | undefined>(undefined);
 
@@ -61,7 +65,6 @@ const useStatsRead = <A>(
         // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
         .runPromise(Stats.use(read))
         .then((value) => {
-          if (kept !== undefined) keepReading(kept, value);
           if (current) setReading({ value, plays, sources, language });
         })
         .catch(() => {
@@ -70,32 +73,36 @@ const useStatsRead = <A>(
       return () => {
         current = false;
       };
-    }, [read, plays, sources, language, kept]),
+    }, [read, plays, sources, language]),
   );
 
-  // Until this visit's reading arrives, the last one kept: the screen opens on it (#1352).
-  return reading?.value ?? (kept === undefined ? undefined : (keptReadings.get(kept) as A));
-};
-
-/**
- * How many Stats readings are kept for the session: each a ranking's top or a
- * genre podium (a few dozen rows), so Stats and its See all open on them and
- * update in place when the visit's own reading arrives.
- */
-export const STATS_KEPT = 32;
-const keptReadings = new Map<string, unknown>();
-
-const keepReading = (key: string, value: unknown): void => {
-  keptReadings.delete(key);
-  keptReadings.set(key, value);
-  while (keptReadings.size > STATS_KEPT) {
-    const oldest = keptReadings.keys().next().value as string;
-    keptReadings.delete(oldest);
-  }
+  return reading?.value;
 };
 
 const rankingKey = (name: string, period: StatsPeriod, limit: number): string =>
-  `${name}:${period}:${limit}`;
+  `stats:${name}:${period}:${limit}`;
+
+/** Stats reads every counted play and the songs it credits. */
+const STATS_READS = { plays: true, tracks: true } as const;
+
+/**
+ * Stats' queries, shared like the Library's (`sharedQueries.ts`): one read serves Stats, See all
+ * and the kept copy, and a counted play or a scan re-reads them. A rolling period moves with
+ * those re-reads. Made once per key.
+ */
+const statsQueries = new Map<string, LibraryQuery<unknown>>();
+const statsQuery = <A>(
+  key: string,
+  read: (stats: Stats["Service"]) => Effect.Effect<A, LibraryStoreError>,
+): LibraryQuery<A> => {
+  let query = statsQueries.get(key);
+  if (query === undefined) {
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+    query = libraryQuery(key, STATS_READS, Stats.use(read)) as LibraryQuery<unknown>;
+    statsQueries.set(key, query);
+  }
+  return query as LibraryQuery<A>;
+};
 
 type ReadRanking<A> = (
   stats: Stats["Service"],
@@ -103,18 +110,42 @@ type ReadRanking<A> = (
   limit: number,
 ) => Effect.Effect<readonly Ranked<A>[], LibraryStoreError>;
 
-/** The top `limit` of a ranking for `period`, or undefined while it first loads. `read` must be stable. */
+const rankingQuery = <A>(
+  name: string,
+  period: StatsPeriod,
+  limit: number,
+  read: ReadRanking<A>,
+): LibraryQuery<readonly Ranked<A>[]> =>
+  statsQuery(rankingKey(name, period, limit), (stats) => read(stats, period, limit));
+
+/**
+ * The top `limit` of a ranking for `period`. Until its own read answers: See all draws the top
+ * of Stats, already in memory, and a period just chosen keeps the last period's ranking, so
+ * neither draws a placeholder. Undefined only when nothing of it was read yet.
+ */
 const useRanking = <A>(
   name: string,
   period: StatsPeriod,
   limit: number,
   read: ReadRanking<A>,
-): readonly Ranked<A>[] | undefined =>
-  useStatsRead(
-    useCallback((stats) => read(stats, period, limit), [read, period, limit]),
-    null,
-    rankingKey(name, period, limit),
+): readonly Ranked<A>[] | undefined => {
+  const top = useLibraryQuery<readonly Ranked<A>[] | undefined>(
+    limit > STATS_TOP ? rankingQuery(name, period, STATS_TOP, read) : null,
+    undefined,
   );
+  const ranking = useLibraryQuery<readonly Ranked<A>[] | undefined>(
+    rankingQuery(name, period, limit, read),
+    undefined,
+  );
+  return useLastShown(ranking ?? top);
+};
+
+/** [value], or the last defined one while it is undefined. */
+const useLastShown = <A>(value: A | undefined): A | undefined => {
+  const [last, setLast] = useState(value);
+  if (value !== undefined && value !== last) setLast(value);
+  return value ?? last;
+};
 
 const readTopSongs: ReadRanking<StatsSong> = (stats, period, limit) =>
   stats.topSongs(period, limit);
@@ -124,6 +155,9 @@ const readTopAlbums: ReadRanking<PlayedAlbum> = (stats, period, limit) =>
 
 const readTopArtists: ReadRanking<PlayedArtist> = (stats, period, limit) =>
   stats.topArtists(period, limit);
+
+const topGenresQuery = (period: StatsPeriod): LibraryQuery<readonly RecapGenre[]> =>
+  statsQuery(`stats:topGenres:${period}`, (stats) => stats.topGenres(period));
 
 /**
  * An artist page's stats block for `artistId`, or undefined while it first
@@ -215,49 +249,33 @@ export const useRecap = (id: string): LoadedRecap | null | undefined =>
 
 /** The period's top five genre shares, refreshed with Stats' other readings. */
 export const useTopGenres = (period: StatsPeriod): readonly RecapGenre[] | undefined =>
-  useStatsRead(
-    useCallback((stats: Stats["Service"]) => stats.topGenres(period), [period]),
-    null,
-    `topGenres:${period}`,
+  useLastShown(
+    useLibraryQuery<readonly RecapGenre[] | undefined>(topGenresQuery(period), undefined),
   );
-
-/** The top artists of Stats' opening period as last read, or none yet (`readStatsOpening`). */
-export const statsOpeningArtists = (language: string): readonly Ranked<PlayedArtist>[] =>
-  (keptReadings.get(`${rankingKey("topArtists", STATS_OPENING_PERIOD, STATS_TOP)}:${language}`) as
-    readonly Ranked<PlayedArtist>[] | undefined) ?? [];
 
 /** The period Stats opens on. */
 export const STATS_OPENING_PERIOD: StatsPeriod = "month";
 
 /**
- * Reads what Stats opens on (its opening period's rankings and genres) into
- * the kept readings, one read per free turn, so its first frame draws them
- * (`readyScreens.ts`, #1352).
+ * What Stats and its See all open on, kept in memory from startup (`readyScreens.ts`, #1352):
+ * the opening period's rankings, their See all lists and its genres. Seven queries, each re-read
+ * on a counted play; the other periods are read when chosen.
  */
-export const readStatsOpening = async (
-  language: string,
-  turn: () => Promise<void>,
-): Promise<void> => {
+export const statsOpeningQueries = (): readonly LibraryQuery<unknown>[] => {
   const period = STATS_OPENING_PERIOD;
-  const reads: readonly (readonly [
-    string,
-    (stats: Stats["Service"]) => Effect.Effect<unknown, LibraryStoreError>,
-  ])[] = [
-    [rankingKey("topSongs", period, STATS_TOP), (stats) => readTopSongs(stats, period, STATS_TOP)],
-    [
-      rankingKey("topAlbums", period, STATS_TOP),
-      (stats) => readTopAlbums(stats, period, STATS_TOP),
-    ],
-    [
-      rankingKey("topArtists", period, STATS_TOP),
-      (stats) => readTopArtists(stats, period, STATS_TOP),
-    ],
-    [`topGenres:${period}`, (stats) => stats.topGenres(period)],
-  ];
-  for (const [key, read] of reads) {
-    await turn();
-    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-    const value = await appRuntime.runPromise(Stats.use(read)).catch(() => undefined);
-    if (value !== undefined) keepReading(`${key}:${language}`, value);
-  }
+  return [
+    rankingQuery("topSongs", period, STATS_TOP, readTopSongs),
+    rankingQuery("topAlbums", period, STATS_TOP, readTopAlbums),
+    rankingQuery("topArtists", period, STATS_TOP, readTopArtists),
+    topGenresQuery(period),
+    rankingQuery("topSongs", period, STATS_SEE_ALL, readTopSongs),
+    rankingQuery("topAlbums", period, STATS_SEE_ALL, readTopAlbums),
+    rankingQuery("topArtists", period, STATS_SEE_ALL, readTopArtists),
+  ] as readonly LibraryQuery<unknown>[];
 };
+
+/** The top artists of Stats' opening period, read once kept (`statsOpeningQueries`). */
+export const statsOpeningArtists = async (): Promise<readonly Ranked<PlayedArtist>[]> =>
+  (await libraryQueryResult(
+    rankingQuery("topArtists", STATS_OPENING_PERIOD, STATS_TOP, readTopArtists),
+  )) ?? [];

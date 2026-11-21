@@ -14,7 +14,7 @@ import {
 import type * as Effect from "effect/Effect";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 
-import { whenFree } from "@/lib/backgroundWork";
+import { inSlice, whenFree } from "@/lib/backgroundWork";
 import { libraryListQueries } from "@/library/hooks";
 import { onLibraryChange } from "@/library/libraryChanges";
 import { publishLibraryRows } from "@/library/libraryRows";
@@ -193,7 +193,9 @@ const readSource = async (source: Source): Promise<void> => {
   const { query, hit } = SOURCES[source];
   const read = query.read as Effect.Effect<Rows, LibraryStoreError, LibraryStore>;
   const rows = await appRuntime.runPromise(read);
-  catalog.update(source, rows, hit as (row: Rows[number]) => SearchHit, idOf);
+  inSlice("Search index reads", () =>
+    catalog.update(source, rows, hit as (row: Rows[number]) => SearchHit, idOf),
+  );
 };
 
 /** Reads the songs [ids] and puts them in their place: a burst asks no whole read of the songs. */
@@ -202,7 +204,7 @@ const patchSongs = async (ids: readonly number[]): Promise<void> => {
     // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
     LibraryStore.use((store) => store.songsWithIds(ids)),
   );
-  catalog.patch("songs", rows, compareSongReadOrder);
+  inSlice("Search index reads", () => catalog.patch("songs", rows, compareSongReadOrder));
 };
 
 const scheduleFollow = (): void => {

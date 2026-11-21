@@ -9,8 +9,11 @@
  */
 import { readStoredRecord } from "./storedJson.ts";
 
-/** The snapshot's format; a stored one of another version reads as none. */
-export const HOME_SNAPSHOT_VERSION = 1;
+/**
+ * The snapshot's format; a stored one of another version reads as none.
+ * Version 2 keeps Stats as totals, drawn in the language of the moment.
+ */
+export const HOME_SNAPSHOT_VERSION = 2;
 
 /**
  * The most a stored snapshot may take, in characters (about 512 KB of
@@ -39,13 +42,7 @@ export type HomeSnapshotChecks<S> = {
  * "object" is any record or array, "boolean" true or false.
  */
 export type HomeSnapshotField =
-  | "number"
-  | "string"
-  | "boolean"
-  | "object"
-  | "number?"
-  | "string?"
-  | "object?";
+  "number" | "string" | "boolean" | "object" | "number?" | "string?" | "object?";
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null;

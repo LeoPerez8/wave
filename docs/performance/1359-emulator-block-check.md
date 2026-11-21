@@ -63,6 +63,32 @@ work (during startup), 3.2 s on `/` by the Artist mixes build, and 1.9 s on `/li
 These are the emulator's numbers on a loaded PC, so they don't measure the reference phone, but
 the startup blocks and the named slices over 50 ms are worth a look in #1350's follow-up.
 
+## Named blocks and the Library's upkeep (#1346 follow-up)
+
+Every free turn now carries a name (`whenFree` and `freeTurn` require one, so the typecheck catches
+a new unnamed one), and the synchronous work that ran outside any slice is wrapped in `inSlice`:
+the Playlist, Genre and Artist pages kept ahead, DJ's opening read, Search's index reads, the
+Library query registry's settle, and the client's read replay passes ("Library read replay"). A
+block over 50 ms during them is now put down to that name instead of "no background work".
+
+The Library's startup upkeep (relinking credits, keying recordings, backfilling recording titles,
+watching taste sources) ran while its layer was built, before the first screen. It now runs as
+"Library upkeep" after the first screen settles (`runLibraryUpkeep`, from `app/_layout.tsx`).
+Measured on the desktop (Node 24 with sql.js, not the phone), with
+`pnpm --filter @wave/mobile bench:startup-upkeep`:
+
+| Songs  | Relink, steady (ms) | Steady total (ms) | First-pass title backfill (ms) |
+| ------ | ------------------- | ----------------- | ------------------------------ |
+| 1,000  | 0.21                | 0.77              | 131                            |
+| 12,000 | 2.38                | 2.84              | 1,416                          |
+| 50,000 | 10.29               | 10.77             | 5,925                          |
+
+At steady state keys take about 0.2 ms, titles 0.07 ms and taste 0.2 ms at every size. The
+first-pass backfill runs once, after the update that adds titles; it is the cost that used to sit
+before the first screen. Each of its 128-row batches is about 15 ms, over the 8 ms slice, as it
+was before this change. Until the upkeep runs, an upgrade's first screen may show credits not yet
+relinked for a moment.
+
 ## Phone run: pending
 
 The check is meant for the emulator, and the phone run stays the evidence for the 50 ms goal. On
@@ -74,3 +100,6 @@ Logs after a `reference-taps` run:
 node scripts/perf/perf.ts emulator-check --serial <phone> --noise-ms 0 \
   --artist "<artist on Artists' first screen>" --playlist "<playlist on Playlists' first screen>"
 ```
+
+Then check that the startup blocks carry names (none of the long ones under "no background work")
+and that "Library upkeep" runs after the first screen settles.

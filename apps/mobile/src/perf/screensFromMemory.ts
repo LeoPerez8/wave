@@ -16,9 +16,10 @@ export type InMemory =
   | { readonly kind: "session"; readonly name: string }
   /**
    * Kept among the pushed screens opened last (`keepRecentlyOpened`); [name] is
-   * its query, which `readyScreens.ts` may also keep ahead.
+   * its query, which `readyScreens.ts` may also keep ahead. [reason] says why
+   * the rest can't be kept from startup.
    */
-  | { readonly kind: "recent"; readonly name: string }
+  | { readonly kind: "recent"; readonly name: string; readonly reason: string }
   /** An external store held in memory for the session. */
   | { readonly kind: "store" }
   /**
@@ -47,9 +48,24 @@ export const MEMORY_SOURCES: Record<string, InMemory> = {
   "library/pagedSongs.ts#usePagedSongs": { kind: "rows", name: "songSummariesInMemory" },
   "library/hooks.ts#useAlbum": { kind: "rows", name: "useMemoryAlbum" },
   "library/hooks.ts#useArtist": { kind: "rows", name: "useMemoryArtist" },
-  "library/hooks.ts#usePlaylist": { kind: "recent", name: "playlistQuery" },
-  "library/hooks.ts#usePlaylistGraveyard": { kind: "recent", name: "playlist-graveyard" },
-  "library/GenreSongList.tsx#useGenreOpening": { kind: "recent", name: "genreOpeningQuery" },
+  "library/hooks.ts#usePlaylist": {
+    kind: "recent",
+    name: "playlistQuery",
+    reason:
+      "PLAYLISTS_AHEAD playlists are kept from startup; keeping every playlist's entries would break Performance rule 12's bound.",
+  },
+  "library/hooks.ts#usePlaylistGraveyard": {
+    kind: "recent",
+    name: "playlist-graveyard",
+    reason:
+      "A playlist's removed entries, one per playlist and seldom opened: kept once opened, not for every playlist at startup.",
+  },
+  "library/GenreSongList.tsx#useGenreOpening": {
+    kind: "recent",
+    name: "genreOpeningQuery",
+    reason:
+      "GENRES_AHEAD genre openings are kept from startup; a Library has hundreds of genres, past Performance rule 12's bound.",
+  },
   "collaboration/collaborativePlaylists.tsx#useCollaborations": {
     kind: "kept",
     name: "listCollaborations",
@@ -57,7 +73,11 @@ export const MEMORY_SOURCES: Record<string, InMemory> = {
   "library/collaborativePlaylists.tsx#usePrivateCopyNotice": { kind: "kept", name: "noticesQuery" },
   "library/dislikedSongList.ts#useDislikedSongList": { kind: "session", name: "keptList" },
   "library/useListeningHistory.ts#useListeningHistory": { kind: "session", name: "keptHead" },
-  "stats/hooks.ts#useTopSongs": { kind: "session", name: "keptReadings" },
+  // Stats' opening period and its See all, kept like the Library's pages (#1352).
+  "stats/hooks.ts#useTopSongs": { kind: "kept", name: "statsOpeningQueries" },
+  "stats/hooks.ts#useTopAlbums": { kind: "kept", name: "statsOpeningQueries" },
+  "stats/hooks.ts#useTopArtists": { kind: "kept", name: "statsOpeningQueries" },
+  "stats/hooks.ts#useTopGenres": { kind: "kept", name: "statsOpeningQueries" },
   "dj/DjScreen.tsx#useDjGrid": { kind: "session", name: "preparedDjOpening" },
   "updates/versionHistory.ts#useVersionHistory": { kind: "store" },
   // Home (#1353): its local sections are kept from startup and drawn from the snapshot at a cold start.
@@ -156,8 +176,21 @@ export const SCREENS_FROM_MEMORY: Record<string, ScreenFromMemory> = {
     ],
   },
   "app/library/playlist-graveyard/[id].tsx": { draws: ["library/hooks.ts#usePlaylistGraveyard"] },
-  "app/library/stats/index.tsx": { draws: ["stats/hooks.ts#useTopSongs"] },
-  "app/library/stats/[ranking].tsx": { draws: ["stats/hooks.ts#useTopSongs"] },
+  "app/library/stats/index.tsx": {
+    draws: [
+      "stats/hooks.ts#useTopSongs",
+      "stats/hooks.ts#useTopAlbums",
+      "stats/hooks.ts#useTopArtists",
+      "stats/hooks.ts#useTopGenres",
+    ],
+  },
+  "app/library/stats/[ranking].tsx": {
+    draws: [
+      "stats/hooks.ts#useTopSongs",
+      "stats/hooks.ts#useTopAlbums",
+      "stats/hooks.ts#useTopArtists",
+    ],
+  },
   "app/dj.tsx": { via: ["dj/DjScreen.tsx"], draws: ["dj/DjScreen.tsx#useDjGrid"] },
   "app/music-folders.tsx": {
     draws: ["library/hooks.ts#useLoadedScanRoots", "library/hooks.ts#useLoadedExcludedFolders"],

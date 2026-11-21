@@ -190,7 +190,8 @@ export default function SearchScreen() {
       ]),
     [results, placed.songs],
   );
-  const lyricHits = useLocalLyricsSearch(
+  // Lyrics read their word index once typing pauses, or on submit; the rest answers from memory.
+  const { hits: lyricHits, submit: submitLyrics } = useLocalLyricsSearch(
     deferredQuery,
     library?.songs ?? NO_SONG_ROWS,
     lyricsSkipIds,
@@ -285,11 +286,19 @@ export default function SearchScreen() {
     setQuery(text);
     setExpansion((current) => expansionAfterTyping(current, text));
   }, []);
+  const submit = useCallback(() => {
+    rememberSearch(query);
+    submitLyrics(query);
+  }, [query, submitLyrics]);
   const remember = useCallback(() => rememberSearch(query), [query]);
-  const pickRecent = useCallback((recent: string) => {
-    setQuery(recent);
-    rememberSearch(recent);
-  }, []);
+  const pickRecent = useCallback(
+    (recent: string) => {
+      setQuery(recent);
+      rememberSearch(recent);
+      submitLyrics(recent);
+    },
+    [submitLyrics],
+  );
   // Opened with a query (an unavailable playlist entry's Search): it searches for it.
   useSearchRequests(pickRecent);
   const showAll = useCallback(
@@ -345,7 +354,7 @@ export default function SearchScreen() {
               ref={field}
               value={query}
               onChange={changeQuery}
-              onSubmit={remember}
+              onSubmit={submit}
               onLayout={focus.onLayout}
               onFocusChange={focus.onFocusChange}
               onRecognize={recognizeSong}
