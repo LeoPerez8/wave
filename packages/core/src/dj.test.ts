@@ -463,9 +463,12 @@ describe("a Magic Queue with a DJ seed", () => {
   });
 
   test("a song on a radio two families share passes when it fits either family", () => {
-    const session = startDjQueue([familyTile("Metal", "Shared Artist"), familyTile("Pop", "Shared Artist")], {
-      id: "dj-two-families",
-    })!;
+    const session = startDjQueue(
+      [familyTile("Metal", "Shared Artist"), familyTile("Pop", "Shared Artist")],
+      {
+        id: "dj-two-families",
+      },
+    )!;
     const radio = "artist:shared artist";
     assert.equal(djRadioSongAllowed(session, radio, ["Metal Band"], familyProfileOf), true);
     assert.equal(djRadioSongAllowed(session, radio, ["Pop Band"], familyProfileOf), true);
@@ -474,9 +477,12 @@ describe("a Magic Queue with a DJ seed", () => {
   });
 
   test("a radio no family brought keeps every song", () => {
-    const session = startDjQueue([familyTile("Metal", "Metal Seed"), djArtistTile("Other Artist")!], {
-      id: "dj-mixed",
-    })!;
+    const session = startDjQueue(
+      [familyTile("Metal", "Metal Seed"), djArtistTile("Other Artist")!],
+      {
+        id: "dj-mixed",
+      },
+    )!;
     assert.equal(
       djRadioSongAllowed(session, "artist:other artist", ["Jazz Band"], familyProfileOf),
       true,
@@ -488,9 +494,12 @@ describe("a Magic Queue with a DJ seed", () => {
   });
 
   test("an artist selected on its own keeps an open radio when a family also picks it", () => {
-    const session = startDjQueue([familyTile("Metal", "Shared Artist"), djArtistTile("Shared Artist")!], {
-      id: "dj-artist-and-family",
-    })!;
+    const session = startDjQueue(
+      [familyTile("Metal", "Shared Artist"), djArtistTile("Shared Artist")!],
+      {
+        id: "dj-artist-and-family",
+      },
+    )!;
     assert.equal(
       djRadioSongAllowed(session, "artist:shared artist", ["Jazz Band"], familyProfileOf),
       true,

@@ -78,6 +78,7 @@ const deezerIsrc = async (song: {
     album: "",
     durationMs: song.durationMs ?? 0,
   });
+  if (lookup === null) return null;
   const response = await fetch(deezerTrackSearchUrl(lookup));
   if (!response.ok) throw new Error(`Deezer HTTP ${response.status}`);
   const body: unknown = await response.json();
@@ -187,7 +188,7 @@ export const startDjMoodLookup = (): (() => void) => {
             byIsrc.set(code, rows);
           }
           const featureByVideo = new Map<string, DjAudioFeatures>();
-          const misses: typeof page = [];
+          const misses: (typeof page)[number][] = [];
           for (const song of page) {
             const code = isrcs.get(song.videoId);
             const features = code === undefined ? null : medianFeatures(byIsrc.get(code) ?? []);
