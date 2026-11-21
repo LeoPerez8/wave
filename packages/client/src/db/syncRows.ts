@@ -12,6 +12,7 @@ import {
   accountTrackIds,
   creditSplitter,
   leavingSongEntry,
+  mergePlaylistEntries,
   mergeRows,
   planSongSync,
   songsLeaving,
@@ -27,6 +28,7 @@ import {
   type SyncPreference,
   type PlaySnapshot,
   type SyncPullPage,
+  type SyncEntryRow,
   type SyncRow,
   type SyncSong,
   type SyncSongFields,
@@ -321,6 +323,7 @@ export const selectUnpushed = (
       songId: tracks.recordingKey,
       ytSong: playlistItems.ytSong,
       removedAt: playlistItems.removedAt,
+      restoredAt: playlistItems.restoredAt,
       addedAt: playlistItems.addedAt,
       changedAt: playlistItems.changedAt,
       phoneId: playlistItems.phoneId,
@@ -359,6 +362,7 @@ export const selectUnpushed = (
         songId: left === null ? row.songId : null,
         ytSong: left ?? (row.songId === null ? row.ytSong : null),
         addedAt: row.addedAt,
+        restoredAt: row.restoredAt,
       };
       if (!row.deleted) return { ...fields, deleted: false, removedAt: null };
       return row.removedAt === null
@@ -905,6 +909,10 @@ const nothingChanged = (): Changed => ({
 const wins = (row: SyncRow, held: Omit<SyncRow, "id"> | undefined): boolean =>
   held === undefined || mergeRows([{ ...held, id: row.id }], [row]).accepted.length > 0;
 
+/** Whether an entry's change [row] wins over the [held] one (Core's `mergePlaylistEntries`). */
+const entryWins = (row: SyncEntryRow, held: Omit<SyncEntryRow, "id"> | undefined): boolean =>
+  held === undefined || mergePlaylistEntries([{ ...held, id: row.id }], [row]).accepted.length > 0;
+
 type PendingKind = "playlistEntries" | "favorites" | "plays";
 
 const pendingRow = (tx: LibraryDatabase, kind: PendingKind, id: string) => {
@@ -950,7 +958,8 @@ const pend = (
 const beatsPending = (tx: LibraryDatabase, kind: PendingKind, row: SyncRow): boolean => {
   const waiting = pendingRow(tx, kind, row.id);
   if (waiting === undefined) return true;
-  if (!wins(row, waiting)) return false;
+  const beats = kind === "playlistEntries" ? entryWins(row, waiting) : wins(row, waiting);
+  if (!beats) return false;
   unpend(tx, kind, row.id);
   return true;
 };
@@ -1000,7 +1009,7 @@ const applyEntry = (
   const { playlists, playlistItems } = schema;
   if (!beatsPending(tx, "playlistEntries", row)) return false;
   const held = tx.select().from(playlistItems).where(eq(playlistItems.syncId, row.id)).get();
-  if (held !== undefined && !wins(row, held)) return false;
+  if (held !== undefined && !entryWins(row, held)) return false;
   if (row.deleted && !("removedAt" in row && typeof row.removedAt === "number")) {
     if (held === undefined) return false;
     tx.update(playlistItems)
@@ -1028,6 +1037,7 @@ const applyEntry = (
     trackId,
     ytSong: trackId === null ? row.ytSong : null,
     removedAt: row.removedAt ?? null,
+    restoredAt: row.restoredAt ?? null,
     orderKey: row.orderKey,
     addedAt: row.addedAt,
     ...stamp(row),

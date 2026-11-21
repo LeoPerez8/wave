@@ -1462,6 +1462,8 @@ CREATE TABLE saved_lyrics_search_words (
 --> statement-breakpoint
 CREATE INDEX saved_lyrics_search_word_idx ON saved_lyrics_search_words (word, video_id, position);`;
 
+const m0062 = `ALTER TABLE playlist_items ADD COLUMN restored_at integer;`;
+
 export default {
   journal: {
     entries: [
@@ -1552,6 +1554,12 @@ export default {
         tag: "0061_saved_lyrics_search_index",
         breakpoints: true,
       },
+      {
+        idx: 62,
+        when: 1_797_163_200_000,
+        tag: "0062_playlist_entry_restores",
+        breakpoints: true,
+      },
     ],
   },
   migrations: {
@@ -1617,5 +1625,6 @@ export default {
     m0059,
     m0060,
     m0061,
+    m0062,
   },
 };

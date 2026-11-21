@@ -1,13 +1,13 @@
 /**
  * Reading and writing an account's synced rows. A push merges by Core's
- * rules (`mergeRows`, `mergePlays`), so the service and the app can't
+ * rules (`mergeTableRows`, `mergePlays`), so the service and the app can't
  * disagree, and numbers each accepted change in the same transaction that
  * writes it: a pull reads in one snapshot and pages by those numbers, so it
  * never misses a change pushed while it runs.
  */
 
 import type { Client, InStatement, InValue, Transaction } from "@libsql/client";
-import { mergePlays, mergeRows, withinServiceClock } from "@wave/core";
+import { mergePlays, mergeTableRows, withinServiceClock } from "@wave/core";
 import type { SyncLimitName, SyncLimits } from "./limits.ts";
 import { type IncomingRow, type SyncTable, SYNC_TABLES, column, wireRow } from "./tables.ts";
 
@@ -45,7 +45,11 @@ const heldRows = async (
   ids: readonly string[],
 ): Promise<IncomingRow[]> => {
   const held: IncomingRow[] = [];
-  const merged = table.kind === "rows" ? "id, changed_at, phone_id, deleted" : "id";
+  const restores = table.name === "playlistEntries";
+  const merged =
+    table.kind === "rows"
+      ? `id, changed_at, phone_id, deleted${restores ? ", restored_at" : ""}`
+      : "id";
   for (const chunk of chunks(ids, IDS_PER_QUERY)) {
     const result = await tx.execute({
       sql: `SELECT ${merged} FROM ${table.sqlName}
@@ -58,11 +62,36 @@ const heldRows = async (
         changedAt: Number(row.changed_at ?? 0),
         phoneId: String(row.phone_id ?? ""),
         deleted: Number(row.deleted ?? 0) === 1,
+        ...(restores && row.restored_at !== null && row.restored_at !== undefined
+          ? { restoredAt: Number(row.restored_at) }
+          : {}),
         values: null,
       });
     }
   }
   return held;
+};
+
+/**
+ * [incoming] as the merge reads it: a live entry from a Wave that sends no restore time
+ * carries the one [held] for it, which is also what stays stored (`keptWhenOmitted`).
+ */
+const withKeptRestores = (
+  held: readonly IncomingRow[],
+  incoming: readonly IncomingRow[],
+): readonly IncomingRow[] => {
+  const restored = new Map(
+    held.flatMap((row) =>
+      row.deleted || row.restoredAt === undefined ? [] : [[row.id, row.restoredAt] as const],
+    ),
+  );
+  if (restored.size === 0) return incoming;
+  return incoming.map((row) => {
+    const kept = restored.get(row.id);
+    return kept !== undefined && !row.deleted && row.omitted?.includes("restoredAt") === true
+      ? { ...row, restoredAt: kept }
+      : row;
+  });
 };
 
 /** The statement that stores accepted [row] of [table] as change number [changeNo]. */
@@ -161,14 +190,13 @@ export const pushRows = (
     const corrected: Record<string, CorrectedRow[]> = {};
     for (const [table, pushed] of batch) {
       if (pushed.length === 0) continue;
-      const incoming = table.kind === "rows" ? withinServiceClock(pushed, now) : pushed;
-      const ahead = new Set(incoming.filter((row, i) => row !== pushed[i]));
-      const held = await heldRows(tx, table, accountId, [
-        ...new Set(incoming.map((row) => row.id)),
-      ]);
+      const held = await heldRows(tx, table, accountId, [...new Set(pushed.map((row) => row.id))]);
+      const sent = withKeptRestores(held, pushed);
+      const incoming = table.kind === "rows" ? withinServiceClock(sent, now) : sent;
+      const ahead = new Set(incoming.filter((row, i) => row !== sent[i]));
       const merged =
         table.kind === "rows"
-          ? mergeRows(held, incoming).accepted
+          ? mergeTableRows(table.name, held, incoming).accepted
           : mergePlays(held, incoming).added;
       accepted.set(table, merged);
       const stored = merged.filter((row) => ahead.has(row));
