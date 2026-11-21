@@ -11,6 +11,8 @@ export const djEn = {
   artistTile: (name: string) => `Artist, ${name}`,
   /** An album tile's name for screen readers: its kind, then the album and its artist. */
   albumTile: (title: string, artist: string) => `Album, ${title}, ${artist}`,
+  /** A genre family tile's name for screen readers. */
+  genreTile: (name: string) => `Genre, ${name}`,
   /** The placeholder tiles' name for screen readers while the chart's artists are on their way. */
   loadingArtists: "Loading artists",
   nothingToPick: "Nothing to pick from yet. Play some music and come back.",
@@ -32,6 +34,8 @@ export const djEn = {
   discoverySteps: { familiar: "Familiar", blend: "Blend", discover: "Discover" },
   /** The group of chips under Adjust's sliders. */
   filters: "Filters",
+  mood: "Mood",
+  moodNames: { energetic: "Energetic", relaxing: "Relaxing", upbeat: "Upbeat" },
   /** Adjust's filters: Trending and Lesser-known songs lean the queue to hits or deep cuts, New releases to recent records. */
   filterNames: {
     trending: "Trending",

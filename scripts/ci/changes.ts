@@ -1,12 +1,18 @@
 // Which parts of the repo a change touches, and whether it can change the result of the
 // native modules' JVM tests.
-// The CI workflow runs it on a PR's changed files and turns jobs off by it:
-//   <paths, one per line> | node scripts/ci/changes.ts   # PRs
-//   node scripts/ci/changes.ts --all                      # everything else
-// It prints `<area>=true|false` lines, then the decisions `allPackages` and
-// `nativeTests`, ready for $GITHUB_OUTPUT. Checks also runs it, through affected-packages.sh.
+// The CI workflow runs it (changes.sh) and turns jobs off by it:
+//   <paths, one per line> | node scripts/ci/changes.ts   # a PR's files, or one app's since its release
+//     [--app-package <before> <after>]                   # the phone's package.json then and now
+//     [--merged <git log file>]                          # each change merged since that release
+//   node scripts/ci/changes.ts --all                      # every area changed
+//   <releases, one JSON line each> | node scripts/ci/changes.ts --previous-release <phone|desktop> <ti|main> [<run's tag>]
+// It prints `<area>=true|false` lines, the decisions `allPackages`, `nativeTests` and
+// `desktopChecks`, then whether each app releases (`phoneRelease`, `desktopRelease`), ready for
+// $GITHUB_OUTPUT. --previous-release prints the tag the app's changes count from, or nothing.
+// Checks also runs it, through affected-packages.sh.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 // Areas of the repo that CI decisions depend on. A path ending in "/" covers
 // everything under it; any other path is one file. Markdown is never in an area.
@@ -120,9 +126,172 @@ export const reachesPhone = (paths: readonly string[]): boolean => {
   return touched.app || touched.core || touched.sync;
 };
 
+/** The phone's package.json, whose `version` every release's bump commit changes. */
+export const APP_PACKAGE = "apps/mobile/package.json";
+
+/** apps/mobile/package.json's text before a change (empty when it had none) and after. */
+export type AppPackage = { previous: string; current: string };
+
+/** Whether package.json's text changed only its `version`, as a release's bump commit does. */
+export const versionOnly = ({ previous, current }: AppPackage): boolean => {
+  try {
+    const [before, after] = [previous, current].map((text) => {
+      const { version: _version, ...rest } = JSON.parse(text) as Record<string, unknown>;
+      return rest;
+    });
+    return isDeepStrictEqual(before, after);
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Which app a set of changes releases. On main and tags each app's workflow runs only when its
+ * own changes since its previous release (previousAppRelease) reach its users. Given the app's
+ * package.json before and after, a change of its version alone doesn't count: a version the
+ * desktop released alone bumped it, and the phone has nothing new.
+ *
+ * `merged` lists the files of each change merged since then (a PR, or a commit pushed to main),
+ * when there are several. `reachesPhone` leaves out the workspace files a desktop-only change
+ * changed along the way, so it decides per change: the workspace files still count for the phone
+ * when a change that touched them reaches it. Without `merged`, the paths are one change.
+ */
+export const releaseChanges = (
+  paths: readonly string[],
+  appPackage?: AppPackage,
+  merged?: readonly (readonly string[])[],
+) => {
+  const counted =
+    appPackage && versionOnly(appPackage) ? paths.filter((path) => path !== APP_PACKAGE) : paths;
+  const workspaceForPhone =
+    merged !== undefined &&
+    changes(counted).workspace &&
+    merged.some((change) => changes(change).workspace && reachesPhone(change));
+  return {
+    phoneRelease: reachesPhone(counted) || workspaceForPhone,
+    desktopRelease: reachesDesktop(counted),
+  };
+};
+
+/**
+ * Each change in `git log --name-only --format='commit %H'` output, as its files. A merge
+ * commit's are its diff against main before it (--diff-merges=first-parent).
+ */
+export const mergedChanges = (log: string): string[][] => {
+  const merged: string[][] = [];
+  for (const line of log.split(/\r?\n/)) {
+    if (line.startsWith("commit ")) merged.push([]);
+    else if (line && merged.length > 0) merged.at(-1)!.push(line);
+  }
+  return merged;
+};
+
+/** A GitHub Release, by its tag and the names of the files it holds. */
+export type PublishedRelease = { tagName: string; assets: readonly string[] };
+
+export type App = "phone" | "desktop";
+
+const VERSION_TAG = /^v(\d+)\.(\d+)\.(\d+)(-ti)?$/;
+
+/** Whether an app published in a release: its APK, or either desktop installer, is there. */
+export const publishedIn = (app: App, { tagName, assets }: PublishedRelease) => {
+  const version = tagName.slice(1);
+  const own =
+    app === "phone"
+      ? [`wave-${version}.apk`]
+      : [`wave-${version}-win-x64.exe`, `wave-${version}-linux-x64.AppImage`];
+  return own.some((name) => assets.includes(name));
+};
+
+const parseVersion = (tagName: string) => {
+  const match = VERSION_TAG.exec(tagName);
+  return match
+    ? { ti: match[4] !== undefined, numbers: [match[1], match[2], match[3]].map(Number) }
+    : undefined;
+};
+
+const compareNumbers = (left: readonly number[], right: readonly number[]) =>
+  left[0]! - right[0]! || left[1]! - right[1]! || left[2]! - right[2]!;
+
+/**
+ * The ti release a stable release's desktop was built from, as promote-version.ts picks it: the
+ * newest -ti release at or below the stable number that holds both installers. The stable tag
+ * sits on the phone's commit when the phone went out too, so it isn't the desktop's source.
+ * Undefined for a stable release older than any such ti release.
+ */
+const desktopSource = (releases: readonly PublishedRelease[], stable: readonly number[]) =>
+  releases
+    .flatMap((release) => {
+      const version = parseVersion(release.tagName);
+      const files = [
+        `wave-${release.tagName.slice(1)}-win-x64.exe`,
+        `wave-${release.tagName.slice(1)}-linux-x64.AppImage`,
+      ];
+      return version?.ti &&
+        compareNumbers(version.numbers, stable) <= 0 &&
+        files.every((name) => release.assets.includes(name))
+        ? [{ tag: release.tagName, numbers: version.numbers }]
+        : [];
+    })
+    .toSorted((left, right) => compareNumbers(right.numbers, left.numbers))[0]?.tag;
+
+/**
+ * The tag an app's changes count from: the source of its newest release that published its own
+ * files. A version that never published (a skipped one, or the other app's alone) doesn't count.
+ * The ti channel looks back past stable releases too, and prefers the -ti release of the same
+ * number; main looks only at stable ones. A stable release's phone was built from the tag's
+ * commit, and its desktop from its own ti release (desktopSource), which is the tag returned.
+ * The run's own tag is left out. Undefined when the app never published.
+ */
+export const previousAppRelease = (
+  releases: readonly PublishedRelease[],
+  app: App,
+  channel: "ti" | "main",
+  current = "",
+): string | undefined => {
+  const candidates = releases.flatMap((release) => {
+    const version = parseVersion(release.tagName);
+    if (!version || release.tagName === current || !publishedIn(app, release)) return [];
+    if (version.ti && channel === "main") return [];
+    const source =
+      app === "desktop" && !version.ti ? desktopSource(releases, version.numbers) : undefined;
+    return [{ ...version, tag: source ?? release.tagName }];
+  });
+  const newer = (left: (typeof candidates)[number], right: (typeof candidates)[number]) =>
+    compareNumbers(right.numbers, left.numbers) || Number(right.ti) - Number(left.ti);
+  return candidates.toSorted(newer)[0]?.tag;
+};
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const result = process.argv.includes("--all")
-    ? decide(() => true)
-    : changes(readFileSync(0, "utf8").split(/\r?\n/).filter(Boolean));
-  for (const [name, value] of Object.entries(result)) console.log(`${name}=${value}`);
+  const args = process.argv.slice(2);
+  if (args[0] === "--previous-release") {
+    const [, app, channel, current] = args;
+    if ((app !== "phone" && app !== "desktop") || (channel !== "ti" && channel !== "main"))
+      throw new Error("Expected --previous-release phone|desktop ti|main [<tag>]");
+    const releases = readFileSync(0, "utf8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as PublishedRelease);
+    const tag = previousAppRelease(releases, app, channel, current);
+    if (tag) console.log(tag);
+  } else {
+    const all = args.includes("--all");
+    const paths = all ? [] : readFileSync(0, "utf8").split(/\r?\n/).filter(Boolean);
+    const packageAt = args.indexOf("--app-package");
+    const [previous, current] = packageAt === -1 ? [] : args.slice(packageAt + 1, packageAt + 3);
+    if (packageAt !== -1 && current === undefined)
+      throw new Error("Expected --app-package <file before> <file after>");
+    const appPackage =
+      previous === undefined || current === undefined
+        ? undefined
+        : { previous: readFileSync(previous, "utf8"), current: readFileSync(current, "utf8") };
+    const mergedAt = args.indexOf("--merged");
+    const log = mergedAt === -1 ? undefined : args[mergedAt + 1];
+    if (mergedAt !== -1 && log === undefined) throw new Error("Expected --merged <git log file>");
+    const merged = log === undefined ? undefined : mergedChanges(readFileSync(log, "utf8"));
+    const result = all
+      ? { ...decide(() => true), phoneRelease: true, desktopRelease: true }
+      : { ...changes(paths), ...releaseChanges(paths, appPackage, merged) };
+    for (const [name, value] of Object.entries(result)) console.log(`${name}=${value}`);
+  }
 }

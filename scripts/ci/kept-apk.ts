@@ -1,5 +1,5 @@
 // A cache entry can be evicted or out of a run's scope. Find a compatible full APK
-// uploaded by a successful CI push on main; download-artifact restores it in ci.yml.
+// uploaded by a successful CI push on main; download-artifact restores it in mobile.yml.
 //   node scripts/ci/kept-apk.ts <native key>   prints runId=<id>, or an empty runId
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";

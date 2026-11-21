@@ -39,6 +39,11 @@ type Props = {
   line?: string | undefined;
   /** Shows `line`: it fades in as the row opens room for it, and out as it closes. */
   lineShown?: boolean;
+  /**
+   * How screen readers get `line`: as the hint (what the entry does), or
+   * with the label (where a choice already sits), so it's heard with the name.
+   */
+  lineRead?: "hint" | "label";
 };
 
 /** A Library entry (Playlists, Artists, …): one quiet line of type, no icon, no chevron. */
@@ -53,16 +58,17 @@ export function EntryRow({
   destructive = false,
   line,
   lineShown = false,
+  lineRead = "hint",
 }: Props) {
   const accent = useThemeColor("accent");
   const { language } = useLocalisation();
+  const named = count === undefined ? label : `${label}, ${formatNumber(language, count)}`;
+  const lineInLabel = lineRead === "label" && line !== undefined;
   return (
     <Press
       accessibilityRole="button"
-      accessibilityLabel={
-        count === undefined ? label : `${label}, ${formatNumber(language, count)}`
-      }
-      accessibilityHint={line}
+      accessibilityLabel={lineInLabel ? `${named}, ${line}` : named}
+      accessibilityHint={lineInLabel ? undefined : line}
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityState={{ selected }}

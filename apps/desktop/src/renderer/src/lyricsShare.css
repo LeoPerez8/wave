@@ -1,0 +1,160 @@
+/* Share in the Lyrics view: the bar while lines are picked, the picked lines, the card's preview. */
+.lyrics-picking {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 0;
+}
+.lyrics-picking .text-button {
+  margin: 0;
+  padding: 4px 6px;
+  font-weight: 600;
+}
+.lyrics-picking .text-button:disabled {
+  opacity: 0.4;
+}
+.lyrics-picking-count {
+  flex: 1;
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-secondary);
+}
+.lyrics-picking + .lyrics-scroll {
+  padding-top: 10px;
+}
+/* While picking, every line is a target, dim until picked: the picked ones are lit on a faint fill. */
+.lyric-lines.picking .lyric-line {
+  cursor: pointer;
+  opacity: var(--lyrics-dim, 0.38);
+}
+.lyric-lines.picking .lyric-line:hover {
+  background: var(--color-fill);
+}
+.lyric-lines.picking .lyric-line.picked {
+  opacity: 1;
+  background: var(--color-fill);
+}
+
+/* The card's preview, over everything but a toast. */
+.lyric-card-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px 24px;
+  background: var(--color-background);
+  outline: none;
+}
+/* The title bar's strip stays the window's handle; Close sits under it. */
+.lyric-card-preview-head {
+  flex: none;
+  align-self: stretch;
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 36px;
+}
+.lyric-card-stage {
+  flex: 1;
+  min-height: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lyric-card-frame {
+  position: relative;
+  flex: none;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgb(0 0 0 / 0.25);
+}
+.lyric-card-frame:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+.lyric-card-hint {
+  flex: none;
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-secondary);
+}
+.lyric-card-preview .card-image-actions button {
+  background: var(--color-fill);
+  color: var(--color-foreground);
+}
+
+/* The card itself, at its image's size; the preview scales it from its top left corner. */
+.lyric-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform-origin: 0 0;
+  text-align: left;
+  font-family: inherit;
+}
+.lyric-card p {
+  margin: 0;
+}
+.lyric-card-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+.lyric-card-cover {
+  flex: none;
+  display: flex;
+  overflow: hidden;
+}
+.lyric-card-cover .artwork {
+  background: transparent;
+  color: inherit;
+  border-radius: 0;
+}
+.lyric-card-cover .artwork svg {
+  width: 40%;
+  height: 40%;
+}
+.lyric-card-song {
+  flex: 1;
+  min-width: 0;
+}
+.lyric-card-title {
+  font-weight: 700;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lyric-card-artist {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lyric-card-lines {
+  display: flex;
+  flex-direction: column;
+}
+.lyric-card-line {
+  font-weight: 700;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.lyric-card-space {
+  flex: 1;
+}
+.lyric-card-mark {
+  flex: none;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+}

@@ -36,6 +36,7 @@ import {
 } from "@wave/client/db/offThreadReads";
 import { SyncLibraryReads } from "./syncLibraryReads.ts";
 import { sqliteDriverLayer } from "./sqliteDriver.ts";
+import { collaborationStore, type CollaborationStore } from "@/collaboration/collaborationStore";
 import type {
   AlbumDetail,
   AlbumRow,
@@ -60,6 +61,20 @@ import type {
 } from "@wave/client";
 import { saveReleaseDate, saveTypedReleaseDate } from "@wave/client/db/releaseDates";
 import { pendingStreamedGenres, keepStreamedGenre } from "@wave/client/db/streamedGenres";
+import {
+  pendingDjMoodSongs,
+  keepDjMoodFeatures,
+  selectDjMoodFeatures,
+  type DjMoodFeatureWrite,
+  type DjMoodLookupPage,
+} from "@wave/client/db/djMoodFeatures";
+import {
+  pendingDjLibraryMoodSongs,
+  keepDjLibraryMoodFeatures,
+  selectDjLibraryMoodFeatures,
+  type DjLibraryMoodFeatureWrite,
+  type DjLibraryMoodSong,
+} from "@wave/client/db/djLibraryMoodFeatures";
 import {
   readFollowShows,
   saveFollowShows,
@@ -228,7 +243,18 @@ import {
   timeLibraryRead,
 } from "@/log/slowLibraryReads";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import { syncCycle, type SyncCycleInput, type SyncCycleResult } from "@wave/client/sync/syncCycle";
+import {
+  syncCollaborativePlaylist,
+  syncCycle,
+  type SyncCycleInput,
+  type SyncCycleResult,
+} from "@wave/client/sync/syncCycle";
+import {
+  dismissPrivateCopyNotice,
+  markCollaborationSeen,
+  selectCollaborations,
+  selectPrivateCopyNotices,
+} from "@wave/client/db/collaborations";
 
 import { selectAlbumDetail, selectAlbums } from "@wave/client/db/albums";
 import { importedPlays, saveImportedPlays, selectImportTracks } from "@wave/client/db/blackPlayer";
@@ -287,6 +313,7 @@ import {
   type RecordedPlay,
 } from "@wave/client/db/playHistory";
 import { listeningSums, selectCountedPlays, songCountedPlays } from "@wave/client/db/playTotals";
+import { settleKeptTotals } from "@wave/client/db/keptPlayTotals";
 import { loadPlayback, savePlayback, type SavedPlayback } from "@wave/client/db/playback";
 import { shuffleSongs } from "@wave/client/db/shuffleSongs";
 import {
@@ -1196,6 +1223,11 @@ export class LibraryStore extends Context.Service<
     readonly creditedPlayTotals: (
       window: StatsWindow,
     ) => Effect.Effect<readonly CreditedPlayTotals[], LibraryStoreError>;
+    /**
+     * One bounded step of what the kept play totals owe (#1349: an upgrade's
+     * history, a changed Library's credits); true once nothing is owed.
+     */
+    readonly settleKeptTotals: Effect.Effect<boolean, LibraryStoreError>;
     /** The albums with these ids, in no particular order; albums no longer in the library are left out. */
     readonly albumsByIds: (
       ids: readonly number[],
@@ -1234,6 +1266,36 @@ export class LibraryStore extends Context.Service<
       videoId: string,
       genre: string | null,
     ) => Effect.Effect<void, LibraryStoreError>;
+    /** Candidate catalog songs due for local mood feature lookup. */
+    readonly pendingDjMoodSongs: (
+      after: string,
+      now: number,
+    ) => Effect.Effect<DjMoodLookupPage, LibraryStoreError>;
+    /** Keeps feature matches permanently and misses for their retry window. */
+    readonly keepDjMoodFeatures: (
+      writes: readonly DjMoodFeatureWrite[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Cached ReccoBeats features by YouTube video id. */
+    readonly djMoodFeatures: (
+      videoIds: readonly string[],
+    ) => Effect.Effect<
+      ReadonlyMap<string, import("@wave/core").DjAudioFeatures>,
+      LibraryStoreError
+    >;
+    /** Library songs with an ISRC tag due for a mood feature lookup, after Track [afterTrackId]. */
+    readonly pendingDjLibraryMoodSongs: (
+      afterTrackId: number,
+      now: number,
+    ) => Effect.Effect<readonly DjLibraryMoodSong[], LibraryStoreError>;
+    /** Keeps Library songs' feature matches for their ISRC, and misses for their retry window. */
+    readonly keepDjLibraryMoodFeatures: (
+      writes: readonly DjLibraryMoodFeatureWrite[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Library songs' cached ReccoBeats features, by Track id as Core's candidates name it. */
+    readonly djLibraryMoodFeatures: () => Effect.Effect<
+      ReadonlyMap<string, import("@wave/core").DjAudioFeatures>,
+      LibraryStoreError
+    >;
     /** Library tags and cached streamed answers by ranking id; pass the Fix songs online setting. */
     readonly songGenres: (
       ids: readonly (number | string)[],
@@ -1291,6 +1353,27 @@ export class LibraryStore extends Context.Service<
      * anew) and its missing songs go (`signOut`).
      */
     readonly leaveAccount: Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Syncs the collaborative playlist [playlistId] alone, for its page in sight
+     * (`syncCollaborativePlaylist`): nothing for an ordinary playlist.
+     */
+    readonly syncCollaborativePlaylist: (
+      input: Omit<SyncCycleInput, "db" | "splits" | "historyChanged">,
+      playlistId: number,
+    ) => Effect.Effect<SyncCycleResult, LibraryStoreError>;
+    /** The playlist [playlistId] was opened: its changed mark goes, on this device. */
+    readonly markCollaborationSeen: (playlistId: number) => Effect.Effect<void, LibraryStoreError>;
+    /** The playlists that became the member's own copy and whose page hasn't said so yet. */
+    readonly privateCopyNotices: Effect.Effect<readonly number[], LibraryStoreError>;
+    /** The page of [playlistId] said once that it is now the member's own copy. */
+    readonly dismissPrivateCopyNotice: (
+      playlistId: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * The playlist here of the collaborative playlist [syncId] (an invite just joined); null
+     * while no pull has brought it.
+     */
+    readonly joinedPlaylistId: (syncId: string) => Effect.Effect<number | null, LibraryStoreError>;
     /**
      * What the Lyrics view saved for a non-D song's video (Core's
      * `SavedLyrics`): lyrics it found online, or a miss; null for nothing.
@@ -1447,8 +1530,16 @@ export class LibraryStore extends Context.Service<
      * like", in the page's order (the artist graph's similar artists).
      */
     readonly ytArtistSimilar: Effect.Effect<readonly YtArtistSimilar[], LibraryStoreError>;
+    /** The account's collaborative playlists on this device, as their menu reads and writes them. */
+    readonly collaborations: CollaborationStore<LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
+
+/**
+ * A settle step's size: summing or crediting 16 songs, or seeding 1,000 of an
+ * upgrade's plays, one transaction each.
+ */
+const KEPT_TOTALS_STEP = { songs: 16, plays: 1_000 };
 
 const writeAttempt = <A>(operation: string, run: () => A): Effect.Effect<A, LibraryStoreError> =>
   Effect.try({ try: run, catch: (cause) => new LibraryStoreError({ operation, cause }) });
@@ -2071,6 +2162,9 @@ const make = Effect.gen(function* () {
       attempt("sum up a Recap's plays", (db) => recapPlays(db, window, includeStreamedGenres)),
     creditedPlayTotals: (window) =>
       attempt("sum up album and artist plays", (db) => creditedPlayTotals(db, window)),
+    settleKeptTotals: writeAttempt("settle the kept play totals", () =>
+      settleKeptTotals(db, KEPT_TOTALS_STEP),
+    ),
 
     albumsByIds: (ids) => attempt("read ranked albums", (db) => albumsByIds(db, ids)),
 
@@ -2098,6 +2192,20 @@ const make = Effect.gen(function* () {
       attempt("read pending streamed genres", (db) => pendingStreamedGenres(db, after)),
     keepStreamedGenre: (videoId, genre) =>
       writeAttempt("save a streamed genre", () => keepStreamedGenre(db, videoId, genre)),
+    pendingDjMoodSongs: (after, now) =>
+      attempt("read pending DJ mood songs", (db) => pendingDjMoodSongs(db, after, now)),
+    keepDjMoodFeatures: (writes) =>
+      writeAttempt("save DJ mood features", () => keepDjMoodFeatures(db, writes)),
+    djMoodFeatures: (videoIds) =>
+      attempt("read DJ mood features", (db) => selectDjMoodFeatures(db, videoIds)),
+    pendingDjLibraryMoodSongs: (afterTrackId, now) =>
+      attempt("read pending DJ Library mood songs", (db) =>
+        pendingDjLibraryMoodSongs(db, afterTrackId, now),
+      ),
+    keepDjLibraryMoodFeatures: (writes) =>
+      writeAttempt("save DJ Library mood features", () => keepDjLibraryMoodFeatures(db, writes)),
+    djLibraryMoodFeatures: () =>
+      attempt("read DJ Library mood features", (db) => selectDjLibraryMoodFeatures(db)),
     songGenres: (ids, includeStreamedGenres = true) =>
       attempt("read the songs' genres", (db) => songGenres(db, ids, includeStreamedGenres)),
 
@@ -2145,6 +2253,31 @@ const make = Effect.gen(function* () {
       }),
 
     leaveAccount: writeAttempt("leave the Wave account", () => signOut(db, splits)),
+
+    syncCollaborativePlaylist: (input, playlistId) =>
+      Effect.tryPromise({
+        try: () => syncCollaborativePlaylist({ ...input, db, splits, historyChanged }, playlistId),
+        catch: (cause) =>
+          new LibraryStoreError({ operation: "sync a collaborative playlist", cause }),
+      }),
+
+    markCollaborationSeen: (playlistId) =>
+      writeAttempt("mark a collaborative playlist seen", () =>
+        markCollaborationSeen(db, playlistId),
+      ),
+
+    privateCopyNotices: attempt("read the private copy notices", (db) =>
+      selectPrivateCopyNotices(db),
+    ),
+
+    dismissPrivateCopyNotice: (playlistId) =>
+      writeAttempt("dismiss a private copy notice", () => dismissPrivateCopyNotice(db, playlistId)),
+
+    joinedPlaylistId: (syncId) =>
+      attempt(
+        "read a joined playlist",
+        (db) => selectCollaborations(db).find((held) => held.syncId === syncId)?.playlistId ?? null,
+      ),
 
     savedLyrics: (videoId) => attempt("read saved lyrics", (db) => selectSavedLyrics(db, videoId)),
 
@@ -2247,6 +2380,11 @@ const make = Effect.gen(function* () {
 
     ytArtistSimilar: attempt("read the saved artist pages' similar artists", (db) =>
       selectYtArtistSimilar(db),
+    ),
+    collaborations: collaborationStore(
+      db,
+      (operation, cause) => new LibraryStoreError({ operation, cause }),
+      attempt,
     ),
   });
 });

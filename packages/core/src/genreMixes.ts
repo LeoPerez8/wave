@@ -273,6 +273,21 @@ export const genreFamily = (tag: string): GenreFamily | null => {
   return BY_TAG.get(key) ?? { key, name: tag.trim().replace(/\s+/g, " ") };
 };
 
+/** The family Genre mixes assigns to [artist], from its profile or direct graph neighbours. */
+export const genreFamilyOfArtist = (
+  artist: string,
+  graph: ArtistGraph | null,
+  profileOf: GenreProfileOf,
+): GenreFamily | null =>
+  finishSteps(
+    artistFamilySteps(
+      { id: 0, name: artist },
+      { artists: [], songs: [], graph, profileOf },
+      profileOf,
+      new Map(),
+    ),
+  );
+
 /**
  * The style a genre [tag] belongs to, or null when it has none: a generic
  * tag (a family's own name, "Rock", "Alternative", "Pop") or an unknown one.
@@ -527,6 +542,55 @@ export const genreMixSeeds = (
   library: GenreMixLibrary,
   avoid?: MixRefreshAvoid,
 ): DiscoverMixSeed[] => finishSteps(genreMixSeedsSteps(library, avoid));
+
+/** Each family's candidate seed, using Genre mixes' artist ranking, plus its eligible artists for DJ. */
+export interface GenreMixDjCandidate {
+  readonly seed: DiscoverMixSeed;
+  readonly artists: readonly DiscoverSeedArtist[];
+}
+
+export const genreMixDjCandidates = (library: GenreMixLibrary): GenreMixDjCandidate[] =>
+  finishSteps(genreMixDjCandidatesSteps(library));
+
+function* genreMixDjCandidatesSteps(
+  library: GenreMixLibrary,
+): Generator<void, GenreMixDjCandidate[]> {
+  const eligible: RankedFamily[] = [];
+  for (const family of yield* libraryFamiliesSteps(library)) {
+    if ((yield* seedableArtistsSteps(family)).length > 0) eligible.push(family);
+    yield;
+  }
+  const ranked = yield* sortSteps(eligible, (a, b) => b.plays - a.plays || b.songs - a.songs);
+  let played = false;
+  for (const entry of library.plays ?? []) {
+    if (entry.countedPlays > 0) {
+      played = true;
+      break;
+    }
+    yield;
+  }
+  const seeds: GenreMixDjCandidate[] = [];
+  for (const family of ranked) {
+    const artists = yield* seedArtistsSteps(family, undefined);
+    const members = [...family.artists.values()]
+      .filter((entry) => ytArtistQuery(entry.artist.name) !== null)
+      .sort((a, b) => b.plays - a.plays || b.songs - a.songs)
+      .map(({ artist }) => ({ id: artist.id, name: artist.name }));
+    const { key, name } = family.family;
+    seeds.push({
+      seed: {
+        kind: "genre",
+        id: genreMixId(key),
+        name,
+        from: played ? "plays" : "library",
+        genre: name,
+        artists,
+      },
+      artists: members,
+    });
+  }
+  return seeds;
+}
 
 export function* genreMixSeedsSteps(
   library: GenreMixLibrary,

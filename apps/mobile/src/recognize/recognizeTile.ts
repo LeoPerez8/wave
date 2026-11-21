@@ -11,7 +11,7 @@ import {
   type YtSong,
 } from "@wave/core";
 
-import { startRecognizeSession, type RecognizeDeps } from "./recognizeSession.ts";
+import { startRecognizeSession, type RecognizeDeps } from "@wave/client/recognizeSession";
 
 /** The tile's half of native (`recognize/RecognizeTileRun.kt`, `RecognizeListeningService.kt`). */
 export interface RecognizeTileNative {

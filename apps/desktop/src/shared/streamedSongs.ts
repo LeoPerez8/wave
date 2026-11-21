@@ -2,7 +2,7 @@
  * A streamed YouTube Music song's menu (`window.wave.streamed`), as the phone gives it: Core's
  * `ytSongActions` and `ytDownloadActions`, and Now Playing's Download button for it.
  */
-import type { NowPlayingDownload, StreamedArtistTarget } from "@wave/core";
+import type { NowPlayingDownload, StreamedArtistTarget, UpNextPlace } from "@wave/core";
 import type { Invoke } from "./bridge.ts";
 import type { SongRunResult } from "./songActions.ts";
 
@@ -30,9 +30,9 @@ export const STREAMED_RUN_ACTIONS = [
 ] as const;
 export type StreamedRunAction = (typeof STREAMED_RUN_ACTIONS)[number];
 
-/** One entry, in the phone's order; the window opens pages, the Magic Queue and Copy Link. */
+/** One entry, in the phone's order; the window opens pages, the Magic Queue, Release Date and Share. */
 export type StreamedEntry =
-  | { readonly action: StreamedRunAction | "magicQueue" | "share" }
+  | { readonly action: StreamedRunAction | "magicQueue" | "releaseDate" | "share" }
   | { readonly action: "goToAlbum"; readonly album: string }
   | { readonly action: "goToArtist"; readonly artists: StreamedArtistChoice };
 
@@ -62,8 +62,14 @@ export interface StreamedContract {
     readonly args: readonly [name: string];
     readonly result: StreamedArtistTarget<StreamedArtist>;
   };
+  /** [at]: Add to Queue dropped in Up Next, between those neighbours. */
   readonly "streamed.run": {
-    readonly args: readonly [videoId: string, action: StreamedRunAction, playlistId?: number];
+    readonly args: readonly [
+      videoId: string,
+      action: StreamedRunAction,
+      playlistId?: number,
+      at?: UpNextPlace,
+    ];
     readonly result: StreamedRunResult;
   };
 }
@@ -73,6 +79,6 @@ export const STREAMED_CALLS = ["streamed.menu", "streamed.artist", "streamed.run
 export const streamedBridge = (invoke: Invoke) => ({
   menu: (videoId: string, playing = false) => invoke("streamed.menu", videoId, playing),
   artist: (name: string) => invoke("streamed.artist", name),
-  run: (videoId: string, action: StreamedRunAction, playlistId?: number) =>
-    invoke("streamed.run", videoId, action, playlistId),
+  run: (videoId: string, action: StreamedRunAction, playlistId?: number, at?: UpNextPlace) =>
+    invoke("streamed.run", videoId, action, playlistId, at),
 });

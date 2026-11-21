@@ -282,7 +282,8 @@ preemptible native SQL call nor a strict six-ms hardware deadline.
 The encapsulated legacy `LibraryStore.playlistRecommendationInput` is now a
 protected whole-Library capability. Production uses the separately protected
 `playlistRecommendationSource.ts#playlistRecommendationInput`: the only component
-allowance is `openPlaylistSuggestionsVisit`, whose visit waits for screen sight and
+allowance is `playlistSuggestionsVisit.ts#phoneHost` (#1193 moved the visit to
+`@wave/client/playlistSuggestionsVisit`; the phone's host reads through it), whose visit waits for screen sight and
 settlement (a slot an edit freed included) and cancels on coverage, navigation or cleanup. Since #849 that wait is
 the only one for settlement: the source facade adds none before calling the guarded
 background source factory, whose only allowance creates one paged, versioned snapshot. Exact declaration

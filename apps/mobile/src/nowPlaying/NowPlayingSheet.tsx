@@ -5,17 +5,22 @@ import {
   NOW_PLAYING_FOOTER_SLOTS,
   NOW_PLAYING_TRANSPORT_SLOTS,
   isUnsearchedTrackId,
+  nowPlayingPageSwipesEnabled,
+  nowPlayingRelatedSwipeEnabled,
+  nowPlayingSlotRunsSongMenu,
   nowPlayingSlotShow,
   nowPlayingSongMenuShow,
   type NowPlayingSlotSong,
 } from "@wave/core";
-import type { ReactNode } from "react";
+import type { ComponentRef, ReactNode } from "react";
 import {
   Activity,
   memo,
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -38,7 +43,7 @@ import { LyricCardLayer } from "@/share/LyricCardLayer";
 import { useLyricCardShown } from "@/share/lyricCard";
 import { useSongShareShown } from "@/share/songShare";
 import { shareNowPlaying } from "@/share/songShare";
-import { useNowPlayingButtons } from "@/settings/nowPlayingButtons";
+import { moveSavedNowPlayingButton, useNowPlayingButtons } from "@/settings/nowPlayingButtons";
 import { showNowPlayingEditHint } from "@/settings/nowPlayingEditHint";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
@@ -58,7 +63,13 @@ import { QueueHeader, UpNextList } from "./QueueView";
 import { usePlayingVideoId } from "./relatedSongs";
 import { RelatedPanel } from "./RelatedPanel";
 import { RelatedView } from "./RelatedView";
-import { QueueEdgeMark, ScreenPage, useScreenPages } from "./ScreenPages";
+import {
+  QueueEdgeMark,
+  RelatedRiseArea,
+  ScreenPage,
+  useScreenPages,
+  type RelatedRise,
+} from "./ScreenPages";
 import { Scrubber } from "./Scrubber";
 import { usePlayheadSource } from "./playhead";
 import {
@@ -71,7 +82,9 @@ import {
   useNowPlayingSettled,
 } from "./sheet";
 import { onRelatedOpened } from "./openRelated";
-import { EditSlot, SlotButton, type SlotContext } from "./SlotButtons";
+import { EditSlot, SlotButton, SlotDragPreview, type SlotContext } from "./SlotButtons";
+import { useNowPlayingSlotDrag } from "./slotDrag";
+import { usePlayingSongMenu } from "./songMenuSlots";
 import { EDITING_OPACITY, Transport } from "./Transport";
 import {
   nowPlayingSongLookup,
@@ -140,9 +153,11 @@ const PlayerPane = memo(function PlayerPane({
   playing: boolean;
 }) {
   return (
-    <DismissArea style={PLAYER_AREA}>
-      <PlayerView item={item} details={details} playing={playing} />
-    </DismissArea>
+    <RelatedRiseArea style={{ flex: 1 }}>
+      <DismissArea style={PLAYER_AREA}>
+        <PlayerView item={item} details={details} playing={playing} />
+      </DismissArea>
+    </RelatedRiseArea>
   );
 });
 
@@ -238,6 +253,20 @@ export function NowPlayingSheet() {
   const covered = ytMusic && screen === "related" && !pages.relatedMoving;
   // Related stays drawn, with its songs, while its panel leaves.
   const relatedMounted = ytMusic && (screen === "related" || pages.relatedMoving);
+  // The page gestures sit under Related's carousel, so they must stand down while it shows.
+  const pageSwipesEnabled = nowPlayingPageSwipesEnabled({ screen, editing }) && !relatedMounted;
+  // A drag up on the player raises Related. It doesn't wait on `relatedMounted`: the drag
+  // itself draws the panel, which turns the page swipes off under the finger.
+  const { related, relatedRiseBegan, relatedRiseEnded } = pages;
+  const riseEnabled = nowPlayingRelatedSwipeEnabled({
+    screens: { screen, editing },
+    ytMusic,
+    playing: item !== null,
+  });
+  const rise = useMemo<RelatedRise>(
+    () => ({ enabled: riseEnabled, related, relatedRiseBegan, relatedRiseEnded }),
+    [riseEnabled, related, relatedRiseBegan, relatedRiseEnded],
+  );
   const { videoId, findAgain } = usePlayingVideoId(relatedMounted ? trackId : null, ytSong);
   const playerPageInSight = (page === "player" || turning) && !covered;
   const leaveQueue = useCallback(() => void send({ type: "headerTap" }), [send]);
@@ -331,6 +360,13 @@ export function NowPlayingSheet() {
       ytSong,
     );
   };
+  const buttons = useNowPlayingButtons();
+  // The playing song's card, read while a slot runs one of its entries (Magic Queue, Go to).
+  const slotMenu = usePlayingSongMenu(
+    trackId,
+    ytSong,
+    shown && buttons.some((action) => action !== null && nowPlayingSlotRunsSongMenu(action)),
+  );
   const slotContext: SlotContext = {
     trackId,
     ytSong,
@@ -341,6 +377,7 @@ export function NowPlayingSheet() {
     openQueue,
     share,
     edit: startEditing,
+    runSongMenu: slotMenu.run,
   };
   const slotSong: NowPlayingSlotSong =
     item === null
@@ -348,13 +385,20 @@ export function NowPlayingSheet() {
       : trackId !== null && isUnsearchedTrackId(trackId)
         ? "unsearched"
         : "song";
-  const buttons = useNowPlayingButtons();
+  const applySlotMove = useCallback(
+    (from: number, to: number) => moveSavedNowPlayingButton(from, to),
+    [],
+  );
+  // The sheet the dragged slot's preview is drawn in, and the slots are measured against.
+  const sheet = useRef<ComponentRef<typeof View>>(null);
+  const slotDrag = useNowPlayingSlotDrag(applySlotMove, sheet);
   // A slot's button; null while the slot is None or its action hides for what's on.
   // In edit mode every slot shows, outlined, and opens its card instead.
   const slotButton = (slot: number) => {
     const action = buttons[slot] ?? null;
-    if (editing) return <EditSlot key={slot} slot={slot} action={action} />;
-    const show = action === null ? "hidden" : nowPlayingSlotShow(action, slotSong);
+    if (editing) return <EditSlot key={slot} slot={slot} action={action} drag={slotDrag} />;
+    const show =
+      action === null ? "hidden" : nowPlayingSlotShow(action, slotSong, slotMenu.actions);
     if (action === null || show === "hidden") return null;
     return <SlotButton key={slot} action={action} off={show === "off"} context={slotContext} />;
   };
@@ -373,6 +417,7 @@ export function NowPlayingSheet() {
 
   return (
     <Animated.View
+      ref={sheet}
       style={[StyleSheet.absoluteFill, sheetStyle]}
       // Out of sight, it takes no touches and screen readers skip it.
       pointerEvents={shown ? "auto" : "none"}
@@ -435,7 +480,7 @@ export function NowPlayingSheet() {
 
         <View className="flex-1" onLayout={(event) => setPagesTop(event.nativeEvent.layout.y)}>
           {item !== null && pages.queueMounted && (
-            <ScreenPage screen="queue" pages={pages}>
+            <ScreenPage screen="queue" pages={pages} swipes={pageSwipesEnabled}>
               <Activity
                 mode={(page === "queue" || turning) && !covered ? "visible" : "hidden"}
                 name={strings.playbackText.queue}
@@ -444,8 +489,16 @@ export function NowPlayingSheet() {
               </Activity>
             </ScreenPage>
           )}
-          {/* The player's page: a swipe to the left anywhere but the scrubber brings the Queue. */}
-          <ScreenPage screen="player" pages={pages} swipes={item !== null && !editing}>
+          {/*
+           * The player's page: a swipe to the left anywhere but the scrubber brings the Queue,
+           * and a drag up anywhere but the lyrics themselves raises Related (`RelatedRiseArea`).
+           */}
+          <ScreenPage
+            screen="player"
+            pages={pages}
+            swipes={pageSwipesEnabled && item !== null}
+            rise={rise}
+          >
             <View className="flex-1" {...dimmed}>
               {item === null ? (
                 <DismissArea style={{ flex: 1 }}>
@@ -486,39 +539,41 @@ export function NowPlayingSheet() {
               )}
             </View>
 
-            <DismissArea style={{ paddingTop: CELL * 3, gap: CELL * 2 }}>
-              <View {...dimmed}>
-                <Scrubber />
-              </View>
-              <Transport
-                left={slotButton(NOW_PLAYING_TRANSPORT_SLOTS.left)}
-                right={slotButton(NOW_PLAYING_TRANSPORT_SLOTS.right)}
-                editing={editing}
-              />
-              {/*
-               * The five footer slots (Settings › Layout › Now Playing). Empty, the row keeps
-               * its height, so the transport stays put. The song controls share one lookup
-               * after settlement or their own early tap.
-               */}
-              <View>
-                <View
-                  className={`flex-row items-center ${footer.length === 1 ? "justify-center" : "justify-between"}`}
-                  style={{ minHeight: CELL * 6 }}
-                >
-                  {footer}
+            <RelatedRiseArea>
+              <DismissArea style={{ paddingTop: CELL * 3, gap: CELL * 2 }}>
+                <View {...dimmed}>
+                  <Scrubber />
                 </View>
-                {/* Under the slots, in the sheet's bottom margin, so nothing above it moves. */}
-                {editing && (
-                  <Text
-                    className="font-sans text-caption text-secondary"
-                    style={EDIT_NOTE}
-                    numberOfLines={1}
+                <Transport
+                  left={slotButton(NOW_PLAYING_TRANSPORT_SLOTS.left)}
+                  right={slotButton(NOW_PLAYING_TRANSPORT_SLOTS.right)}
+                  editing={editing}
+                />
+                {/*
+                 * The five footer slots (Settings › Layout › Now Playing). Empty, the row keeps
+                 * its height, so the transport stays put. The song controls share one lookup
+                 * after settlement or their own early tap.
+                 */}
+                <View>
+                  <View
+                    className={`flex-row items-center ${footer.length === 1 ? "justify-center" : "justify-between"}`}
+                    style={{ minHeight: CELL * 6 }}
                   >
-                    {strings.playbackText.tapASlotToChooseItsAction}
-                  </Text>
-                )}
-              </View>
-            </DismissArea>
+                    {footer}
+                  </View>
+                  {/* Under the slots, in the sheet's bottom margin, so nothing above it moves. */}
+                  {editing && (
+                    <Text
+                      className="font-sans text-caption text-secondary"
+                      style={EDIT_NOTE}
+                      numberOfLines={1}
+                    >
+                      {strings.playbackText.tapASlotToChooseItsAction}
+                    </Text>
+                  )}
+                </View>
+              </DismissArea>
+            </RelatedRiseArea>
             {item !== null && !editing && <QueueEdgeMark onPress={openQueue} />}
           </ScreenPage>
         </View>
@@ -531,6 +586,9 @@ export function NowPlayingSheet() {
       )}
       {/* The lyrics card's preview, over the whole sheet (Share in the Lyrics view). */}
       <LyricCardLayer />
+      {slotDrag.dragging !== null && (
+        <SlotDragPreview drag={slotDrag} action={buttons[slotDrag.dragging] ?? null} />
+      )}
     </Animated.View>
   );
 }

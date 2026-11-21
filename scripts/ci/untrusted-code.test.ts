@@ -20,6 +20,13 @@ describe("untrustedCodeExposures", () => {
     assert.deepEqual(untrustedCodeExposures(workflow), ["trigger pull_request_target"]);
   });
 
+  it("lets a workflow be called by another one, which runs it with its own event and token", () => {
+    const workflow = ["on:", "  workflow_call:", "    inputs: {}", "permissions: {}", ...job].join(
+      "\n",
+    );
+    assert.deepEqual(untrustedCodeExposures(workflow), []);
+  });
+
   it("names a workflow that grants its jobs a token before they ask for one", () => {
     const missing = ["on:", "  pull_request:", ...job].join("\n");
     const broad = ["on: [push, pull_request]", "permissions: write-all", ...job].join("\n");

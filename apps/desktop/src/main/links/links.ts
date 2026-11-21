@@ -29,6 +29,12 @@ import {
   keepBothName,
   importNameClash,
   spotifyShortLinkTarget,
+  desktopSongShareMenu,
+  spotifyRecordingLink,
+  joinArtists,
+  type SongLinksState,
+  type SpotifySong,
+  type SpotifyTrackState,
   type LinkImportPlan,
   type LinkReadFailure,
   type LinkedSource,
@@ -51,10 +57,13 @@ import {
 } from "@wave/client/db/playlists";
 import type { KotlinMethods } from "../kotlin/protocol.ts";
 import { ytSongs } from "../yt/ytMusic.ts";
-import type { OpenLinkResult, CopyLinkResult } from "../../shared/links.ts";
+import type { OpenLinkResult, CopyLinkResult, SongShareView } from "../../shared/links.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
 import { preference, savePreference } from "../preferences.ts";
+import { isCollaborative } from "../library/collaborativePlaylists.ts";
 import { targetSongs } from "../library/songActions.ts";
+import { findSpotifyRecording, shareLibraryPlaylist } from "../spotify/playlistShare.ts";
+import type { SpotifyAccountService } from "../spotify/spotifyAccount.ts";
 
 export interface LinksOptions {
   readonly db: LibraryDatabase;
@@ -70,7 +79,20 @@ export interface LinksOptions {
   readonly writeClipboard: (text: string) => void;
   readonly changed: () => void;
   readonly fetch?: typeof globalThis.fetch;
+  /** The streamed song a page or the queue brought, by its video id (Share's card and links). */
+  readonly song?: (videoId: string) => YtAlbumSong | undefined;
 }
+
+/** The addresses Share's link items copy: song.link's, YT Music's and Spotify's song pages. */
+const SHARE_LINKS = [
+  /^https:\/\/song\.link\/y\/[A-Za-z0-9_-]{11}$/u,
+  /^https:\/\/music\.youtube\.com\/watch\?v=[A-Za-z0-9_-]{11}$/u,
+  /^https:\/\/open\.spotify\.com\/track\/[A-Za-z0-9]{1,64}$/u,
+];
+
+/** Whether [url] is a song address Share copies. */
+export const isShareLink = (url: unknown): url is string =>
+  typeof url === "string" && SHARE_LINKS.some((pattern) => pattern.test(url));
 
 export const createDesktopLinks = (options: LinksOptions) => {
   /**
@@ -180,7 +202,91 @@ export const createDesktopLinks = (options: LinksOptions) => {
       view: linkImportView({ status: "read", playlist: read, plan }, language),
     };
   };
+  /** [target]'s one Library song, or undefined when it isn't one song. */
+  const librarySong = (target: SongTarget) => {
+    const ids = targetSongs(options.db, target);
+    return ids.length === 1
+      ? trackQuery(options.db).where(eq(tracks.id, ids[0]!)).get()
+      : undefined;
+  };
+  /** One YouTube Music search for [song]'s video, as Copy Link searches. */
+  const searchVideo = async (song: SpotifySong) => {
+    if (!options.online()) return { ok: false, reason: "offline" } as const;
+    try {
+      const page = (await options.call("search", {
+        query: songSearchQuery(song as SongSearchKey),
+      })) as { songs?: unknown };
+      return { ok: true, songs: ytSongs(page.songs) } as const;
+    } catch {
+      return { ok: false, reason: "failed" } as const;
+    }
+  };
+  /** [song]'s Spotify link, searched for as the signed-in [account]; nothing is sent signed out. */
+  const spotifyLink = async (
+    song: SpotifySong,
+    account: Pick<SpotifyAccountService, "session" | "request">,
+  ): Promise<SpotifyTrackState> =>
+    account.session().status !== "signedIn"
+      ? { status: "signedOut" }
+      : spotifyRecordingLink(await findSpotifyRecording(account.request, song));
   return {
+    /**
+     * Share's submenu for a Library song ([target]) or a streamed one (its video id): the
+     * song's card, and its Copy Link, Spotify and YT Music addresses as the phone's share sheet
+     * finds them. Without a connection the links read Offline; with YT Music off there are none.
+     */
+    songShare: async (
+      target: SongTarget | string,
+      language: AppLanguage,
+      account: Pick<SpotifyAccountService, "session" | "request">,
+    ): Promise<SongShareView> => {
+      const strings = catalogueOf(language, "desktop");
+      let card: Omit<SongShareView, "items">;
+      let videoId: string | null;
+      let search: SpotifySong;
+      if (typeof target === "string") {
+        const song = options.song?.(target);
+        if (song === undefined) throw new Error("[yt-unknown] That song isn't known anymore");
+        videoId = song.videoId;
+        search = {
+          title: song.title,
+          artists: song.artists,
+          album: song.album,
+          durationMs: song.durationMs,
+        };
+        card = {
+          title: song.title,
+          artist: joinArtists(song.artists),
+          cover: song.artworkUrl ? { kind: "url", url: song.artworkUrl } : null,
+        };
+      } else {
+        const song = librarySong(target);
+        if (song === undefined) throw new Error("Share takes one song");
+        videoId = selectVideoIds(options.db, [song.id]).get(song.id) ?? null;
+        search = librarySearchSong(song);
+        card = { title: song.title, artist: song.artist, cover: { kind: "song", id: song.id } };
+      }
+      let links: SongLinksState | null = null;
+      if (options.enabled())
+        links = !options.online()
+          ? { video: { status: "offline" }, spotify: { status: "offline" } }
+          : await Promise.all([
+              lookUpSongVideo({ videoId, search }, searchVideo).catch(
+                () => ({ status: "failed" }) as const,
+              ),
+              spotifyLink(search, account).catch(() => ({ status: "failed" }) as const),
+            ]).then(([video, spotify]) => ({ video, spotify }));
+      return { ...card, items: desktopSongShareMenu(links, strings) };
+    },
+    /** Puts one of Share's song addresses on the clipboard; anything else is refused. */
+    copyShareLink: (url: string, language: AppLanguage): CopyLinkResult => {
+      if (!isShareLink(url)) throw new Error("Refused a link Share doesn't give");
+      options.writeClipboard(url);
+      return { kind: "copied", message: catalogueOf(language, "desktop").share.linkCopied };
+    },
+    /** Share to Spotify: [account] asks Spotify, and the playlist's link goes to the clipboard. */
+    shareToSpotify: (id: number, account: Pick<SpotifyAccountService, "session" | "request">) =>
+      shareLibraryPlaylist({ db: options.db, account, writeClipboard: options.writeClipboard }, id),
     copyPlaylist: async (id: number, language: AppLanguage): Promise<CopyLinkResult> => {
       const strings = catalogueOf(language, "desktop");
       const fail = (message: string): CopyLinkResult => ({
@@ -297,9 +403,12 @@ export const createDesktopLinks = (options: LinksOptions) => {
       if (pending?.token !== token) throw new Error("No playlist import to save");
       const { plan } = pending;
       const playlists = selectPlaylists(options.db);
-      const clash = importNameClash(plan.name, playlists);
+      const found = importNameClash(plan.name, playlists);
+      // A collaborative playlist is never replaced: the import keeps both.
+      const clash =
+        found === undefined || isCollaborative(options.db, found.id) ? undefined : found;
       const name =
-        replace || clash === undefined
+        (replace && clash !== undefined) || found === undefined
           ? plan.name
           : keepBothName(
               plan.name,
@@ -327,25 +436,13 @@ export const createDesktopLinks = (options: LinksOptions) => {
       let videoId: string | null = typeof target === "string" ? target : null;
       let search = null;
       if (typeof target !== "string") {
-        const ids = targetSongs(options.db, target);
-        const song =
-          ids.length === 1 ? trackQuery(options.db).where(eq(tracks.id, ids[0]!)).get() : undefined;
+        const song = librarySong(target);
         if (song !== undefined) {
           videoId = selectVideoIds(options.db, [song.id]).get(song.id) ?? null;
           search = librarySearchSong(song);
         }
       }
-      const video = await lookUpSongVideo({ videoId, search }, async (song) => {
-        if (!options.online()) return { ok: false, reason: "offline" };
-        try {
-          const page = (await options.call("search", {
-            query: songSearchQuery(song as SongSearchKey),
-          })) as { songs?: unknown };
-          return { ok: true, songs: ytSongs(page.songs) };
-        } catch {
-          return { ok: false, reason: "failed" };
-        }
-      });
+      const video = await lookUpSongVideo({ videoId, search }, searchVideo);
       const link = songLinkView("copyLink", { video, spotify: { status: "signedOut" } }, strings);
       if (link.url === null)
         return {

@@ -169,8 +169,10 @@ export function Links({
                 disabled={busy || !opened.view.canImport}
                 onClick={() => {
                   void window.wave.library.browse({ kind: "playlists" }, 0, 200).then((page) => {
+                    // A collaborative playlist is never replaced: the import keeps both.
                     const clash = page.items.find(
                       (row) =>
+                        !row.collaborative &&
                         row.title.toLocaleLowerCase() === opened.view.name?.toLocaleLowerCase(),
                     );
                     if (clash) setReplace({ token: opened.token, name: clash.title });

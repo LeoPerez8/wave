@@ -1,4 +1,4 @@
-//! The engine the app drives: one player on the default output device.
+//! The engine the app drives: one player on the default output device, or the one chosen.
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -8,7 +8,7 @@ use std::thread;
 
 use crate::error::EngineError;
 use crate::loudness::{Measurement, measure};
-use crate::output::Output;
+use crate::output::{Output, OutputDevice};
 use crate::player::{Next, PlayState, Player, TrackInfo, Transition};
 use crate::stream::{Origin, Streams};
 
@@ -113,6 +113,17 @@ impl Engine {
     /// Normalize Volume's switch; at once.
     pub fn set_normalize(&self, on: bool) {
         self.player.set_normalize(on);
+    }
+
+    /// The outputs the system has, as of a second ago at most; none for a silent engine.
+    pub fn outputs(&self) -> Vec<OutputDevice> {
+        self.output.outputs()
+    }
+
+    /// Plays on the output with `id` while the system has it, and on the system's default
+    /// otherwise or with `None`. The song goes on from where it is.
+    pub fn set_output(&self, id: Option<String>) {
+        self.output.choose(id);
     }
 
     /// Queues `path` to be measured for Normalize Volume, away from playback; its result comes

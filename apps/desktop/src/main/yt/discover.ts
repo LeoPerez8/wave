@@ -21,6 +21,7 @@ import {
   libraryFinder,
   libraryMixProfilesSteps,
   mixSeedArtists,
+  placeDiscoverMixSongs,
   randomMagicQueuePicks,
   type MagicQueueSeedId,
   rankedDiscoverMixes,
@@ -31,7 +32,9 @@ import {
   type DiscoverRowId,
   type MixRowId,
   type DiscoverSongPlays,
+  type MixedSong,
   type PlayedSeedArtist,
+  type YtAlbumSong,
   type YtSong,
 } from "@wave/core";
 
@@ -72,7 +75,14 @@ export interface DiscoverDeps {
   readonly saveSettings?: (value: DiscoverSettings) => void;
   /** Discover's rows Home shows, in order (Core's `parseHomeArrangement`); absent, all three. */
   readonly rows?: () => readonly DiscoverRowId[];
+  /** Whether the Library still has the song [id] as a file; absent, the `library` ids. */
+  readonly track?: (id: number) => boolean;
+  /** The Library song [song] is, by id, once it's a file (a download); absent, none. */
+  readonly find?: (song: YtAlbumSong) => number | null;
 }
+
+/** A song of a mix as its page lists it and it plays: a Library song by id, or one that streams. */
+export type PlacedMixSong = MixedSong<YtAlbumSong, number>;
 
 /** One mix as Discover's level plays it, named after its seed: an artist or a genre family. */
 export interface DesktopMix extends BlendedDiscoverMix {
@@ -102,6 +112,12 @@ export interface DiscoverShape {
   readonly mixes: () => Promise<MixesRead>;
   /** One of today's mixes, by its id. */
   readonly mix: (id: string) => DesktopMix | undefined;
+  /**
+   * Today's mix [id]'s songs as its page lists and plays them (Core's `placeDiscoverMixSongs`):
+   * its Library songs among its new ones, a new song the Library has since as its file, a
+   * Library song no longer there left out; undefined for a mix that's gone.
+   */
+  readonly placed: (id: string) => readonly PlacedMixSong[] | undefined;
 }
 
 type SeedArtist = Pick<DiscoverMixSeed, "name" | "browseId">;
@@ -262,5 +278,15 @@ export const createDiscover = (deps: DiscoverDeps): DiscoverShape => {
       }
     },
     mix: (id) => built?.mixes.find((mix) => mix.id === id),
+    placed: (id) => {
+      const mix = built?.mixes.find((found) => found.id === id);
+      if (mix === undefined) return undefined;
+      const ids = deps.track === undefined ? new Set(deps.library().trackIds) : undefined;
+      const has = (trackId: number) => deps.track?.(trackId) ?? ids?.has(trackId) === true;
+      return placeDiscoverMixSongs(mix, {
+        find: (song) => deps.find?.(song) ?? null,
+        track: (trackId) => (has(trackId) ? trackId : null),
+      });
+    },
   };
 };

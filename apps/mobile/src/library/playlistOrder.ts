@@ -1,6 +1,8 @@
 import {
+  PLAYLIST_ORDER_SETTING,
   movePlaylist,
   parsePlaylistOrder,
+  samePlaylistOrder,
   sortPlaylists,
   storedPlaylistOrder,
   type PlaylistOrder,
@@ -12,21 +14,16 @@ import { persistedSetting } from "@/lib/persistedSetting";
 import type { LibraryStore, LibraryStoreError } from "./LibraryStore";
 import type { PlaylistRow } from "@wave/client";
 
-const sameOrder = (a: PlaylistOrder, b: PlaylistOrder): boolean =>
-  a.sort === b.sort &&
-  a.order.length === b.order.length &&
-  a.order.every((id, index) => id === b.order[index]);
-
 /**
  * The Playlists list's order (Core's `playlistSort.ts`): the sort, and the
  * owner's own order for Custom. Kept on this phone; it doesn't sync. Free of
  * screens and queries, so Android Auto's service reads it too.
  */
 export const playlistOrder = persistedSetting<PlaylistOrder>({
-  key: "settings.playlistOrder",
+  key: PLAYLIST_ORDER_SETTING,
   read: parsePlaylistOrder,
   write: storedPlaylistOrder,
-  equals: sameOrder,
+  equals: samePlaylistOrder,
 });
 
 /** No playlist played yet, or Recently Played not asked for. */

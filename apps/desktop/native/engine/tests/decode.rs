@@ -57,6 +57,11 @@ fn flac_decodes_and_seeks_sample_exact() {
     assert_lossless("tone.flac", 22_050);
 }
 
+#[test]
+fn alac_in_m4a_decodes_and_seeks_sample_exact() {
+    assert_lossless("tone-alac.m4a", 22_050);
+}
+
 /// Lossy files decode to the signal within the codec's noise, lined up to the frame (`delay`
 /// is where the decoder puts the signal's first frame), from the start and after a seek.
 fn assert_lossy(name: &str, rate: u32, delay: i64, min_snr: f64) {
@@ -102,6 +107,43 @@ fn opus_decodes_and_seeks_in_place() {
 #[test]
 fn aac_decodes_and_seeks_in_place() {
     assert_lossy("tone.m4a", 44_100, 0, 15.0);
+}
+
+fn assert_he_aac(name: &str, golden: &[u8]) {
+    let mut decoder = Decoder::open(&fixture(name)).expect("opens");
+    assert_eq!(decoder.sample_rate(), 48_000, "{name}: output runs at the SBR rate");
+    assert_eq!(decoder.source_channels(), 2, "{name}: stereo output");
+    assert_eq!(decoder.duration_frames(), Some(48_000), "{name}: trimmed duration");
+    let pcm = decode_all(&mut decoder);
+    assert_eq!(pcm.len(), 96_000, "{name}: frame count");
+
+    // FFmpeg's AAC decoder produced this window, including energy above the core's 12 kHz limit.
+    // Allow two 16-bit quantization steps for rounding and differences in SBR synthesis.
+    let compare = |samples: &[f32], position: &str| {
+        assert_eq!(samples.len() * 4, golden.len());
+        for (i, (&sample, bytes)) in samples.iter().zip(golden.as_chunks::<4>().0).enumerate() {
+            let expected = f32::from_le_bytes(*bytes);
+            assert!(
+                (sample - expected).abs() <= 2.0 / 32768.0,
+                "{name} {position}: sample {i}: {sample} against {expected}"
+            );
+        }
+    };
+    let start = 12_000;
+    let frames = golden.len() / 8;
+    compare(&pcm[start * 2..(start + frames) * 2], "from the start");
+    decoder.seek(start as u64).expect("seeks");
+    compare(&decode_frames(&mut decoder, frames), "after seeking");
+}
+
+#[test]
+fn he_aac_v1_in_m4a_decodes_spectral_band_replication() {
+    assert_he_aac("tone-he-aac-v1.m4a", include_bytes!("fixtures/tone-he-aac-v1.f32le"));
+}
+
+#[test]
+fn he_aac_v2_in_m4a_decodes_parametric_stereo() {
+    assert_he_aac("tone-he-aac-v2.m4a", include_bytes!("fixtures/tone-he-aac-v2.f32le"));
 }
 
 #[test]

@@ -2,14 +2,16 @@
  * A Wave sync service for tests, run by plain Node: one account's rows in
  * memory, merged by Core's rules as `apps/sync` merges them, numbered by
  * change and paged by pulls as the service pages them, with its body limit
- * and, when set, its retained-row limits.
+ * and, when set, its retained-row limits. A change time ahead of its clock
+ * is stored as its own time, and the push answer names those rows.
  * It answers what `WaveAccount.request` would.
  */
 import {
   EMPTY_SYNC_TABLES,
   mergePlays,
-  mergeRows,
+  mergeTableRows,
   SYNC_TABLE_NAMES,
+  withinServiceClock,
   type SyncPlayRow,
   type SyncTables,
 } from "@wave/core";
@@ -43,6 +45,17 @@ export interface TestSyncService extends SyncTransport {
    * add an id past it is refused whole (413), as the service refuses it.
    */
   rowLimits: Partial<Record<Table, number>>;
+  /** Stores a push of [body] as `POST /v1/push` does: the answer, or the limit it passed. */
+  readonly pushTables: (
+    body: Partial<SyncTables>,
+  ) =>
+    | { readonly accepted: Record<string, number>; readonly corrected: Record<string, unknown> }
+    | { readonly limit: string };
+  /** A pull page after change [since] of the rows [keep] takes (all when absent). */
+  readonly pullTables: (
+    since: number,
+    keep?: (table: Table, row: SyncTables[Table][number]) => boolean,
+  ) => Record<string, unknown>;
 }
 
 /** The service's name for each table's row limit (`SYNC_LIMITS`). */
@@ -60,8 +73,17 @@ const LIMIT_NAMES: Record<Table, string> = {
   dislikes: "maxDislikes",
 };
 
-export const testSyncService = (options: { readonly pageSize?: number } = {}): TestSyncService => {
+export const testSyncService = (
+  options: {
+    readonly pageSize?: number;
+    /** The service's clock (the real time when absent, which no test phone's clock is ahead of). */
+    readonly now?: () => number;
+    /** Keys every `GET /v1/pull` answer carries besides the rows (the account's membership). */
+    readonly pullExtras?: () => Record<string, unknown>;
+  } = {},
+): TestSyncService => {
   const pageSize = options.pageSize ?? 1_000;
+  const now = options.now ?? Date.now;
   const held = new Map<string, Held>();
   let changeSeq = 0;
 
@@ -70,17 +92,32 @@ export const testSyncService = (options: { readonly pageSize?: number } = {}): T
 
   const push = (body: Partial<SyncTables>) => {
     const accepted: Record<string, number> = {};
+    const corrected: Record<string, { id: string; changedAt: number }[]> = {};
     const won = new Map<Table, readonly SyncTables[Table][number][]>();
     for (const table of TABLES) {
-      const incoming = body[table] ?? [];
+      const pushed = body[table] ?? [];
       const current = rowsOf(table);
+      const incoming =
+        table === "plays"
+          ? pushed
+          : withinServiceClock(pushed as SyncTables["songs"][number][], now());
       const merged =
         table === "plays"
           ? mergePlays(current as SyncPlayRow[], incoming as SyncPlayRow[]).added
-          : mergeRows(
+          : mergeTableRows(
+              table,
               current as SyncTables["songs"][number][],
               incoming as SyncTables["songs"][number][],
             ).accepted;
+      const stored = merged.filter(
+        (row) => "changedAt" in row && !(pushed as readonly unknown[]).includes(row),
+      );
+      if (stored.length > 0) {
+        corrected[table] = stored.map((row) => ({
+          id: row.id,
+          changedAt: (row as { changedAt: number }).changedAt,
+        }));
+      }
       const ids = new Set(current.map((row) => row.id));
       const limit = service.rowLimits[table];
       const added = new Set(merged.map((row) => row.id).filter((id) => !ids.has(id))).size;
@@ -95,12 +132,15 @@ export const testSyncService = (options: { readonly pageSize?: number } = {}): T
       }
       accepted[table] = rows.length;
     }
-    return { accepted };
+    return { accepted, corrected };
   };
 
-  const pull = (since: number) => {
+  const pull = (
+    since: number,
+    keep: (table: Table, row: SyncTables[Table][number]) => boolean = () => true,
+  ) => {
     const changed = [...held.values()]
-      .filter((entry) => entry.changeNo > since)
+      .filter((entry) => entry.changeNo > since && keep(entry.table, entry.row))
       // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array
       .sort((a, b) => a.changeNo - b.changeNo);
     const page = changed.slice(0, pageSize);
@@ -109,7 +149,10 @@ export const testSyncService = (options: { readonly pageSize?: number } = {}): T
       tables[table] = page
         .filter((entry) => entry.table === table)
         .map((entry) =>
-          "deleted" in entry.row && entry.row.deleted
+          // As the service: a tombstone carries no fields, a Graveyard one keeps them.
+          "deleted" in entry.row &&
+          entry.row.deleted &&
+          !("removedAt" in entry.row && typeof entry.row.removedAt === "number")
             ? {
                 id: entry.row.id,
                 changedAt: entry.row.changedAt,
@@ -131,6 +174,8 @@ export const testSyncService = (options: { readonly pageSize?: number } = {}): T
     refuse: 0,
     rowLimits: {},
     requests: [],
+    pushTables: push,
+    pullTables: pull,
     rows: () =>
       Object.fromEntries(TABLES.map((table) => [table, rowsOf(table)])) as unknown as SyncTables,
     request: async (method, path, body) => {
@@ -153,7 +198,10 @@ export const testSyncService = (options: { readonly pageSize?: number } = {}): T
       }
       const since = /^\/v1\/pull\?since=(\d+)$/.exec(path)?.[1];
       if (method === "GET" && since !== undefined) {
-        return { status: 200, body: JSON.stringify(pull(Number(since))) };
+        return {
+          status: 200,
+          body: JSON.stringify({ ...pull(Number(since)), ...options.pullExtras?.() }),
+        };
       }
       return { status: 404, body: '{"error":"not_found"}' };
     },

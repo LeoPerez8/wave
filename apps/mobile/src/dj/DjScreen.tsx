@@ -12,13 +12,16 @@ import {
   djSelectable,
   djSelected,
   djTileArtist,
+  genreMixDjCandidates,
   type DjAlbum,
   type DjAlbumTile,
   type DjArtistTile,
+  type DjGenreTile,
   type DjOpeningGrid,
   type DjState,
   type DjTile,
   type DjTileKey,
+  type GenreMixDjCandidate,
   identityKey,
 } from "@wave/core";
 import { IconArrowLeft, IconSearch, IconX } from "@tabler/icons-react-native";
@@ -39,6 +42,7 @@ import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { StagedSections } from "@/components/StagedSections";
 import { TextButton } from "@/components/TextButton";
 import { useBuiltArtistMixes } from "@/home/discoverMixes";
+import { magicProfileOf } from "@/home/artistGenres";
 import { magicQueueGrid } from "@/home/homeOpening";
 import type { MixIndexes } from "@/home/mixKnown";
 import { recommendationSnapshot } from "@/home/recommendationSnapshot";
@@ -90,12 +94,23 @@ const similarOf = (name: string) =>
     now: Date.now,
   });
 
-/** What DJ's grid ranks its artists by, as Core's `djGrid` takes it. */
-const gridSources = (library: MixIndexes) => ({
+/** Genre mixes' families over [library] (`genreMixDjCandidates`): worked out once per Library snapshot. */
+const familiesOf = (library: MixIndexes): readonly GenreMixDjCandidate[] =>
+  genreMixDjCandidates({
+    artists: library.artists,
+    songs: library.songs,
+    plays: library.plays,
+    graph: recommendationSnapshot.peek().graph,
+    profileOf: magicProfileOf(library),
+  });
+
+/** What DJ's grid ranks its artists by, as Core's `djGrid` takes it, with [library]'s [families]. */
+const gridSources = (library: MixIndexes, families: readonly GenreMixDjCandidate[]) => ({
   artists: library.artists,
   taste: latestTasteProfile(),
   played: library.topArtists,
   graph: recommendationSnapshot.peek().graph,
+  genreCandidates: families,
 });
 
 /**
@@ -106,9 +121,17 @@ const gridSources = (library: MixIndexes) => ({
  * YT Music pages of the grid's artists list (the grid as it is without
  * albums, which holds every artist the one with albums shows).
  */
-const albumsOver = (library: MixIndexes): Promise<DjAlbum[]> => {
+const albumsOver = (
+  library: MixIndexes,
+  families: readonly GenreMixDjCandidate[],
+): Promise<DjAlbum[]> => {
   const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
-  return readDjAlbums(djGrid(gridSources(library)).map(djTileArtist), {
+  const artists = new Set(
+    djGrid(gridSources(library, families)).flatMap((tile) =>
+      tile.kind === "genre" ? tile.opens.map(djTileArtist) : [djTileArtist(tile)],
+    ),
+  );
+  return readDjAlbums([...artists], {
     library: () =>
       appRuntime.runPromise(
         Effect.gen(function* () {
@@ -175,23 +198,34 @@ const useDjGrid = () => {
       current = false;
     };
   }, [waiting]);
-  const [albums, setAlbums] = useState<readonly DjAlbum[] | null>(null);
+  // The Library snapshot's families and albums, read once per snapshot outside render.
+  const [read, setRead] = useState<{
+    readonly library: MixIndexes;
+    readonly families: readonly GenreMixDjCandidate[];
+    readonly albums: readonly DjAlbum[];
+  } | null>(null);
   useEffect(() => {
     if (library === null || library === "failed") return;
     let current = true;
-    void albumsOver(library).then((read) => {
-      if (current) setAlbums(read);
+    const families = familiesOf(library);
+    void albumsOver(library, families).then((albums) => {
+      if (current) setRead({ library, families, albums });
     });
     return () => {
       current = false;
     };
   }, [library]);
+  const ready = read !== null && read.library === library ? read : null;
   const opening = useMemo((): DjOpeningGrid | null => {
     if (library === null) return null;
     if (library === "failed") return { kind: "nothing" };
-    if (albums === null) return null;
-    return djOpeningGrid({ ...gridSources(library), albums, artistMixes });
-  }, [library, albums, artistMixes]);
+    if (ready === null) return null;
+    return djOpeningGrid({
+      ...gridSources(ready.library, ready.families),
+      albums: ready.albums,
+      artistMixes,
+    });
+  }, [library, ready, artistMixes]);
   const libraryArtists = library === null || library === "failed" ? NO_ARTISTS : library.artists;
   if (state === null && opening !== null && opening.kind !== "skeleton") {
     // The tiles the last DJ was started from are selected, and in the grid
@@ -200,7 +234,9 @@ const useDjGrid = () => {
       grid: opening.kind === "tiles" ? opening.tiles : [],
       remembered: djRemembered.get().tiles,
       artists: libraryArtists,
-      albums: albums ?? [],
+      albums: ready?.albums ?? [],
+      genreCandidates: ready?.families ?? null,
+      taste: latestTasteProfile(),
     });
     if (reopened.tiles.length > 0) setState(reopened);
   }
@@ -371,6 +407,45 @@ const AlbumTile = memo(function AlbumTile({
         <View style={{ paddingTop: CELL }}>
           <CardTitle>{tile.name}</CardTitle>
           <CardDetail size="footnote">{tile.artist}</CardDetail>
+        </View>
+      </CardTile>
+    </View>
+  );
+});
+
+/** A family tile: a square named for its family, with a check when selected. */
+const GenreTile = memo(function GenreTile({
+  tile,
+  size,
+  selected,
+  selectable,
+  onToggle,
+}: {
+  tile: DjGenreTile;
+  size: number;
+  selected: boolean;
+  selectable: boolean;
+  onToggle: (key: DjTileKey) => void;
+}) {
+  const { strings } = useLocalisation();
+  return (
+    <View
+      style={{ opacity: selectable ? 1 : 0.4 }}
+      pointerEvents={selectable ? "auto" : "none"}
+      accessibilityState={{ disabled: !selectable }}
+    >
+      <CardTile
+        width={size}
+        label={strings.dj.genreTile(tile.name)}
+        checked={selected}
+        onPress={() => onToggle(tile.key)}
+      >
+        <View
+          className="bg-fill items-center justify-center"
+          style={{ width: size, height: size, borderRadius: CELL * 0.75, padding: CELL * 2 }}
+        >
+          <CardTitle centred>{tile.name}</CardTitle>
+          {selected && <TileCheck checked />}
         </View>
       </CardTile>
     </View>
@@ -564,6 +639,8 @@ export function DjScreen() {
                   };
                   return tile.kind === "album" ? (
                     <AlbumTile key={cell.key} tile={tile} {...picking} />
+                  ) : tile.kind === "genre" ? (
+                    <GenreTile key={cell.key} tile={tile} {...picking} />
                   ) : (
                     <ArtistTile
                       key={cell.key}

@@ -6,26 +6,29 @@
 account, asks Genius and Ticketmaster for signed-in phones and deletes accounts. See "Wave
 account and sync", "Genius About" and "Followed artists" in `docs/spec.md`.
 
-| File                   | What it holds                                                           |
-| ---------------------- | ----------------------------------------------------------------------- |
-| `src/worker.ts`        | The Worker entry: builds the service from the Worker's secrets and vars |
-| `src/service.ts`       | The routes, sessions, the rate limits and the allowlist                 |
-| `src/google.ts`        | Checking a Google ID token (RS256 against Google's JWKS)                |
-| `src/store.ts`         | Push (merge and number changes), pull (pages) and account deletion      |
-| `src/soulseek.ts`      | The account's Soulseek account, its password encrypted (`SOULSEEK_KEY`) |
-| `src/proxy.ts`         | A provider's fixed requests: the cache, the provider call, its failures |
-| `src/tables.ts`        | The synced tables: wire fields, checks and columns                      |
-| `src/migrations.ts`    | The schema, as ordered migrations                                       |
-| `src/limits.ts`        | `SYNC_LIMITS` and `USAGE_WARNINGS`                                      |
-| `src/sessions.ts`      | Session expiry and the hourly deletion of expired sessions              |
-| `src/maintenance.ts`   | The hourly maintenance (the Cron Trigger): expired sessions, usage      |
-| `src/usage.ts`         | The hourly usage watch                                                  |
-| `src/compatibility.ts` | The compatibility report: current use against the selected limits       |
-| `scripts/migrate.ts`   | Runs pending migrations against `TURSO_DATABASE_URL`                    |
+| File                    | What it holds                                                           |
+| ----------------------- | ----------------------------------------------------------------------- |
+| `src/worker.ts`         | The Worker entry: builds the service from the Worker's secrets and vars |
+| `src/service.ts`        | The routes, sessions, the rate limits and the allowlist                 |
+| `src/google.ts`         | Checking a Google ID token (RS256 against Google's JWKS)                |
+| `src/store.ts`          | Push (merge and number changes), pull (pages) and account deletion      |
+| `src/collaborations.ts` | A collaborative playlist's record: owner, members, leaving and removal  |
+| `src/invites.ts`        | A collaborative playlist's invite link: create, read, turn off, join    |
+| `src/soulseek.ts`       | The account's Soulseek account, its password encrypted (`SOULSEEK_KEY`) |
+| `src/proxy.ts`          | A provider's fixed requests: the cache, the provider call, its failures |
+| `src/tables.ts`         | The synced tables: wire fields, checks and columns                      |
+| `src/migrations.ts`     | The schema, as ordered migrations                                       |
+| `src/limits.ts`         | `SYNC_LIMITS` and `USAGE_WARNINGS`                                      |
+| `src/sessions.ts`       | Session expiry and the hourly deletion of expired sessions              |
+| `src/maintenance.ts`    | The hourly maintenance (the Cron Trigger): expired sessions, usage      |
+| `src/usage.ts`          | The hourly usage watch                                                  |
+| `src/compatibility.ts`  | The compatibility report: current use against the selected limits       |
+| `scripts/migrate.ts`    | Runs pending migrations against `TURSO_DATABASE_URL`                    |
 
 ## API
 
-Every body is JSON. Every route but `POST /v1/session` needs the session token as
+Every body is JSON. Every route but `POST /v1/session`, the invite page (`GET /invite`) and
+`GET /.well-known/assetlinks.json` needs the session token as
 `Authorization: Bearer <sessionToken>`. Only `POST /v1/session` ever answers a session token,
 and nothing logs a session token, an ID token, an address or a Soulseek password.
 
@@ -39,8 +42,9 @@ names in `CF-Connecting-IP` (kept only as a SHA-256):
   that puts many phones behind one address.
 - A token that isn't the shape `POST /v1/session` gives (43 base64url characters) answers
   `401 { "error": "unauthorized" }` without a lookup.
-- Past `maxFailedLookupsPerAddressPerMinute` lookups that find no session, the address's
-  session routes answer `429` with
+- Past `maxFailedLookupsPerAddressPerMinute` lookups that find no session, or no invite (a
+  wrong invite token, see [Invite links](#invite-links)), the address's session routes answer
+  `429` with
   `{ "error": "limit", "limit": "maxFailedLookupsPerAddressPerMinute" }` for
   `failedLookupBlockSeconds`, valid sessions included. Requests that find their session never
   count toward it, and other addresses aren't affected.
@@ -66,8 +70,13 @@ its Wave account (keyed by Google's `sub`).
 `200`:
 
 ```json
-{ "sessionToken": "<43 characters>", "email": "ana@example.com" }
+{ "sessionToken": "<43 characters>", "email": "ana@example.com", "name": "Ana Souza" }
 ```
+
+`name` is the name the service keeps for the account, `null` when it has none. Every sign-in
+stores the ID token's `name` claim, cleaned and cut to 100 characters by Core's `accountName`
+(`packages/core/src/accountName.ts`); a token without the claim leaves the name there is. The
+members of a collaborative playlist see the account by it, and nothing else of it.
 
 `401 { "error": "invalid_id_token" }` when the token doesn't check out,
 `403 { "error": "not_allowed" }` when `ALLOWED_EMAILS` is set and the email isn't on it,
@@ -149,19 +158,19 @@ Each pushed row is merged with the stored one by `mergeRows`: the later `changed
 the greater `phoneId` breaks a tie. Plays are merged by `mergePlays`: a play whose `id` is
 already held is ignored.
 
-| Table                  | `id`                             | Fields (`?` may be `null`)                                                                                                                                                                                                                                    |
-| ---------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `songs`                | recording key                    | `title`, `credit`, `album?`, `albumArtist`, `discNumber?`, `trackNumber?`, `durationMs`, `year?`, `genre?`, `videoId?`, `addedAt`                                                                                                                             |
-| `playlists`            | playlist id                      | `name`, `createdAt`                                                                                                                                                                                                                                           |
-| `playlistEntries`      | entry id                         | `playlistId`, `orderKey` (Core's `orderKeyBetween`), `songId?` (recording key), `ytSong?` (the YT Music song as the app stores it, text), `addedAt`. Exactly one of `songId` and `ytSong` is set.                                                             |
-| `favorites`            | recording key                    | `addedAt`                                                                                                                                                                                                                                                     |
-| `preferences`          | preference key                   | `value?` (text: what the app's key-value store holds, `null` for nothing)                                                                                                                                                                                     |
-| `plays`                | play id (made on the device)     | `songId` (recording key), `startedAt`, `listenedMs`, `durationMs?`, `endReason` (`completed`, `skipped`, `stopped`, `interrupted`), `counted` (boolean), `contextType?`, `contextId?`, `source` (`phone`, `auto`, `desktop`), `importedFrom?` (`blackplayer`) |
-| `follows`              | artist name key                  | `name`, `level` (`releases`, `shows`), `followedAt`, `deezerId?`, `ytBrowseId?`                                                                                                                                                                               |
-| `hiddenReleases`       | release key                      | none                                                                                                                                                                                                                                                          |
-| `notifiedShows`        | Ticketmaster event id            | none                                                                                                                                                                                                                                                          |
-| `dismissedSuggestions` | artist name key                  | `dismissedAt` (when the follow suggestion was dismissed; Undo is a tombstone)                                                                                                                                                                                 |
-| `dislikes`             | recording key, or `yt:<videoId>` | `title`, `artists` (a JSON array of names, as text), `durationMs?`, `dislikedAt` (the song as it was listed when disliked; removing the dislike is a tombstone)                                                                                               |
+| Table                  | `id`                             | Fields (`?` may be `null`)                                                                                                                                                                                                                                                                                        |
+| ---------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `songs`                | recording key                    | `title`, `credit`, `album?`, `albumArtist`, `discNumber?`, `trackNumber?`, `durationMs`, `year?`, `genre?`, `videoId?`, `addedAt`                                                                                                                                                                                 |
+| `playlists`            | playlist id                      | `name`, `createdAt`                                                                                                                                                                                                                                                                                               |
+| `playlistEntries`      | entry id                         | `playlistId`, `orderKey` (Core's `orderKeyBetween`), `songId?` (recording key), `ytSong?` (the YT Music song as the app stores it, text), `addedAt`, `title?`, `credit?`, `album?`, `durationMs?`, `videoId?` (a Library song's own fields), `addedBy?` (see below). Exactly one of `songId` and `ytSong` is set. |
+| `favorites`            | recording key                    | `addedAt`                                                                                                                                                                                                                                                                                                         |
+| `preferences`          | preference key                   | `value?` (text: what the app's key-value store holds, `null` for nothing)                                                                                                                                                                                                                                         |
+| `plays`                | play id (made on the device)     | `songId` (recording key), `startedAt`, `listenedMs`, `durationMs?`, `endReason` (`completed`, `skipped`, `stopped`, `interrupted`), `counted` (boolean), `contextType?`, `contextId?`, `source` (`phone`, `auto`, `desktop`), `importedFrom?` (`blackplayer`)                                                     |
+| `follows`              | artist name key                  | `name`, `level` (`releases`, `shows`), `followedAt`, `deezerId?`, `ytBrowseId?`                                                                                                                                                                                                                                   |
+| `hiddenReleases`       | release key                      | none                                                                                                                                                                                                                                                                                                              |
+| `notifiedShows`        | Ticketmaster event id            | none                                                                                                                                                                                                                                                                                                              |
+| `dismissedSuggestions` | artist name key                  | `dismissedAt` (when the follow suggestion was dismissed; Undo is a tombstone)                                                                                                                                                                                                                                     |
+| `dislikes`             | recording key, or `yt:<videoId>` | `title`, `artists` (a JSON array of names, as text), `durationMs?`, `dislikedAt` (the song as it was listed when disliked; removing the dislike is a tombstone)                                                                                                                                                   |
 
 Times are ms since the epoch; numbers are integers. Ids and text are at most 16,384
 characters. The tables and their fields are Core's wire (`SYNC_TABLE_NAMES`, `SYNC_FIELDS` in
@@ -192,7 +201,8 @@ by the app (Core's `settleMarks`), which pushes the removal. Deploy it before an
 sends dislikes: an older service refuses a push naming them, so a phone with a dislike would
 push nothing until it's deployed.
 
-`200`, how many rows of each table won (and were stored):
+`200`, how many rows of each table won (and were stored), and the rows stored with another
+change time than the one pushed:
 
 ```json
 {
@@ -208,9 +218,19 @@ push nothing until it's deployed.
     "notifiedShows": 0,
     "dismissedSuggestions": 0,
     "dislikes": 0
+  },
+  "corrected": {
+    "playlists": [{ "id": "…", "changedAt": 1760443200000 }]
   }
 }
 ```
+
+A `changedAt` ahead of the service's clock is stored as the service's time (Core's
+`withinServiceClock`), before the merge, in every table but `plays`, which carries none.
+`corrected` names each such row that was stored, by table, with the time it now has; a table
+with none is left out. The app takes that time for its own row (Core's `readPushAnswer`), so
+it agrees with the service and doesn't push the row again. An app from before `corrected`
+ignores it.
 
 A push is all or nothing. `400 { "error": "bad_request", "detail": "songs[3].durationMs isn't an integer" }`
 for a row that isn't valid or a table that doesn't exist.
@@ -234,7 +254,9 @@ The rows changed after `since`, oldest change first, at most 1,000 a page. Leave
   "dismissedSuggestions": [DismissedSuggestion],
   "dislikes": [Dislike],
   "cursor": "1234",
-  "more": false
+  "more": false,
+  "collaborations": [Collaboration],
+  "endedCollaborations": [{ "playlistId": "…", "reason": "left", "endedAt": 1760443200000 }]
 }
 ```
 
@@ -245,6 +267,189 @@ Keep `cursor` for the next pull (it's opaque: send it back as is), and pull agai
 Each accepted change gets the account's next change number in the transaction that writes
 it, and a pull reads every table in one snapshot, so a pull never misses a change pushed
 while it runs.
+
+`collaborations` and `endedCollaborations` are not rows and have no cursor: every page states
+them whole, as they are when the pull is answered (see
+[Collaborative playlists](#collaborative-playlists)). `collaborations` lists each
+collaborative playlist the account is in. `endedCollaborations` lists the playlists the
+account was in and isn't any more, each with `reason`: `left` when the account left, `ended`
+when the owner removed it or ended the collaboration (the answer doesn't say which). An end stays in every pull until the account joins that playlist again.
+A playlist the account owned and ended is in neither list. An app from before these two keys
+reads the rest of the page as before (Core's `readPullPage` takes the tables it knows).
+
+### Collaborative playlists
+
+A playlist's collaboration record (`docs/spec.md`, Collaborative playlists; `docs/adr/0005`):
+the playlist's rows stay in the owner's account, and the record names the owner and the
+members with when each joined. The owner is a member too. A playlist id names one
+collaboration in the whole service. All five routes need the session.
+
+A `Collaboration`, with the owner first and the others in the order they joined:
+
+```json
+{
+  "playlistId": "5f0c…",
+  "members": [
+    {
+      "accountId": "0b6e…",
+      "name": "Ana Souza",
+      "joinedAt": 1760443200000,
+      "owner": true,
+      "self": true
+    }
+  ]
+}
+```
+
+`name` is the account's Google account name, `null` when the service has none; no email is
+ever given. `self` marks the account that asked. `accountId` is the service's id of the
+account, the one `DELETE /v1/collaboration/members` takes.
+
+| Route                                                         | Who                          | What it does                                                                                                  |
+| ------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `POST /v1/collaboration`, body `{ "playlistId": "…" }`        | holder                       | Makes a playlist of the session's account collaborative, with the account as owner. `200` the `Collaboration` |
+| `DELETE /v1/collaboration?playlist=<id>`                      | owner                        | Ends it: the record goes, the playlist's rows stay as they are. `204`                                         |
+| `GET /v1/collaboration/members?playlist=<id>`                 | a member                     | `200` the `Collaboration`                                                                                     |
+| `DELETE /v1/collaboration/members?playlist=<id>&account=<id>` | owner                        | Removes that member. `204`                                                                                    |
+| `DELETE /v1/collaboration/membership?playlist=<id>`           | a member who isn't the owner | Leaves. `204`                                                                                                 |
+
+Making a playlist collaborative again answers the collaboration as it is. Nothing here
+changes a synced row or a cursor: the owner's and the members' devices learn of a make, a
+removal, a leave and an end from their next pull.
+
+Refusals:
+
+- `404 { "error": "not_found" }`: `POST` for a playlist the account doesn't hold (unknown,
+  deleted or another account's); removing an account that isn't in the playlist.
+- `409 { "error": "taken" }`: `POST` for an id that names another account's collaboration.
+- `403 { "error": "not_member" }`: the playlist isn't collaborative or the account isn't in
+  it. The two answer the same.
+- `403 { "error": "not_owner" }`: ending or removing a member as a member who isn't the owner.
+- `403 { "error": "owner_cannot_leave" }`: the owner leaving, or removing itself.
+- `400 { "error": "bad_request" }`: no `playlistId`, `playlist` or `account`.
+
+Deleting an account (`DELETE /v1/account`) takes it out of the playlists it is in. Each
+playlist it owns passes to the member who joined first, who becomes its owner: the playlist
+row and every entry that names its id, Graveyard ones included, move to that account as its
+next changes, so its ordinary pull carries them, and they count in its caps from then on,
+even past them. A row that account held with the same id is replaced. The other members stay
+in it and get no end record. A playlist with no other member goes with the account. An entry
+tombstone keeps its playlist id, so it moves with it; one stored before migration
+`0019_collaborative_entries` has none and goes with the account. The entries the account
+added stay and name no one (`addedBy` becomes `null`).
+
+Migration `0017_collaborations` adds `collaborations`, `collaboration_members` and
+`collaboration_ends`, and changes no table there was. Deploy it before an app that calls
+these routes.
+
+### Invite links
+
+The only way into a collaborative playlist (`docs/spec.md`, Collaborative playlists, Invite
+link). A playlist has at most one active link: an https address on this service,
+`https://<service>/invite#<token>`, valid for 7 days, for any number of people. The token is
+32 random bytes in base64url, as a session token is, and goes after `#`, so a browser never
+sends it. The service keeps only its SHA-256, with the link's expiry and state
+(`collaboration_invites`); it can tell the owner when the current link ends, but not the link,
+which the app that created it holds.
+
+| Route                                                         | Who        | What it does                                                                                                                                                      |
+| ------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /v1/collaboration/invite`, body `{ "playlistId": "…" }` | owner      | Creates a link and ends the active one. `200 { "url": "https://…/invite#…", "expiresAt": 1761048000000 }`                                                         |
+| `GET /v1/collaboration/invite?playlist=<id>`                  | owner      | `200 { "invite": { "createdAt": …, "expiresAt": … } }`, or `{ "invite": null }` when none lets people in                                                          |
+| `DELETE /v1/collaboration/invite?playlist=<id>`               | owner      | Turns the active link off. `204`, also when there's none                                                                                                          |
+| `POST /v1/invite`, body `{ "token": "…" }`                    | anyone     | `200 { "playlistId": "…", "playlistName": "Road trip", "ownerName": "Ana Souza" }`; joins nothing                                                                 |
+| `POST /v1/invite/join`, body `{ "token": "…" }`               | anyone     | Makes the session's account a member. `200` the `Collaboration`                                                                                                   |
+| `GET /invite`                                                 | no session | The page a browser shows: that this is a Wave invite and to open it in an up-to-date Wave, in the browser's language (`Accept-Language`). Nothing of the playlist |
+
+"Anyone" is any signed-in account. A token goes in the body, never in a URL. Creating a new
+link marks the earlier one `replaced`, turning it off marks it `off`, and removing a member
+marks it `ended`; a member leaving leaves it as it is. People who joined stay members when
+the link ends. Joining again, as a member or the owner, answers the collaboration and keeps
+when the account joined; one that left or was ended joins again and loses its end record.
+Ending the collaboration, and deleting the owner's account, delete its links.
+
+Refusals, besides the owner routes' `403 not_member` and `403 not_owner` and `400 bad_request`
+(no `playlistId` or `playlist`):
+
+- `404 { "error": "not_found" }`: the token names no link, or isn't the shape of one. It counts
+  as a failed lookup of the address (`maxFailedLookupsPerAddressPerMinute`), as an unknown
+  session does.
+- `410 { "error": "invite_ended" }`: the link expired, was turned off or replaced, or ended with a
+  removal. Deleting the playlist ends its collaboration, which deletes its links, so their tokens
+  answer `404`. A finished link is kept until a new link of its
+  playlist is created after its expiry; then its token answers `404`.
+
+Migration `0018_collaboration_invites` adds `collaboration_invites`, and changes no table
+there was.
+
+`GET /.well-known/assetlinks.json`, with no session, is Android's App Link check: it names
+Wave's package (`dev.leoperez.wave`) and the SHA-256 of the release key's certificate, the
+one `scripts/ci/sign-apk.sh` pins (`docs/spec.md`, APK signing). With it the phone's `/invite`
+filter (`autoVerify: true` in `apps/mobile/app.config.ts`) is verified, and a tapped link
+opens a released Wave with nothing to turn on in Open by default. A build signed with another
+key, a local debug build included, isn't verified. A change to the release key changes the
+constant in `src/service.ts` and needs a deploy.
+
+#### A member's push and pull of one playlist
+
+A member who isn't the owner syncs each collaborative playlist with two requests of its own,
+in the same cycle as its account's push and pull. Both write and read the rows in the owner's
+account, so the owner's ordinary push and pull carry the members' changes, and both check
+membership first. The owner may call them too.
+
+- `POST /v1/collaboration/push?playlist=<id>`: the body and answer of `POST /v1/push`,
+  holding only that playlist's row and entries. The rows merge into the owner's as any push
+  merges (Core's `mergeTableRows`, a change time ahead of the service's clock corrected) and
+  count in the owner's caps. An entry the owner holds in another playlist, or in none (a
+  removal stored before entries kept their playlist), is dropped and the rest is stored, so
+  the push is still done and the app stops sending it. So is a removal of an entry the service
+  never held: nothing says which playlist it was in. The playlist's row takes the member's
+  `name` alone; `createdAt` stays as stored.
+- `GET /v1/collaboration/pull?playlist=<id>&since=<cursor>`: `{ "playlists": [Playlist],
+"playlistEntries": [PlaylistEntry], "cursor": "<n>_<owner>", "more": false }`, every change
+  of the playlist's row and entries after the cursor, whoever made it, oldest first and paged
+  as `GET /v1/pull`. The cursor is per playlist and opaque to the app; start with none. It names
+  the owner whose change numbers it counts, so after the playlist passes to another owner a
+  cursor taken before starts from the beginning. Core's `readPullPage` reads it.
+
+Refusals, besides those of `POST /v1/push`:
+
+- `403 { "error": "not_member" }`: the playlist isn't collaborative (never was, or it ended)
+  or the account isn't in it.
+- `403 { "error": "deleted" }`: a push to a playlist whose row is a tombstone while it is
+  still collaborative. The owner deleting the playlist ends its collaboration in the same push,
+  as `DELETE /v1/collaboration` does, so members are then refused as `not_member` and their
+  account pull says it ended.
+- `403 { "error": "not_owner" }`: a push that deletes the playlist.
+- `400 { "error": "bad_request", "detail": "…" }`: a push with another table, another
+  playlist's row, or an entry that names another playlist; no `playlist`; a cursor that isn't
+  one.
+- `413 { "error": "limit", "limit": "maxCollaborativeSongs" }` or `"maxCollaborativeEntries"`.
+
+What the service keeps of a collaborative playlist's rows, whoever pushes them, the owner's
+ordinary push included:
+
+- **Who added an entry.** `addedBy` is the account id (the `accountId` of the member list) of
+  the session that first stored the entry; what an app sends is ignored, and later changes keep
+  it. Every new entry of any playlist gets it; making a playlist collaborative names its owner on
+  the entries stored before the field. An entry of a deleted account has `null`.
+- **A Library song's own fields** (`title`, `credit`, `album`, `durationMs`, `videoId`), for
+  the other members to match their Tracks by. An app from before them leaves them out, and a
+  row it pushes keeps what's stored; a Library entry it adds to a collaborative playlist, with
+  its recording key alone, is filled from the owner's `songs` row.
+- **Bounds** (Core's `collaborativeRow`): the playlist's name, an entry's `title`, `credit` and
+  `album`, and the title, artists and album inside `ytSong` are cut to 300 characters; a cover
+  in `ytSong` (`artworkUrl`) that isn't an https address on YouTube's or Google's image hosts
+  (`ytimg.com`, `googleusercontent.com`, `ggpht.com`) becomes `null`.
+- **Size.** At most `maxCollaborativeSongs` live entries and `maxCollaborativeEntries` with
+  the removed ones, as well as the owner's `maxPlaylistEntries`. A push past one is refused only
+  when it raises that count, so a playlist already past it still takes moves and removals.
+- **A deleted playlist.** The owner's push that deletes a collaborative playlist ends its
+  collaboration (the other members get an `ended` record), and a live entry the same push, or
+  a later one while it is still collaborative, sends into it is left out; removals still go in.
+
+Migration `0019_collaborative_entries` adds those entry columns and an index for the
+per-playlist pull. Deploy it before an app that sends them.
 
 ### `PUT /v1/soulseek`
 
@@ -281,6 +486,7 @@ and the log names the secret; the other routes still work.
 ### `DELETE /v1/account`
 
 Deletes every row and every session of the account, its Soulseek account, and the account.
+It leaves the collaborative playlists it is in, and the ones it owns end.
 The session isn't enough: the body holds a Google ID token from a fresh sign-in.
 
 ```json
@@ -294,6 +500,19 @@ The token must pass the `POST /v1/session` checks, have been issued (`iat`) with
 check), `401 { "error": "invalid_id_token" }` when it doesn't check out. Either way nothing is
 deleted and the session stays; the app tells these apart from `unauthorized`, which means the
 session itself ended.
+
+### `PUT /v1/account/name`
+
+Keeps a name for the session's account, as a sign-in keeps the ID token's: an app that signed
+in before names were kept sends its Google account name once.
+
+```json
+{ "name": "Ana Souza" }
+```
+
+`204`, no body. The name is cleaned and cut to 100 characters as a sign-in's is.
+`400 { "error": "bad_request" }` when `name` isn't text or is empty, and the name there was
+stays. Deleting the account deletes the name with it.
 
 ### `GET /v1/genius/search?q=<text>`, `GET /v1/genius/song?id=<id>`, `GET /v1/genius/referents?song=<id>&page=<n>`
 
@@ -392,6 +611,8 @@ answer (its over-quota error names the key), nothing cached, and a log line that
 | `maxSongs`                                | 100,000   | rows per account, tombstones included                |
 | `maxPlaylists`                            | 5,000     |                                                      |
 | `maxPlaylistEntries`                      | 250,000   |                                                      |
+| `maxCollaborativeSongs`                   | 2,000     | live entries of one collaborative playlist           |
+| `maxCollaborativeEntries`                 | 10,000    | its entries with the removed ones                    |
 | `maxFavorites`                            | 100,000   |                                                      |
 | `maxPreferences`                          | 200       |                                                      |
 | `maxPlays`                                | 1,000,000 |                                                      |
@@ -407,7 +628,7 @@ answer (its over-quota error names the key), nothing cached, and a log line that
 | `maxNewAccountsPerDay`                    | 10        | new accounts in any 24 hours                         |
 | `maxSessionsPerAccount`                   | 10        | valid sessions per account, for a new sign-in        |
 | `maxRequestsPerAddressPerMinute`          | 600       | every route, per address                             |
-| `maxFailedLookupsPerAddressPerMinute`     | 20        | lookups that find no session, per address            |
+| `maxFailedLookupsPerAddressPerMinute`     | 20        | lookups that find no session or invite, per address  |
 | `failedLookupBlockSeconds`                | 300       | how long an address past the line above is held back |
 | `maxGeniusRequestsPerMinute`              | 30        | the Genius routes, per account                       |
 | `maxGeniusRequestsPerDay`                 | 1,000     | Genius requests the cache didn't answer, per account |
@@ -475,15 +696,18 @@ and still reads the figures. There's no route that runs it.
 
 The rows the service keeps for itself, apart from the synced Library, and what bounds each:
 
-| Table               | Bound                                                                                      |
-| ------------------- | ------------------------------------------------------------------------------------------ |
-| `usage_warnings`    | today and the 29 UTC days before, deleted by the usage watch                               |
-| `upstream_usage`    | one row per account and provider count (three today), reset by the next UTC day's request  |
-| `sign_in_windows`   | `maxSignInKeysPerMinute` keys of the current minute; a sign-in deletes older minutes' rows |
-| `sessions`          | ended by sign-out, 90 idle days or account deletion (`POST /v1/session`)                   |
-| `accounts`          | `maxAccounts`                                                                              |
-| `soulseek_accounts` | one row per account                                                                        |
-| `migrations`        | one row per migration                                                                      |
+| Table                   | Bound                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------ |
+| `usage_warnings`        | today and the 29 UTC days before, deleted by the usage watch                               |
+| `upstream_usage`        | one row per account and provider count (three today), reset by the next UTC day's request  |
+| `sign_in_windows`       | `maxSignInKeysPerMinute` keys of the current minute; a sign-in deletes older minutes' rows |
+| `sessions`              | ended by sign-out, 90 idle days or account deletion (`POST /v1/session`)                   |
+| `accounts`              | `maxAccounts`                                                                              |
+| `soulseek_accounts`     | one row per account                                                                        |
+| `migrations`            | one row per migration                                                                      |
+| `collaborations`        | one row per collaborative playlist, a live playlist of its owner when made                 |
+| `collaboration_members` | one row per collaborative playlist and account in it, so at most `maxAccounts` a playlist  |
+| `collaboration_ends`    | one row per account and playlist it was in and isn't any more; deleted with the account    |
 
 The usage watch deletes `usage_warnings` rows and nothing else. Sessions, sign-in counts,
 tombstones and synced rows are bounded by the session, sign-in and table limits above, never by

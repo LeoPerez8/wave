@@ -1,8 +1,9 @@
 /**
- * Home's In your orbit: the artists with the most counted plays in the recent
- * window (`recentWindow.ts`), streamed plays included, credited as Stats
- * credits them, so a collaboration counts for each artist it names. Most
- * played artists keeps ranking all time.
+ * The desktop Home's In your orbit (`apps/desktop`): the artists with the most
+ * counted plays in the recent window (`recentWindow.ts`), streamed plays
+ * included, credited as Stats credits them, so a collaboration counts for each
+ * artist it names. The phone's In your orbit ranks songs instead
+ * (`inYourOrbitSongs`).
  */
 import { recentWindowStart } from "./recentWindow.ts";
 import { rankEntityPlays, type EntityPlayTotals, type StatsWindow } from "./stats.ts";

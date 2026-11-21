@@ -18,6 +18,7 @@ const WRITES = new Set([
   "takeDeletedPlaylistImages",
   "clearArtistPhotos",
   "leaveAccount",
+  "settleKeptTotals",
 ]);
 
 const appLog = async () => {

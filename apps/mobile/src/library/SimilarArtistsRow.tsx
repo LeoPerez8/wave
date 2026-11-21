@@ -51,7 +51,11 @@ export function SimilarArtistsRow({
                 imageUrl: artist.artworkUrl,
               }}
               size={COVER_ROW_TILE}
-              onPress={selecting ? ignore : () => openYtArtist(artist.browseId, artist.name)}
+              onPress={
+                selecting
+                  ? ignore
+                  : () => openYtArtist(artist.browseId, artist.name, artist.artworkUrl)
+              }
             />
           ) : (
             <ArtistCard

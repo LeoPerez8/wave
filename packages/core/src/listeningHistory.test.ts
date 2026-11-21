@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { listeningHistoryDays, findListeningHistory } from "./index.ts";
+import { listeningHistoryDays, findListeningHistory, listeningHistoryRowState } from "./index.ts";
 
 const at = (year: number, month: number, day: number, hour = 12) =>
   new Date(year, month - 1, day, hour).getTime();
@@ -104,4 +104,46 @@ test("history finds snapshot words across fields with Search folding and keeps e
   assert.deepEqual(findListeningHistory(plays, "eja"), []);
   assert.deepEqual(findListeningHistory(plays, "missing"), []);
   assert.deepEqual(findListeningHistory(plays, " -- "), plays);
+});
+
+test("a play replays its Library song, else its stream while YT Music can play it", () => {
+  const stream = { videoId: "abc" };
+  const none = new Set<string>();
+  const state = listeningHistoryRowState;
+  assert.deepEqual(state({ song: { path: "/a.flac" }, streamedSong: stream }, false, none), {
+    replays: "library",
+    missing: false,
+    unavailable: false,
+    disabled: false,
+  });
+  assert.deepEqual(state({ song: { path: null }, streamedSong: null }, true, none), {
+    replays: "library",
+    missing: true,
+    unavailable: false,
+    disabled: false,
+  });
+  assert.deepEqual(state({ song: null, streamedSong: stream }, true, none), {
+    replays: "stream",
+    missing: false,
+    unavailable: false,
+    disabled: false,
+  });
+  // YT Music off, or a video YouTube refused this session: dimmed, and it doesn't play.
+  for (const [ytMusic, refused] of [
+    [false, none],
+    [true, new Set(["abc"])],
+  ] as const)
+    assert.deepEqual(state({ song: null, streamedSong: stream }, ytMusic, refused), {
+      replays: null,
+      missing: false,
+      unavailable: true,
+      disabled: false,
+    });
+  // A song removed from the Library with no stream to fall back on.
+  assert.deepEqual(state({ song: null, streamedSong: null }, true, none), {
+    replays: null,
+    missing: false,
+    unavailable: true,
+    disabled: true,
+  });
 });

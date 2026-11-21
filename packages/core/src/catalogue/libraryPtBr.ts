@@ -198,6 +198,8 @@ export const libraryPtBr: typeof libraryEn = {
     genres: "Buscar em Gêneros",
     playlists: "Buscar em Playlists",
     artist: "Buscar em artista",
+    favorites: "Buscar em Favoritas",
+    genre: "Buscar em gênero",
   },
   noMatch: {
     history: "Nenhuma ouvida encontrada",
@@ -208,6 +210,8 @@ export const libraryPtBr: typeof libraryEn = {
     genres: "Nenhum gênero encontrado",
     playlists: "Nenhuma playlist encontrada",
     artist: "Nenhuma música encontrada",
+    favorites: "Nenhuma música encontrada",
+    genre: "Nenhuma música encontrada",
   },
   shelfUnderLibrary: "Seção abaixo da Biblioteca",
   chooseShelf: "Escolher a seção da Biblioteca",

@@ -19,6 +19,9 @@ export const PLAYLIST_LAYOUTS: readonly {
   { layout: "large", label: en.playlists.layouts.large },
 ];
 
+/** Where the layout is kept, on the phone and the computer alike (each its own; it doesn't sync). */
+export const PLAYLIST_LAYOUT_SETTING = "settings.playlistLayout";
+
 /** The layout of an install that never picked one: today's rows. */
 const DEFAULT_PLAYLIST_LAYOUT: PlaylistLayout = "list";
 
@@ -29,3 +32,12 @@ export const parsePlaylistLayout = (stored: string | null): PlaylistLayout =>
 /** What to store for [layout]: null (nothing) for the default. */
 export const storedPlaylistLayout = (layout: PlaylistLayout): string | null =>
   layout === DEFAULT_PLAYLIST_LAYOUT ? null : layout;
+
+/** The layouts the computer's Playlists page switches between: its table, or a grid of covers. */
+export const DESKTOP_PLAYLIST_LAYOUTS: readonly PlaylistLayout[] = ["list", "grid"];
+
+/** The computer's layout a stored value names: Large Cards, which it has no room for, is the grid. */
+export const desktopPlaylistLayout = (stored: string | null): PlaylistLayout => {
+  const layout = parsePlaylistLayout(stored);
+  return layout === "large" ? "grid" : layout;
+};

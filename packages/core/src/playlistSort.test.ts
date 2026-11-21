@@ -6,6 +6,7 @@ import {
   choosePlaylistSort,
   movePlaylist,
   parsePlaylistOrder,
+  samePlaylistOrder,
   sortKey,
   sortPlaylists,
   storedPlaylistOrder,
@@ -231,5 +232,26 @@ describe("moving a playlist", () => {
     assert.equal(movePlaylist(shown, 0, -1), null);
     assert.equal(movePlaylist(shown, 2, 3), null);
     assert.equal(movePlaylist(shown, 5, 0), null);
+  });
+});
+
+describe("telling orders apart", () => {
+  test("the same sort and arranged order are the same order; any other difference isn't", () => {
+    assert.equal(
+      samePlaylistOrder({ sort: "custom", order: [1, 2] }, { sort: "custom", order: [1, 2] }),
+      true,
+    );
+    assert.equal(
+      samePlaylistOrder({ sort: "custom", order: [1, 2] }, { sort: "custom", order: [2, 1] }),
+      false,
+    );
+    assert.equal(
+      samePlaylistOrder({ sort: "custom", order: [1, 2] }, { sort: "custom", order: [1] }),
+      false,
+    );
+    assert.equal(
+      samePlaylistOrder({ sort: "name", order: [1] }, { sort: "added", order: [1] }),
+      false,
+    );
   });
 });

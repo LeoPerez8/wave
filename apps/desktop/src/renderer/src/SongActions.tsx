@@ -3,47 +3,45 @@
  * `desktopSongActions`, read through `window.wave.songs`) with the phone's toasts.
  */
 import {
+  allTableRows,
   actionBarLabel,
+  checkedTableRow,
   confirmSongRemoval,
   isDestructiveAction,
   planAlert,
   splitActionBar,
   tagLookupsToast,
   toastDuration,
+  tableSelectionOf,
   type ActionSurface,
   type AlertSpec,
-  type ItemActionEntry,
+  type DesktopSongEntry,
+  type TableSelection,
+  type UpNextPlace,
 } from "@wave/core";
-import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
-import type { BrowseScope } from "../../shared/browse.ts";
-import type { SongMenu, SongRunAction, SongTarget } from "../../shared/songActions.ts";
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
+import {
+  MAX_TARGET_IDS,
+  type SongMenu,
+  type SongRunAction,
+  type SongTarget,
+} from "../../shared/songActions.ts";
 import { Menu, type MenuItem, type OpenMenu } from "./Menu.tsx";
-import { copyLink } from "./copyLink.ts";
+import { ReleaseDateDialog, type ReleaseDateSong } from "./ReleaseDate.tsx";
+import { songShareItems } from "./SongShare.tsx";
 import { songActionToast } from "./songActionToast.ts";
 import { language, text } from "./text.ts";
+import type { DraggedSongs } from "./songDrag.ts";
+import type { SelectionTarget } from "../../shared/collectionActions.ts";
+import type { TableSelectionProps } from "./useTableSelection.ts";
 
-/** Checked songs: the ones in [ids], or with [all] every song of the list but those. */
-export interface Selection {
-  readonly all: boolean;
-  readonly ids: ReadonlySet<number>;
+export function selectionTarget(scope: BrowseScope, selection: TableSelection): SongTarget | null {
+  const ids =
+    selection.ids.size > MAX_TARGET_IDS ? Float64Array.from(selection.ids) : [...selection.ids];
+  if (selection.all) return { scope, all: true, except: ids };
+  return ids.length === 0 ? null : { scope, ids };
 }
-
-export const isChecked = (selection: Selection, id: number): boolean =>
-  selection.all !== selection.ids.has(id);
-
-export const toggled = (selection: Selection, id: number): Selection => {
-  const ids = new Set(selection.ids);
-  if (ids.has(id)) ids.delete(id);
-  else ids.add(id);
-  return { all: selection.all, ids };
-};
-
-export const selectionTarget = (scope: BrowseScope, selection: Selection): SongTarget | null =>
-  selection.all
-    ? { scope, all: true, except: [...selection.ids] }
-    : selection.ids.size === 0
-      ? null
-      : { scope, ids: [...selection.ids] };
 
 type Route = { readonly kind: "album" | "artist"; readonly id: number };
 
@@ -51,7 +49,7 @@ interface Options {
   /** Opens an album's or an artist's page. */
   readonly go: (route: Route) => void;
   /** Turns selection on with [ids] checked. */
-  readonly select: (ids: readonly number[]) => void;
+  readonly select: (ids: Iterable<number>) => void;
   /** Says an action failed, in the window's error line. */
   readonly failed: (message?: string) => void;
   /** Reads the player and the rows again once an action changed them. */
@@ -65,14 +63,18 @@ interface Confirm {
   readonly onAction: () => void;
 }
 
-/** The playlists Add to Playlist offers: the sidebar's first page. */
+/** The playlists Add to Playlist offers: the sidebar's first page, but the collaborative ones. */
 const playlists = async () =>
-  (await window.wave.library.browse({ kind: "playlists" }, 0, 200)).items;
+  (await window.wave.library.browse({ kind: "playlists" }, 0, 200)).items.filter(
+    (row) => !row.collaborative,
+  );
 
 /** The menus, toasts and question an entry can show, and how to open them. */
 export function useSongActions({ go, select, failed, changed, newPlaylist }: Options) {
   const { menu, setMenu, setToast, menuAndToast } = useMenuAndToast();
   const [confirm, setConfirm] = useState<Confirm>();
+  /** The song whose Release Date is open. */
+  const [releaseDate, setReleaseDate] = useState<ReleaseDateSong>();
 
   const notify = useCallback(
     (message: string | null, undo?: () => void, action?: ToastAction) => {
@@ -88,11 +90,17 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
   );
 
   const run = useCallback(
-    async (target: SongTarget, action: SongRunAction, surface: ActionSurface, id?: number) => {
+    async (
+      target: SongTarget,
+      action: SongRunAction,
+      surface: ActionSurface,
+      id?: number,
+      at?: UpNextPlace,
+    ) => {
       try {
         // Each song waits on LRCLIB and Deezer: say it's under way.
         if (action === "fixSong" || action === "fixSongs") notify(text.fixSongs.progress);
-        const result = await window.wave.songs.run(target, action, id);
+        const result = await window.wave.songs.run(target, action, id, at);
         changed();
         switch (result.kind) {
           case "downloaded":
@@ -124,12 +132,30 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
   /** [entry] as a menu item or a bar button; [finish] ends selection once it runs. */
   const itemFor = useCallback(
     (
-      entry: ItemActionEntry,
+      entry: DesktopSongEntry,
       target: SongTarget,
       about: SongMenu,
       surface: ActionSurface,
       finish: () => void,
     ): MenuItem => {
+      if (entry.action === "showInFolder") {
+        // Core offers it on one Library song's menu: main finds its file by the id.
+        const [id] = "ids" in target ? target.ids : [];
+        const label = text.desktopLibrary.showInFolder;
+        if (id === undefined) return { key: entry.action, label, disabled: true };
+        return {
+          key: entry.action,
+          label,
+          run: () =>
+            void window.wave.songs
+              .showInFolder(id)
+              .then((result) => {
+                if (result === "unavailable") failed(text.desktopLibrary.driveDisconnected);
+                else if (result === "gone") failed(text.desktopLibrary.fileGone);
+              })
+              .catch(() => failed()),
+        };
+      }
       const { action } = entry;
       const label =
         surface === "selection"
@@ -249,13 +275,13 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
                 },
               }),
           };
+        case "releaseDate":
+          return { ...base, run: () => setReleaseDate(target) };
         case "share":
           return {
             ...base,
-            run: () => {
-              finish();
-              void copyLink(window.wave.links.copySong(target));
-            },
+            submenu: text.itemActions.labels.share,
+            open: () => songShareItems(target, (message) => notify(message)),
           };
         case "magicQueue":
           return {
@@ -277,26 +303,40 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
           return { ...base, disabled: true };
       }
     },
-    [go, run, select, changed, failed, newPlaylist],
+    [go, run, select, changed, failed, newPlaylist, notify],
   );
 
-  /** Opens one song's menu at [at], with [extra] entries (Move Up, Move Down) at its end. */
+  /** Opens a song or selection menu at [at]. */
   const openMenu = useCallback(
     (
       target: SongTarget,
       title: string,
       at: { readonly x: number; readonly y: number },
       extra: readonly MenuItem[] = [],
+      options?: {
+        readonly select?: () => void;
+        readonly done?: () => void;
+        readonly label?: string;
+      },
     ) =>
       setMenu({
-        label: text.desktopLibrary.songMenu(title),
+        label: options?.label ?? text.desktopLibrary.songMenu(title),
         at,
-        items: window.wave.songs
-          .actions(target, "menu")
-          .then((about) => [
-            ...about.entries.map((entry) => itemFor(entry, target, about, "menu", () => {})),
-            ...extra,
-          ]),
+        items: window.wave.songs.actions(target, "menu").then((about) => [
+          ...about.entries.flatMap((entry) =>
+            entry.action !== "select"
+              ? [itemFor(entry, target, about, "menu", options?.done ?? (() => {}))]
+              : options?.done
+                ? []
+                : [
+                    {
+                      ...itemFor(entry, target, about, "menu", () => {}),
+                      ...(options?.select ? { run: options.select } : {}),
+                    },
+                  ],
+          ),
+          ...extra,
+        ]),
       }),
     [itemFor, setMenu],
   );
@@ -319,6 +359,17 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
   const overlays = (
     <>
       {menuAndToast}
+      {releaseDate !== undefined && (
+        <ReleaseDateDialog
+          song={releaseDate}
+          failed={failed}
+          onClose={(saved) => {
+            setReleaseDate(undefined);
+            // A playlist sorted by release date places the song again.
+            if (saved) changed();
+          }}
+        />
+      )}
       {confirm && (
         <ConfirmDialog
           spec={confirm.spec}
@@ -334,7 +385,11 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
     openMenu,
     openItems,
     itemFor,
+    /** Runs an entry on [target] with its toast, as a drop onto a playlist or the Queue does. */
+    run,
     overlays,
+    /** Opens Release Date for a Library song's target or a streamed song's video id. */
+    openReleaseDate: setReleaseDate,
     /** Shows [message] as the window's toast, with Undo or another [action] to offer. */
     notify,
     /** Closes the open menu, if one is; false when none was. */
@@ -493,6 +548,60 @@ export function ConfirmDialog({
   );
 }
 
+export type SongSelectionControls = TableSelectionProps & {
+  readonly actions: ReturnType<typeof useSongActions>;
+  /** False where the songs are checked with collections, whose bar acts on them all. */
+  readonly bar?: false;
+  /** Where songs are checked with collections: the checked songs with them, as one target. */
+  readonly picks?: (songs: SongTarget) => SelectionTarget;
+};
+
+/**
+ * What dragging [row] carries: the checked rows, in the list's order, when it is one of them
+ * (with the collections checked beside them), else the row alone.
+ */
+export function rowDrag(
+  controls: Pick<SongSelectionControls, "selection" | "picks">,
+  scope: BrowseScope,
+  row: BrowseRow,
+): DraggedSongs {
+  const { selection, picks } = controls;
+  const target =
+    selection && checkedTableRow(selection, row.id) ? selectionTarget(scope, selection) : null;
+  if (target === null) return { kind: "songs", target: { scope, ids: [row.id] } };
+  return picks ? { kind: "selection", target: picks(target) } : { kind: "songs", target };
+}
+
+/** A selected row opens the group's menu. Other rows keep their own actions. */
+export function openTableSongMenu(
+  controls: SongSelectionControls,
+  scope: BrowseScope,
+  row: BrowseRow,
+  at: { readonly x: number; readonly y: number },
+  extra: readonly MenuItem[] = [],
+) {
+  const { selection, onSelection, actions } = controls;
+  const target =
+    selection && checkedTableRow(selection, row.id) ? selectionTarget(scope, selection) : null;
+  if (target !== null) {
+    const count = selection?.all ? undefined : selection?.ids.size;
+    actions.openMenu(
+      target,
+      count && count > 1 ? text.library.selected(count) : row.title,
+      at,
+      [],
+      {
+        done: () => onSelection?.(undefined),
+        ...(selection?.all ? { label: text.library.selectionActions } : {}),
+      },
+    );
+    return;
+  }
+  actions.openMenu({ scope, ids: [row.id] }, row.title, at, extra, {
+    select: () => onSelection?.(tableSelectionOf([row.id], true)),
+  });
+}
+
 /** The selection bar: how many songs are checked, the phone's actions, Select All and Done. */
 export function SelectionBar({
   scope,
@@ -501,40 +610,43 @@ export function SelectionBar({
   actions,
   onChange,
   onDone,
+  selectAll,
 }: {
   readonly scope: BrowseScope;
-  readonly selection: Selection;
+  readonly selection: TableSelection;
   readonly revision: number;
   readonly actions: ReturnType<typeof useSongActions>;
-  readonly onChange: (selection: Selection) => void;
+  readonly onChange: (selection: TableSelection) => void;
   readonly onDone: () => void;
+  readonly selectAll?: (() => TableSelection) | undefined;
 }) {
-  const target = selectionTarget(scope, selection);
-  const key = JSON.stringify(target);
-  const [about, setAbout] = useState<{ readonly key: string; readonly menu: SongMenu }>();
+  const target = useMemo(() => selectionTarget(scope, selection), [scope, selection]);
+  const [about, setAbout] = useState<{ readonly target: SongTarget; readonly menu: SongMenu }>();
   useEffect(() => {
-    // The target is read again only when it or the rows change.
-    const wanted = JSON.parse(key) as SongTarget | null;
-    if (wanted === null) return;
+    if (target === null) return;
     let current = true;
     void window.wave.songs
-      .actions(wanted, "selection")
+      .actions(target, "selection")
       .then((menu) => {
-        if (current) setAbout({ key, menu });
+        if (current) setAbout({ target, menu });
       })
       .catch(() => {});
     return () => {
       current = false;
     };
-  }, [key, revision]);
-  const menu = target !== null && about?.key === key ? about.menu : undefined;
+  }, [target, revision]);
+  const menu = target !== null && about?.target === target ? about.menu : undefined;
+  const count = menu?.count ?? (selection.all ? 0 : selection.ids.size);
+  if (!selection.checkboxes && count < 2) return null;
   const items =
     menu === undefined || target === null
       ? []
-      : menu.entries.map((entry) => ({
-          entry,
-          item: actions.itemFor(entry, target, menu, "selection", onDone),
-        }));
+      : menu.entries.flatMap((entry) =>
+          // Show in Folder is one song's menu's, never the bar's.
+          entry.action === "showInFolder"
+            ? []
+            : [{ entry, item: actions.itemFor(entry, target, menu, "selection", onDone) }],
+        );
   const { bar, more } = splitActionBar(
     items.map(({ entry, item }) => ({ action: entry.action, item })),
     5,
@@ -542,7 +654,7 @@ export function SelectionBar({
   return (
     <div className="selection-bar" role="toolbar" aria-label={text.library.selectionActions}>
       <span className="selection-count" role="status">
-        {text.library.selected(target === null ? 0 : (menu?.count ?? 0))}
+        {text.library.selected(count)}
       </span>
       <div className="selection-actions">
         {bar.map(({ item }) => (
@@ -574,7 +686,7 @@ export function SelectionBar({
           </button>
         )}
       </div>
-      <button onClick={() => onChange({ all: true, ids: new Set() })}>
+      <button onClick={() => onChange(selectAll?.() ?? allTableRows(selection.checkboxes))}>
         {text.library.selectAll}
       </button>
       <button className="accent" onClick={onDone}>

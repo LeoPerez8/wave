@@ -4,7 +4,7 @@ import { Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
-import { useScreenContent } from "@/lib/screenTiming";
+import { useScreenContent, useSettledOnce } from "@/lib/screenTiming";
 import { useLocalisation } from "@/localisation/localisation";
 import { SettingsPageScreen } from "@/settings/SettingsPage";
 import { RUNNING_VERSION } from "@/updates/runningVersion";
@@ -63,13 +63,17 @@ function Release({ entry }: { entry: VersionHistoryEntry }) {
  * Settings › Version History: the channel's releases newest first, as Core's
  * `versionHistoryEntries` lays them out. It opens with the last list read,
  * kept on the phone, and reads the history again; that list stays while it
- * does and when the read fails, so "Couldn't load" shows only with nothing kept.
+ * does and when the read fails, so "Couldn't load" shows only with nothing kept. The read
+ * starts once the push has settled, so the first frame and Back never wait on it.
  */
 export default function VersionHistoryScreen() {
   const { language, strings } = useLocalisation();
   const { status, releases } = useVersionHistory();
   useScreenContent(true);
-  useEffect(() => versionHistory.load(), []);
+  const settled = useSettledOnce("versionHistory");
+  useEffect(() => {
+    if (settled) versionHistory.load();
+  }, [settled]);
 
   const entries =
     releases === null

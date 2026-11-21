@@ -2,9 +2,9 @@ import { useFocusEffect } from "expo-router";
 import * as Effect from "effect/Effect";
 import { useCallback, useRef, useState } from "react";
 
+import { listeningHistoryReads, type ListeningHistoryRead } from "@wave/core";
 import type { ListeningHistoryPage } from "@wave/client/db/listeningHistory";
 import { onLibraryChange } from "./libraryChanges";
-import { listeningHistoryReads, type ListeningHistoryRead } from "./listeningHistoryReads";
 import { LibraryStore } from "./LibraryStore";
 
 import { appRuntime } from "./runtime";

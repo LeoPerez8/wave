@@ -21,6 +21,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { afterFirstSettled, touchEnded, touchStarted, touchTakenOver } from "@/lib/backgroundWork";
 import { followFixSongsSummary } from "@/library/findLyricsAndGenre";
+import { startKeptPlayTotals } from "@/library/keptPlayTotals";
 import { useAllFilesAccess } from "@/library/hooks";
 import { resumePlaylistImports } from "@/library/playlistImports";
 import { resumeYtLibraryImport } from "@/library/ytLibraryImport";
@@ -140,6 +141,53 @@ export default function RootLayout() {
       stop?.();
     };
   }, [granted, genreLookups]);
+
+  // Mood lookups send candidate titles and artists to Deezer and ReccoBeats: "Fix songs online".
+  useEffect(() => {
+    if (!granted || !genreLookups) return;
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    const cancel = afterFirstSettled("djMoodFeatures", () => {
+      void import("@/dj/djMoodLookup").then(({ startDjMoodLookup }) => {
+        if (!disposed) stop = startDjMoodLookup();
+      });
+    });
+    return () => {
+      disposed = true;
+      cancel();
+      stop?.();
+    };
+  }, [granted, genreLookups]);
+
+  // Library songs' mood features, by their file's ISRC tag, while Fix songs online is on.
+  useEffect(() => {
+    if (!granted || !genreLookups) return;
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    const cancel = afterFirstSettled("djLibraryMoodFeatures", () => {
+      void import("@/dj/djLibraryMoodLookup").then(({ startDjLibraryMoodLookup }) => {
+        if (!disposed) stop = startDjLibraryMoodLookup();
+      });
+    });
+    return () => {
+      disposed = true;
+      cancel();
+      stop?.();
+    };
+  }, [granted, genreLookups]);
+
+  // The kept play totals sum an upgrade's history and credit what Library changes leave owed,
+  // a step per settled turn (src/library/keptPlayTotals.ts); readers sum from the history until then.
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    const cancel = afterFirstSettled("keptPlayTotals", () => {
+      stop = startKeptPlayTotals();
+    });
+    return () => {
+      cancel();
+      stop?.();
+    };
+  }, []);
 
   // SQLite gathers the planner statistics the Library database lacks (src/library/db/connection.ts).
   useEffect(() => afterFirstSettled("optimize", optimizeLibraryDatabase), []);

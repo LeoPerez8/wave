@@ -759,6 +759,28 @@ describe("promoteUpdate", () => {
     assert.equal(manifest.extra.expoClient.version, "1.0.0-ti");
   });
 
+  it("leaves the desktop's channel files as they were", async () => {
+    const storage = memoryStorage();
+    // What the desktop's releases keep beside the phone's (desktopProtocol.ts).
+    const desktop = {
+      "desktop/ti/latest.json": '{"win32":"signed"}',
+      "desktop/ti/history.json": '[{"version":"1.0.1-ti"}]',
+      "desktop/ti/versions/1.0.1-ti.json": "{}",
+      "desktop/ti/files/1.0.1-ti/wave-1.0.1-ti-linux-x64.AppImage": "AppImage",
+    };
+    for (const [key, value] of Object.entries(desktop))
+      await storage.put(key, value, "application/json");
+    await release(storage, "1.0.0-ti");
+    await release(storage, "1.0.1-ti");
+
+    await promote(storage, "1.0.0-ti");
+
+    const { objects } = await storage.list({ prefix: "desktop/" });
+    assert.deepEqual(objects.map(({ key }) => key).toSorted(), Object.keys(desktop).toSorted());
+    for (const [key, value] of Object.entries(desktop))
+      assert.equal(await storage.read(key), value);
+  });
+
   it("refuses a version built for another runtime version, and says why", async () => {
     const storage = memoryStorage();
     await release(storage, "1.0.0-ti", { runtimeVersion: "native-a" });

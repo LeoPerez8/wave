@@ -147,6 +147,7 @@ input::placeholder {
   color: var(--color-secondary);
 }
 .sidebar {
+  --sidebar-gap: 10px;
   width: var(--sidebar-width);
   min-height: 0;
   background: var(--color-grouped);
@@ -155,7 +156,7 @@ input::placeholder {
   flex-direction: column;
   /* The right padding leaves room for the scrollbar's gutter, so entries never shift. */
   padding: 18px 4px 12px 12px;
-  gap: 14px;
+  gap: var(--sidebar-gap);
   /* One scroller for the whole sidebar; the search field and Settings stay in view. */
   overflow: hidden auto;
   scrollbar-gutter: stable;
@@ -228,6 +229,13 @@ input::placeholder {
 }
 .nav-item[aria-current="page"] svg {
   color: var(--color-accent);
+}
+/* A sidebar playlist or the Queue button while songs dragged over it can drop there. */
+.nav-item.drop-over,
+.icon-button.drop-over {
+  background: var(--color-fill);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  border-radius: 6px;
 }
 .nav-heading {
   font-size: 11px;
@@ -337,6 +345,20 @@ h2 {
   outline: 2px solid var(--color-accent);
   outline-offset: -2px;
   border-radius: 4px;
+}
+/* A playlist's own rows dragged to a new place: the row fades and a line marks where it lands. */
+.table-row.dragging {
+  opacity: 0.4;
+}
+.table-drop-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--color-accent);
+  pointer-events: none;
 }
 .table-row[aria-disabled="true"] {
   color: var(--color-secondary);
@@ -462,6 +484,12 @@ h2 {
 .yt-quiet {
   flex-shrink: 0;
   padding: 14px 12px;
+  font-size: 13px;
+}
+/* Try Again on the quiet line: read the page again. */
+.yt-quiet-again {
+  margin-left: 8px;
+  color: var(--color-accent);
   font-size: 13px;
 }
 /* YouTube Music's pages (Discover, Magic Queue, artist and album pages) scroll as one. */
@@ -610,6 +638,10 @@ h2 {
 .hero-actions button:disabled {
   opacity: 0.65;
 }
+/* Downloaded: the Library has every song; it stays tinted and a click does nothing. */
+.hero-actions button.downloaded {
+  cursor: default;
+}
 .scan-progress {
   display: flex;
   gap: 16px;
@@ -685,14 +717,16 @@ h2 {
 .account-actions .destructive {
   color: var(--color-destructive);
 }
-.yt-account {
+.yt-account,
+.account-profile {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-top: 16px;
 }
 .yt-account-photo,
-.yt-account-cover {
+.yt-account-cover,
+.account-profile-photo {
   width: 40px;
   height: 40px;
   flex-shrink: 0;
@@ -703,7 +737,8 @@ h2 {
   min-width: 0;
   text-align: left;
 }
-.yt-account-names > span {
+.yt-account-names > span,
+.account-profile-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -759,6 +794,15 @@ h2 {
 .invitation button {
   padding: 7px 10px;
   color: var(--color-accent);
+}
+.bring-your-music-sources {
+  margin-top: 12px;
+  list-style: none;
+}
+.bring-your-music-sources li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .player-bar {
   grid-column: 1/-1;
@@ -866,13 +910,13 @@ h2 {
   .nav-item:has(> .nav-monogram) svg {
     display: none;
   }
-  .search-field {
+  .sidebar > .search-field {
     border: 0;
     padding: 0;
     height: 34px;
     justify-content: center;
   }
-  .search-field input {
+  .sidebar > .search-field input {
     position: absolute;
     opacity: 0;
     width: 34px;
@@ -880,7 +924,7 @@ h2 {
     cursor: text;
   }
   /* Ctrl+F opens the field in the title bar, after Back and Forward, over no page title. */
-  .search-field:focus-within {
+  .sidebar > .search-field:focus-within {
     position: fixed;
     left: calc(var(--sidebar-width) + 116px);
     top: 7px;
@@ -891,14 +935,14 @@ h2 {
     z-index: 5;
     padding: 0 8px;
   }
-  .search-field:focus-within::before {
+  .sidebar > .search-field:focus-within::before {
     display: none;
   }
-  /* Its slot stays, so a click on an entry isn't lost when leaving the field moves them. */
+  /* Search's slot and its following gap stay in place while the field is in the title bar. */
   .sidebar:has(> .search-field:focus-within) {
-    padding-top: calc(18px + 34px + 14px);
+    padding-top: calc(18px + 34px + var(--sidebar-gap));
   }
-  .search-field:focus-within input {
+  .sidebar > .search-field:focus-within input {
     outline: none;
     position: static;
     opacity: 1;
@@ -1061,8 +1105,10 @@ button.destructive {
   background: var(--color-surface);
   box-shadow: 0 8px 28px #0003;
 }
-.menu [role="menuitem"] {
+.menu [role="menuitem"],
+.menu [role="menuitemradio"] {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 6px 10px;
@@ -1072,7 +1118,12 @@ button.destructive {
 .menu [role="menuitem"].destructive {
   color: var(--color-destructive);
 }
-.menu [role="menuitem"]:focus {
+.menu-line {
+  font-size: 12px;
+  opacity: 0.7;
+}
+.menu [role="menuitem"]:focus,
+.menu [role="menuitemradio"]:focus {
   outline: none;
   color: var(--color-on-accent);
   background: var(--color-accent);
@@ -1224,10 +1275,22 @@ kbd {
 .yt-download:focus-visible {
   color: var(--color-accent);
 }
-/* Downloads: the songs on their way and the ones that failed. */
+/* Downloads: the run's panel over one virtual list of groups, waiting songs and failures. */
 .downloads-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  font-variant-numeric: tabular-nums;
+}
+.downloads-scroll {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   padding-right: 22px;
+}
+.downloads-list {
+  position: relative;
 }
 .downloads-bar {
   display: flex;
@@ -1246,13 +1309,63 @@ kbd {
 .downloads-note {
   padding: 0 12px 14px;
 }
+.downloads-run {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 560px;
+  padding: 0 12px 16px;
+  font-size: 12px;
+}
+.downloads-run h2 {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-secondary);
+}
+.run-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.run-panel strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.run-bar {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-separator);
+  overflow: hidden;
+}
+.run-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--color-accent);
+}
 .download-row {
+  position: absolute;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 48px;
+  height: 52px;
   padding: 0 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--color-separator) 45%, transparent);
+}
+.download-row.movable {
+  cursor: grab;
+}
+.download-row.dragging {
+  opacity: 0.4;
+}
+.download-row.drop-over {
+  background: var(--color-fill);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
 }
 .download-song {
   flex: 1;
@@ -1262,6 +1375,39 @@ kbd {
 }
 .download-song > .secondary {
   font-size: 12px;
+}
+/* A group's header: its name, its counts, and its bar along the bottom edge. */
+.download-group {
+  align-items: flex-end;
+  padding-bottom: 10px;
+}
+.download-group h3 {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+}
+.download-group > .secondary {
+  font-size: 12px;
+}
+.download-group > .run-bar {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 2px;
+  height: 3px;
+}
+/* Move Up and Move Down show on the row under the pointer and while a key is on them. */
+.download-move {
+  display: flex;
+  opacity: 0;
+}
+.download-row:hover .download-move,
+.download-move:focus-within {
+  opacity: 1;
+}
+.download-move .icon-button {
+  width: 24px;
+  height: 24px;
 }
 .nav-count {
   margin-left: auto;
@@ -1380,6 +1526,7 @@ kbd {
   gap: 12px;
 }
 .search-tile {
+  position: relative;
   display: grid;
   gap: 2px;
   padding: 8px;
@@ -1387,6 +1534,15 @@ kbd {
   color: inherit;
   text-align: left;
   min-width: 0;
+}
+.search-tile.selected {
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-background));
+}
+.search-tile > .row-check {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  background-color: var(--color-background);
 }
 .search-tile > :first-child {
   display: block;
@@ -1450,4 +1606,9 @@ kbd {
   display: block;
   height: 100%;
   background: var(--color-accent);
+}
+/* A list page's Find field (#1213), under its heading. */
+.find-field {
+  max-width: 280px;
+  margin-top: 16px;
 }

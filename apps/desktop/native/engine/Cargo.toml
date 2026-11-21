@@ -7,8 +7,9 @@ publish.workspace = true
 
 [dependencies]
 cpal = "0.18.2"
-symphonia = { version = "0.6.1", default-features = false, features = ["aac", "flac", "isomp4", "mp3", "ogg", "pcm", "vorbis", "wav", "all-meta", "opt-simd"] }
+symphonia = { version = "0.6.1", default-features = false, features = ["aac", "flac", "isomp4", "mp3", "ogg", "pcm", "vorbis", "wav", "all-meta", "opt-simd", "alac"] }
 symphonia-adapter-libopus = "0.3.0"
+oxideav-aac = "0.1.7"
 # Fetches YT Music songs by range (docs/spec-desktop.md, Audio engine).
 ureq = { version = "3.5.2", default-features = false, features = ["rustls"] }
 

@@ -25,15 +25,22 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
-import type { ImageEdit, ImportAnswer } from "../../shared/playlists.ts";
+import type {
+  ImageEdit,
+  ImportAnswer,
+  PlaylistCreateTarget,
+  PlaylistInfo,
+} from "../../shared/playlists.ts";
+import type { SpotifyImportResult } from "../../shared/spotifyImport.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
 import "./playlists.css";
 import { copyLink } from "./copyLink.ts";
-import type { MenuItem } from "./Menu.tsx";
+import { shareToSpotify } from "./shareToSpotify.ts";
+import type { MenuItem, MenuPoint } from "./Menu.tsx";
 import { ConfirmDialog, trapTab, useMenuAndToast } from "./SongActions.tsx";
+import { SpotifyImportDialog } from "./SpotifyImport.tsx";
 import { language, text } from "./text.ts";
 
-type Point = { readonly x: number; readonly y: number };
 type FramingAdjustment = Parameters<typeof adjustFraming>[2];
 
 interface Options {
@@ -45,24 +52,30 @@ interface Options {
   readonly failed: (message: string) => void;
   /** Reads the player, the rows and the sidebar again once an edit changed them. */
   readonly changed: () => void;
+  /** From Spotify's import started: Bring your music marks the source. */
+  readonly importStarted?: (source: "spotify") => void;
 }
 
+/** The menu entries that change a collaborative playlist for every member. */
+const EDITS: ReadonlySet<string> = new Set(["renamePlaylist", "graveyard", "deletePlaylist"]);
+
 type Naming =
-  | { readonly kind: "create"; readonly initial: string; readonly target?: SongTarget }
+  | { readonly kind: "create"; readonly initial: string; readonly target?: PlaylistCreateTarget }
   | { readonly kind: "rename"; readonly initial: string; readonly playlistId: number };
 
 /** The dialogs, menu and toast playlist edits show, and how to open them. */
-export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
+export function usePlaylistEdits({ go, deleted, failed, changed, importStarted }: Options) {
   /** Counts edits the player's revision misses (a playlist's image), for whatever shows them. */
   const [edits, setEdits] = useState(0);
   const [naming, setNaming] = useState<Naming>();
-  const { menu, setMenu, setToast, menuAndToast } = useMenuAndToast();
+  const { setMenu, setToast, menuAndToast } = useMenuAndToast();
   const [confirm, setConfirm] = useState<{
     readonly spec: AlertSpec;
     readonly onChoose: (yes: boolean) => void;
   }>();
   const [crop, setCrop] = useState<{ readonly playlistId: number; readonly edit: ImageEdit }>();
   const [summary, setSummary] = useState<M3uImportSummary>();
+  const [fromSpotify, setFromSpotify] = useState(false);
 
   const edited = useCallback(() => {
     setEdits((n) => n + 1);
@@ -81,7 +94,7 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
 
   /** New Playlist: asks for a name; with [target], the new playlist holds its songs. */
   const newPlaylist = useCallback(
-    (target?: SongTarget) => {
+    (target?: PlaylistCreateTarget) => {
       void window.wave.playlists
         .newName()
         .then((initial) => setNaming({ kind: "create", initial, ...(target ? { target } : {}) }))
@@ -122,14 +135,35 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
       .catch(() => failed(problem));
   };
 
-  /** A playlist's menu: Rename, its image, its Graveyard and Delete. */
+  /**
+   * A playlist's menu: Rename, its image, its Graveyard and Delete. A collaborative one keeps
+   * only what is this device's own (its image) and sharing: the desktop edits none of it.
+   */
   const playlistItems = async (playlistId: number): Promise<readonly MenuItem[]> => {
     const info = await window.wave.playlists.info(playlistId);
     if (info === null) return [{ key: "deleted", label: text.playlists.deleted, disabled: true }];
+    const items = await allPlaylistItems(playlistId, info, await window.wave.settings.ytMusic());
+    return info.collaborative
+      ? [
+          {
+            key: "collaborative",
+            label: text.desktopLibrary.collaborativeOnPhone,
+            disabled: true,
+          },
+          ...items.filter((item) => !EDITS.has(item.key)),
+        ]
+      : items;
+  };
+
+  const allPlaylistItems = async (
+    playlistId: number,
+    info: PlaylistInfo,
+    ytMusic: boolean,
+  ): Promise<readonly MenuItem[]> => {
     const labels = text.itemActions.labels;
     return [
       {
-        key: "rename",
+        key: "renamePlaylist",
         label: labels.renamePlaylist,
         run: () => setNaming({ kind: "rename", initial: info.name, playlistId }),
       },
@@ -175,10 +209,10 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
             },
           ]
         : []),
-      ...((await window.wave.settings.ytMusic())
+      ...(ytMusic
         ? [
             {
-              key: "copyLink",
+              key: "share",
               label: text.share.copyLink,
               run: () => {
                 void copyLink(window.wave.links.copyPlaylist(playlistId));
@@ -186,8 +220,20 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
             },
           ]
         : []),
+      ...((await window.wave.spotifyAccount.view()).configured
+        ? [
+            {
+              key: "shareToSpotify",
+              label: text.share.shareToSpotify,
+              run: () =>
+                void shareToSpotify({ id: playlistId, name: info.name }, ask, (message) =>
+                  setToast({ message, id: Date.now() }),
+                ),
+            },
+          ]
+        : []),
       {
-        key: "delete",
+        key: "deletePlaylist",
         label: labels.deletePlaylist,
         destructive: true,
         run: () =>
@@ -205,10 +251,6 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
     ];
   };
 
-  /** Opens a playlist's menu at [at] (right-click in the sidebar, its page's ⋯). */
-  const openMenu = (playlistId: number, at: Point) =>
-    setMenu({ label: text.playlists.playlistActions, at, items: playlistItems(playlistId) });
-
   /** Move Up and Move Down, for a song's menu on its playlist's page. */
   const moveItems = (playlistId: number, trackId: number): readonly MenuItem[] =>
     (["up", "down"] as const).map((direction) => ({
@@ -221,8 +263,18 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
           .catch(() => failed(text.desktopLibrary.actionFailed)),
     }));
 
-  /** Import Playlists: the file picker, a question per name another playlist has, the summary. */
-  const importPlaylists = async () => {
+  /**
+   * A drag or Alt+arrow on a playlist's page: [target] goes before row [before], or to the end.
+   * Settles once the playlist holds the new order.
+   */
+  const place = (playlistId: number, target: SongTarget, before: number | null): Promise<void> =>
+    window.wave.playlists
+      .place(playlistId, target, before)
+      .then(changed)
+      .catch(() => failed(text.desktopLibrary.actionFailed));
+
+  /** From Files: the file picker, a question per name another playlist has, the summary. */
+  const importFiles = async () => {
     try {
       const choice = await window.wave.playlists.chooseImport();
       if (choice === null) return;
@@ -239,6 +291,40 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
     } catch {
       failed(text.imports.couldntImportPlaylists);
     }
+  };
+
+  /** Import Playlists: From Files, and From Spotify while YT Music is on; at [at], the choice. */
+  const importPlaylists = async (at?: MenuPoint) => {
+    const ytMusic = await window.wave.settings.ytMusic().catch(() => false);
+    if (!ytMusic || at === undefined) return importFiles();
+    setMenu({
+      label: text.playlists.importPlaylists,
+      at,
+      items: [
+        { key: "fromFiles", label: text.imports.fromFiles, run: () => void importFiles() },
+        { key: "fromSpotify", label: text.imports.fromSpotify, run: () => setFromSpotify(true) },
+      ],
+    });
+  };
+
+  /** From Spotify's Import ended: one playlist opens, several are counted, and what it left out is said. */
+  const importedFromSpotify = ({ imported, skipped, failure }: SpotifyImportResult) => {
+    edited();
+    const [first] = imported;
+    if (first !== undefined) {
+      if (imported.length === 1) go({ kind: "playlist", id: first.playlistId });
+      setToast({
+        message:
+          imported.length === 1
+            ? text.imports.importedName(first.name)
+            : text.imports.importedPlaylists(imported.length),
+        id: Date.now(),
+      });
+    }
+    if (failure === null && skipped > 0)
+      failed(
+        skipped === 1 ? text.imports.couldntImportPlaylist : text.imports.couldntImportPlaylists,
+      );
   };
 
   const overlays = (
@@ -267,22 +353,26 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
         />
       )}
       {summary && <SummaryDialog summary={summary} onClose={() => setSummary(undefined)} />}
+      {fromSpotify && (
+        <SpotifyImportDialog
+          onStarted={() => importStarted?.("spotify")}
+          onImported={importedFromSpotify}
+          onClose={() => setFromSpotify(false)}
+        />
+      )}
       {confirm && <ConfirmDialog spec={confirm.spec} onChoose={confirm.onChoose} />}
     </>
   );
   return {
     edits,
     newPlaylist,
-    openMenu,
+    playlistItems,
     moveItems,
-    importPlaylists: () => void importPlaylists(),
+    place,
+    importPlaylists: (at?: MenuPoint) => void importPlaylists(at),
+    /** Opens the From Spotify picker (it signs in first when signed out). */
+    importFromSpotify: () => setFromSpotify(true),
     overlays,
-    /** Closes the open menu, if one is; false when none was. */
-    closeMenu: () => {
-      if (menu === undefined) return false;
-      setMenu(undefined);
-      return true;
-    },
   };
 }
 
@@ -401,7 +491,7 @@ function CropDialog({
 }) {
   const size = { width: edit.width, height: edit.height };
   const [framing, setFraming] = useState(edit.framing);
-  const drag = useRef<Point | undefined>(undefined);
+  const drag = useRef<MenuPoint | undefined>(undefined);
   const view = framingView(size, VIEW, framing);
   const adjust = (action: FramingAdjustment) => setFraming((f) => adjustFraming(size, f, action));
   const library = text.library;

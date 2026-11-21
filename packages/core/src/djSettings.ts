@@ -17,6 +17,9 @@ export type DjDiscovery = "familiar" | "blend" | "discover";
 /** The popularity filters: Trending, neither, or Lesser-known songs. */
 export type DjPopularity = "trending" | "balanced" | "lesserKnown";
 
+/** A single sound profile; null leaves the radio order alone. */
+export type DjMood = "energetic" | "relaxing" | "upbeat";
+
 /** The choices a DJ session ranks with. */
 export interface DjSettings {
   readonly variety: DjVariety;
@@ -28,6 +31,8 @@ export interface DjSettings {
    * give a year and no date).
    */
   readonly newReleases: boolean;
+  /** At most one sound profile. Older saved sessions read this as null. */
+  readonly mood: DjMood | null;
 }
 
 /** DJ's choices before the owner adjusts any. */
@@ -36,9 +41,18 @@ export const DEFAULT_DJ_SETTINGS: DjSettings = {
   discovery: "blend",
   popularity: "balanced",
   newReleases: false,
+  mood: null,
 };
 
 const VARIETIES: { readonly [K in DjVariety]: true } = { low: true, medium: true, high: true };
+const MOODS: { readonly [K in DjMood]: true } = {
+  energetic: true,
+  relaxing: true,
+  upbeat: true,
+};
+
+/** Mood chips in the order Adjust shows them. */
+export const DJ_MOOD_FILTERS: readonly DjMood[] = ["energetic", "relaxing", "upbeat"];
 
 /** Artist variety's steps as Adjust offers them, from its left end to its right one. */
 export const DJ_VARIETIES: readonly DjVariety[] = ["low", "medium", "high"];
@@ -96,6 +110,12 @@ export const djToggleFilter = (settings: DjSettings, filter: DjFilter): DjSettin
     ? { ...settings, newReleases: !settings.newReleases }
     : { ...settings, popularity: settings.popularity === filter ? "balanced" : filter };
 
+/** A tap selects one mood, switches to another, or turns the selected mood off. */
+export const djToggleMood = (settings: DjSettings, mood: DjMood): DjSettings => ({
+  ...settings,
+  mood: settings.mood === mood ? null : mood,
+});
+
 const oneOf = <T extends string>(
   value: unknown,
   choices: { readonly [K in T]: unknown },
@@ -110,5 +130,9 @@ export const parseDjSettings = (value: unknown): DjSettings => {
     discovery: oneOf(saved["discovery"], NEW_MUSIC_SHARE, DEFAULT_DJ_SETTINGS.discovery),
     popularity: oneOf(saved["popularity"], POPULARITY_STEP, DEFAULT_DJ_SETTINGS.popularity),
     newReleases: saved["newReleases"] === true,
+    mood:
+      typeof saved["mood"] === "string" && Object.hasOwn(MOODS, saved["mood"])
+        ? (saved["mood"] as DjMood)
+        : null,
   };
 };

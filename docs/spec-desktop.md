@@ -88,6 +88,7 @@ D2. As a user, I want to add other folders (another disk, a network share) with 
 D3. As a user, I want the Library to notice files I add, change or delete while Wave runs, and to catch up on what changed while it was closed, so that I never press a refresh button for normal use.
 D4. As a user, I want songs on an unplugged drive to stay in the Library, greyed with a folder glyph and their plays, stars and playlist places kept, and to play again when the drive is back, so that unplugging a disk loses nothing.
 D5. As a user, I want the account invitation after the first scan, as on the phone, so that I can bring my playlists and history over if I have an account.
+D5a. As a user, I want the Bring your music card after the invitation, with From Spotify and From YT Music, so that my playlists come over from the app I used before. Continue, Not Now and Escape answer it for good on that computer; the answer is kept there and never synced, and a computer that used Wave before the card existed never gets it, nor does a build that can't sign in, which has no invitation.
 
 #### The window
 
@@ -110,7 +111,7 @@ D16. As a user, I want Space to press a focused button instead of pausing, and �
 
 D17. As a user, I want my keyboard's media keys and the system's media controls (Windows' media flyout, the Linux desktop's media controls) to show the song and play, pause, skip and seek it, so that I control Wave from anywhere.
 D18. As a user, I want closing the window to keep Wave playing in the tray, with a one-time notice saying so and how to change it, and a setting that makes closing quit, so that music doesn't stop when I close a window.
-D19. As a user, I want the tray icon to show or hide the window on click, and its menu to show the playing song with Play/Pause, Next, Previous, Show Wave and Quit, so that I can control playback without the window.
+D19. As a user, I want the tray icon to show or hide the window on click, and its menu to show the playing song with Play/Pause, Next, Previous, Show Wave, Mini Player and Quit, so that I can control playback without the window.
 D20. As a Linux user without a tray, I want the desktop's media controls and launching Wave again to bring it back, so that a hidden Wave is never lost.
 D21. As a user, I want launching Wave while it runs to show the running window, so that I never get two players.
 D22. As a user, I want to choose in Settings whether Wave starts with the system, hidden in the tray and not playing, off by default, so that it is ready when I want it.
@@ -210,7 +211,12 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
 - The PCM carries its song's identity up to the gain stage, so a per-song gain switches on the
   first frame of the song. Measured: no mismatching sample across 619,534 frames.
 - Loudness measurement for Normalize Volume runs in the engine, which already decodes.
-- Output device: the system default, following changes. Picking a device is later.
+- Output device: the system default, following changes, unless Settings › Playback › Output
+  picks another (#1230). The list is the system's outputs, System default first, read again
+  every second. Picking one moves the stream to it and the song goes on from where it is. While
+  the picked device is away the engine plays on the system default and returns to the device
+  when the system lists it again; the same holds for a device that won't open. The choice is
+  this computer's: its id and name are in `desktop_settings` (`outputDevice`), never synced.
 - Streaming: the Kotlin resolver returns the stream address and its headers. The engine fetches
   the bytes by range, writes them to the bounded audio cache (1 GB, as on the phone) and asks the
   main process to resolve again on a 403 or 410.
@@ -245,6 +251,12 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
   that brought stars or songs, and as Wave starts. Unstarring it before the file arrives cancels
   the download only the star asked for. What the stars asked is kept on this computer
   (`downloads.syncedStars`, `downloads.starAsked`), never synced.
+- The Downloads page is the phone's (`docs/spec.md`, Downloads): the line counting the songs
+  downloading and waiting, the run's panel with the paused line while YouTube limits downloads,
+  the waiting songs under their source's header, and the failed section folded until shown,
+  grouped by reason. It is one virtual list. A group's header drags among the groups and a
+  waiting song among its group's songs, with the mouse or with Move Up and Move Down on the row,
+  and the queue downloads in the order shown.
 - Play and Shuffle on a list with missing songs play what can play (Core's `listPlay`): the
   songs with a file and, with YT Music on, the missing songs downloaded from a YouTube Music
   video, streamed in their place. A toast counts the ones left out and offers Download Missing
@@ -258,6 +270,18 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
   the desktop's database and don't sync in v1.
 - The desktop pulls on opening, on focus after five minutes away, and every 15 minutes while
   running. It trusts the system clock as the phone does, and conflicts follow Core's rules.
+- Collaborative playlists (`docs/spec.md`, Collaborative playlists): the desktop shows and plays
+  them and never edits them, for the owner and for the other members. In the sidebar one has a
+  people glyph, and its row and page say "Collaborative" before the song count. Its menu has a
+  line saying it is edited in Wave on the phone, its image entries and sharing. Rename, the
+  Graveyard, Delete, Move Up and Move Down are left out. Add to Playlist doesn't list it, and a
+  playlist's page doesn't offer Remove from Playlist. An M3U or link import with its name makes
+  a playlist of its own. Main refuses every change to its name, entries or order, whatever the
+  window asks (`src/main/library/collaborativePlaylists.ts`). Its image stays this computer's
+  own, as for any playlist. The sync cycle reads the account's collaborations on every pull. A
+  member's desktop then pulls each playlist with its own cursor, in the same cycle, and pushes
+  nothing of it (`pushCollaborative: false`), so it shows the playlist after a sync and follows
+  later changes.
 
 ### Sign-in
 
@@ -322,10 +346,22 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   percentage); the user's playlists with New Playlist; Settings pinned at the bottom. Back and
   forward arrows sit in the title bar. Every entry has its own icon. The sidebar scrolls as one
   when the window is short, keeping the Search field and Settings in view.
+- The Playlists page counts its playlists and has the phone's Sort by (Name, Recently Added,
+  Recently Played, Custom) and a switch between its table and a grid of covers. In Custom a row
+  or a cover drags into another's place, and a playlist's menu has Move Up and Move Down. The
+  sidebar lists playlists in the same order. As on the phone, the sort, the arranged order and
+  the layout stay on the computer (Core's `PLAYLIST_ORDER_SETTING`, `PLAYLIST_LAYOUT_SETTING`)
+  and don't sync. Large Cards reads as the grid.
 - Lyrics and the Queue share the side panel, toggled from the player bar and closed by the
   panel's own control on every tab. Now Playing (artwork,
   title, lyrics) opens from the bar's artwork or title and closes with Esc. Focus lands on Now
   Playing itself, so Space still plays and pauses; Tab reaches its close button.
+- Share in the Lyrics view (the panel's tab and Now Playing, after Karaoke and Translate) picks
+  up to five lines next to each other as the phone does (Core's `tapLyricLine`); while picking, a
+  click picks instead of seeking and synced lyrics stop following the song. Cancel, Esc or a new
+  song leaves picking. Next previews the phone's lyrics card, 1080 px wide; a click on it moves
+  to the cover's next colour, and Save Image (the save dialog, at the phone's file name) and Copy
+  Image (the PNG on the clipboard) stand in for the share sheet.
 - Minimum window 960×600. Below 1120 px wide the sidebar shows icons only, a playlist as
   its first letter, and Ctrl+F opens the Search field in the title bar. When the content is
   narrower than 760 px, tables drop the Album column, the search top result stacks and hero
@@ -336,25 +372,97 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
 - Scrollbars are Wave's own everywhere: an 8 px rounded thumb with no track and no arrow buttons.
 - Theme: the phone's tokens, light and dark following the system or the Appearance setting. The
   accent follows the synced theme, so the default theme gives a white accent in dark and the ink
-  colour in light, as on the phone.
+  colour in light, as on the phone. Settings › Appearance edits that theme as the phone does: a
+  background for each mode, Primary and Secondary from Default, the saved colours or a custom
+  one, and Reset to defaults. Each row of swatches is one tab stop the arrows move through; a
+  saved colour has a Remove button where the phone has a long press. The app icon isn't offered.
 - Tables: 40 px rows. Songs show title (with a thumbnail with 4 px corners), artist, album, the
   star and time; album pages show the track number instead of the thumbnail; on an artist's page
   the artist column shows only featured artists. A selected row has its own tint, separate from
   the keyboard focus ring. Songs keeps the A–Z spine.
+- Songs and Favorites have the song count under their title, then Play and Shuffle in the accent
+  as on a hero; both play the list in the order its table shows (#1220).
+- Each list page (Songs, Albums, Artists, Genres, Favorites, Playlists, a playlist, an artist, a
+  genre) has a Find field under its heading, the phone's pull-down Find: typing narrows the table
+  with Core's matching (case and accents ignored, words matched from their start). Main filters
+  in the page's query (`wave_finds`), so the table still reads pages; a playlist keeps each
+  song's place in its "#". The count, Play, Shuffle and Select All go by the rows found, and a
+  Find with none says so ("No songs match"). Esc clears it and gives the focus back to the list.
+  It has no shortcut: Ctrl+F stays the Library Search (#1213).
 - Artwork has 6 px corners on tiles and heroes, 4 px on row thumbnails, circles for artists.
 - The song menu holds Play Next, Add to Queue, Add to Playlist, Favorite, Go to Album, Go to
-  Artist, Start Magic Queue, Copy Link, Select, Fix Song and Remove from Library.
+  Artist, Start Magic Queue, Share, Select, Fix Song and Remove from Library.
+- Release Date, on a Library song and on a streamed song (#1223), opens a small dialog with the
+  date Wave has (or a line saying none is known) and the phone's Year, Month and Day fields, read
+  by Core's `readTypedReleaseDate`. It keeps the date as the phone does: in the synced
+  `releaseDates.typed.*` preferences, and for a Library song in the index (not in its file), so it
+  reaches the phone and a playlist's Release date sort places the song by it.
+- Show in Folder (#1224) is on the menu of one Library song with a file here, never a missing or
+  streamed one. The window asks with the song's id (`songs.showInFolder`), never a path: main
+  reads the file from the index and opens the system's file manager with it selected
+  (`shell.showItemInFolder`), on Windows and Linux. A song in a folder whose drive isn't connected
+  says so, and one whose file has gone asks for a Refresh.
+- Share, on a Library song and on a streamed song (#1209), is a submenu in place of the phone's
+  share sheet: Copy Link (song.link), Copy Spotify Link (Spotify's own search as #1201's
+  account), Copy YT Music Link, then Save Image (the system's save dialog) and Copy Image, which
+  draw the phone's song card 1080 px wide. A link that can't work is disabled and says why under
+  its label (No Match, Signed Out, Offline, Unavailable); offline every link reads Offline. With
+  YT Music off the submenu holds the two image items only.
+- Selection takes albums, artists, genres and playlists too (#1216): Select, Ctrl+click and
+  Shift+click check their rows in the tables and their tiles in Search, where they check together
+  with the songs. One collection checked alone keeps its menu's entries. Several, or collections
+  with songs, get one bar whose actions run on every song the checked items hold, a song two of
+  them hold once: Play Next, Add to Queue and Add to Playlist always; Download while one of those
+  songs has no file; Fix Songs when the checked items are one kind of collection. Favorite and
+  the other song entries show only while songs alone are checked (Core's
+  `desktopSelectionActions`, the phone's mixed selection rules).
+- A song row drags onto a playlist in the sidebar, wide or collapsed to icons, to add it there;
+  onto an Up Next row, the playing row or the end of the Queue tab, to go in Up Next at that
+  place (#1217); or onto the player bar's Queue button, for Add to Queue. A checked row brings
+  every checked song, and on Search the collections checked with them, in the order shown.
+  Streamed songs drag the same way. A target is highlighted only while it can take the drop,
+  dragging over the Queue tab opens it, and the toasts are the menu entries' own. Add to
+  Playlist and Add to Queue stay in the menus for the keyboard.
+- On a playlist's page in its own order (#1218), a row drags to a new place, with a line where it
+  will land; a checked row brings every checked song, together and in the playlist's order. The
+  list scrolls while a drag is held near its top or bottom. Alt+Up and Alt+Down move the focused
+  row, as in the Queue tab, and Move Up and Move Down stay in its menu. The order is the
+  playlist's synced one, so it reaches the phone. A sorted page moves nothing.
 - Home shows the phone's sections in the phone's order, following the account's synced
-  arrangement: shelves of tiles, Most played as a table.
+  arrangement: shelves of tiles, Most played as a table. Edit Home, on Home and under Settings ›
+  Home, is the phone's editor: the sections shown, Discover's rows under Discover, then the ones
+  not on Home. A row is dragged to its place or moved with Move Up and Move Down, removed, or
+  added back at the bottom. Each change is kept and synced as it is made. A section or row the
+  stored arrangement names that this Wave doesn't have stays in it, in its place.
 - Home's New from Artists You Follow and Upcoming Shows use the phone's rules and the account's
   follows, hidden releases and switches. Each computer runs its own checks, looks shows up in the
-  system's region and posts no show notification. A release opens its Library album or its
-  YT Music page; a show opens its ticket page in the browser. Following, unfollowing and hiding a
-  release stay on the phone.
+  country chosen in Settings › Followed artists (the system's region until one is chosen) and
+  posts no show notification. A release opens its Library album or its YT Music page; a show
+  opens its ticket page in the browser. Hiding a release stays on the phone.
+- A Library artist's page and a YT Music artist's page have a Follow button in the hero's
+  actions. It reads Follow or Following and opens a card with the levels (Core's
+  `followLevelEntries`): New music, New music and shows while a Wave account is signed in, and
+  Unfollow once followed. Settings › Followed artists has the account's switch, the Country for
+  shows (kept on this computer, as each phone keeps its own), Find artists to follow, and the
+  artists followed A to Z, each with its level in a menu and Unfollow. Unfollow shows the toast
+  "Unfollowed <artist>" with Undo. The search lists the Library's matches and Deezer's, and
+  its one line is Core's `followSearchLine`: searching, no answer from Deezer, or no artists
+  found. With the switch off no artist page has the button, the search is disabled and the
+  follows are listed but can't change. Follows sync with the Wave account as any change does.
+  The phone's level icons, their legend and Suggested aren't on the desktop.
 - Album, artist and playlist pages have a hero: artwork, a light title, and the kind in the line
   under it ("Album · Indie Folk · 1995 · 7 songs · 33 min", or "36 h 43 min" from an hour up, Core's `listDuration`; a table's Time
   column reads "36:43:09"), with no label above the title. Play
   and Shuffle are text buttons in the accent, without a filled box.
+- A playlist's page ends with Recommended songs while YT Music is on (#1193), by the phone's
+  rules (docs/spec.md, Playlist recommendations): five offers with Add and Dismiss, Refresh in
+  the heading, saved offers shown at once on a return, and the failure line with Try Again. The
+  page then scrolls as one, the table first, and Go to Suggestions shows while the section's
+  heading is below what it shows. Main holds the visit (`main/yt/playlistSuggestions.ts`, the
+  phone's shared visit in `@wave/client/playlistSuggestionsVisit`), keeps its saved offers and
+  seed draws in the device settings and reads each seed's radio as the Magic Queue does. The
+  artist graph and genre lookups aren't on the desktop, and an offer isn't played from the
+  section.
 - Search: a top result (artwork and name, no card), a Songs table, then Albums, Artists and
   Playlists shelves, then YouTube Music results. An empty field lists recent searches.
 - Settings is a page with its own side list: Library, Appearance, Window, Playback, Lyrics and
@@ -363,6 +471,19 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   quiet line saying they come back online, and downloads pause. A missing song is dimmed, with
   no × (a download on its way shows its progress on the row); the × marks only a file that failed
   to play.
+- A YT Music album page has Play, Shuffle and Download, and a YT Music artist page Play and
+  Shuffle, as on the phone. Download follows Core's album rule (Download, Cancel, Retry Failed,
+  Downloaded) and the head counts the songs saved while they're on their way; the songs land
+  as one album, tagged from its page. A page YT Music didn't answer has Try Again on its quiet
+  line. On an artist page's Albums and Singles & EPs, a release the Library has opens the
+  Library's album page.
+- A Library album with more than one disc heads each disc's songs "Disc n", its track numbers
+  starting again on each (#1221). With YT Music on, its hero has the phone's Library | Online
+  toggle; Online asks for the album artist and the release only when picked, then lists the whole
+  tracklist in the release's order, the songs the Library lacks streamed among its own (each
+  Library song once, as the Library's), with the release's Download in place of Download Missing
+  Songs. Play plays that list. Offline or after a failure Online is the quiet line, and picking it
+  again asks again.
 - No chips, no filled Play button, no card around the top result (Quiet Catalog, as on the
   phone).
 
@@ -397,8 +518,42 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   addon (`wave-media.node`). On Windows it is Chromium's Media Session with a silent audio
   element: the check in #1157 found `souvlaki` publishing the song there while the system's Pause
   never reached Wave. Linux falls back to Chromium's session when the addon doesn't load.
-- No file associations, no `https` link handler and no floating mini player in v1. Windows lets
-  an app own `https` links only for a domain it proves it owns.
+- Opening files (#1233). Wave is an "Open with" choice for the audio formats the engine plays
+  (`.mp3`, `.m4a`, `.flac`, `.ogg`, `.oga`, `.opus`, `.wav`; not `.mp4`, which is a video more
+  often than a song). It never takes a type's default from another player: the Windows installer
+  adds Wave to each extension's `OpenWithProgids` and to `Applications\Wave.exe\SupportedTypes`
+  under the user's own registry keys and leaves the extension's default alone, and uninstalling
+  removes what it added; the AppImage's desktop entry lists the same formats as `MimeType`
+  (`apps/desktop/scripts/file-types.ts`). The files a launch names play in order as a new queue,
+  with "New queue playing" and Undo when a queue was there. A launch while Wave runs hands its
+  files to the running window. The system starts Wave once per file when several are opened
+  together, so files that arrive within half a second of each other play as one queue, and files
+  that arrive while Wave starts wait for its services. A file the Library has plays as its
+  Library song, so its play is counted. Any other file plays as itself (the queue id
+  `file:<path>`, Core's `openedFiles.ts`): it joins nothing, its play isn't kept or synced, it
+  shows by its tags' title and artist (its name until they're read), without a cover, and the
+  star and the song menus are off for it. A path that isn't one of those formats, or isn't
+  there, is ignored. A file left in the queue plays again after a restart while it still exists.
+- No `https` link handler and no floating mini player in v1. Windows lets an app own `https`
+  links only for a domain it proves it owns.
+
+- No file associations and no `https` link handler in v1. Windows lets an app own `https` links
+  only for a domain it proves it owns.
+- The mini player (#1232) is a small frameless window that stays above other windows: artwork,
+  title and artists, Previous, Play or Pause, Next, the star and a thin progress line. The player
+  bar's Mini Player button and the tray menu's Mini Player entry open it, or show the one already
+  open. Show Wave on it brings the main window back and leaves it open; Close Mini Player closes
+  it, and Wave keeps running. The main window can be hidden while it is open. It drags from
+  anywhere but its buttons. Space, the other player keys and Ctrl+Q work in it, and the media keys
+  reach Wave as they do with the main window hidden. Its position is a device-local setting
+  (`miniPlayer.position`), saved when it is moved and when it closes. It opens where it was left
+  while the screens show all of it, else moved whole onto the screen showing most of it, or onto
+  the primary screen when its own is gone, also when a monitor goes while it is open; never
+  placed, it opens in the primary screen's bottom right corner (Core's `floatingWindowPosition`).
+  It is a second page of the same renderer (`mini.html`) on the same preload, web preferences
+  (`windowWebPreferences`), navigation guard and CSP as the main window, and main answers bridge
+  calls from those two pages only. It adds `miniPlayer.open`, `close` and `showMain`, which take
+  no arguments.
 
 ### Local data
 
@@ -436,22 +591,43 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   only when what it is built from changed since its previous release (`desktop.yml`, called by
   `ci.yml`; `docs/spec.md` › Build and CI, Phone and desktop builds). A push that changes only the
   desktop still gets a version and publishes only the installers; one that changes only the phone
-  builds none. The desktop's release gate waits only for the shared jobs and the Desktop jobs, so
-  the two apps never hold each other back. A desktop `feat/` PR makes the bump minor. Promote to
-  main publishes the desktop too once v1 is complete (`app=both` or `app=desktop`), from its
-  newest release at or below the promoted version.
+  builds none. `desktop.yml` holds the Desktop jobs (Linux, Windows), the desktop's release gate,
+  Sign the Windows release and the desktop's release job. Its gate waits only for the shared jobs
+  and the Desktop jobs, so the two apps never hold each other back. The desktop's release job
+  publishes the installers and the desktop's record (`wave-<version>.desktop.provenance.json`)
+  to the version's GitHub Release on its own, creating the release when the phone hasn't, then
+  their update (`docs/release-provenance.md`, Desktop installers). A desktop `feat/` PR makes the
+  bump minor and a desktop `fix/` PR a patch, as the phone's do; a change to CI or docs alone,
+  the desktop's included, bumps nothing. The desktop's patch notes count from its own previous
+  release (the newest GitHub Release of the channel holding a desktop installer; a stable one
+  counts as the `-ti` release its desktop was built from), not from the channel's previous tag,
+  so a version only the phone released doesn't drop a line, and the same rule picks what changed
+  since then. With no previous desktop release on the channel, its notes are the hand-written
+  `docs/desktop-first-release-notes.md`. They list the PRs that reach what the desktop is
+  built from and leave the phone's out. A version the desktop releases alone has a GitHub
+  Release with only the installers, the desktop's record and the desktop's notes; phones skip
+  that number. Promote to
+  main publishes the desktop too once v1 is complete and `RELEASE_DESKTOP_MAIN` is on
+  (`app=both`, the default, or `app=desktop`; `app=mobile` publishes no installer). It builds
+  the desktop from the desktop's newest `-ti` release at or below the promoted version that holds
+  both installers, which may be older or newer than the phone's. That run builds only the
+  desktop, from that release's commit, and its record links the release as `promotedFrom`. With
+  `app=both`, a desktop with nothing new since its last stable release is a log line, not a
+  failure; with `app=desktop` it fails the promotion.
   `apps/updates` serves the desktop's updates per channel.
 - Updates are whole-app in v1 (the NSIS blockmap downloads only what changed); no JS-only
   bundles. electron-updater only downloads.
-- Update signing: the release job signs the update manifest and files with Wave's updates key
+- Update signing: the desktop's release job signs the update manifest and files with Wave's updates key
   (Ed25519, in the release Environments), and the app checks them against the public key built
   into it before installing, on Windows and Linux alike, as the phone does. The channel is fixed
   in the build; Wave's code never sets the update endpoint or channel at run time.
 - Roll back an update (`app=desktop`) republishes the previous version for the channel with
-  downgrade allowed, and leaves the phone's update alone.
+  downgrade allowed. It checks the release's desktop record and installers, needs no APK, and
+  writes only the desktop's files in R2 (`desktop/<channel>/…`), so the phone's update and
+  metadata stay as they are; `app=mobile` leaves the desktop's alone the same way.
 - Windows code signing: SignPath Foundation, free for OSI-licensed projects, once the GPL-3.0-only
-  licence is in the repo (#1122). The key stays in SignPath's HSM and the release job asks for
-  the signature. Until then `ti` builds are unsigned and Windows warns on each new version.
+  licence is in the repo (#1122). The key stays in SignPath's HSM and the Sign the Windows
+  release job asks for the signature. Until then `ti` builds are unsigned and Windows warns on each new version.
 - PR runs typecheck, test and lint the desktop, run `cargo test`, and compile the Rust addon on
   both OS. They build no installer and hold no secret, as for the phone.
 - Linux builds run on `ubuntu-22.04` so the AppImage runs on older distributions.
@@ -470,6 +646,10 @@ The threat model in `docs/spec.md` › Security applies. The desktop adds:
   session but writes it nowhere: main hands it over each time that process starts and takes each
   change back.
 - An update installs only with Wave's Ed25519 signature (Build, release and updates).
+- The window gets audio capture only for Recognize, and main decides: its permission handlers
+  allow the microphone (or Linux's monitor input) and a display capture's loopback audio only to
+  the main window, only while a Recognize session is capturing that source, and never the camera
+  or a screen's picture. The window drops the picture of the display capture at once.
 - Out of scope: another program running as the same user. DPAPI doesn't protect against it.
 - No installer holds a credential. A provider key a feature needs stays a secret of the sync
   Worker, as for the phone.
@@ -527,7 +707,7 @@ does for the phone. Audio is checked by the engine's golden tests, not by ear.
 These come after v1, in an order decided when v1 is close to done: Spotify, Recap, Stats and
 Listening History, Genius, Recognize, Karaoke, the lyrics image, Shift/Ctrl multi-select in
 tables, sortable table columns, drag and drop onto sidebar playlists and the queue, Show in
-Folder, file associations, a floating mini player, picking an output device.
+Folder, a floating mini player, picking an output device.
 
 ### Risks
 

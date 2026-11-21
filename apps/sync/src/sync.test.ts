@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { readPullPage } from "@wave/core";
 import { migrate } from "./migrations.ts";
-import { favorite, harness, pull, pullAll, push } from "./testing.ts";
+import { type Harness, favorite, harness, pull, pullAll, push } from "./testing.ts";
 
 const song = (
   id: string,
@@ -60,6 +60,10 @@ const preference = (changedAt: number, value: unknown) => ({
   deleted: false,
   value,
 });
+
+/** The id of the one account [service] holds. */
+const onlyAccount = async (service: Harness): Promise<string> =>
+  String((await service.db.execute("SELECT id FROM accounts")).rows[0]?.id);
 
 describe("POST /v1/push and GET /v1/pull", () => {
   test("a desktop play is stored and returned unchanged to another device", async () => {
@@ -268,6 +272,7 @@ describe("POST /v1/push and GET /v1/pull", () => {
         dismissedSuggestions: 0,
         dislikes: 0,
       },
+      corrected: {},
     });
 
     const pulled = await pull(service, phoneB);
@@ -721,6 +726,12 @@ describe("POST /v1/push and GET /v1/pull", () => {
           songId: null,
           ytSong: '{"videoId":"u7K72X4eo_s"}',
           addedAt: 10,
+          restoredAt: null,
+          title: null,
+          credit: null,
+          album: null,
+          durationMs: null,
+          videoId: null,
         },
       ],
       favorites: [
@@ -772,7 +783,13 @@ describe("POST /v1/push and GET /v1/pull", () => {
     await push(service, session, rows);
     const response = await service.request("GET", "/v1/pull", { session });
     const page = readPullPage(await response.text());
-    assert.deepEqual({ ...page, cursor: undefined }, { ...rows, cursor: undefined, more: false });
+    // The service names the account that added an entry.
+    const addedBy = await onlyAccount(service);
+    const entries = rows.playlistEntries.map((row) => ({ ...row, addedBy }));
+    assert.deepEqual(
+      { ...page, cursor: undefined },
+      { ...rows, playlistEntries: entries, cursor: undefined, more: false },
+    );
   });
 
   test("a cursor that isn't one is refused", async () => {
@@ -813,8 +830,250 @@ test("Graveyard tombstones keep their song and manual removal date through push 
     ytSong: JSON.stringify({ videoId: "x" }),
     addedAt: 100,
     removedAt: 300,
+    restoredAt: null,
+    title: null,
+    credit: null,
+    album: null,
+    durationMs: null,
+    videoId: null,
   };
   await push(service, session, { playlistEntries: [entry] });
   const page = await pullAll(service, session);
-  assert.deepEqual(readPullPage(JSON.stringify(page))?.playlistEntries, [entry]);
+  assert.deepEqual(readPullPage(JSON.stringify(page))?.playlistEntries, [
+    { ...entry, addedBy: await onlyAccount(service) },
+  ]);
+});
+
+describe("a removed playlist entry stays removed", () => {
+  const entry = (
+    changedAt: number,
+    phoneId: string,
+    overrides: Readonly<Record<string, unknown>> = {},
+  ) => ({
+    id: "entry-1",
+    changedAt,
+    phoneId,
+    deleted: false,
+    playlistId: "drive",
+    orderKey: "a0",
+    songId: "song-1",
+    ytSong: null,
+    addedAt: 100,
+    removedAt: null,
+    restoredAt: null,
+    title: null,
+    credit: null,
+    album: null,
+    durationMs: null,
+    videoId: null,
+    ...overrides,
+  });
+  const removed = (changedAt: number, phoneId: string) =>
+    entry(changedAt, phoneId, { deleted: true, removedAt: changedAt });
+  // Who added an entry is not what these tests are about.
+  const held = async (service: Parameters<typeof pullAll>[0], session: string) =>
+    (await pullAll(service, session)).playlistEntries.map(({ addedBy: _addedBy, ...row }) => row);
+  const acceptedEntries = (answer: Readonly<Record<string, unknown>>) =>
+    (answer.accepted as Record<string, number>).playlistEntries;
+
+  test("a move stamped after a removal is not stored, whichever arrives first", async () => {
+    const move = entry(400, "phone-b", { orderKey: "b0" });
+    for (const order of [
+      [removed(300, "phone-a"), move],
+      [move, removed(300, "phone-a")],
+    ]) {
+      const service = await harness();
+      const session = await service.signIn();
+      await push(service, session, { playlistEntries: [entry(100, "phone-a")] });
+      for (const change of order) await push(service, session, { playlistEntries: [change] });
+      assert.deepEqual(await held(service, session), [removed(300, "phone-a")]);
+    }
+  });
+
+  test("a restore brings the entry back, an edit keeps it back and a later removal removes it again", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    await push(service, session, { playlistEntries: [removed(300, "phone-a")] });
+
+    const restored = entry(400, "phone-b", { restoredAt: 400 });
+    assert.equal(acceptedEntries(await push(service, session, { playlistEntries: [restored] })), 1);
+    assert.deepEqual(await held(service, session), [restored]);
+
+    const moved = entry(500, "phone-a", { orderKey: "c0", restoredAt: 400 });
+    await push(service, session, { playlistEntries: [moved] });
+    assert.deepEqual(await held(service, session), [moved]);
+
+    await push(service, session, { playlistEntries: [removed(600, "phone-b")] });
+    const staleMove = entry(700, "phone-a", { orderKey: "d0", restoredAt: 400 });
+    assert.equal(
+      acceptedEntries(await push(service, session, { playlistEntries: [staleMove] })),
+      0,
+    );
+    assert.deepEqual(await held(service, session), [removed(600, "phone-b")]);
+  });
+
+  test("a restore made before the removal held doesn't undo it", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    await push(service, session, { playlistEntries: [removed(600, "phone-a")] });
+    await push(service, session, {
+      playlistEntries: [entry(900, "phone-b", { restoredAt: 400 })],
+    });
+    assert.deepEqual(await held(service, session), [removed(600, "phone-a")]);
+  });
+
+  test("a Wave from before restores keeps pushing: its edit of a restored entry is stored, its edit of a removed one is not", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    await push(service, session, { playlistEntries: [removed(300, "phone-a")] });
+    await push(service, session, {
+      playlistEntries: [entry(400, "phone-a", { restoredAt: 400 })],
+    });
+
+    const { restoredAt: _restored, ...legacyMove } = entry(500, "phone-old", { orderKey: "b0" });
+    assert.equal(
+      acceptedEntries(await push(service, session, { playlistEntries: [legacyMove] })),
+      1,
+    );
+    assert.deepEqual(await held(service, session), [
+      entry(500, "phone-old", { orderKey: "b0", restoredAt: 400 }),
+    ]);
+
+    await push(service, session, { playlistEntries: [removed(600, "phone-a")] });
+    const { restoredAt: _again, ...legacyLate } = entry(700, "phone-old", { orderKey: "c0" });
+    assert.equal(
+      acceptedEntries(await push(service, session, { playlistEntries: [legacyLate] })),
+      0,
+    );
+    assert.deepEqual(await held(service, session), [removed(600, "phone-a")]);
+  });
+
+  test("a restore from a clock running ahead brings the entry back, and a later removal still removes it", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    await push(service, session, { playlistEntries: [removed(service.now - 10, "phone-a")] });
+    const at = service.now + 86_400_000;
+    await push(service, session, { playlistEntries: [entry(at, "phone-b", { restoredAt: at })] });
+    assert.equal((await held(service, session))[0]?.deleted, false);
+
+    service.now += 60_000;
+    await push(service, session, { playlistEntries: [removed(service.now, "phone-a")] });
+    assert.deepEqual(await held(service, session), [removed(service.now, "phone-a")]);
+  });
+
+  test("other tables still take an edit made after a removal", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    await push(service, session, {
+      playlists: [{ id: "drive", changedAt: 300, phoneId: "phone-a", deleted: true }],
+    });
+    await push(service, session, { playlists: [playlist("drive", 400, "phone-b", "Drive")] });
+    assert.deepEqual((await pullAll(service, session)).playlists, [
+      playlist("drive", 400, "phone-b", "Drive"),
+    ]);
+  });
+
+  test("upgrading an existing database only adds the restore time and keeps its entries", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    await push(service, session, { playlistEntries: [entry(100, "phone-a")] });
+    // Recreate the deployed schema with an existing entry, before migration 0015.
+    await service.db.batch(
+      [
+        "ALTER TABLE playlist_entries DROP COLUMN restored_at",
+        "DELETE FROM migrations WHERE id = '0015_playlist_entry_restores'",
+      ],
+      "write",
+    );
+    assert.deepEqual(await migrate(service.db), ["0015_playlist_entry_restores"]);
+    assert.deepEqual(await held(service, session), [entry(100, "phone-a")]);
+  });
+});
+
+describe("a change time ahead of the service's clock", () => {
+  test("is stored as the service's time, and a later change by another device wins over it", async () => {
+    const service = await harness();
+    const ahead = await service.signIn();
+    const other = await service.signIn();
+    const storedAt = service.now;
+
+    const answer = await push(service, ahead, {
+      playlists: [playlist("drive", storedAt + 86_400_000, "phone-z", "Drive")],
+    });
+    assert.deepEqual(answer.accepted && (answer.accepted as Record<string, number>).playlists, 1);
+    assert.deepEqual(answer.corrected, { playlists: [{ id: "drive", changedAt: storedAt }] });
+    assert.equal((await pull(service, other)).playlists[0]?.changedAt, storedAt);
+
+    service.now += 60_000;
+    const renamed = playlist("drive", service.now, "phone-a", "Road");
+    await push(service, other, { playlists: [renamed] });
+    assert.deepEqual((await pullAll(service, ahead)).playlists, [renamed]);
+  });
+
+  test("is corrected in every table that carries one", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const at = service.now + 5_000;
+    const stamp = { changedAt: at, phoneId: "phone-a", deleted: false };
+
+    const answer = await push(service, session, {
+      songs: [song("song-1", at)],
+      playlists: [playlist("drive", at, "phone-a", "Drive")],
+      playlistEntries: [
+        { id: "e1", ...stamp, playlistId: "drive", orderKey: "a0", songId: "song-1", addedAt: 1 },
+      ],
+      favorites: [favorite("song-1", at)],
+      preferences: [preference(at, "on")],
+      plays: [play("phone-a:1")],
+      follows: [{ id: "tricky", changedAt: at, phoneId: "phone-a", deleted: true }],
+      hiddenReleases: [{ id: "deezer:1", ...stamp }],
+      notifiedShows: [{ id: "show-1", ...stamp }],
+      dismissedSuggestions: [{ id: "bjork", ...stamp, dismissedAt: 10 }],
+    });
+    const now = service.now;
+    assert.deepEqual(answer.corrected, {
+      songs: [{ id: "song-1", changedAt: now }],
+      playlists: [{ id: "drive", changedAt: now }],
+      playlistEntries: [{ id: "e1", changedAt: now }],
+      favorites: [{ id: "song-1", changedAt: now }],
+      preferences: [{ id: "settings.ytMusic", changedAt: now }],
+      follows: [{ id: "tricky", changedAt: now }],
+      hiddenReleases: [{ id: "deezer:1", changedAt: now }],
+      notifiedShows: [{ id: "show-1", changedAt: now }],
+      dismissedSuggestions: [{ id: "bjork", changedAt: now }],
+    });
+    const page = await pullAll(service, session);
+    for (const table of Object.keys(answer.corrected as object) as (keyof typeof page)[]) {
+      assert.deepEqual(
+        (page[table] as readonly { changedAt?: unknown }[]).map((row) => row.changedAt),
+        [now],
+        table,
+      );
+    }
+  });
+
+  test("a row whose time is not ahead is stored unchanged, and the answer names none", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const rows = [
+      playlist("past", service.now - 1, "phone-a", "Past"),
+      playlist("present", service.now, "phone-a", "Present"),
+    ];
+    const answer = await push(service, session, { playlists: rows });
+    assert.deepEqual(answer.corrected, {});
+    assert.deepEqual((await pullAll(service, session)).playlists, rows);
+  });
+
+  test("a corrected row that loses to the row held isn't named", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    await push(service, session, {
+      playlists: [playlist("drive", service.now, "phone-z", "Held")],
+    });
+    const answer = await push(service, session, {
+      playlists: [playlist("drive", service.now + 9_000, "phone-a", "Ahead")],
+    });
+    assert.deepEqual(answer.corrected, {});
+    assert.equal((await pullAll(service, session)).playlists[0]?.name, "Held");
+  });
 });

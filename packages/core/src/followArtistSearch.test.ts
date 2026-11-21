@@ -52,3 +52,39 @@ test("Deezer errors differ from no matches and malformed artists cannot be follo
     [],
   );
 });
+
+test("the follow search says it is searching, that Deezer didn't answer, or that nothing matched", () => {
+  const strings = core.catalogueOf("en").followArtistSearch;
+  const line = (state: Parameters<typeof core.followSearchLine>[0]) =>
+    core.followSearchLine(state, strings);
+  assert.equal(line({ query: "  ", pending: true, failed: false, results: 0 }), null);
+  assert.equal(
+    line({ query: "daft", pending: true, failed: false, results: 1 }),
+    "Searching Deezer…",
+  );
+  // No answer keeps the Library's matches and says so; it is never "No artists found."
+  assert.equal(
+    line({ query: "daft", pending: false, failed: true, results: 0 }),
+    "Couldn't reach Deezer. Library results are still available.",
+  );
+  assert.equal(
+    line({ query: "daft", pending: false, failed: false, results: 0 }),
+    "No artists found.",
+  );
+  assert.equal(line({ query: "daft", pending: false, failed: false, results: 2 }), null);
+});
+
+test("a show country is one of ISO 3166's two-letter codes", () => {
+  assert.equal(core.SHOW_COUNTRY_CODES.length, 249);
+  assert.equal(new Set(core.SHOW_COUNTRY_CODES).size, 249);
+  assert.equal(core.isShowCountry("BR"), true);
+  assert.equal(core.isShowCountry("br"), false);
+  assert.equal(core.isShowCountry("ZZ"), false);
+  assert.equal(core.isShowCountry(null), false);
+});
+
+test("the desktop's Country row names the computer's region, not a phone's", () => {
+  assert.equal(core.catalogueOf("en", "desktop").shows.phoneRegion, "This computer's region");
+  assert.equal(core.catalogueOf("pt-BR", "desktop").shows.phoneRegion, "Região deste computador");
+  assert.equal(core.catalogueOf("en").shows.phoneRegion, "Phone's region");
+});

@@ -41,7 +41,7 @@ third-party content, or material whose origin isn't recorded, and none of it shi
 
 ## Code under other licences
 
-- `apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/recognize/RealFft2048.kt`
+- `packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/recognize/RealFft2048.kt`
   is ported from chfft 0.3.4 and stays under the Mozilla Public License 2.0. MPL-2.0 section 3.3
   lets it be part of this GPL-3.0-only work.
 - Files ported or derived from Metrolist, NewPipe, innertubex, ytmusicapi, shazamio-core and
@@ -62,3 +62,35 @@ node scripts/ci/rights-inventory.ts notices
 
 Each release's Corresponding Source, including the third-party GPL libraries at their exact
 revisions, is described in [docs/release-source.md](docs/release-source.md).
+
+### Desktop audio codecs
+
+`symphonia-codec-alac` 0.6.1 is copyright (c) 2019-2026 The Project Symphonia Developers.
+Its source files are available under the Mozilla Public License 2.0.
+[Source and licence](https://docs.rs/crate/symphonia-codec-alac/0.6.1/source/).
+
+`oxideav-aac` 0.1.7 and `oxideav-core` 0.1.43 carry the following notice.
+
+```text
+MIT License
+
+Copyright (c) 2026 Karpelès Lab Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

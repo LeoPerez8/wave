@@ -13,6 +13,7 @@ import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { libraryLayer } from "../database.ts";
 import { browseLibrary } from "./browse.ts";
+import { togglePlaylistSort } from "./browseSort.ts";
 import { createPlaylists, type PlaylistImageCodec } from "./playlists.ts";
 
 /** Photos as text: `IMG 800x600` is an 800 by 600 photo; anything else isn't an image. */
@@ -37,6 +38,8 @@ const setUp = async (
     readonly playlists: ReturnType<typeof createPlaylists>;
     readonly picked: { files: string[]; image: string | undefined };
     readonly changes: () => number;
+    readonly kept: string[];
+    readonly played: { songs: unknown[]; index: number; context: unknown }[];
   }) => Promise<void>,
   platform = "win32",
 ) => {
@@ -51,6 +54,8 @@ const setUp = async (
     let changes = 0;
     let clock = 0;
     const picked = { files: [] as string[], image: undefined as string | undefined };
+    const kept: string[] = [];
+    const played: { songs: unknown[]; index: number; context: unknown }[] = [];
     const playlists = createPlaylists({
       db,
       platform,
@@ -61,8 +66,13 @@ const setUp = async (
       changed: () => void changes++,
       // Each edit a second after the last, so the newest removal is told apart.
       now: () => (clock += 1_000),
+      keepStreams: (streams) => kept.push(...streams.map((song) => song.videoId)),
+      play: async (entries, index, context) => {
+        played.push({ songs: [...entries], index, context });
+        return { kind: "playing", streamed: 0, leftOut: 0 };
+      },
     });
-    await run({ db, folder, playlists, picked, changes: () => changes });
+    await run({ db, folder, playlists, picked, changes: () => changes, kept, played });
   } finally {
     await runtime.dispose();
     rmSync(folder, { recursive: true, force: true });
@@ -133,7 +143,12 @@ test("Remove from Playlist puts songs in the Graveyard; Undo, Restore and Remove
 
     playlists.removeSongs(id, [pink!]);
     playlists.removeSongs(id, [road!]);
-    assert.deepEqual(playlists.info(id), { name: "Evening", hasImage: false, graveyard: 2 });
+    assert.deepEqual(playlists.info(id), {
+      name: "Evening",
+      hasImage: false,
+      graveyard: 2,
+      collaborative: false,
+    });
     const graveyard = playlists.graveyard(id, 0, 50);
     assert.equal(graveyard.total, 2);
     assert.deepEqual(
@@ -171,6 +186,120 @@ test("Move Up and Move Down move a song one place among the songs its page shows
     playlists.move(id, parasite!, "up");
     playlists.move(id, pink!, "down");
     assert.deepEqual(pageTitles(db, id), ["Parasite", "Road", "Pink Moon"]);
+  });
+});
+
+test("dragging songs places them before a row, or at the end, in the playlist's own order", async () => {
+  await setUp(async ({ db, playlists, changes }) => {
+    const [road, pink, parasite, river, place] = songs(
+      db,
+      "Road",
+      "Pink Moon",
+      "Parasite",
+      "River Man",
+      "Place to Be",
+    );
+    const { playlistId: id } = storePlaylist(
+      db,
+      "Evening",
+      [road!, pink!, parasite!, river!, place!].map((trackId) => ({ source: "library", trackId })),
+      0,
+    );
+    const scope = { kind: "playlist", id } as const;
+    playlists.place(id, { scope, ids: [parasite!] }, road!);
+    assert.deepEqual(pageTitles(db, id), [
+      "Parasite",
+      "Road",
+      "Pink Moon",
+      "River Man",
+      "Place to Be",
+    ]);
+    playlists.place(id, { scope, ids: [parasite!] }, null);
+    assert.deepEqual(pageTitles(db, id), [
+      "Road",
+      "Pink Moon",
+      "River Man",
+      "Place to Be",
+      "Parasite",
+    ]);
+    // A selection moves together, in the order the playlist had it.
+    playlists.place(id, { scope, ids: [parasite!, pink!] }, river!);
+    assert.deepEqual(pageTitles(db, id), [
+      "Road",
+      "Pink Moon",
+      "Parasite",
+      "River Man",
+      "Place to Be",
+    ]);
+    // Dropped on one of its own rows, it lands before the next row it doesn't hold.
+    playlists.place(id, { scope, ids: [road!, parasite!] }, parasite!);
+    assert.deepEqual(pageTitles(db, id), [
+      "Pink Moon",
+      "Road",
+      "Parasite",
+      "River Man",
+      "Place to Be",
+    ]);
+    playlists.place(id, { scope, all: true, except: [pink!, river!] }, null);
+    assert.deepEqual(pageTitles(db, id), [
+      "Pink Moon",
+      "River Man",
+      "Road",
+      "Parasite",
+      "Place to Be",
+    ]);
+    assert.equal(changes(), 5);
+  });
+});
+
+test("dragging moves a streamed entry among the Library songs", async () => {
+  await setUp(async ({ db, playlists }) => {
+    const [road] = songs(db, "Road");
+    const stream = {
+      videoId: "abcdefghijk",
+      title: "Pink Moon",
+      artists: ["Nick Drake"],
+      album: "Pink Moon",
+      albumId: "MPREb_pinkmoon",
+      durationMs: 124_000,
+      artworkUrl: null,
+      explicit: false,
+    };
+    const { playlistId: id } = storePlaylist(
+      db,
+      "Mixed",
+      [
+        { source: "unsearched", song: { ...stream, title: "Still searching" } },
+        { source: "library", trackId: road! },
+        { source: "stream", song: stream },
+      ],
+      0,
+    );
+    const scope = { kind: "playlist", id } as const;
+    const streamed = browseLibrary(db, scope, 0, 50).items[1]!.id;
+    assert.ok(streamed < 0);
+    playlists.place(id, { scope, ids: [streamed] }, road!);
+    assert.deepEqual(pageTitles(db, id), ["Pink Moon", "Road"]);
+    playlists.place(id, { scope, ids: [road!] }, streamed);
+    assert.deepEqual(pageTitles(db, id), ["Road", "Pink Moon"]);
+  });
+});
+
+test("a sorted playlist can't be rearranged: its own order stays as it was", async () => {
+  await setUp(async ({ db, playlists }) => {
+    const [road, pink, parasite] = songs(db, "Road", "Pink Moon", "Parasite");
+    const { playlistId: id } = storePlaylist(
+      db,
+      "Evening",
+      [road!, pink!, parasite!].map((trackId) => ({ source: "library", trackId })),
+      0,
+    );
+    togglePlaylistSort(db, id, "title");
+    playlists.move(id, parasite!, "up");
+    playlists.place(id, { scope: { kind: "playlist", id }, ids: [parasite!] }, road!);
+    assert.deepEqual(pageTitles(db, id), ["Parasite", "Pink Moon", "Road"]);
+    togglePlaylistSort(db, id, "custom");
+    assert.deepEqual(pageTitles(db, id), ["Road", "Pink Moon", "Parasite"]);
   });
 });
 
@@ -263,7 +392,12 @@ test("a playlist's image: Change Image, Adjust Image, Remove Image, and a delete
     assert.throws(() => playlists.saveImage(made.id + 1, edit!.framing), /No photo/);
     const framing = { zoom: 2, centerX: 0.25, centerY: 0.5 };
     playlists.saveImage(made.id, framing);
-    assert.deepEqual(playlists.info(made.id), { name: "Evening", hasImage: true, graveyard: 0 });
+    assert.deepEqual(playlists.info(made.id), {
+      name: "Evening",
+      hasImage: true,
+      graveyard: 0,
+      collaborative: false,
+    });
     const square = framingSquare({ width: 800, height: 600 }, framing);
     const large = await playlists.image(made.id, true);
     assert.equal(
@@ -357,5 +491,58 @@ test("mixed pages count only listable entries and keep the visible stream metada
       browseLibrary(db, scope, 0, 1).items.map((row) => row.id),
       [road],
     );
+  });
+});
+
+test("a Graveyard lists its streamed songs too, and plays from the song chosen without restoring it", async () => {
+  await setUp(async ({ db, playlists, kept, played }) => {
+    const [road, pink] = songs(db, "Road", "Pink Moon");
+    const stream = {
+      videoId: "abcdefghijk",
+      title: "Northern Sky",
+      artists: ["Nick Drake"],
+      album: "Bryter Layter",
+      albumId: null,
+      durationMs: 222_000,
+      artworkUrl: null,
+      explicit: false,
+    };
+    const { playlistId: id } = storePlaylist(
+      db,
+      "Evening",
+      [
+        { source: "library", trackId: road! },
+        { source: "stream", song: stream },
+        { source: "library", trackId: pink! },
+      ],
+      0,
+    );
+    const streamedRow = browseLibrary(db, { kind: "playlist", id }, 0, 50).items[1]!;
+    playlists.removeSongs(id, [road!]);
+    playlists.removeSongs(id, [streamedRow.id]);
+    assert.equal(playlists.info(id)?.graveyard, 2);
+    const graveyard = playlists.graveyard(id, 0, 50);
+    assert.deepEqual(
+      graveyard.items.map((row) => [row.title, row.videoId ?? null]),
+      [
+        ["Northern Sky", "abcdefghijk"],
+        ["Road", null],
+      ],
+    );
+    assert.equal(graveyard.items[0]!.id, streamedRow.id);
+    assert.deepEqual(kept, ["abcdefghijk"]);
+
+    await playlists.playGraveyard(id, graveyard.items[1]!.itemId);
+    assert.deepEqual(played, [
+      {
+        songs: [{ itemId: graveyard.items[0]!.itemId, song: stream }, { trackId: road }],
+        index: 1,
+        context: { kind: "playlist", id: String(id) },
+      },
+    ]);
+    // Playing it leaves it in the Graveyard.
+    assert.deepEqual(pageTitles(db, id), ["Pink Moon"]);
+    assert.equal(playlists.graveyard(id, 0, 50).total, 2);
+    await assert.rejects(playlists.playGraveyard(id, 999_999));
   });
 });

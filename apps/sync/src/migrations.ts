@@ -294,6 +294,81 @@ const MIGRATIONS: readonly Migration[] = [
     id: "0014_play_context_playlist",
     statements: ["ALTER TABLE plays ADD COLUMN context_playlist_id TEXT"],
   },
+  {
+    // When Restore or Undo last brought an entry back (Core's `mergePlaylistEntries`).
+    id: "0015_playlist_entry_restores",
+    statements: ["ALTER TABLE playlist_entries ADD COLUMN restored_at INTEGER"],
+  },
+  {
+    // The Google account's name, as the members of a collaborative playlist see the account
+    // (`@wave/core`'s `accountName`); null until a sign-in or `PUT /v1/account/name` gives one.
+    id: "0016_account_name",
+    statements: ["ALTER TABLE accounts ADD COLUMN name TEXT"],
+  },
+  {
+    // A collaborative playlist's record (src/collaborations.ts): its owner, in whose account
+    // the playlist's rows stay, its members with when each joined (the owner is one), and, for
+    // an account that left or for which it ended, why and when.
+    id: "0017_collaborations",
+    statements: [
+      `CREATE TABLE collaborations (
+        playlist_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )`,
+      `CREATE INDEX collaborations_owner_idx ON collaborations (owner_id)`,
+      `CREATE TABLE collaboration_members (
+        playlist_id TEXT NOT NULL,
+        account_id TEXT NOT NULL,
+        joined_at INTEGER NOT NULL,
+        PRIMARY KEY (playlist_id, account_id)
+      )`,
+      `CREATE INDEX collaboration_members_account_idx ON collaboration_members (account_id)`,
+      `CREATE TABLE collaboration_ends (
+        account_id TEXT NOT NULL,
+        playlist_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        ended_at INTEGER NOT NULL,
+        PRIMARY KEY (account_id, playlist_id)
+      )`,
+    ],
+  },
+  {
+    // A collaborative playlist's invite links (src/invites.ts): a hash of each token, never the
+    // token, with its owner, expiry and state (`active`, `off`, `replaced`, or `ended` by a
+    // member's removal). A playlist has at most one active link.
+    id: "0018_collaboration_invites",
+    statements: [
+      `CREATE TABLE collaboration_invites (
+        token_hash TEXT PRIMARY KEY,
+        playlist_id TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        state TEXT NOT NULL
+      )`,
+      `CREATE UNIQUE INDEX collaboration_invites_active_idx
+        ON collaboration_invites (playlist_id) WHERE state = 'active'`,
+      `CREATE INDEX collaboration_invites_playlist_idx ON collaboration_invites (playlist_id)`,
+      `CREATE INDEX collaboration_invites_owner_idx ON collaboration_invites (owner_id)`,
+    ],
+  },
+  {
+    // A collaborative playlist's entries (Core's `SyncPlaylistEntry`): a Library song's own
+    // fields, which other members match their Tracks by, and the account that added it. The
+    // index serves a member's pull of one playlist.
+    id: "0019_collaborative_entries",
+    statements: [
+      "ALTER TABLE playlist_entries ADD COLUMN title TEXT",
+      "ALTER TABLE playlist_entries ADD COLUMN credit TEXT",
+      "ALTER TABLE playlist_entries ADD COLUMN album TEXT",
+      "ALTER TABLE playlist_entries ADD COLUMN duration_ms INTEGER",
+      "ALTER TABLE playlist_entries ADD COLUMN video_id TEXT",
+      "ALTER TABLE playlist_entries ADD COLUMN added_by TEXT",
+      `CREATE INDEX playlist_entries_playlist_idx
+        ON playlist_entries (account_id, playlist_id, change_no)`,
+    ],
+  },
 ];
 
 /**

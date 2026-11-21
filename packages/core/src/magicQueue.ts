@@ -206,6 +206,8 @@ export interface MagicSession {
    * in place of Discover's sliders (`magicSessionSliders`); none otherwise.
    */
   readonly dj?: DjSettings;
+  /** Family constraints for radios contributed by selected DJ family tiles. */
+  readonly djGenreRadios?: readonly { readonly id: string; readonly families: readonly string[] }[];
   /** Signals consumed by the shared radio ranking. Old sessions have none. */
   readonly radioSignals?: readonly MagicSignal[];
   /** Tells this session apart from the others: its queue's context id. */
@@ -758,6 +760,34 @@ export const magicBatchEmpty = (
   session !== null && empty === session.id && wantsMagicBatch(session, state, sleepTimer);
 
 /**
+ * Whether the footnote "More songs arrive as the Magic Queue learns…" sits
+ * under the last song of Up Next (#1376): [state] is [session]'s queue, Up
+ * Next holds songs, and more batches can still come (no End of Queue
+ * [sleepTimer], and no Repeat over a continuation). It gives way to the
+ * loading rows, the failure line and the empty line ([marks]: the ids
+ * `magicBatchLoading`, `magicBatchFailed` and `magicBatchEmpty` read).
+ */
+export const magicQueueFootnote = (
+  session: MagicSession | null,
+  marks: {
+    readonly picking: MagicSession["id"] | null;
+    readonly failed: MagicSession["id"] | null;
+    readonly empty: MagicSession["id"] | null;
+  },
+  state: QueueState,
+  sleepTimer: SleepTimer | null = null,
+): boolean =>
+  session !== null &&
+  isMagicQueue(session, state) &&
+  state.index >= 0 &&
+  state.index < state.entries.length - 1 &&
+  sleepTimer?.type !== "endOfQueue" &&
+  (!session.continuation || state.repeat === "off") &&
+  !magicBatchLoading(session, marks.picking, state, sleepTimer) &&
+  !magicBatchFailed(session, marks.failed, state, sleepTimer) &&
+  !magicBatchEmpty(session, marks.empty, state, sleepTimer);
+
+/**
  * Whether [session] should pick its next batch now: it wants one
  * (`wantsMagicBatch`) and its last pick didn't come back empty ([empty]:
  * the id of the session whose did). After an empty pick, moving through the
@@ -944,6 +974,12 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
   const radioSeed = value["radioSeed"];
   const likedRadios = value["likedRadios"];
   const radioSignals = value["radioSignals"];
+  const djGenreRadios = value["djGenreRadios"];
+  const validDjGenreRadios =
+    Array.isArray(djGenreRadios) &&
+    djGenreRadios.every(
+      (radio) => isRecord(radio) && typeof radio["id"] === "string" && isStrings(radio["families"]),
+    );
   const validSeed = isRadioSeed(radioSeed);
   const seedSongs = value["seedSongs"];
   const seedDraws = value["seedDraws"];
@@ -979,6 +1015,11 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
       ? { likedRadios: likedRadios as unknown as readonly MagicSongRadioSeed[] }
       : {}),
     ...(seed["kind"] === "dj" ? { dj: parseDjSettings(value["dj"]) } : {}),
+    ...(validDjGenreRadios
+      ? {
+          djGenreRadios: djGenreRadios as unknown as NonNullable<MagicSession["djGenreRadios"]>,
+        }
+      : {}),
     ...(validSignals ? { radioSignals: radioSignals as unknown as readonly MagicSignal[] } : {}),
     // A list session saved before its seed songs were kept reads its old radio, if any.
     ...(validSeedSongs

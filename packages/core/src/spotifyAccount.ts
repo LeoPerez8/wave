@@ -23,6 +23,19 @@ export interface SpotifyAccount {
   readonly photoUrl: string | null;
 }
 
+/** The public display fields of the Spotify Web API's current-user profile. */
+export const readSpotifyWebProfile = (value: unknown): SpotifyAccount | null => {
+  const profile = value as {
+    id?: unknown;
+    display_name?: unknown;
+    images?: unknown;
+  } | null;
+  if (typeof profile?.id !== "string" || profile.id === "") return null;
+  const name = typeof profile.display_name === "string" && profile.display_name.trim();
+  const url: unknown = Array.isArray(profile.images) ? profile.images[0]?.url : null;
+  return { name: name || profile.id, photoUrl: typeof url === "string" && url ? url : null };
+};
+
 /**
  * Whether Wave holds a Spotify session, as the native module reports it. One
  * Spotify stopped accepting is gone, and Sign In Again starts a new one.

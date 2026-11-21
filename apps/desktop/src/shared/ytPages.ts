@@ -18,6 +18,12 @@ import type { YtStatus } from "./yt.ts";
 
 export type { YtArtistAlbum, YtArtistCandidate };
 
+/** A release on a YT Music artist's shelf, with the Library album it already is, if any. */
+export interface YtArtistRelease extends YtArtistAlbum {
+  /** The Library album's id (Core's `libraryAlbumFinder`): a click opens it. Null without one. */
+  readonly libraryId: number | null;
+}
+
 /** A YouTube Music artist page. */
 export interface YtArtistView {
   readonly status: YtStatus;
@@ -25,8 +31,8 @@ export interface YtArtistView {
     readonly name: string;
     readonly artworkUrl: string | null;
     readonly songs: Page<BrowseRow>;
-    readonly albums: readonly YtArtistAlbum[];
-    readonly singles: readonly YtArtistAlbum[];
+    readonly albums: readonly YtArtistRelease[];
+    readonly singles: readonly YtArtistRelease[];
     readonly similar: readonly YtArtistCandidate[];
   } | null;
 }

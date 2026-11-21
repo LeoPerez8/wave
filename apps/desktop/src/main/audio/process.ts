@@ -4,8 +4,9 @@
  * `WAVE_AUDIO_CACHE` is where YT Music songs are kept; without it the engine plays files only.
  */
 import { createRequire } from "node:module";
-import type { PlaybackStatus } from "../../shared/playback.ts";
+import type { OutputDevice, PlaybackStatus } from "../../shared/playback.ts";
 import {
+  outputsEvent,
   playbackEvent,
   stamped,
   type AudioRequest,
@@ -46,9 +47,15 @@ process.parentPort.on("message", (event) => {
 // Main hears of every move to the preloaded song, and of the position, without asking, even
 // while the window is hidden. The move itself happens in Rust's output callback.
 let reported: PlaybackStatus | undefined;
+let outputs: readonly OutputDevice[] | undefined;
 if (engine !== undefined) {
   setInterval(() => {
     streams.pump();
+    const listed = outputsEvent(engine, outputs);
+    if (listed !== undefined) {
+      outputs = listed.outputs;
+      process.parentPort.postMessage(listed);
+    }
     const event = playbackEvent(engine, reported, Date.now());
     if (event === undefined) return;
     reported = event.status;

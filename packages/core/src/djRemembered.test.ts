@@ -6,6 +6,7 @@ import {
   djAlbumTile,
   djArtistTile,
   djCanStart,
+  djGenreTile,
   djGrid,
   djOpened,
   djReopened,
@@ -33,9 +34,17 @@ const chosen: DjSettings = {
   discovery: "familiar",
   popularity: "trending",
   newReleases: true,
+  mood: "energetic",
 };
 
 describe("what DJ remembers on the phone", () => {
+  test("a selected family comes back with its family name", () => {
+    const family = djGenreTile("Dubstep");
+    assert.ok(family);
+    const stored = storedDjRemembered({ tiles: [family], settings: chosen });
+    const read = readDjRemembered(stored);
+    assert.deepEqual(read.tiles, [family]);
+  });
   test("the last selection and Adjust choices read back as they were kept", () => {
     const stored = storedDjRemembered({
       tiles: [tile("Burial"), tile("Four Tet")],
@@ -67,8 +76,8 @@ describe("what DJ remembers on the phone", () => {
         { kind: "artist" },
         { kind: "artist", name: 7 },
         { kind: "artist", name: "Burial" },
-        // A kind a newer Wave keeps.
-        { kind: "genre", name: "Dubstep" },
+        // A kind this Wave doesn't know.
+        { kind: "mood", name: "Focus" },
         { name: "Four Tet" },
         { kind: "artist", name: "Various Artists" },
         { kind: "artist", name: "burial" },
@@ -188,6 +197,32 @@ describe("a remembered album", () => {
 
 describe("DJ reopening", () => {
   const grid = [tile("Burial", 1), tile("Four Tet", 2), tile("Floating Points")];
+
+  test("a remembered family is selected only while Genre mixes still has its seed artists", () => {
+    const family = djGenreTile("Rock")!;
+    const artists = [{ id: 1, name: "Rock Artist" }];
+    const genreLibrary = {
+      artists,
+      songs: [
+        {
+          id: 1,
+          title: "Rock song",
+          artist: "Rock Artist",
+          artistIds: [1],
+          durationMs: 180_000,
+          addedAt: 0,
+          genre: "Rock",
+        },
+      ],
+    };
+    const restored = djReopened({ grid: [], remembered: [family], genreLibrary });
+    assert.deepEqual(
+      djSeedTiles(restored).map((tile) => tile.kind),
+      ["genre"],
+    );
+    assert.deepEqual(restored.tiles[0]?.kind === "genre" ? restored.tiles[0].artists : [], artists);
+    assert.deepEqual(djSeedTiles(djReopened({ grid: [], remembered: [family] })), []);
+  });
 
   test("with nothing remembered it opens as the fresh grid, nothing selected", () => {
     assert.deepEqual(djReopened({ grid, remembered: [] }), djOpened(grid));

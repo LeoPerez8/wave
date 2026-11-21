@@ -47,6 +47,7 @@ import {
   countPageRead,
   countSummarized,
 } from "./playlistWork.ts";
+import { keptPlaylistPlays } from "./keptPlayTotals.ts";
 import * as schema from "./schema.ts";
 import { stamped } from "./sync.ts";
 import { filePath, hasFile, inScope, songColumns, type TrackScope } from "./tracks.ts";
@@ -107,6 +108,8 @@ export type PlaylistTrack = Omit<ReturnType<typeof playlistTracks>[number], "ite
 export type PlaylistEntry<T = PlaylistTrack> = PlaylistItem<YtAlbumSong, T> & {
   readonly itemId: number;
   readonly addedAt?: number;
+  /** In a collaborative playlist, the account that added it (Core's `entryAdder` names it). */
+  readonly addedBy?: string;
 };
 
 /** A stored song as decoded, and the entry's stamp when it was. */
@@ -193,6 +196,7 @@ export const selectPlaylistEntries = (
     .select({
       id: playlistItems.id,
       addedAt: playlistItems.addedAt,
+      addedBy: playlistItems.addedBy,
       changedAt: playlistItems.changedAt,
       streamed: sql<number>`${playlistItems.ytSong} IS NOT NULL`,
     })
@@ -232,14 +236,18 @@ export const selectPlaylistEntries = (
     ).map(({ itemId, ...track }) => [itemId, track]),
   );
   return items.flatMap((item): PlaylistEntry[] => {
+    // Only a collaborative playlist's entries carry who added them.
+    const adder = item.addedBy === null ? {} : { addedBy: item.addedBy };
     if (item.streamed) {
       const stored = songs.get(item.id)?.song ?? null;
-      return stored === null ? [] : [{ itemId: item.id, addedAt: item.addedAt, ...stored }];
+      return stored === null
+        ? []
+        : [{ itemId: item.id, addedAt: item.addedAt, ...adder, ...stored }];
     }
     const track = tracks.get(item.id);
     return track === undefined
       ? []
-      : [{ itemId: item.id, addedAt: item.addedAt, source: "library", track }];
+      : [{ itemId: item.id, addedAt: item.addedAt, ...adder, source: "library", track }];
   });
 };
 
@@ -558,6 +566,9 @@ export const restorePlaylistItems = (
       .map((entry) =>
         entry.source === "library" ? { source: "library", trackId: entry.track.id } : entry,
       );
+    // The restore's time is the change's own: what lets it win over the removal (Core's merge).
+    const stampedNow = stamped(playlistItems, now);
+    const restoreStamp = { ...stampedNow, restoredAt: stampedNow.changedAt };
     for (const { itemId, changedAt } of removal.entries) {
       const row = tx
         .select()
@@ -580,7 +591,7 @@ export const restorePlaylistItems = (
             : decode(playlistId, row.ytSong);
       if (song === null || planPlaylistSongs(held, [song]).add.length === 0) continue;
       tx.update(playlistItems)
-        .set({ deleted: false, removedAt: null, ...stamped(playlistItems, now) })
+        .set({ deleted: false, removedAt: null, ...restoreStamp })
         .where(eq(playlistItems.id, itemId))
         .run();
     }
@@ -616,6 +627,39 @@ export const movePlaylistItem = (
       .set({ orderKey: keys[0] ?? "", ...stamped(playlistItems, now) })
       .where(eq(playlistItems.id, itemId))
       .run();
+    tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
+  });
+
+/**
+ * Moves entries [itemIds] together, in the playlist order they had, before
+ * entry [beforeItemId] (after the last entry when it is null or one of
+ * them): a drag of several rows. Only their order keys change, as
+ * `movePlaylistItem`'s do.
+ */
+export const movePlaylistItems = (
+  db: LibraryDatabase,
+  playlistId: number,
+  itemIds: readonly number[],
+  beforeItemId: number | null,
+  now: number,
+): void =>
+  db.transaction((tx) => {
+    const { playlists, playlistItems } = schema;
+    const named = new Set(itemIds);
+    const entries = orderedEntries(tx, playlistId);
+    const moved = entries.filter((entry) => named.has(entry.itemId));
+    if (moved.length === 0) return;
+    const others = entries.filter((entry) => !named.has(entry.itemId));
+    const at = others.findIndex((entry) => entry.itemId === beforeItemId);
+    const { keys, rekeyed } = placeEntries(others, at === -1 ? others.length : at, moved.length);
+    rekey(tx, rekeyed, now);
+    moved.forEach((entry, i) =>
+      tx
+        .update(playlistItems)
+        .set({ orderKey: keys[i] ?? "", ...stamped(playlistItems, now) })
+        .where(eq(playlistItems.id, entry.itemId))
+        .run(),
+    );
     tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
   });
 
@@ -1382,19 +1426,22 @@ export const selectPlaylistsLastPlayed = (db: LibraryDatabase): Map<number, numb
 export const selectPlaylistPlays = (db: LibraryDatabase, now: number): PlaylistPlays[] => {
   const { playEvents } = schema;
   const recent = sql`${playEvents.startedAt} >= ${recentWindowStart(now)} AND ${playEvents.startedAt} <= ${now}`;
-  const rows = db
-    .select({
-      contextId: playEvents.contextId,
-      recentPlays: sql<number>`coalesce(sum(CASE WHEN ${playEvents.counted} AND ${recent} THEN 1 ELSE 0 END), 0)`,
-      plays: sql<number>`coalesce(sum(${playEvents.counted}), 0)`,
-      latestPlayAt: sql<
-        number | null
-      >`max(CASE WHEN ${playEvents.counted} THEN ${playEvents.startedAt} END)`,
-    })
-    .from(playEvents)
-    .where(and(eq(playEvents.contextType, "playlist"), isNotNull(playEvents.contextId)))
-    .groupBy(playEvents.contextId)
-    .all();
+  // The kept counts (#1349), or summed from the plays until an upgrade seeds them.
+  const rows =
+    keptPlaylistPlays(db, { from: recentWindowStart(now), to: now }) ??
+    db
+      .select({
+        contextId: playEvents.contextId,
+        recentPlays: sql<number>`coalesce(sum(CASE WHEN ${playEvents.counted} AND ${recent} THEN 1 ELSE 0 END), 0)`,
+        plays: sql<number>`coalesce(sum(${playEvents.counted}), 0)`,
+        latestPlayAt: sql<
+          number | null
+        >`max(CASE WHEN ${playEvents.counted} THEN ${playEvents.startedAt} END)`,
+      })
+      .from(playEvents)
+      .where(and(eq(playEvents.contextType, "playlist"), isNotNull(playEvents.contextId)))
+      .groupBy(playEvents.contextId)
+      .all();
   // Two spellings of one number ("7", "07") are one playlist.
   const byPlaylist = new Map<number, PlaylistPlays>();
   for (const { contextId, recentPlays, plays, latestPlayAt } of rows) {

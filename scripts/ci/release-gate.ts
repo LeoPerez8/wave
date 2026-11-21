@@ -3,21 +3,28 @@
 // admits the release only when every prerequisite succeeded for the one release source this
 // run selected. What it admits becomes the release's provenance record
 // (docs/release-provenance.md), which the release job checks the APK against before signing it.
-//   node scripts/ci/release-gate.ts admit <needs.json> [<ti record>]
+//   node scripts/ci/release-gate.ts admit <needs.json> [<ti record> [<ti tag>]]
 //                                     the provenance record, as one JSON line; reads the GITHUB_*
-//                                     names of the run. A stable tag needs its ti release's record.
+//                                     names of the run. A stable tag needs the record of the ti
+//                                     release it promotes (by default the same number's).
 //   node scripts/ci/release-gate.ts digest <file|dir>     a file's SHA-256, or a folder's (digestOf)
 //   node scripts/ci/release-gate.ts verify <provenance.json> <unsigned apk>
 //   node scripts/ci/release-gate.ts verify-update <provenance.json> <update dir>
 //   node scripts/ci/release-gate.ts seal <provenance.json> <signed apk>   the record, signed
 //   node scripts/ci/release-gate.ts verify-release <record> <tag> <commit> [<signed apk>]
 //                                     a published release's sealed record (verifyPublished)
+//   node scripts/ci/release-gate.ts promote-desktop <ti desktop record> <ti tag> <stable tag> <source>
+//                                     a stable desktop's link to its ti release (desktopPromotion)
+//   node scripts/ci/release-gate.ts verify-desktop-release <record> <tag> <commit> [<promoted commit>]
+//                                     a published desktop record (verifyDesktopPublished)
 // Every command fails, printing nothing to stdout, when the evidence doesn't hold. It uses no
 // token, key or network.
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { promotableSource } from "./promote-version.ts";
 
 const SHA = /^[0-9a-f]{40}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -112,7 +119,13 @@ const succeeded = (needs: Record<string, unknown>, name: Prerequisite): Outputs 
  * Admits a release from its prerequisites' evidence, or throws why it's refused. A stable
  * release also needs `promoted`: the sealed record of the ti release it promotes.
  */
-export const admitRelease = (needs: unknown, run: Run = NO_RUN, promoted?: unknown): Provenance => {
+export const admitRelease = (
+  needs: unknown,
+  run: Run = NO_RUN,
+  promoted?: unknown,
+  /** The ti release a promotion builds this app from; by default the same number's. */
+  promotedTag?: string,
+): Provenance => {
   if (!record(needs)) return refuse("no evidence.");
   const outputs = Object.fromEntries(
     PREREQUISITES.map((name) => [name, succeeded(needs, name)]),
@@ -147,13 +160,17 @@ export const admitRelease = (needs: unknown, run: Run = NO_RUN, promoted?: unkno
     artifact,
   };
   if (!releaseTag || releaseTag.endsWith("-ti")) return provenance;
-  return { ...provenance, promotedFrom: promotionOf(promoted, `${releaseTag}-ti`, source) };
+  const tiTag = promotedTag || `${releaseTag}-ti`;
+  const problem = promotableSource(releaseTag, tiTag);
+  if (problem) refuse(problem);
+  return { ...provenance, promotedFrom: promotionOf(promoted, tiTag, source) };
 };
 
 /**
- * What a stable release promotes: the ti release of the same number, sealed by its release job
- * and built from the same source. A ti release from before the gate has no record, so it can't
- * be promoted; a newer one can (docs/release-provenance.md).
+ * What a stable release promotes: the phone's newest ti release at or below its number
+ * (promote-version.ts), sealed by its release job and built from the same source. A ti release
+ * from before the gate has no record, so it can't be promoted; a newer one can
+ * (docs/release-provenance.md).
  */
 const promotionOf = (value: unknown, tiTag: string, source: string): Promotion => {
   if (!record(value) || value.schema !== "wave-release-provenance/1" || !record(value.artifact))
@@ -299,6 +316,69 @@ export const verifyPublished = (
   return provenance;
 };
 
+/** A stable desktop release's link to the ti release its installers were built from. */
+export type DesktopPromotion = { releaseTag: string; source: string };
+
+/** The desktop's admission in a record: its own (#1336), or the phone's from before. */
+const desktopOf = (value: unknown, tag: string) => {
+  if (!record(value) || value.schema !== "wave-release-provenance/1")
+    return refuse(`${tag} has no desktop record.`);
+  const desktop = value.desktop;
+  if (!record(desktop) || desktop.tag !== value.releaseTag || desktop.source !== value.source)
+    return refuse(`${tag}'s record admitted no desktop installers.`);
+  return value;
+};
+
+/**
+ * What a stable desktop release promotes: the desktop's newest ti release at or below its number
+ * (promote-version.ts), whose record admitted installers built from this run's source.
+ */
+export const desktopPromotion = (
+  value: unknown,
+  { tiTag, stableTag, source }: { tiTag: string; stableTag: string; source: string },
+): DesktopPromotion => {
+  const problem = promotableSource(stableTag, tiTag);
+  if (problem) refuse(problem);
+  const ti = desktopOf(value, tiTag);
+  if (ti.releaseTag !== tiTag)
+    refuse(`the promoted desktop record is ${String(ti.releaseTag)}'s, not ${tiTag}'s.`);
+  if (ti.source !== source)
+    refuse(`${tiTag} was built from ${String(ti.source).slice(0, 7)}, not ${source.slice(0, 7)}.`);
+  return { releaseTag: tiTag, source };
+};
+
+/**
+ * Checks a published desktop record (`wave-<version>.desktop.provenance.json`, or the phone's
+ * record before #1336): it is this tag's, admitted installers, and names the tag's commit as its
+ * source. A stable release whose desktop came from an older ti release than the phone's names that
+ * release's commit instead (`promotedFrom`), which the caller looks up as `promotedCommit`.
+ */
+export const verifyDesktopPublished = (
+  value: unknown,
+  { tag, commit, promotedCommit }: { tag: string; commit: string; promotedCommit?: string },
+): Record<string, unknown> => {
+  const desktop = desktopOf(value, tag);
+  if (desktop.releaseTag !== tag)
+    refuse(`the desktop record is ${String(desktop.releaseTag)}'s, not ${tag}'s.`);
+  const source = typeof desktop.source === "string" ? desktop.source : "";
+  if (!SHA.test(source)) refuse(`${tag}'s desktop record names no commit.`);
+  if (source === commit) return desktop;
+  const promoted = desktop.promotedFrom;
+  if (!record(promoted) || promoted.source !== source || typeof promoted.releaseTag !== "string")
+    return refuse(
+      `${tag} is on ${commit.slice(0, 7)}, but its desktop record names ${source.slice(0, 7)}.`,
+    );
+  const problem = promotableSource(tag, promoted.releaseTag);
+  if (problem) refuse(problem);
+  if (promotedCommit !== source)
+    refuse(
+      `${tag} is on ${commit.slice(0, 7)} and ${promoted.releaseTag} is on ` +
+        `${(promotedCommit ?? "").slice(0, 7) || "no commit"}, but ${tag}'s desktop record ` +
+        `names ${source.slice(0, 7)}.`,
+    );
+  return desktop;
+};
+
 const runFromEnv = (env: NodeJS.ProcessEnv): Run => ({
   repository: env.GITHUB_REPOSITORY ?? "",
   id: Number(env.GITHUB_RUN_ID ?? 0),
@@ -314,8 +394,25 @@ const readJson = (path: string | undefined): unknown =>
 const cli = ([command, first, second, third, fourth]: string[]): string => {
   if (command === "admit" && first)
     return JSON.stringify(
-      admitRelease(parse(readFileSync(first, "utf8")), runFromEnv(process.env), readJson(second)),
+      admitRelease(
+        parse(readFileSync(first, "utf8")),
+        runFromEnv(process.env),
+        readJson(second),
+        third,
+      ),
     );
+  if (command === "promote-desktop" && first && second && third && fourth)
+    return JSON.stringify(
+      desktopPromotion(readJson(first), { tiTag: second, stableTag: third, source: fourth }),
+    );
+  if (command === "verify-desktop-release" && first && second && third) {
+    const desktop = verifyDesktopPublished(readJson(first), {
+      tag: second,
+      commit: third,
+      ...(fourth ? { promotedCommit: fourth } : {}),
+    });
+    return `Verified ${second}'s desktop record: ${String(desktop.source)}`;
+  }
   if (command === "digest" && first) return digestOf(first);
   if (command === "verify" && first && second) {
     const { artifact } = provenanceAt(first);
