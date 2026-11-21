@@ -20,6 +20,7 @@ export type SettingsPage =
   | "playback"
   | "history"
   | "followedArtists"
+  | "dislikedSongs"
   | "lyricsAndTags"
   | "downloads"
   | "accounts"
@@ -33,6 +34,7 @@ export type SettingsPage =
 export type SettingsIcon =
   | "history"
   | "userCheck"
+  | "circleMinus"
   | "books"
   | "palette"
   | "layout"
@@ -87,6 +89,12 @@ export const SETTINGS_PAGES = [
     title: en.settings.pages.followedArtists,
     route: "/settings/followed-artists",
     icon: "userCheck",
+  },
+  {
+    page: "dislikedSongs",
+    title: en.settings.pages.dislikedSongs,
+    route: "/settings/disliked-songs",
+    icon: "circleMinus",
   },
   {
     page: "lyricsAndTags",
@@ -179,6 +187,12 @@ export const accountsSummary = (
   if (wave.status === "signedIn") parts.push(`Wave: ${wave.account.name ?? wave.account.email}`);
   return parts.length === 0 ? null : parts.join(" · ");
 };
+
+/**
+ * The Disliked songs row's line: how many songs are disliked; null with none.
+ */
+export const dislikedSongsSummary = (count: number, catalogue: Catalogue = en): string | null =>
+  count === 0 ? null : catalogue.library.songCount(count);
 
 /**
  * The Downloads row's line: how many songs are on their way while any are

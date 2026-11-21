@@ -496,6 +496,7 @@ export {
   LAYOUT_PAGES,
   SETTINGS_PAGES,
   accountsSummary,
+  dislikedSongsSummary,
   downloadsSummary,
   visibleSettingsPages,
 } from "./settingsPages.ts";
@@ -2437,6 +2438,8 @@ export type {
   SongMarks,
 } from "./dislikes.ts";
 export { dislikeSkipsPlaying } from "./dislikeSkip.ts";
+export { dislikedSongRows } from "./dislikedSongsPage.ts";
+export type { DislikedSongRow } from "./dislikedSongsPage.ts";
 export { queuedToast } from "./queuedToast.ts";
 export type { FavoriteSource } from "./favoriteToast.ts";
 

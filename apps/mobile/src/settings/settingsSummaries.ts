@@ -2,6 +2,7 @@ import { useFollowCount } from "@/library/follows";
 import { useLocalisation } from "@/localisation/localisation";
 import {
   accountsSummary,
+  dislikedSongsSummary,
   downloadsSummary,
   libraryLookupProgress,
   type SettingsPage,
@@ -13,6 +14,7 @@ import * as Result from "effect/Result";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
+import { useDislikedSongs } from "@/library/dislikes";
 import { useFixSongsRun } from "@/library/findLyricsAndGenre";
 import { useScanRoots, useScanStatus } from "@/library/hooks";
 import { WaveAccount } from "@/native/waveAccount";
@@ -73,7 +75,7 @@ const useAccountsSummary = (): string | null => {
 
 /**
  * Each Settings row's line on its page, live: a rescan or the whole-Library
- * lookup while it runs, how many music folders there are, how many songs are
+ * lookup while it runs, how many music folders there are, how many songs are disliked, how many songs are
  * downloading and waiting and how many songs' downloads failed, the accounts
  * signed into, the running version's date. Null leaves a row with its title
  * alone.
@@ -81,6 +83,7 @@ const useAccountsSummary = (): string | null => {
 export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
   const { strings } = useLocalisation();
   const follows = useFollowCount();
+  const disliked = useDislikedSongs().size;
   const roots = useScanRoots();
   const scanning = useScanStatus() === "scanning";
   const lookup = useFixSongsRun();
@@ -101,6 +104,7 @@ export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
     playback: null,
     history: null,
     followedArtists: follows === 0 ? null : strings.settings.artistCount(follows),
+    dislikedSongs: dislikedSongsSummary(disliked, strings),
     lyricsAndTags:
       lookup.status === "running"
         ? libraryLookupProgress(lookup.done, lookup.total, strings).line

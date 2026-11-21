@@ -11,6 +11,7 @@ export const settingsPtBr: typeof settingsEn = {
     playback: "Reprodução",
     history: "Histórico de Ouvidas",
     followedArtists: "Artistas Seguidos",
+    dislikedSongs: "Músicas de que não gostei",
     lyricsAndTags: "Letras e tags",
     downloads: "Downloads",
     accounts: "Contas",
@@ -391,6 +392,10 @@ export const settingsPtBr: typeof settingsEn = {
     "As músicas das pastas excluídas e de suas subpastas saem da biblioteca. Os arquivos ficam no telefone.",
   followedArtists: "Artistas seguidos",
   youArentFollowingAnyArtistsYet: "Você ainda não segue nenhum artista.",
+  dislikedSongsAreLeftOut:
+    "O Wave deixa estas músicas fora do que escolhe sozinho. Elas ainda tocam quando você escolhe.",
+  youHaventDislikedAnySongs: "Você ainda não marcou nenhuma música como não gostei.",
+  removeDislikeOf: (title) => `Remover não gostei, ${title}`,
   developerIsOn: "Developer is on",
   developerHidden: "Developer hidden",
   settings: "Ajustes",
