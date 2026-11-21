@@ -593,7 +593,14 @@ export type {
   PlaylistSort,
   SortablePlaylist,
 } from "./playlistSort.ts";
-export { TAB_PATH, detailPath, inLibraryStack, isDetailPath, tabOfPath } from "./navigation.ts";
+export {
+  TAB_PATH,
+  detailPath,
+  inLibraryStack,
+  isDetailPath,
+  playlistAddSongsPath,
+  tabOfPath,
+} from "./navigation.ts";
 export type { DetailScreen } from "./navigation.ts";
 export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
@@ -1626,6 +1633,9 @@ export {
 } from "./pagePlayback.ts";
 export type { PagePlayback, PlayableSongs } from "./pagePlayback.ts";
 export {
+  playlistAddVisit,
+  holdPlaylistAddVisitSong,
+  stepPlaylistAddVisit,
   planPlaylistSongs,
   playlistEntryLinks,
   playlistPlayback,
@@ -1648,6 +1658,7 @@ export {
   writePlaylistYtSong,
 } from "./playlistEntries.ts";
 export type {
+  PlaylistAddVisit,
   HeldPlaylistTrack,
   PlaylistEntryLink,
   PlaylistEntryLinks,
