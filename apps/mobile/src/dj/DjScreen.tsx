@@ -719,7 +719,10 @@ export function DjScreen() {
             <Text numberOfLines={1} className="flex-1 font-sans text-footnote text-secondary">
               {summary}
             </Text>
-            <View className="items-center justify-center" style={{ width: CELL * 6, height: CELL * 6 }}>
+            <View
+              className="items-center justify-center"
+              style={{ width: CELL * 6, height: CELL * 6 }}
+            >
               <IconAdjustmentsHorizontal size={CELL * 3} color={accent} strokeWidth={1.5} />
             </View>
           </Press>
