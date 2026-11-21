@@ -24,10 +24,12 @@ import { readArtwork } from "./library/artwork.ts";
 import { appearance, preference, savePreference } from "./preferences.ts";
 import {
   SEARCH_ONLINE_SETTING,
+  isSpotifyLibrarySource,
   libraryTableSortsFor,
   readSearchOnline,
   readThemeEdit,
   writeSearchOnline,
+  type AppLanguage,
   ytTrackId,
 } from "@wave/core";
 import {
@@ -67,6 +69,8 @@ import { linkHandlers } from "./links/handlers.ts";
 import { artistPageHandlers } from "./artistPageHandlers.ts";
 import { YtAccount } from "./yt/ytAccountLayer.ts";
 import { SpotifyAccount } from "./spotify/spotifyAccountLayer.ts";
+import { SpotifyImport } from "./spotify/spotifyImportLayer.ts";
+import { SPOTIFY_IMPORT_MOST } from "../shared/spotifyImport.ts";
 import { DesktopPlaylists } from "./library/playlists.ts";
 import { playlistHandlers } from "./playlistHandlers.ts";
 import { searchLibrary } from "./library/search.ts";
@@ -175,7 +179,8 @@ export type BridgeServices =
   | DesktopLinks
   | HomeFollow
   | YtAccount
-  | SpotifyAccount;
+  | SpotifyAccount
+  | SpotifyImport;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -316,6 +321,27 @@ const spotifyAccountCall =
           });
         })
       : refuse(call, "expected no arguments");
+
+/** Runs a From Spotify call in the language main resolved: the window's own idea of it is never asked. */
+const spotifyImportCall = <A>(
+  run: (spotify: SpotifyImport["Service"], language: AppLanguage) => A | Promise<A>,
+) =>
+  Effect.gen(function* () {
+    const spotify = yield* SpotifyImport;
+    const { language } = (yield* Account).language();
+    return yield* Effect.tryPromise({
+      try: async () => run(spotify, language),
+      catch: () => new Error("Spotify import failed"),
+    });
+  });
+
+/** Picker rows' sources: Liked Songs or a playlist URI, each once. */
+const spotifySources = (value: unknown): value is string[] =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.length <= SPOTIFY_IMPORT_MOST &&
+  value.every((source) => typeof source === "string" && isSpotifyLibrarySource(source)) &&
+  new Set(value).size === value.length;
 
 /** What each call does; `args` come from the window and are checked here before use. */
 type Handlers = {
@@ -798,6 +824,32 @@ const createHandlers = (
     "spotifyAccount.signOut": spotifyAccountCall("spotifyAccount.signOut", (a) => a.signOut()),
     "spotifyAccount.check": spotifyAccountCall("spotifyAccount.check", (a) => a.check()),
     "spotifyAccount.photo": spotifyAccountCall("spotifyAccount.photo", (a) => a.photo()),
+    "spotifyImport.library": (args) =>
+      args.length === 1 && typeof args[0] === "boolean"
+        ? spotifyImportCall((spotify, language) => spotify.library(args[0] as boolean, language))
+        : refuse("spotifyImport.library", "invalid request"),
+    "spotifyImport.run": (args) => {
+      const [sources, download] = args;
+      return args.length === 2 && spotifySources(sources) && typeof download === "boolean"
+        ? spotifyImportCall((spotify, language) => spotify.run(sources, download, language))
+        : refuse("spotifyImport.run", "invalid playlists");
+    },
+    "spotifyImport.cancel": (args) =>
+      args.length === 0
+        ? spotifyImportCall((spotify) => spotify.cancel())
+        : refuse("spotifyImport.cancel", "expected no arguments"),
+    "spotifyImport.missing": (args) => {
+      const [playlistId] = args;
+      return args.length === 1 && songId(playlistId)
+        ? spotifyImportCall((spotify) => spotify.missing(playlistId as number))
+        : refuse("spotifyImport.missing", "invalid playlist");
+    },
+    "spotifyImport.artwork": (args) => {
+      const [source] = args;
+      return args.length === 1 && typeof source === "string" && isSpotifyLibrarySource(source)
+        ? spotifyImportCall((spotify) => spotify.artwork(source))
+        : refuse("spotifyImport.artwork", "invalid playlist");
+    },
     "spotifyShare.playlist": (args) =>
       args.length === 1 && songId(args[0])
         ? Effect.gen(function* () {

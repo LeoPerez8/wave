@@ -189,6 +189,25 @@ and [Development Mode requirements](https://developer.spotify.com/documentation/
 folder for each test. It checks the profile, restart, Sign Out, Sign In Again, and the no-keyring
 notice. The owner can verify the system browser and consent screen with a registered Spotify app.
 
+## From Spotify
+
+Import Playlists on the Playlists page offers From Files and, while YT Music is on, From Spotify.
+Main reads the account with Spotify's Web API (`src/main/spotify/spotifyImport.ts`, Core's
+`readSpotifyWebLibrary` and `readSpotifyWebPlaylist`) and the window uses
+`wave.spotifyImport.library`, `run`, `cancel`, `artwork` and `missing`. `run` accepts only
+sources the last `library` listed. A playlist Spotify answers 403 or 404 for is skipped, which
+is what Development Mode does for playlists the account doesn't own.
+
+A playlist page hides songs the Library lacks until YT Music has them, so its hero counts them
+("2 not in your library") and lists them. Reading that list has main look them up on YT Music;
+each one found takes its place among the page's rows.
+
+`e2e/spotifyImport.spec.ts` fakes Spotify's browser and Web API. It checks the choice with YT
+Music off and on, the sign-in before the picker, the rows, Import, the Imported label, Try Again
+and Sign In Again. Its two absent songs are looked up on the live YT Music when the JVM is
+built; the check holds whether or not it answers. Import & Download's queueing is covered in
+`src/main/spotify/spotifyImport.test.ts`. A real account and a real download are owner checks.
+
 ## Share to Spotify
 
 A playlist's menu has Share to Spotify when the build names a Spotify client ID. Main matches the

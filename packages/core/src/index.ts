@@ -1569,6 +1569,8 @@ export type {
   SpotifyLibraryPlaylist,
   SpotifyLibraryRead,
 } from "./spotifyLibrary.ts";
+export { readSpotifyWebLibrary, readSpotifyWebPlaylist } from "./spotifyWebLibrary.ts";
+export type { SpotifyWebAnswer, SpotifyWebAsk } from "./spotifyWebLibrary.ts";
 export { compareOrderKeys, orderKeyBetween, placeEntries } from "./orderKey.ts";
 export type { EntryPlacement, OrderedEntry } from "./orderKey.ts";
 export { graveyardRemovalsOf, graveyardRestoreIndex, graveyardSongs } from "./playlistGraveyard.ts";

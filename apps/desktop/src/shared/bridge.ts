@@ -84,6 +84,11 @@ import {
   type SpotifyAccountContract,
 } from "./spotifyAccount.ts";
 import {
+  SPOTIFY_IMPORT_CALLS,
+  spotifyImportBridge,
+  type SpotifyImportContract,
+} from "./spotifyImport.ts";
+import {
   SPOTIFY_SHARE_CALLS,
   spotifyShareBridge,
   type SpotifyShareContract,
@@ -117,6 +122,7 @@ export interface BridgeContract
     LyricsAndTagsContract,
     YtAccountContract,
     SpotifyAccountContract,
+    SpotifyImportContract,
     MiniPlayerContract,
     SpotifyShareContract {
   readonly "system.mediaBackend": {
@@ -583,6 +589,7 @@ export const BRIDGE_CALLS = [
   ...STREAMED_CALLS,
   ...YT_ACCOUNT_CALLS,
   ...SPOTIFY_ACCOUNT_CALLS,
+  ...SPOTIFY_IMPORT_CALLS,
   ...MINI_PLAYER_CALLS,
   ...SPOTIFY_SHARE_CALLS,
   "stats.overview",
@@ -610,6 +617,8 @@ export interface WaveBridge {
   /** The YouTube account: its session never reaches the window. */
   readonly ytAccount: ReturnType<typeof ytAccountBridge>;
   readonly spotifyAccount: ReturnType<typeof spotifyAccountBridge>;
+  /** Import Playlists › From Spotify: main reads the account, the window never sees a token. */
+  readonly spotifyImport: ReturnType<typeof spotifyImportBridge>;
   /** Share to Spotify: main asks Spotify and copies the link. */
   readonly spotifyShare: ReturnType<typeof spotifyShareBridge>;
   readonly stats: {
@@ -955,6 +964,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   streamed: streamedBridge(invoke),
   ytAccount: ytAccountBridge(invoke),
   spotifyAccount: spotifyAccountBridge(invoke),
+  spotifyImport: spotifyImportBridge(invoke),
   miniPlayer: miniPlayerBridge(invoke),
   spotifyShare: spotifyShareBridge(invoke),
   stats: {
