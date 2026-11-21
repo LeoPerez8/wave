@@ -23,7 +23,7 @@ import { sql } from "drizzle-orm";
 
 import type { AlbumRow, ArtistRow } from "../types.ts";
 import { selectAlbums } from "./albums.ts";
-import { keptPlayedTotals } from "./keptPlayTotals.ts";
+import { keptPlayedTotals, keptTotalsSettled } from "./keptPlayTotals.ts";
 import { playedLibrary } from "./playedLibrary.ts";
 import * as schema from "./schema.ts";
 import type { LibraryDatabase } from "./database.ts";
@@ -97,8 +97,14 @@ export const streamedListeningTotals = (
       counted_listened_ms, last_played_at, last_counted_at FROM streamed_totals
       WHERE last_played_at <= ${window.to}
     UNION ALL ${aggregate}`;
+  // Settled, the kept totals know the Library song each streamed song is now.
+  const track =
+    window === undefined && keptTotalsSettled(db)
+      ? sql`(SELECT song_track FROM played_songs
+        WHERE song = 'v:' || streamed.video_id || '|' || streamed.recording_key)`
+      : streamedTrack(sql`streamed.video_id`, sql`nullif(streamed.recording_key, '')`);
   return db.all<StreamedListeningTotal>(sql`WITH streamed AS (${source})
-    SELECT video_id AS "videoId", ${streamedTrack(sql`streamed.video_id`, sql`nullif(streamed.recording_key, '')`)} AS "trackId",
+    SELECT video_id AS "videoId", ${track} AS "trackId",
       counted_plays AS "countedPlays", listened_ms AS "listenedMs", counted_listened_ms AS "countedListenedMs",
       coalesce(last_counted_at, 0) AS "latestPlayAt", last_played_at AS "lastPlayedAt" FROM streamed`);
 };
@@ -349,6 +355,7 @@ const streamedAlbums = (
   const credited = streams.filter(
     (entry) => entry.trackId === null || !trackAlbums.has(entry.trackId),
   );
+  if (keptTotalsSettled(db)) return keptStreamedAlbums(db, streams, trackAlbums, credited);
   const songs = streamedSongsOf(
     db,
     credited.map((entry) => entry.videoId),
@@ -369,6 +376,39 @@ const streamedAlbums = (
     }
     // A Library song whose file wasn't found only takes an online album.
     return entry.trackId === null ? [{ entry, album: resolved.id }] : [];
+  });
+};
+
+/**
+ * `streamedAlbums` from the kept credits (#1349): each streamed song's album
+ * as Core credited it when it was settled, an online one named by its latest
+ * played song, without building Core's resolver from the whole Library.
+ */
+const keptStreamedAlbums = (
+  db: LibraryDatabase,
+  streams: readonly StreamedListeningTotal[],
+  trackAlbums: ReadonlyMap<number, number>,
+  credited: readonly StreamedListeningTotal[],
+): StreamedAlbum[] => {
+  const albums = new Map<string, number | OnlineAlbum>();
+  if (credited.length > 0)
+    for (const row of db.all<{ videoId: string; entity: string; item: string | null }>(sql`
+      SELECT played_songs.video_id AS "videoId", play_credits.entity, played_entities.item
+      FROM played_songs
+      JOIN play_credits ON play_credits.song = played_songs.song AND play_credits.kind = 'album'
+      LEFT JOIN played_entities ON played_entities.kind = 'album'
+        AND played_entities.entity = play_credits.entity
+      WHERE played_songs.song_track IS NULL AND played_songs.video_id IN
+        (SELECT value FROM json_each(${JSON.stringify(credited.map((entry) => entry.videoId))}))`))
+      albums.set(
+        row.videoId,
+        /^\d+$/u.test(row.entity) ? Number(row.entity) : (JSON.parse(row.item!) as OnlineAlbum),
+      );
+  return streams.flatMap((entry): StreamedAlbum[] => {
+    const downloaded = entry.trackId === null ? undefined : trackAlbums.get(entry.trackId);
+    if (downloaded !== undefined) return [{ entry, album: downloaded }];
+    const album = entry.trackId === null ? albums.get(entry.videoId) : undefined;
+    return album === undefined ? [] : [{ entry, album }];
   });
 };
 

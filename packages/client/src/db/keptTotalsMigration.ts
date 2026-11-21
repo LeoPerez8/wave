@@ -18,6 +18,9 @@
  *   (`settleKeptTotals`), since a streamed song's credits are Core's.
  * - `credited_buckets`: `play_buckets` summed per credit, which triggers on
  *   the two tables above keep.
+ * - `played_recordings`: each recording key's counted plays, for the
+ *   new-release feed. Its triggers count only plays already seeded or newer
+ *   than the migration, so a seeding step adds each older play once.
  *
  * The migration itself reads no history: `seed_until` is the last play it
  * found, and the app seeds and sums the songs of the plays up to it in
@@ -102,6 +105,16 @@ const ONLINE_CHANGED = `${owe("online = 1")}
 
 const PLAY_COLUMNS = "track_id, video_id, recording_key, started_at, listened_ms, counted";
 
+/** Whether the play [id] is counted in `played_recordings` yet: newer than the migration, or seeded. */
+const accounted = (id: string) => `(${id} > (SELECT seed_until FROM kept_totals_state)
+  OR ${id} <= (SELECT seeded_through FROM kept_totals_state))`;
+
+/** Adds [plays] counted plays to the recording [key]. */
+const countRecording = (key: string, plays: string) => `
+  INSERT INTO played_recordings (recording_key, counted_plays) SELECT ${key}, ${plays}
+    WHERE ${key} IS NOT NULL AND ${plays} <> 0
+    ON CONFLICT (recording_key) DO UPDATE SET counted_plays = counted_plays + excluded.counted_plays;`;
+
 export const mKeptPlayTotals = `CREATE TABLE played_songs (
 	song text PRIMARY KEY NOT NULL,
 	track_id integer,
@@ -173,6 +186,11 @@ CREATE TABLE played_entities (
 	PRIMARY KEY (kind, entity)
 ) WITHOUT ROWID;
 --> statement-breakpoint
+CREATE TABLE played_recordings (
+	recording_key text PRIMARY KEY NOT NULL,
+	counted_plays integer NOT NULL
+) WITHOUT ROWID;
+--> statement-breakpoint
 CREATE TABLE kept_totals_state (
 	id integer PRIMARY KEY NOT NULL CHECK (id = 1),
 	generation integer NOT NULL,
@@ -216,6 +234,21 @@ END;
 --> statement-breakpoint
 CREATE TRIGGER kept_play_delete AFTER DELETE ON play_events WHEN old.counted BEGIN
 ${sumAgain("old")}
+END;
+--> statement-breakpoint
+CREATE TRIGGER kept_recording_insert AFTER INSERT ON play_events WHEN new.counted BEGIN
+${countRecording("new.recording_key", "1")}
+END;
+--> statement-breakpoint
+CREATE TRIGGER kept_recording_change AFTER UPDATE OF recording_key, counted ON play_events
+WHEN ${accounted("new.id")} BEGIN
+${countRecording("old.recording_key", "-old.counted")}
+${countRecording("new.recording_key", "new.counted")}
+END;
+--> statement-breakpoint
+CREATE TRIGGER kept_recording_delete AFTER DELETE ON play_events
+WHEN old.counted AND ${accounted("old.id")} BEGIN
+${countRecording("old.recording_key", "-1")}
 END;
 --> statement-breakpoint
 CREATE TRIGGER kept_play_album AFTER UPDATE OF album_id ON play_events

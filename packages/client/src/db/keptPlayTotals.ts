@@ -90,6 +90,11 @@ const seed = (db: LibraryDatabase, kept: KeptState, rows: number) => {
       SELECT DISTINCT ${sql.raw(songKeySql("e"))}, e.track_id, e.video_id, e.recording_key, 0
       FROM play_events AS e WHERE e.id > ${kept.seededThrough} AND e.id <= ${to}
       ON CONFLICT (song) DO UPDATE SET state = 0`);
+    tx.run(sql`INSERT INTO played_recordings (recording_key, counted_plays)
+      SELECT recording_key, count(*) FROM play_events
+      WHERE id > ${kept.seededThrough} AND id <= ${to} AND counted AND recording_key IS NOT NULL
+      GROUP BY recording_key
+      ON CONFLICT (recording_key) DO UPDATE SET counted_plays = counted_plays + excluded.counted_plays`);
     tx.run(sql`UPDATE kept_totals_state SET seeded_through = ${to} WHERE id = 1`);
   });
 };
@@ -539,6 +544,23 @@ export const creditPlayedSongs = (db: LibraryDatabase): void => {
   creditSongs(db, songs, kept.generation);
 };
 
+/**
+ * Which of [keys] have a counted play, from the kept counts per recording:
+ * null until an upgrade's history is seeded.
+ */
+export const countedRecordings = (db: LibraryDatabase, keys: readonly string[]): string[] | null => {
+  if (!keepsTotals(db)) return null;
+  const kept = keptState(db);
+  if (kept.seededThrough < kept.seedUntil) return null;
+  if (keys.length === 0) return [];
+  return db
+    .all<{ key: string }>(
+      sql`SELECT recording_key AS key FROM played_recordings WHERE counted_plays > 0
+      AND recording_key IN (SELECT value FROM json_each(${JSON.stringify(keys)}))`,
+    )
+    .map((row) => row.key);
+};
+
 interface KeptTotal {
   readonly entity: string;
   readonly countedPlays: number;
@@ -561,7 +583,8 @@ export const creditedTotals = (
   for (const plays of plan.plays)
     parts.push(sql`SELECT c.entity, c.weight, c.weight * e.listened_ms, e.started_at
       FROM play_events AS e
-      JOIN play_credits AS c ON c.song = ${sql.raw(songKeySql("e"))} AND c.kind = ${kind}
+      -- The partial days' plays lead: each finds its song's credits by key.
+      CROSS JOIN play_credits AS c ON c.song = ${sql.raw(songKeySql("e"))} AND c.kind = ${kind}
       WHERE e.counted AND e.started_at BETWEEN ${plays.from} AND ${plays.to}`);
   if (parts.length === 0) return [];
   return db.all<KeptTotal>(sql`WITH totals (entity, plays, listened, latest) AS (

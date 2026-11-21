@@ -3,7 +3,11 @@ import {
   EMPTY_SYNC_TABLES,
   readPullPage,
   statsWindow,
-  type PlayEvent, type StatsWindow, type YtAlbumSong } from "@wave/core";
+  type FollowRelease,
+  type PlayEvent,
+  type StatsWindow,
+  type YtAlbumSong,
+} from "@wave/core";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -11,6 +15,7 @@ import { sql } from "drizzle-orm";
 
 import { saveImportedPlays } from "./blackPlayer.ts";
 import { creditSplits, relinkCredits } from "./credits.ts";
+import { followReleaseListening } from "./followReleases.ts";
 import {
   keptCreditedPlayTotals,
   keptPlayedTotals,
@@ -18,7 +23,7 @@ import {
   keptTotalsSettled,
   settleKeptTotals,
 } from "./keptPlayTotals.ts";
-import { recordPlay, updatePlay } from "./playHistory.ts";
+import { homePlays, recordPlay, updatePlay } from "./playHistory.ts";
 import {
   playedEntityTotals,
   summedPlayedTotals,
@@ -279,4 +284,53 @@ test("a kept read searches only the plays of its window's partial days", async (
     const read = traceQueries(db, () => keptPlayedTotals(db, window, true));
     assert.deepEqual(read.queries.filter(scansHistory), [], JSON.stringify(window));
   }
+});
+
+/** Makes every song owe its credits, so readers sum from the history as before #1349. */
+const unsettle = (db: TestDatabase) => db.run(sql`UPDATE played_songs SET state = 1`);
+
+test("Home's plays read the kept credits: the same shelves, without reading every artist", async () => {
+  const { db } = await library();
+  recordPlay(db, play("yt:skipped-only", NOW - DAY, false), false, streamed("skipped-only", ["H"], "Skipped album", null));
+  unsettle(db);
+  const summed = homePlays(db);
+  settle(db);
+  const kept = traceQueries(db, () => homePlays(db));
+  assert.deepEqual(kept.result, summed);
+  assert.deepEqual(
+    kept.queries.filter((query) => query.plan.some((step) => /^SCAN (artists|albums)\b/u.test(step))),
+    [],
+  );
+});
+
+test("release listening finds counted recordings in the kept totals, not by scanning the plays", async () => {
+  const { db, solo } = await library({ through: "0064_pull_dislikes" });
+  const keys = db
+    .all<{ key: string }>(sql`SELECT DISTINCT recording_key AS key FROM play_events ORDER BY 1`)
+    .map((row) => row.key);
+  const release: FollowRelease = {
+    key: "deezer:9",
+    artistKey: "nobody",
+    title: "Elsewhere",
+    type: "album",
+    releaseDate: "2026-10-29",
+    artworkUrl: null,
+    explicit: false,
+    browseId: null,
+    videoIds: [],
+    recordingKeys: [...keys, "never-played"],
+  };
+  const before = followReleaseListening(db, [release]);
+  migrateDatabase(db, migrations);
+  // A play from before the upgrade leaves before its plays are seeded.
+  db.run(sql`DELETE FROM play_events WHERE track_id = ${solo} AND counted`);
+  settle(db);
+  const after = traceQueries(db, () => followReleaseListening(db, [release]));
+  assert.deepEqual(after.queries.filter(scansHistory), []);
+  const expected = new Set(before.countedPlays);
+  for (const key of db
+    .all<{ key: string }>(sql`SELECT recording_key AS key FROM play_events WHERE track_id = ${solo}`)
+    .map((row) => row.key))
+    expected.delete(key);
+  assert.deepEqual([...after.result.countedPlays].sort(), [...expected].sort());
 });
