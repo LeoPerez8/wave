@@ -788,6 +788,20 @@ describe("community playlists in Search", () => {
     assert.equal(ytSectionView(found([]), library)?.note, "noMatches");
   });
 
+  test("songs the Library already has still get their line when a community playlist is found", () => {
+    const section = stepYtSection(stepYtSection(typed(YT_SECTION_HIDDEN, "lofi"), ONLINE), {
+      type: "found",
+      query: "lofi",
+      songs: [song("mine")],
+      artists: [artist("Mine")],
+      albums: [album("Mine")],
+      playlists: [playlist("a")],
+    });
+    const view = ytSectionView(section, library);
+    assert.equal(view?.note, "allInLibrary");
+    assert.deepEqual(view?.playlists, [playlist("a")]);
+  });
+
   test("Online again for the same query shows them again without asking", () => {
     const section = found([playlist("a")]);
     const library_ = stepYtSection(section, { type: "picked", pick: "library" });

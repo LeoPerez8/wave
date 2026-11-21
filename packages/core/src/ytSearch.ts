@@ -326,17 +326,22 @@ export const ytSectionView = <S extends YtSong>(
         playlists: section.playlists,
       };
       const top = ytTop(section.query, shown);
-      const note = !isEmpty(shown) ? null : isEmpty(section) ? "noMatches" : "allInLibrary";
+      // The line is about songs, artists and albums; the shelf shows either way.
+      const note = !lacksMusic(shown)
+        ? null
+        : !lacksMusic(section)
+          ? "allInLibrary"
+          : shown.playlists.length === 0
+            ? "noMatches"
+            : null;
       return { ...shown, top, note, loading: false, integrated: true };
     }
   }
 };
 
-const isEmpty = (answer: YtSearchAnswer<YtSong>): boolean =>
-  answer.songs.length === 0 &&
-  answer.artists.length === 0 &&
-  answer.albums.length === 0 &&
-  answer.playlists.length === 0;
+/** Whether [answer] has no song, artist or album (its community playlists aside). */
+const lacksMusic = (answer: YtSearchAnswer<YtSong>): boolean =>
+  answer.songs.length === 0 && answer.artists.length === 0 && answer.albums.length === 0;
 
 /** Who asked YT Music, or null when it isn't asked (hidden, idle, or the Library's alone). */
 const askedBy = <S extends YtSong>(state: YtSection<S>): YtAskedBy | null =>

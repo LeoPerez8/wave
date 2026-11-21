@@ -12,7 +12,7 @@ import type { SongRow } from "@wave/client";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import type { LocalLyricsHit } from "./lyricsSearch.ts";
 import type { SearchHit } from "./searchIndex.ts";
-import { resultRows, type PlacedYtSongs } from "./rows.ts";
+import { resultRows, ytFooterRows, type PlacedYtSongs } from "./rows.ts";
 
 const noPlaced: PlacedYtSongs = { songs: [], rowOf: new Map() };
 const empty: SearchResults<SearchHit> = { top: null, groups: [] };
@@ -522,6 +522,42 @@ describe("Search's Community playlists shelf", () => {
       key: "heading:community-playlists",
       label: "Playlists da comunidade · 1",
     });
+  });
+
+  test("the line about results the Library already has shows once, above the shelf", () => {
+    const allInLibrary: YtSectionView<NativeYtSong> = {
+      ...view([playlist("a")]),
+      songs: [],
+      top: null,
+      note: "allInLibrary",
+    };
+    const rows = [
+      ...resultRows(empty, new Set(), allInLibrary, noPlaced, null, "en"),
+      ...ytFooterRows(allInLibrary, "en"),
+    ];
+    assert.deepEqual(rows, [
+      {
+        type: "note",
+        key: "note:yt",
+        text: "Everything found online is already in your library.",
+      },
+      { type: "heading", key: "heading:community-playlists", label: "Community playlists · 1" },
+      { type: "ytPlaylist", key: "yt-playlist:a", playlist: playlist("a") },
+    ]);
+  });
+
+  test("with no shelf, that line stays under the results", () => {
+    const allInLibrary: YtSectionView<NativeYtSong> = {
+      ...view([]),
+      songs: [],
+      top: null,
+      note: "allInLibrary",
+    };
+    assert.deepEqual(resultRows(empty, new Set(), allInLibrary, noPlaced, null, "en"), []);
+    assert.deepEqual(
+      ytFooterRows(allInLibrary, "en").map((row) => row.key),
+      ["note:yt"],
+    );
   });
 
   test("with nothing else found, the shelf still shows", () => {
