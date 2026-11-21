@@ -40,15 +40,31 @@ export function useTableSelection({
   const [ordinary, setOrdinary] = useState<number>();
   const keyboardAnchor = useRef<number>(undefined);
   const pending = useRef<AbortController>(undefined);
+  /** The selection this table last asked for, so its arrival doesn't cancel a newer range. */
+  const asked = useRef<TableSelection | undefined>(undefined);
   const cancel = () => {
     pending.current?.abort();
     pending.current = undefined;
+  };
+  const ask = (next: TableSelection | undefined) => {
+    asked.current = next;
+    onSelection?.(next);
   };
   useLayoutEffect(() => {
     clicked.current = undefined;
     keyboardAnchor.current = undefined;
   }, [order]);
-  useLayoutEffect(() => cancel, [order, revision, selection]);
+  useLayoutEffect(() => cancel, [order, revision]);
+  // A selection made elsewhere (Escape, Done, another list) cancels a range still being read.
+  // The one this table asked for doesn't: a Shift+arrow pressed before it arrived is newer.
+  useLayoutEffect(() => {
+    const ours =
+      selection !== undefined &&
+      asked.current !== undefined &&
+      selection.ids === asked.current.ids &&
+      selection.all === asked.current.all;
+    if (!ours) cancel();
+  }, [selection]);
   useLayoutEffect(() => {
     const escape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -69,7 +85,7 @@ export function useTableSelection({
     try {
       const window = tableRange(anchor, end);
       const ids = await read(window.start, window.end, controller.signal);
-      if (!controller.signal.aborted) onSelection(tableSelectionOf(ids, selection?.checkboxes));
+      if (!controller.signal.aborted) ask(tableSelectionOf(ids, selection?.checkboxes));
     } catch {
       if (!controller.signal.aborted) onError();
     } finally {
@@ -79,7 +95,7 @@ export function useTableSelection({
   const toggle = (id: number) => {
     const next = toggleTableRow(selection, id, ordinary);
     setOrdinary(undefined);
-    onSelection?.((next.all ? total - next.ids.size : next.ids.size) > 0 ? next : undefined);
+    ask((next.all ? total - next.ids.size : next.ids.size) > 0 ? next : undefined);
   };
   return {
     ordinary,
@@ -101,7 +117,7 @@ export function useTableSelection({
       cancel();
       if (event.ctrlKey || event.metaKey || selection?.checkboxes) toggle(id);
       else {
-        if (selection !== undefined) onSelection(undefined);
+        if (selection !== undefined) ask(undefined);
         setOrdinary(id);
       }
       clicked.current = index;
@@ -128,7 +144,7 @@ export function useTableSelection({
       if (command === "selectAllRows") {
         cancel();
         setOrdinary(undefined);
-        onSelection(selectAll?.() ?? allTableRows(selection?.checkboxes));
+        ask(selectAll?.() ?? allTableRows(selection?.checkboxes));
         return true;
       }
       return false;
