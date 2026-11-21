@@ -267,6 +267,12 @@ const MIGRATIONS: readonly Migration[] = [
       )`,
     ],
   },
+  {
+    // The Google account's name, as the members of a collaborative playlist see the account
+    // (`@wave/core`'s `accountName`); null until a sign-in or `PUT /v1/account/name` gives one.
+    id: "0014_account_name",
+    statements: ["ALTER TABLE accounts ADD COLUMN name TEXT"],
+  },
 ];
 
 /**
