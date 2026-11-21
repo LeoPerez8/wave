@@ -14,7 +14,6 @@ import {
   djReduce,
   djSelectable,
   djSelected,
-  djTileArtist,
   magicArtistKey,
   magicBatchRadios,
   parseMagicSession,
@@ -191,13 +190,40 @@ describe("selecting an album in DJ", () => {
   test("with fewer than 3, waits for its album artist's page, which fills the row", () => {
     const waiting = tap(djOpened([dummy]), dummy.key, graphOf({ Portishead: ["Tricky"] }));
     assert.deepEqual(drawn(waiting), ["[Dummy / Portishead]", "Portishead", "Tricky", "…"]);
-    assert.deepEqual(djPagesNeeded(waiting).map(djTileArtist), ["Portishead"]);
+    assert.deepEqual(
+      djPagesNeeded(waiting).map((page) => page.artist),
+      ["Portishead"],
+    );
     const filled = djReduce(waiting, {
       type: "similar",
-      key: dummy.key,
+      artist: "Portishead",
       artists: [{ name: "Tricky" }, { name: "Lamb" }, { name: "Morcheeba" }],
     });
     assert.deepEqual(drawn(filled), ["[Dummy / Portishead]", "Portishead", "Tricky", "Lamb"]);
+    assert.deepEqual(djPagesNeeded(filled), []);
+  });
+
+  test("its row and its album artist's row wait for one read of the artist's page", () => {
+    const album = tap(djOpened([dummy]), dummy.key, null);
+    const both = tap(album, djArtistTile("PORTISHEAD")!.key, null);
+    assert.deepEqual(drawn(both), ["[Dummy / Portishead]", "Portishead", "…", "…", "…", "…", "…"]);
+    assert.deepEqual(djPagesNeeded(both), [{ artist: "Portishead", key: "portishead" }]);
+    const filled = djReduce(both, {
+      type: "similar",
+      artist: "portishead",
+      artists: ["Tricky", "Lamb", "Morcheeba", "Massive Attack", "Beth Gibbons"].map((name) => ({
+        name,
+      })),
+    });
+    assert.deepEqual(drawn(filled), [
+      "[Dummy / Portishead]",
+      "Portishead",
+      "Tricky",
+      "Lamb",
+      "Morcheeba",
+      "Massive Attack",
+      "Beth Gibbons",
+    ]);
     assert.deepEqual(djPagesNeeded(filled), []);
   });
 

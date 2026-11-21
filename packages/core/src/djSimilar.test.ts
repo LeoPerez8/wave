@@ -46,7 +46,7 @@ const tap = (state: DjState, name: string, graph: ArtistGraph | null = null): Dj
 const page = (state: DjState, name: string, similar: readonly string[] | null): DjState =>
   djReduce(state, {
     type: "similar",
-    key: tile(name).key,
+    artist: name,
     artists: similar === null ? null : similar.map((other) => ({ name: other })),
   });
 
@@ -114,13 +114,13 @@ describe("selecting an artist in DJ", () => {
     const state = tap(djOpened([tile("Portishead"), tile("Air")]), "Portishead", few);
     assert.deepEqual(names(state), ["Portishead", "Tricky", "Air"]);
     assert.deepEqual(drawn(state), ["Portishead", "Tricky", "…", "…", "Air"]);
-    assert.deepEqual(djPagesNeeded(state), [tile("Portishead")]);
+    assert.deepEqual(djPagesNeeded(state), [{ artist: "Portishead", key: "portishead" }]);
   });
 
   test("with a cold graph, the whole row waits for the page", () => {
     const state = tap(djOpened([tile("Portishead"), tile("Air")]), "Portishead");
     assert.deepEqual(drawn(state), ["Portishead", "…", "…", "…", "Air"]);
-    assert.deepEqual(djPagesNeeded(state), [tile("Portishead")]);
+    assert.deepEqual(djPagesNeeded(state), [{ artist: "Portishead", key: "portishead" }]);
   });
 
   test("the page fills the row up to 3, in its order, skipping tiles the grid shows", () => {

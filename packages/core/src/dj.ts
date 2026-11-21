@@ -9,6 +9,7 @@ import { catalogSeedKey } from "./candidateCatalog.ts";
 import { DEFAULT_DJ_SETTINGS, djNewMusicShare, type DjSettings } from "./djSettings.ts";
 import type { MagicSeedSong, MagicSession } from "./magicQueue.ts";
 import type { TasteProfile } from "./tasteProfile.ts";
+import { identityKey } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
 import { releaseTitle, YT_ARTIST_FRESH_MS } from "./ytArtist.ts";
 
@@ -222,12 +223,13 @@ export type DjAction =
     }
   | {
       /**
-       * The YT Music page of the tile [key] was read (`djPagesNeeded`):
-       * [artists] is its "Fans might also like" list in the page's order, or
-       * null when it couldn't be read (offline, a failed request, no such page).
+       * The YT Music page of [artist] was read (`djPagesNeeded`): [artists]
+       * is its "Fans might also like" list in the page's order, or null when
+       * it couldn't be read (offline, a failed request, no such page). It
+       * settles every row waiting for that artist's page.
        */
       readonly type: "similar";
-      readonly key: DjTileKey;
+      readonly artist: string;
       readonly artists: readonly { readonly name: string }[] | null;
       readonly library?: DjLibraryArtists;
     }
@@ -383,8 +385,15 @@ const withRowFilled = (
  * `DJ_MAX_SELECTED` another can't be added (`djSelectable` says so ahead).
  */
 export const djReduce = (state: DjState, action: DjAction): DjState => {
-  if (action.type === "similar")
-    return withRowFilled(state, action.key, action.artists, action.library ?? []);
+  if (action.type === "similar") {
+    const page = identityKey(action.artist);
+    return waitingRows(state)
+      .filter(({ tile }) => identityKey(djTileArtist(tile)) === page)
+      .reduce(
+        (filled, { row }) => withRowFilled(filled, row.of, action.artists, action.library ?? []),
+        state,
+      );
+  }
   if (action.type === "add") {
     if (djSelected(state, action.tile.key) || !djSelectable(state, action.tile.key)) return state;
     const shown = state.tiles.find((each) => each.key === action.tile.key);
@@ -411,14 +420,36 @@ export const djReduce = (state: DjState, action: DjAction): DjState => {
   );
 };
 
+/** The rows still holding places for a YT Music page, each with the tile that opened it. */
+const waitingRows = (state: DjState): { row: DjRow; tile: DjTile }[] =>
+  state.rows.flatMap((row) => {
+    const tile = row.waiting > 0 ? state.tiles.find((each) => each.key === row.of) : undefined;
+    return tile === undefined ? [] : [{ row, tile }];
+  });
+
+/** A YT Music page DJ reads for the rows waiting for it. */
+export interface DjPageNeeded {
+  /** The artist whose page it is, as the first row waiting for it names them. */
+  readonly artist: string;
+  /** The artist as pages are saved and asked for by (`identityKey`), one read per key. */
+  readonly key: string;
+}
+
 /**
- * The tiles whose row still holds places for a YT Music page, which DJ reads
- * now: the page of the tile's artist (`djTileArtist`), an album's album artist.
+ * The pages the rows that still hold places wait for, which DJ reads now:
+ * the page of each row's tile's artist (`djTileArtist`), an album's album
+ * artist. An artist's page is read once however many rows wait for it (an
+ * album's row and its album artist's own), and that read settles them all.
  */
-export const djPagesNeeded = (state: DjState): DjTile[] =>
-  state.rows.flatMap((row) =>
-    row.waiting > 0 ? (state.tiles.find((tile) => tile.key === row.of) ?? []) : [],
-  );
+export const djPagesNeeded = (state: DjState): DjPageNeeded[] => {
+  const pages = new Map<string, DjPageNeeded>();
+  for (const { tile } of waitingRows(state)) {
+    const artist = djTileArtist(tile);
+    const key = identityKey(artist);
+    if (!pages.has(key)) pages.set(key, { artist, key });
+  }
+  return [...pages.values()];
+};
 
 /** One place of DJ's grid as it's drawn: a tile, or a still placeholder holding a place. */
 export type DjCell =

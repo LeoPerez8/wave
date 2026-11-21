@@ -2909,7 +2909,7 @@ export {
 } from "./djNewReleases.ts";
 export type { DjReleasePage } from "./djNewReleases.ts";
 export { magicSessionSliders } from "./magicQueue.ts";
-export type { DjAction, DjState, DjArtistTile, DjGridSources, DjTile, DjTileKey } from "./dj.ts";
+export type { DjAction, DjState, DjArtistTile, DjGridSources, DjPageNeeded, DjTile, DjTileKey } from "./dj.ts";
 export { djOpeningGrid } from "./djOpening.ts";
 export type { DjOpeningGrid, DjOpeningSources } from "./djOpening.ts";
 export { DJ_OPENED_TILES, djCells, djPageRead, djPagesNeeded } from "./dj.ts";

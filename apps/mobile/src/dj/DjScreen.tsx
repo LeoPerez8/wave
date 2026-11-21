@@ -153,8 +153,8 @@ const albumsOver = (library: MixIndexes): Promise<DjAlbum[]> => {
  * `djReopened`), a remembered album as the albums read here know it. The first tiles stay for the whole opening. A tile
  * selected for the first time, whichever source it came from, opens its
  * similar artists from the last artist graph; a row that isn't full reads the
- * artist's page once (Core's `djPagesNeeded`), and whatever comes of it
- * settles the row. A result of the grid's search joins the grid selected
+ * artist's page once (Core's `djPagesNeeded`), one read at a time per
+ * artist, and whatever comes of it settles every row waiting for it. A result of the grid's search joins the grid selected
  * ([add]), opening its row the same way; over a grid that has nothing to
  * pick, it's the first tile.
  */
@@ -231,24 +231,27 @@ const useDjGrid = () => {
         library: libraryArtists,
       }),
     );
-  const asked = useRef(new Set<DjTileKey>());
+  // The artists whose page is being read, by `identityKey`: one read at a time per artist.
+  const asked = useRef(new Set<string>());
   useEffect(() => {
     if (state === null) return;
-    for (const tile of djPagesNeeded(state)) {
-      if (asked.current.has(tile.key)) continue;
-      asked.current.add(tile.key);
-      const settle = (similar: Awaited<ReturnType<typeof similarOf>>): void =>
+    for (const page of djPagesNeeded(state)) {
+      if (asked.current.has(page.key)) continue;
+      asked.current.add(page.key);
+      const settle = (similar: Awaited<ReturnType<typeof similarOf>>): void => {
+        asked.current.delete(page.key);
         setState(
           (current) =>
             current &&
             djReduce(current, {
               type: "similar",
-              key: tile.key,
+              artist: page.artist,
               artists: similar,
               library: libraryArtists,
             }),
         );
-      void similarOf(djTileArtist(tile)).then(settle, () => settle(null));
+      };
+      void similarOf(page.artist).then(settle, () => settle(null));
     }
   }, [state, libraryArtists]);
   return { state, opening, artists, toggle, add };
