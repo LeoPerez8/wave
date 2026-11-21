@@ -26,6 +26,8 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useMemo } from "react";
 
 import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
+
+import { homeTurnOf } from "./homeWork";
 import { withNetworkLog } from "@/lib/networkMeter";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { appRuntime } from "@/library/runtime";
@@ -107,8 +109,8 @@ const refresh = (current: string): void => {
     Effect.gen(function* () {
       const ytMusic = yield* YtMusic;
       const home = yield* ytMusic.homePlaylistShelves;
-      // The network wait isn't a slice; the JS handling its answer takes a free turn.
-      yield* freeTurnEffect;
+      // The network wait isn't a slice; the JS handling its answer takes a free turn on Home.
+      yield* homeTurnOf(freeTurnEffect);
       return keptCommunityPlaylists(kept.get(), home.shelves, {
         now: Date.now(),
         account: keyOf(home.account),
@@ -117,7 +119,7 @@ const refresh = (current: string): void => {
     (list) => readOutcome(list.playlists.length),
   );
   void appRuntime
-    .runPromise(settledTurnEffect.pipe(Effect.andThen(Effect.result(read))))
+    .runPromise(homeTurnOf(settledTurnEffect).pipe(Effect.andThen(Effect.result(read))))
     .then((result) => {
       if (Result.isSuccess(result)) {
         retryAt = null;
