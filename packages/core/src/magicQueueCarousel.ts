@@ -37,6 +37,32 @@ export const recentPlaysWindow = (now: number): StatsWindow => ({
   to: now,
 });
 
+/** What a carousel row shows: its page width, its pages' keys in order, and the page in sight. */
+export interface MagicQueueCarouselRow {
+  readonly width: number;
+  readonly pages: readonly string[];
+  readonly index: number;
+}
+
+/**
+ * Whether the carousel's row starts over at its page between [before] and
+ * [now]: when its width changed, or when the page in sight is the same page
+ * but the pages before it changed, so it sits at another offset. A swipe (the
+ * page in sight changes) and a page joining or leaving after the one in sight
+ * leave the row as it is.
+ */
+export const magicQueueCarouselRestarts = (
+  before: MagicQueueCarouselRow,
+  now: MagicQueueCarouselRow,
+): boolean => {
+  if (before.width !== now.width) return true;
+  if (before.pages[before.index] !== now.pages[now.index]) return false;
+  return (
+    before.index !== now.index ||
+    before.pages.slice(0, before.index).some((page, place) => page !== now.pages[place])
+  );
+};
+
 /**
  * The songs played in the recent window, the most counted plays first (as
  * Stats ranks songs: then the most time listened, then the latest play), given
@@ -77,6 +103,16 @@ export const magicQueueCarouselPage = (
   pages: readonly MagicQueueCarouselPageId[],
   kept: MagicQueueCarouselPageId | null,
 ): number => Math.max(0, kept === null ? 0 : pages.indexOf(kept));
+
+/**
+ * The page the row remembers: [kept] once there is one (also while that page
+ * is missing, so the row returns to it), else the first page drawn. A page
+ * that joins before it then moves the row, not the page in sight.
+ */
+export const magicQueueCarouselKeptPage = (
+  pages: readonly MagicQueueCarouselPageId[],
+  kept: MagicQueueCarouselPageId | null,
+): MagicQueueCarouselPageId | null => kept ?? pages[0] ?? null;
 
 /** The name of the carousel's page [id], in [strings]' language. */
 export const magicQueueCarouselPageTitle = (
