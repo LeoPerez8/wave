@@ -1,9 +1,8 @@
 import {
-  DEFAULT_DJ_SETTINGS,
   djCanStart,
   djGrid,
-  djOpened,
   djReduce,
+  djReopened,
   djSeedTiles,
   djSelectable,
   djSelected,
@@ -39,20 +38,27 @@ import type { ArtistRow } from "@wave/client";
 
 import { DjAdjust } from "./DjAdjust";
 import { runDjDone, type DjDone } from "./djDone";
+import { djRemembered } from "./djRemembered";
 
 /** The Library's artists by id, for the tiles that show one's image. */
 type LibraryArtists = ReadonlyMap<number, ArtistRow>;
 
-/** DJ as it opens: the grid Core builds from [library], the last taste profile and artist graph. */
+/**
+ * DJ as it opens: the grid Core builds from [library], the last taste profile
+ * and artist graph, with the tiles the last DJ was started from selected
+ * (and in the grid, whether or not it would show them).
+ */
 const openedOver = (library: MixIndexes): { state: DjState; artists: LibraryArtists } => ({
-  state: djOpened(
-    djGrid({
+  state: djReopened({
+    grid: djGrid({
       artists: library.artists,
       taste: latestTasteProfile(),
       played: library.topArtists,
       graph: recommendationSnapshot.peek().graph,
     }),
-  ),
+    remembered: djRemembered.get().tiles,
+    artists: library.artists,
+  }),
   artists: new Map(library.artists.map((artist) => [artist.id, artist])),
 });
 
@@ -77,7 +83,11 @@ const useDjGrid = () => {
         if (current) setOpened(openedOver(library));
       })
       .catch(() => {
-        if (current) setOpened({ state: djOpened([]), artists: new Map() });
+        if (current)
+          setOpened({
+            state: djReopened({ grid: [], remembered: djRemembered.get().tiles }),
+            artists: new Map(),
+          });
       });
     return () => {
       current = false;
@@ -145,7 +155,9 @@ function ArtistTile({
  * batch and plays it, then closes; Close leaves the queue as it is. Adjust,
  * beside Done, shows the Adjust screen in the grid's place: its back arrow
  * (and Android's Back) returns to the grid, which stayed as it was, and Done
- * starts the queue from either with the choices made there.
+ * starts the queue from either with the choices made there. DJ opens with
+ * the selection and the choices its last queue was started with, kept on
+ * this phone (`djRemembered`); Done always starts a new session.
  */
 export function DjScreen() {
   const { strings } = useLocalisation();
@@ -156,7 +168,7 @@ export function DjScreen() {
   const { size } = magicQueueGrid(available, fontScale);
   const { opened, toggle } = useDjGrid();
   const [done, setDone] = useState<DjDone>("idle");
-  const [settings, setSettings] = useState(DEFAULT_DJ_SETTINGS);
+  const [settings, setSettings] = useState(() => djRemembered.get().settings);
   const [adjusting, setAdjusting] = useState(false);
   useEffect(() => {
     if (!adjusting) return;
@@ -175,7 +187,11 @@ export function DjScreen() {
       done,
       () => appRuntime.runPromise(startDjMagicQueue(seed, settings)),
       setDone,
-      () => router.back(),
+      () => {
+        // The queue started: this DJ is the one the next opening shows.
+        djRemembered.set({ tiles: seed, settings });
+        router.back();
+      },
     );
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: insets.top + 4 }}>
