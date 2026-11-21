@@ -343,9 +343,10 @@ export const createPlaylists = (options: PlaylistOptions) => {
       const index = all.findIndex((entry) => entry.itemId === itemId);
       if (index === -1) throw new Error("That song isn't in the Graveyard");
       if (options.play === undefined) throw new Error("Nothing plays here");
-      const songs = all.map(
-        (entry): PlaylistSong =>
-          "trackId" in entry ? { trackId: entry.trackId } : { itemId: entry.itemId, song: entry.song },
+      const songs = all.map((entry): PlaylistSong =>
+        "trackId" in entry
+          ? { trackId: entry.trackId }
+          : { itemId: entry.itemId, song: entry.song },
       );
       return options.play(songs, index, { kind: "playlist", id: String(playlistId) });
     },

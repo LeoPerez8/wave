@@ -48,7 +48,6 @@ const seed = (data: string) =>
               title: "Northern Sky",
               artists: ["Nick Drake"],
               album: "Bryter Layter",
-              albumId: null,
               durationMs: 222_000,
               artworkUrl: null,
               explicit: false,

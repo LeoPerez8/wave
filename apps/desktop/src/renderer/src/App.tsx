@@ -1322,9 +1322,15 @@ export function App() {
                     at,
                   )
                 : // Its own menu, without Select: the Graveyard selects nothing.
-                  actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at, extra, {
-                    done: () => {},
-                  })
+                  actions.openMenu(
+                    { scope: { kind: "songs" }, ids: [row.id] },
+                    row.title,
+                    at,
+                    extra,
+                    {
+                      done: () => {},
+                    },
+                  )
             }
           />
         ) : route.kind === "search" ? (
