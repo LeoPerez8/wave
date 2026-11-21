@@ -8,6 +8,7 @@ export const djPtBr: typeof djEn = {
   starting: "Iniciando sua fila",
   artistTile: (name: string) => `Artista, ${name}`,
   albumTile: (title: string, artist: string) => `Álbum, ${title}, ${artist}`,
+  genreTile: (name: string) => `Gênero, ${name}`,
   loadingArtists: "Carregando artistas",
   nothingToPick: "Nada para escolher ainda. Ouça algumas músicas e volte depois.",
   noSongsFound: "Nenhuma música encontrada para o que você escolheu.",

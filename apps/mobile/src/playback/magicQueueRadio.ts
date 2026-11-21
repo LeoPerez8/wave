@@ -1,6 +1,7 @@
 /** Magic Queue reads its seed's radio and ranks it with the last available Wave signals. */
 import {
   catalogSeedKey,
+  djFamilyRadioAllowed,
   djNewReleasesRanked,
   djVarietyCandidates,
   identityKey,
@@ -154,14 +155,33 @@ export const magicQueueYtCandidates = (
       const current = sessionNow?.() ?? session;
       const read = readers.current(session.id, group);
       // Old artist radios still provide an offline fallback until an ordered page is saved.
-      const fallback = catalog
-        .filter((entry) =>
-          entry.radios.some((r) => artists.some((name) => catalogSeedKey(name) === r.seed)),
-        )
-        .map((entry) => entry.song);
-      const radios = read.flatMap(({ seed, page }) =>
-        page === null ? [] : [{ id: seed.id, artists: seed.artists, songs: page.songs }],
-      );
+      const familyAllowed = (id: string, songArtists: readonly string[]): boolean => {
+        const families = current.djGenreRadios?.find(
+          (radio) => radio.id === id || `artist:${radio.id}` === id,
+        )?.families;
+        return (
+          families === undefined ||
+          families.every((family) => djFamilyRadioAllowed(family, songArtists, profileOf, graph))
+        );
+      };
+      const fallback = catalog.flatMap((entry) => {
+        const matching = entry.radios.filter((radio) =>
+          artists.some((name) => catalogSeedKey(name) === radio.seed),
+        );
+        return matching.some((radio) => familyAllowed(`artist:${radio.seed}`, entry.song.artists))
+          ? [entry.song]
+          : [];
+      });
+      const radios = read.flatMap(({ seed, page }) => {
+        if (page === null) return [];
+        return [
+          {
+            id: seed.id,
+            artists: seed.artists,
+            songs: page.songs.filter((song) => familyAllowed(seed.id, song.artists)),
+          },
+        ];
+      });
       if (original && radios.length === 0 && !connected)
         radios.push({ id: seeds[0]!.id, artists, songs: fallback });
       const exclude = magicRadioExclusions(
