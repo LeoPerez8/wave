@@ -96,30 +96,33 @@ describe("carouselPageSongs", () => {
 
 describe("magicQueueCarouselPages", () => {
   test("puts Most listened recently before the Magic Queue page", () => {
-    assert.deepEqual(magicQueueCarouselPages({ "most-listened-recently": 9, "magic-queue": 9 }), [
-      "most-listened-recently",
-      "magic-queue",
-    ]);
+    assert.deepEqual(
+      magicQueueCarouselPages({ "most-listened-recently": 9, "magic-queue": 9, discoveries: 0 }),
+      ["most-listened-recently", "magic-queue"],
+    );
   });
 
   test("shows the Magic Queue page alone when too few songs were played recently", () => {
-    assert.deepEqual(magicQueueCarouselPages({ "most-listened-recently": 2, "magic-queue": 9 }), [
-      "magic-queue",
-    ]);
+    assert.deepEqual(
+      magicQueueCarouselPages({ "most-listened-recently": 2, "magic-queue": 9, discoveries: 0 }),
+      ["magic-queue"],
+    );
   });
 
   test("keeps the Magic Queue page of a small Library", () => {
-    assert.deepEqual(magicQueueCarouselPages({ "most-listened-recently": 0, "magic-queue": 1 }), [
-      "magic-queue",
-    ]);
+    assert.deepEqual(
+      magicQueueCarouselPages({ "most-listened-recently": 0, "magic-queue": 1, discoveries: 0 }),
+      ["magic-queue"],
+    );
   });
 
   test("leaves out a Magic Queue page with nothing to show", () => {
-    assert.deepEqual(magicQueueCarouselPages({ "most-listened-recently": 4, "magic-queue": 0 }), [
-      "most-listened-recently",
-    ]);
     assert.deepEqual(
-      magicQueueCarouselPages({ "most-listened-recently": 0, "magic-queue": 0 }),
+      magicQueueCarouselPages({ "most-listened-recently": 4, "magic-queue": 0, discoveries: 0 }),
+      ["most-listened-recently"],
+    );
+    assert.deepEqual(
+      magicQueueCarouselPages({ "most-listened-recently": 0, "magic-queue": 0, discoveries: 0 }),
       [],
     );
   });

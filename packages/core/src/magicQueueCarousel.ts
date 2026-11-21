@@ -4,7 +4,8 @@
  * songs each, a tap on any song starting a Magic Queue seeded by it. Most
  * listened recently holds the songs with the most counted plays in Home's
  * recent window, streamed plays included; the Magic Queue page is the row's
- * random seeds (`magicQueueRow`).
+ * random seeds (`magicQueueRow`); Discoveries holds songs never played
+ * (`discoveries`).
  */
 
 import { en, type Catalogue } from "./catalogueEn.ts";
@@ -18,7 +19,11 @@ import type { TrackRef } from "./ytMusic.ts";
  * new id here, in its place, with its name in the catalogue's
  * `discover.pages`.
  */
-export const MAGIC_QUEUE_CAROUSEL_PAGES = ["most-listened-recently", "magic-queue"] as const;
+export const MAGIC_QUEUE_CAROUSEL_PAGES = [
+  "most-listened-recently",
+  "magic-queue",
+  "discoveries",
+] as const;
 
 /** A page of the carousel. */
 export type MagicQueueCarouselPageId = (typeof MAGIC_QUEUE_CAROUSEL_PAGES)[number];

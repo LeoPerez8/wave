@@ -20,6 +20,7 @@ export const discoverEn = {
   /** The Magic Queue carousel's pages beside the Magic Queue one, which is named as its row. */
   pages: {
     "most-listened-recently": "Most listened recently",
+    discoveries: "Discoveries",
   },
   /** A carousel page as TalkBack hears it: its name and its place. */
   pageOf: (name: string, page: number, pages: number) =>

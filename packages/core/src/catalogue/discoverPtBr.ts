@@ -14,6 +14,7 @@ export const discoverPtBr: typeof discoverEn = {
   },
   pages: {
     "most-listened-recently": "Mais ouvidas recentemente",
+    discoveries: "Descobertas",
   },
   pageOf: (name: string, page: number, pages: number) =>
     `${name}, página ${formatNumber("pt-BR", page)} de ${formatNumber("pt-BR", pages)}`,
