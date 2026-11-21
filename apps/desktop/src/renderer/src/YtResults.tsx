@@ -18,6 +18,7 @@ import { labels, text } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
 import { AlbumCredit, ArtistCredit, type YtCreditLinks } from "./YtCredit.tsx";
 import { Shelf } from "./YtLists.tsx";
+import { listRowDrag, songDragProps } from "./songDrag.ts";
 
 type SearchSong = YtSong & { readonly row: BrowseRow };
 
@@ -240,6 +241,7 @@ export function YtResults({
                     className="table-row table-columns yt-row"
                     aria-selected={selected === index}
                     aria-label={[row.title, row.artist].filter(Boolean).join(", ")}
+                    {...songDragProps(() => listRowDrag(row))}
                     onClick={() => setSelected(index)}
                     onDoubleClick={() => row.videoId !== undefined && onPlay(row.videoId)}
                     onKeyDown={(event) => {

@@ -27,6 +27,9 @@ type ShazamAddPlan =
   | { readonly kind: "duplicate"; readonly playlistId: string; readonly toast: string };
 
 /** Plans an explicit save; [existing] holds the remembered playlist's songs. Its toast is in [language]. */
+/** The synced setting that names the Shazam playlist, by its id shared across devices. */
+export const SHAZAM_PLAYLIST_SETTING = "settings.shazamPlaylistId";
+
 export const planShazamAdd = (
   rememberedId: string | null,
   playlists: readonly ShazamPlaylist[],

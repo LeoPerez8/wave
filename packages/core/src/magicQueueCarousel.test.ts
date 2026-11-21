@@ -6,13 +6,14 @@ import {
   catalogueOf,
   isRecent,
   magicQueueCarouselPage,
-  magicQueueCarouselKeptPage,
   magicQueueCarouselPageLabel,
-  magicQueueCarouselPageTitle,
-  magicQueueCarouselPages,
   magicQueueCarouselRestarts,
   mostListenedRecently,
+  inYourOrbitSongs,
+  inYourOrbitTap,
+  inYourOrbitTileUnavailable,
   recentPlaysWindow,
+  type MagicQueueSeed,
   type SongPlayTotals,
   type TrackRef,
 } from "./index.ts";
@@ -77,6 +78,79 @@ describe("mostListenedRecently", () => {
       [library(2), library(1)],
     );
   });
+
+  test("breaks tied play counts by time listened before the latest play", () => {
+    const longer = { ...plays(library(1), 3, NOW - DAY), listenedMs: 600_000 };
+    const newer = { ...plays(library(2), 3, NOW), listenedMs: 300_000 };
+    assert.deepEqual(mostListenedRecently([newer, longer]), [library(1), library(2)]);
+  });
+});
+
+describe("inYourOrbitSongs", () => {
+  test("shows the nine most listened songs when at least nine have counted plays", () => {
+    const totals = Array.from({ length: 10 }, (_, index) => plays(library(index + 1), index + 1));
+    assert.deepEqual(inYourOrbitSongs(mostListenedRecently(totals)), [
+      library(10),
+      library(9),
+      library(8),
+      library(7),
+      library(6),
+      library(5),
+      library(4),
+      library(3),
+      library(2),
+    ]);
+  });
+
+  test("leaves the section out when fewer than nine songs have counted plays", () => {
+    const totals = Array.from({ length: 8 }, (_, index) => plays(library(index + 1), index + 1));
+    assert.deepEqual(inYourOrbitSongs(mostListenedRecently(totals)), []);
+  });
+
+  test("counts only the songs that can show, in their order", () => {
+    const shown = ["a", "b", "c", "d", "e", "f", "g", "h"];
+    assert.deepEqual(inYourOrbitSongs(shown), []);
+    assert.deepEqual(inYourOrbitSongs([...shown, "i", "j"]), [...shown, "i"]);
+  });
+});
+
+describe("inYourOrbitTap", () => {
+  type Song = { readonly id: number };
+  const own = (id: number): MagicQueueSeed<Song> => ({ source: "library", song: { id } });
+  const stream = (videoId: string): MagicQueueSeed<Song> => ({
+    source: "stream",
+    song: { videoId, title: videoId, artists: [], album: null, artworkUrl: null } as never,
+  });
+  const tiles = [own(1), stream("x"), own(2), own(3), stream("y"), own(4)];
+
+  test("starts a Magic Queue from the tapped song with YT Music on", () => {
+    assert.deepEqual(inYourOrbitTap(tiles, 1, true), { kind: "magicQueue", seed: tiles[1] });
+    assert.deepEqual(inYourOrbitTap(tiles, 2, true), { kind: "magicQueue", seed: tiles[2] });
+  });
+
+  test("with YT Music off, plays the grid's Library songs in order from the tapped one", () => {
+    assert.deepEqual(inYourOrbitTap(tiles, 2, false), {
+      kind: "play",
+      songs: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }],
+      start: 1,
+    });
+    assert.deepEqual(inYourOrbitTap(tiles, 5, false), {
+      kind: "play",
+      songs: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }],
+      start: 3,
+    });
+  });
+
+  test("with YT Music off, a streamed tile can't play: it shows unavailable and a tap does nothing", () => {
+    assert.deepEqual(inYourOrbitTap(tiles, 1, false), { kind: "none" });
+    assert.equal(inYourOrbitTileUnavailable(tiles[1]!, false), true);
+    assert.equal(inYourOrbitTileUnavailable(tiles[1]!, true), false);
+    assert.equal(inYourOrbitTileUnavailable(tiles[0]!, false), false);
+  });
+
+  test("a tap past the grid does nothing", () => {
+    assert.deepEqual(inYourOrbitTap(tiles, 9, true), { kind: "none" });
+  });
 });
 
 describe("carouselPageSongs", () => {
@@ -96,70 +170,18 @@ describe("carouselPageSongs", () => {
   });
 });
 
-describe("magicQueueCarouselPages", () => {
-  test("puts Most listened recently before the Magic Queue page", () => {
-    assert.deepEqual(
-      magicQueueCarouselPages({ "most-listened-recently": 9, "magic-queue": 9, discoveries: 0 }),
-      ["most-listened-recently", "magic-queue"],
-    );
-  });
-
-  test("shows the Magic Queue page alone when too few songs were played recently", () => {
-    assert.deepEqual(
-      magicQueueCarouselPages({ "most-listened-recently": 2, "magic-queue": 9, discoveries: 0 }),
-      ["magic-queue"],
-    );
-  });
-
-  test("keeps the Magic Queue page of a small Library", () => {
-    assert.deepEqual(
-      magicQueueCarouselPages({ "most-listened-recently": 0, "magic-queue": 1, discoveries: 0 }),
-      ["magic-queue"],
-    );
-  });
-
-  test("leaves out a Magic Queue page with nothing to show", () => {
-    assert.deepEqual(
-      magicQueueCarouselPages({ "most-listened-recently": 4, "magic-queue": 0, discoveries: 0 }),
-      ["most-listened-recently"],
-    );
-    assert.deepEqual(
-      magicQueueCarouselPages({ "most-listened-recently": 0, "magic-queue": 0, discoveries: 0 }),
-      [],
-    );
-  });
-});
-
 describe("magicQueueCarouselPage", () => {
-  const pages = ["most-listened-recently", "magic-queue"] as const;
-
   test("opens on the first page", () => {
-    assert.equal(magicQueueCarouselPage(pages, null), 0);
+    assert.equal(magicQueueCarouselPage(3, null), 0);
   });
 
   test("keeps the page that was showing", () => {
-    assert.equal(magicQueueCarouselPage(pages, "magic-queue"), 1);
+    assert.equal(magicQueueCarouselPage(3, 2), 2);
   });
 
-  test("falls back to the first page when the kept one is left out", () => {
-    assert.equal(magicQueueCarouselPage(["magic-queue"], "most-listened-recently"), 0);
-  });
-});
-
-describe("magicQueueCarouselKeptPage", () => {
-  test("remembers the first page drawn when none is kept", () => {
-    assert.equal(magicQueueCarouselKeptPage(["magic-queue", "discoveries"], null), "magic-queue");
-    assert.equal(magicQueueCarouselKeptPage([], null), null);
-  });
-
-  test("a page joining before the one in sight leaves that page in sight", () => {
-    const first = magicQueueCarouselKeptPage(["magic-queue"], null);
-    const joined = ["most-listened-recently", "magic-queue"] as const;
-    assert.equal(magicQueueCarouselPage(joined, magicQueueCarouselKeptPage(joined, first)), 1);
-  });
-
-  test("keeps a page that is missing, so the row returns to it", () => {
-    assert.equal(magicQueueCarouselKeptPage(["magic-queue"], "discoveries"), "discoveries");
+  test("stands on the last page while the kept one is left out", () => {
+    assert.equal(magicQueueCarouselPage(2, 2), 1);
+    assert.equal(magicQueueCarouselPage(1, 2), 0);
   });
 });
 
@@ -204,20 +226,9 @@ describe("magicQueueCarouselRestarts", () => {
   });
 });
 
-describe("the carousel's page names", () => {
-  test("are in English and Brazilian Portuguese", () => {
-    assert.equal(magicQueueCarouselPageTitle("most-listened-recently"), "Most listened recently");
-    assert.equal(
-      magicQueueCarouselPageTitle("most-listened-recently", ptBR),
-      "Mais ouvidas recentemente",
-    );
-    assert.equal(magicQueueCarouselPageTitle("magic-queue", en), "Magic Queue");
-    assert.equal(magicQueueCarouselPageTitle("magic-queue", ptBR), "Fila Mágica");
-  });
-
-  test("say where the page sits for a screen reader", () => {
-    const pages = ["most-listened-recently", "magic-queue"] as const;
-    assert.equal(magicQueueCarouselPageLabel(pages, 0, en), "Most listened recently, page 1 of 2");
-    assert.equal(magicQueueCarouselPageLabel(pages, 1, ptBR), "Fila Mágica, página 2 de 2");
+describe("the carousel's pages for a screen reader", () => {
+  test("have no names of their own: the row's name and the page's place", () => {
+    assert.equal(magicQueueCarouselPageLabel(0, 3, en), "Magic Queue, page 1 of 3");
+    assert.equal(magicQueueCarouselPageLabel(1, 2, ptBR), "Fila Mágica, página 2 de 2");
   });
 });

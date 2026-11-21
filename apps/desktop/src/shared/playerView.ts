@@ -1,5 +1,5 @@
 import type { AudioStatus } from "@wave/client/playbackSession";
-import type { RepeatMode, SleepTimer } from "@wave/core";
+import type { RepeatMode, SleepTimer, UpNextPlace } from "@wave/core";
 
 import type { BrowseRow } from "./browse.ts";
 
@@ -45,9 +45,17 @@ export type PlaybackCommand =
   | { readonly type: "next" }
   | { readonly type: "previous" }
   | { readonly type: "setShuffle"; readonly on: boolean }
+  /** Shuffles Up Next again by the kind now chosen, turning shuffle on. */
+  | { readonly type: "reshuffle" }
   | { readonly type: "setRepeat"; readonly mode: RepeatMode }
   | { readonly type: "jumpTo" | "remove"; readonly key: string }
-  | { readonly type: "playNext" | "addToQueue"; readonly trackIds: readonly string[] }
+  | { readonly type: "playNext"; readonly trackIds: readonly string[] }
+  /** [at]: dropped in Up Next, between those neighbours. */
+  | {
+      readonly type: "addToQueue";
+      readonly trackIds: readonly string[];
+      readonly at?: UpNextPlace;
+    }
   | {
       readonly type: "move";
       readonly key: string;
@@ -68,8 +76,15 @@ export type PlayStart =
 
 /** The transport calls main's playback and the window's bridge share. */
 export interface PlaybackTransport {
-  /** Plays YouTube Music songs a search found, from [index], as a new queue. */
-  readonly startYt: (videoIds: readonly string[], index: number) => Promise<void>;
+  /**
+   * Plays YouTube Music songs a page brought, from [index], as a new queue; with [shuffle], all
+   * of them shuffled, as a list's Shuffle does.
+   */
+  readonly startYt: (
+    videoIds: readonly string[],
+    index: number,
+    shuffle?: boolean,
+  ) => Promise<void>;
   /** A queue command: Next, Previous, shuffle, repeat, and the Queue's edits. */
   readonly command: (command: PlaybackCommand) => Promise<void>;
   readonly play: () => Promise<void>;

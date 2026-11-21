@@ -1,6 +1,6 @@
 {
   "name": "@wave/mobile",
-  "version": "0.80.1-ti",
+  "version": "0.83.0-ti",
   "private": true,
   "license": "GPL-3.0-only",
   "main": "./index.ts",

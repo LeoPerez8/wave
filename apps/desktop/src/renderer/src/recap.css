@@ -1,0 +1,346 @@
+/* Home's card for a new Recap and Stats' Recaps row. */
+.recap-home-card,
+.recap-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  color: var(--color-on-recap);
+  border-radius: 14px;
+  text-align: left;
+}
+.recap-home-card {
+  width: 100%;
+  gap: 4px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+.recap-home-card strong {
+  font-size: 22px;
+  line-height: 28px;
+}
+.recap-home-card span,
+.recap-tile span {
+  font-size: 13px;
+  opacity: 0.8;
+}
+.recap-home-card:hover,
+.recap-tile:hover {
+  filter: brightness(1.08);
+}
+.stats-recaps {
+  margin-bottom: 24px;
+}
+.recap-tiles {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+.recap-tile {
+  flex: none;
+  justify-content: flex-end;
+  gap: 2px;
+  width: 136px;
+  height: 168px;
+  padding: 14px;
+}
+.recap-tile strong {
+  font-size: 17px;
+  line-height: 22px;
+}
+
+/* Save Image and Copy Image, under or beside any card. */
+.card-image-actions {
+  display: flex;
+  gap: 8px;
+}
+.card-image-actions button {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.card-image-actions button:disabled {
+  opacity: 0.5;
+}
+
+/* The stories, over everything but a toast. */
+.recap-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  color: var(--color-on-recap);
+  outline: none;
+}
+/* The title bar's strip stays the window's handle, clear of the window's own buttons. */
+.recap-drag {
+  flex: none;
+  height: 32px;
+  app-region: drag;
+}
+.recap-bars {
+  display: flex;
+  gap: 4px;
+  width: min(720px, calc(100% - 48px));
+  margin: 0 auto;
+}
+.recap-bar {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-on-recap) 35%, transparent);
+}
+.recap-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--color-on-recap);
+}
+.recap-bar-running {
+  width: 0;
+  animation: recap-bar linear forwards;
+}
+@keyframes recap-bar {
+  to {
+    width: 100%;
+  }
+}
+.recap-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  width: min(720px, calc(100% - 48px));
+  margin: 12px auto 0;
+}
+.recap-viewer button {
+  color: var(--color-on-recap);
+}
+.recap-viewer .card-image-actions button,
+.recap-viewer .icon-button {
+  background: color-mix(in srgb, var(--color-on-recap) 16%, transparent);
+}
+.recap-viewer .card-image-actions button:hover,
+.recap-viewer .icon-button:hover {
+  background: color-mix(in srgb, var(--color-on-recap) 28%, transparent);
+}
+.recap-viewer button:focus-visible {
+  outline: 2px solid var(--color-on-recap);
+  outline-offset: 2px;
+}
+.recap-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 12px 24px 24px;
+}
+.recap-nav {
+  flex: none;
+  border-radius: 50%;
+}
+.recap-stage {
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.recap-frame {
+  flex: none;
+  overflow: hidden;
+}
+
+/* The card: a story at a shared image's size (1080 by 1920), scaled by its frame. */
+.recap-card {
+  box-sizing: border-box;
+  width: 1080px;
+  height: 1920px;
+  padding: 96px 88px 88px;
+  display: flex;
+  flex-direction: column;
+  transform-origin: 0 0;
+  color: var(--color-on-recap);
+  font-family: var(--font-sans);
+  font-size: 44px;
+  line-height: 58px;
+  text-align: left;
+}
+.recap-card p,
+.recap-card ol {
+  margin: 0;
+  padding: 0;
+}
+.recap-card ol {
+  list-style: none;
+}
+.recap-card-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  font-size: 40px;
+}
+.recap-mark {
+  font-size: 44px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+.recap-story {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 64px;
+}
+.recap-quiet {
+  opacity: 0.8;
+}
+.recap-small {
+  font-size: 36px;
+  line-height: 48px;
+  font-weight: 600;
+}
+.recap-heading {
+  font-size: 54px;
+  line-height: 68px;
+}
+.recap-gap {
+  margin-top: 32px;
+}
+.recap-title {
+  font-size: 76px;
+  line-height: 92px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.recap-figure {
+  font-size: 150px;
+  line-height: 170px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.recap-figure-large {
+  font-size: 240px;
+  line-height: 260px;
+}
+.recap-picture {
+  display: block;
+  flex: none;
+}
+.recap-picture .artwork {
+  border-radius: 28px;
+  background: color-mix(in srgb, var(--color-on-recap) 16%, transparent);
+  color: var(--color-on-recap);
+}
+.recap-picture .artist-image {
+  border-radius: 50%;
+}
+.recap-picture svg {
+  width: 40%;
+  height: 40%;
+}
+.recap-picture-top {
+  width: 520px;
+  height: 520px;
+  margin-bottom: 36px;
+}
+.recap-picture-album {
+  width: 760px;
+  height: 760px;
+}
+.recap-picture-summary {
+  width: 460px;
+  height: 460px;
+  margin: 0 auto;
+}
+.recap-picture-line {
+  width: 108px;
+  height: 108px;
+}
+.recap-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+.recap-lines li {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+}
+.recap-rank {
+  flex: none;
+  width: 56px;
+  font-size: 52px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.recap-line-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.recap-line-text strong,
+.recap-line-text span,
+.recap-column li {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.recap-line-text span {
+  font-size: 36px;
+  line-height: 46px;
+}
+.recap-columns {
+  display: flex;
+  gap: 40px;
+}
+.recap-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.recap-column ol {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.recap-column li {
+  font-size: 40px;
+  line-height: 54px;
+}
+.recap-column .recap-rank {
+  display: inline-block;
+  width: 48px;
+  font-size: 40px;
+}
+/* A story's lines rise in one after another; with reduced motion they fade. */
+.recap-rise {
+  animation: recap-rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes recap-rise {
+  from {
+    opacity: 0;
+    transform: translateY(64px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .recap-rise {
+    animation: recap-fade 150ms ease both;
+  }
+}
+@keyframes recap-fade {
+  from {
+    opacity: 0;
+  }
+}

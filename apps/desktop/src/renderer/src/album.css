@@ -1,0 +1,38 @@
+/* A Library album's page (AlbumSection.tsx): the tracks table, or with Online the album's whole
+   tracklist under the table's header, scroll as one. */
+.album-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding-bottom: 24px;
+}
+.album-page > .table-area {
+  flex: 1;
+  min-height: 0;
+}
+.album-online-head .table-viewport {
+  display: none;
+}
+.album-online-disc .yt-list {
+  padding-right: 22px;
+}
+.album-disc-heading {
+  margin: 14px 0 4px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-secondary);
+}
+/* The tracklist sits under the album table's columns: no album column there. */
+.album-online-disc .yt-row {
+  grid-template-columns: minmax(180px, 1.5fr) minmax(110px, 1fr) 28px 54px;
+}
+.album-online-disc .yt-row > .album-column {
+  display: none;
+}
+@container (width < 760px) {
+  .album-online-disc .yt-row {
+    grid-template-columns: minmax(160px, 1.5fr) minmax(110px, 1fr) 28px 54px;
+  }
+}

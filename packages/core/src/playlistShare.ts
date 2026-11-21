@@ -163,6 +163,15 @@ export const sharedSongsLine = (
 ): string => strings.share.found(found, total);
 
 /**
+ * What sharing says on the desktop, which has no share sheet and copies the
+ * playlist's link instead: "12 of 15 songs found. Link copied."
+ */
+export const sharedSongsCopiedLine = (
+  { found, total }: Pick<SharedSongs, "found" | "total">,
+  strings: Catalogue = en,
+): string => strings.share.foundAndCopied(found, total);
+
+/**
  * An entry of a playlist Wave shared, as the service lists it: the song's
  * [id], and [entryId], the entry itself (YouTube's `setVideoId`), which edits
  * name.

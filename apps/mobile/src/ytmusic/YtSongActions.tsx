@@ -362,6 +362,7 @@ function YtSongActionsMenu({
 /**
  * Runs the swipe a shared song-list row showed ([shown]): the menu is planned
  * again with the current route and stars, and its entry for [shown] runs.
+ * Now Playing's Magic Queue slot runs the playing streamed song's entry here too.
  */
 export const runYtSongSwipe = (
   song: NativeYtSong,

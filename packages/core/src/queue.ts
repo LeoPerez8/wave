@@ -64,7 +64,15 @@ export type QueueCommand =
   | { readonly type: "reshuffle" }
   | { readonly type: "setRepeat"; readonly mode: RepeatMode }
   | { readonly type: "playNext"; readonly trackIds: readonly string[] }
-  | { readonly type: "addToQueue"; readonly trackIds: readonly string[] }
+  /**
+   * Lines tracks up after the ones already lined up; [at], a drop in Up Next, puts them
+   * between those neighbours instead, found as a move finds them (`UpNextMove`).
+   */
+  | {
+      readonly type: "addToQueue";
+      readonly trackIds: readonly string[];
+      readonly at?: UpNextPlace | undefined;
+    }
   /**
    * Plays [trackIds]' first song now, as the current one (a related song
    * tapped): the song that was playing goes to History, and Up Next and the
@@ -583,6 +591,13 @@ export type ShuffleKind = Shuffle["kind"];
 export const readShuffleKind = (stored: string | null): ShuffleKind =>
   stored === "smart" || stored === "even" ? stored : "real";
 
+/** The kinds of shuffle, in the order every menu and setting lists them. */
+export const SHUFFLE_KINDS: readonly ShuffleKind[] = ["real", "smart", "even"];
+
+/** What [kind] is saved as, for `readShuffleKind` to read: nothing for Real Shuffle. */
+export const writeShuffleKind = (kind: ShuffleKind): string | null =>
+  kind === "real" ? null : kind;
+
 /**
  * Whether [command] shuffles [state]'s queue, and so uses the kind of shuffle
  * `reduceQueue` is given: the app reads play counts for Smart Shuffle, and
@@ -659,6 +674,22 @@ export const shuffledTrackIds = (state: QueueState, command: QueueCommand): stri
   const from = command.type === "setShuffle" || command.type === "reshuffle" ? state.index : 0;
   return [...new Set(state.entries.slice(Math.max(0, from)).map((entry) => entry.trackId))];
 };
+
+/**
+ * What the app reads before [command] runs on [state] with [kind] chosen: nothing for Real
+ * Shuffle or a command that doesn't shuffle, else the songs (`shuffledTrackIds`) whose counted
+ * plays Smart Shuffle orders by, or whose artists, genres and albums Even Shuffle does.
+ */
+export const shuffleReads = (
+  kind: ShuffleKind,
+  state: QueueState,
+  command: QueueCommand,
+):
+  | { readonly kind: "real" }
+  | { readonly kind: "smart" | "even"; readonly trackIds: readonly string[] } =>
+  kind === "real" || !shufflesQueue(state, command)
+    ? { kind: "real" }
+    : { kind, trackIds: shuffledTrackIds(state, command) };
 
 /** [entries] in the order [shuffle] gives them, after [previous] (the song before them, if any). */
 const shuffleEntries = (
@@ -794,19 +825,24 @@ const isQueued = (entry: QueueEntry): boolean => entry.contextIndex === null;
 
 /**
  * Inserts tracks as queued entries: right after the current entry (Play Next)
- * or after the queued entries that already follow it (Add to Queue).
+ * or after the last queued entry in Up Next (Add to Queue).
  */
 const enqueue = (
   state: QueueState,
   trackIds: readonly string[],
-  where: "next" | "last",
+  where: "next" | "last" | UpNextPlace,
 ): QueueResult => {
   if (trackIds.length === 0) return result(state);
   const { entries: added, nextKey } = makeEntries(trackIds, state.nextKey, () => null);
   if (state.index < 0) return result({ ...state, entries: added, index: 0, nextKey }, "play");
-  let at = state.index + 1;
+  let at = typeof where === "string" ? state.index + 1 : placeIn(state.entries, state.index, where);
   if (where === "last") {
-    while (at < state.entries.length && isQueued(state.entries[at]!)) at += 1;
+    for (let i = state.entries.length - 1; i > state.index; i -= 1) {
+      if (isQueued(state.entries[i]!)) {
+        at = i + 1;
+        break;
+      }
+    }
   }
   const entries = [...state.entries.slice(0, at), ...added, ...state.entries.slice(at)];
   return result({ ...state, entries, nextKey });
@@ -894,20 +930,29 @@ const playerMoved = (
   return result(select(state, key));
 };
 
+/** Where [place] falls among [entries] (the current one at [index]), as `UpNextMove` says. */
+const placeIn = (
+  entries: readonly QueueEntry[],
+  index: number,
+  { after, before }: UpNextPlace,
+): number => {
+  const upcoming = (anchor: string | null): number => {
+    if (anchor === null) return -1;
+    const at = entries.findIndex((other) => other.key === anchor);
+    return at > index ? at : -1;
+  };
+  const afterAt = upcoming(after);
+  const beforeAt = upcoming(before);
+  return afterAt >= 0 ? afterAt + 1 : beforeAt >= 0 ? beforeAt : index + 1;
+};
+
 /** Moves an Up Next entry to another Up Next position (clamped). */
 const move = (state: QueueState, { key, after, before }: UpNextMove): QueueResult => {
   const from = indexOfKey(state, key);
   if (from <= state.index) return result(state);
   const entries = [...state.entries];
   const [entry] = entries.splice(from, 1);
-  const upcoming = (anchor: string | null): number => {
-    if (anchor === null) return -1;
-    const at = entries.findIndex((other) => other.key === anchor);
-    return at > state.index ? at : -1;
-  };
-  const afterAt = upcoming(after);
-  const beforeAt = upcoming(before);
-  const to = afterAt >= 0 ? afterAt + 1 : beforeAt >= 0 ? beforeAt : state.index + 1;
+  const to = placeIn(entries, state.index, { after, before });
   if (to === from) return result(state);
   entries.splice(to, 0, entry!);
   return result({ ...state, entries });
@@ -1011,7 +1056,7 @@ export const reduceQueue = (
     case "playNext":
       return enqueue(state, playing(command.trackIds, passOver), "next");
     case "addToQueue":
-      return enqueue(state, playing(command.trackIds, passOver), "last");
+      return enqueue(state, playing(command.trackIds, passOver), command.at ?? "last");
     case "playNow":
       return playNow(state, playing(command.trackIds, passOver));
     case "append":
@@ -1046,8 +1091,12 @@ export const reduceQueue = (
  * one is still upcoming, else right before [before], else to the top of Up
  * Next. Null neighbours: dropped at the top ([after]) or the bottom ([before]).
  */
-export interface UpNextMove {
+export interface UpNextMove extends UpNextPlace {
   readonly key: string;
+}
+
+/** A place in Up Next, between two neighbours named by key (see `UpNextMove`). */
+export interface UpNextPlace {
   readonly after: string | null;
   readonly before: string | null;
 }

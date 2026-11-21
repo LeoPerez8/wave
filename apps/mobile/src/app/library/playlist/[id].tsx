@@ -20,10 +20,18 @@ import { useRenderCount } from "@/perf/perf";
 import { openPlaylistActions } from "@/playback/ActionsMenu";
 import { useScreenSettled } from "@/lib/screenTiming";
 import { playlistOpened } from "@/library/backgroundFill";
+import {
+  CollaborativeMembers,
+  PrivateCopyNotice,
+  useShownCollaborations,
+  useCollaborativePage,
+  usePrivateCopyNotice,
+} from "@/library/collaborativePlaylists";
 import { DetailFrame } from "@/library/DetailFrame";
 import { usePlaylist } from "@/library/hooks";
 import { LibraryStore } from "@/library/LibraryStore";
 import { type PlaylistEntryRow, type PlaylistRow } from "@wave/client";
+import type { CollaborativePlaylist } from "@wave/client/db/collaborations";
 import { ImportCoverRing } from "@/library/ImportCoverRing";
 import { ImportProgressLine } from "@/library/ImportProgressLine";
 import { PlaylistImportLine } from "@/library/PlaylistImportLine";
@@ -47,7 +55,14 @@ interface Shown {
 // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const readPlaylist = (id: number) => LibraryStore.use((store) => store.getPlaylist(id));
 
-function PlaylistHead({ shown }: { shown: Shown }) {
+function PlaylistHead({
+  shown,
+  collaboration,
+}: {
+  shown: Shown;
+  /** The playlist is collaborative: its members under its name. */
+  collaboration: CollaborativePlaylist | undefined;
+}) {
   const { language, strings } = useLocalisation();
   const { width } = useWindowDimensions();
   const { playlist, items } = shown;
@@ -82,6 +97,7 @@ function PlaylistHead({ shown }: { shown: Shown }) {
   const releaseSort = usePlaylistSongSort(sortId);
   const release = releaseSort.key === "releaseDate" ? status : undefined;
   const count = items?.length ?? playlist.trackCount;
+  const copyNotice = usePrivateCopyNotice(playlist.id);
   // Every entry counts, and the line says how many can't play (Core's `playlistSongsLine`).
   const furniture =
     count === 0
@@ -114,6 +130,7 @@ function PlaylistHead({ shown }: { shown: Shown }) {
             {playlist.name}
           </Text>
         </CompactTitleMark>
+        {collaboration !== undefined && <CollaborativeMembers collaboration={collaboration} />}
         <Text
           className="font-sans text-footnote text-secondary"
           style={{ fontVariant: ["tabular-nums"] }}
@@ -140,6 +157,7 @@ function PlaylistHead({ shown }: { shown: Shown }) {
         <PlaylistImportLine playlistId={playlist.id} />
         <YtLibraryReadLine playlistId={playlist.id} />
       </View>
+      {copyNotice && <PrivateCopyNotice playlistId={playlist.id} />}
       {count > 0 ? (
         <PlayShuffle
           onPlay={() => play(false)}
@@ -203,6 +221,9 @@ export default function PlaylistScreen() {
   }, [playlistId, settled]);
   const shown: Shown | null | undefined =
     detail === undefined && known !== undefined ? { playlist: known, items: undefined } : detail;
+  // A collaborative playlist: its members, who added each song, its own pull.
+  const collaboration = useShownCollaborations().get(playlistId);
+  useCollaborativePage(playlistId, collaboration);
   return (
     <DetailFrame
       detail={shown}
@@ -217,7 +238,8 @@ export default function PlaylistScreen() {
           customOrder={sort.key === "custom"}
           showReleaseYear={sort.key === "releaseDate"}
           items={items}
-          header={<PlaylistHead shown={{ playlist, items }} />}
+          members={collaboration?.members}
+          header={<PlaylistHead shown={{ playlist, items }} collaboration={collaboration} />}
           empty={<NoSongs />}
         />
       )}

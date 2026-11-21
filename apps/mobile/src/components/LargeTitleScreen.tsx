@@ -41,7 +41,7 @@ type Props = {
 };
 
 /** The large title's type (`--text-large-title` in global.css), in dp at the standard font scale. */
-const LARGE_TITLE = { fontSize: 36, lineHeight: 44 } as const;
+const LARGE_TITLE = { fontSize: 26, lineHeight: 32 } as const;
 
 /** The large title's classes and tracking, the same with and without the waves. */
 const TITLE_CLASS = "font-sans text-large-title font-light text-foreground";
@@ -52,7 +52,7 @@ const ACTION_WIDTH = 48;
 
 /**
  * Wave's two waves before a large title's word, the top one in the primary and
- * the bottom one in the secondary: as tall as the word's capitals, on its
+ * the bottom one in the secondary: 60% as tall as the word's capitals, on its
  * baseline, where [placement] puts them beside the word as drawn.
  */
 function TitleWaves({ placement }: { placement: TitleMarkLayout }) {

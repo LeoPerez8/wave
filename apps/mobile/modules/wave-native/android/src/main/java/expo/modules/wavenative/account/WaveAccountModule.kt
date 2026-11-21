@@ -61,7 +61,10 @@ class WaveAccountModule : Module() {
       }
     }
 
-    /** `POST /v1/push` or `GET /v1/pull?since=…` with the session; `{ status, body }`. */
+    /**
+     * `POST /v1/push`, `GET /v1/pull?since=…` or another request `WaveAccountClient.request`
+     * takes (a collaborative playlist's among them), with the session; `{ status, body }`.
+     */
     AsyncFunction("request") Coroutine { method: String, path: String, body: String? ->
       coded { withContext(Dispatchers.IO) { owner.client.request(method, path, body).toMap() } }
     }

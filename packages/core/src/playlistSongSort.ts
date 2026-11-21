@@ -5,6 +5,8 @@
  */
 
 import { compareStrings, sortKey } from "./library.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
+import { SONG_SORTS, songSortLabelFor } from "./songSort.ts";
 import type { ReleaseDate } from "./releaseDate.ts";
 import { readSyncedBucket } from "./syncedBuckets.ts";
 
@@ -16,6 +18,31 @@ export type PlaylistSongSort = {
 
 /** The sort of a playlist that never picked one. */
 export const CUSTOM_SONG_SORT: PlaylistSongSort = { key: "custom", descending: false };
+
+/** Every sort a playlist's control offers, in its order: Custom leads, the release dates end. */
+export const PLAYLIST_SONG_SORTS: readonly PlaylistSongSort[] = [
+  CUSTOM_SONG_SORT,
+  ...SONG_SORTS,
+  { key: "releaseDate", descending: false },
+  { key: "releaseDate", descending: true },
+];
+
+/** Whether a playlist showing in [sort] can be rearranged: only its own order moves. */
+export const playlistReorders = (sort: PlaylistSongSort): boolean => sort.key === "custom";
+
+/** How a playlist's sort reads in [language]'s control and to screen readers. */
+export const playlistSongSortLabelFor =
+  (language: AppLanguage) =>
+  (sort: PlaylistSongSort): string => {
+    const text = catalogueOf(language).playlists;
+    return sort.key === "custom"
+      ? text.sorts.custom
+      : sort.key === "releaseDate"
+        ? sort.descending
+          ? text.releaseNewest
+          : text.releaseOldest
+        : songSortLabelFor(language)({ ...sort, key: sort.key });
+  };
 
 const SORTED_KEYS = ["title", "artist", "album", "added", "releaseDate"] as const;
 

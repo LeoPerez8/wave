@@ -20,14 +20,25 @@ import {
   useGeniusInsightsEnabled,
 } from "@/settings/genius";
 
-import { loadGenius, translateGenius, type GeniusAsk, type GeniusService } from "./geniusSource";
-import { dropGenius as forgetGenius, keepGenius } from "./geniusStorage";
+import {
+  GENIUS_REQUEST_TIMEOUT_MS,
+  loadGenius,
+  translateGenius,
+  type GeniusAsk,
+  type GeniusService,
+} from "@wave/client/geniusSource";
+import { createGeniusStorage } from "@wave/client/geniusStorage";
 import { isPlayheadLive, playheadVisibility } from "./playhead";
 import { askWaveService } from "@/sync/askWaveService";
 import { useWaveSignedIn } from "@/sync/waveSignedIn";
 
-/** A request that takes longer than this has failed. */
-const REQUEST_TIMEOUT_MS = 15_000;
+const geniusStorage = createGeniusStorage({
+  read: (key) => Storage.getItemAsync(key),
+  write: (key, value) => Storage.setItemAsync(key, value),
+  remove: async (key) => {
+    await Storage.removeItemAsync(key);
+  },
+});
 
 /** The About card's text: [shown] is [original] or its translation, which replaces it in place. */
 export interface GeniusAboutText {
@@ -66,7 +77,7 @@ export type GeniusState = GeniusLoading | GeniusShown;
 
 /**
  * [request]'s answer, or a failure once it takes longer than
- * `REQUEST_TIMEOUT_MS` or [controller] aborts: a request that can't be
+ * `GENIUS_REQUEST_TIMEOUT_MS` or [controller] aborts: a request that can't be
  * stopped (the native module's) then has its answer dropped. [request] gets
  * a signal that aborts with it.
  */
@@ -86,7 +97,10 @@ const withTimeout = <T>(
       return;
     }
     const stopped = (): void => stop(new Error("The request was no longer wanted"));
-    const timeout = setTimeout(() => stop(new Error("No answer in time")), REQUEST_TIMEOUT_MS);
+    const timeout = setTimeout(
+      () => stop(new Error("No answer in time")),
+      GENIUS_REQUEST_TIMEOUT_MS,
+    );
     signal.addEventListener("abort", stopped, { once: true });
     request(own.signal)
       .then(resolve, reject)
@@ -188,9 +202,7 @@ export const useGenius = (
       if (!geniusInsightsEnabled()) controller.abort();
     });
     const service: GeniusService = {
-      read: (key) => Storage.getItemAsync(key),
-      keep: keepGenius,
-      drop: forgetGenius,
+      ...geniusStorage,
       enabled: () =>
         current && !controller.signal.aborted && geniusInsightsEnabled() && isPlayheadLive(),
       get: (path) => withTimeout(controller, () => askWaveService(path)),

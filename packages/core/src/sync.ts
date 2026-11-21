@@ -130,32 +130,101 @@ const sortedById = <R extends SyncRow>(rows: Iterable<R>): R[] =>
   // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
   [...rows].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
-/**
- * Merges [incoming] changes into the [current] rows, row by row: the later
- * change wins and the phone id breaks a tie (`SyncRow`). A tombstone is a
- * change like any other, so an older edit arriving late can't undo a removal,
- * while an edit made after it brings the row back. The result doesn't depend
- * on the order the changes arrive in, nor on which side holds which.
- */
-export const mergeRows = <R extends SyncRow>(
+const mergeBy = <R extends SyncRow>(
+  beats: (a: R, b: R) => boolean,
   current: readonly R[],
   incoming: readonly R[],
 ): MergedRows<R> => {
   const winners = new Map<string, R>();
   for (const row of current) {
     const held = winners.get(row.id);
-    if (held === undefined || wins(row, held)) winners.set(row.id, row);
+    if (held === undefined || beats(row, held)) winners.set(row.id, row);
   }
   const accepted = new Map<string, R>();
   for (const row of incoming) {
     const held = winners.get(row.id);
-    if (held === undefined || wins(row, held)) {
+    if (held === undefined || beats(row, held)) {
       winners.set(row.id, row);
       accepted.set(row.id, row);
     }
   }
   return { rows: sortedById(winners.values()), accepted: sortedById(accepted.values()) };
 };
+
+/**
+ * Merges [incoming] changes into the [current] rows, row by row: the later
+ * change wins and the phone id breaks a tie (`SyncRow`). A tombstone is a
+ * change like any other, so an older edit arriving late can't undo a removal,
+ * while an edit made after it brings the row back. The result doesn't depend
+ * on the order the changes arrive in, nor on which side holds which.
+ * Playlist entries merge by `mergePlaylistEntries` instead (`mergeTableRows`).
+ */
+export const mergeRows = <R extends SyncRow>(
+  current: readonly R[],
+  incoming: readonly R[],
+): MergedRows<R> => mergeBy(wins, current, incoming);
+
+/** What a playlist entry's merge reads besides `SyncRow`. */
+export interface SyncEntryRow extends SyncRow {
+  /**
+   * When the entry was last brought back by Restore in the Graveyard or by
+   * Undo: the `changedAt` of that change. Later edits of the entry keep it.
+   * Null or absent on an entry never restored.
+   */
+  readonly restoredAt?: number | null;
+}
+
+/**
+ * The time an entry's state dates from: a removed entry's removal, a live
+ * entry's last restore (none: before any removal). A restore is never later
+ * than the change that carries it.
+ */
+const entryStateAt = (row: SyncEntryRow): number =>
+  row.deleted ? row.changedAt : Math.min(row.restoredAt ?? Number.NEGATIVE_INFINITY, row.changedAt);
+
+const entryWins = (a: SyncEntryRow, b: SyncEntryRow): boolean => {
+  const [aAt, bAt] = [entryStateAt(a), entryStateAt(b)];
+  if (aAt !== bAt) return aAt > bAt;
+  if (a.deleted !== b.deleted) return a.deleted;
+  return wins(a, b);
+};
+
+/**
+ * Merges changes of playlist entries. A removed entry stays removed: a
+ * removal wins over any change of the entry that isn't a restore made after
+ * it, whatever their times, and between a restore and a removal the later
+ * wins. Among live changes the one holding the later restore wins, and among
+ * those with the same restore, or among removals, the later change as in
+ * `mergeRows`. The result doesn't depend on the order the changes arrive in.
+ */
+export const mergePlaylistEntries = <R extends SyncEntryRow>(
+  current: readonly R[],
+  incoming: readonly R[],
+): MergedRows<R> => mergeBy(entryWins, current, incoming);
+
+/**
+ * Merges changes of the synced table [table] (its name on the wire) by that
+ * table's rule: `mergePlaylistEntries` for playlist entries, `mergeRows` for
+ * every other. The app and the sync service both merge through it.
+ */
+export const mergeTableRows = <R extends SyncEntryRow>(
+  table: string,
+  current: readonly R[],
+  incoming: readonly R[],
+): MergedRows<R> =>
+  // not UI text: a wire table name
+  table === "playlistEntries"
+    ? mergePlaylistEntries(current, incoming)
+    : mergeRows(current, incoming);
+
+/**
+ * Pushed [rows] as the service stores them at its time [now]: a change time
+ * ahead of the service's clock becomes [now], so a phone whose clock runs
+ * ahead doesn't win over the changes other phones make later. A row that
+ * isn't ahead is returned as it is, the same object.
+ */
+export const withinServiceClock = <R extends SyncRow>(rows: readonly R[], now: number): R[] =>
+  rows.map((row) => (row.changedAt > now ? { ...row, changedAt: now } : row));
 
 /** A synced play event: its id is made on the phone that recorded it, and is the same everywhere. */
 export interface SyncPlay {

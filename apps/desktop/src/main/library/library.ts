@@ -11,6 +11,8 @@ import type { LibraryArtwork } from "./onlineArtwork.ts";
 import { missingSongCover } from "@wave/client/artworkLookup";
 import type { YtAlbum } from "@wave/core";
 import { YtMusic } from "../yt/ytMusic.ts";
+import type { ShowInFolderResult } from "../../shared/songActions.ts";
+import { showSongInFolder } from "./showInFolder.ts";
 
 export interface DesktopLibraryShape extends ReturnType<typeof createScanner> {
   /** Pictures found online, and the artist photos kept (Settings › Lyrics and tags). */
@@ -22,6 +24,8 @@ export interface DesktopLibraryShape extends ReturnType<typeof createScanner> {
   ) => ReturnType<typeof browseLibrary>;
   readonly pickRoot: () => Promise<void>;
   readonly pickExclusion: () => Promise<void>;
+  /** Opens the file manager on the Library song [trackId]'s file (`showSongInFolder`). */
+  readonly showInFolder: (trackId: number) => ShowInFolderResult;
 }
 
 export class DesktopLibrary extends Context.Service<DesktopLibrary, DesktopLibraryShape>()(
@@ -32,6 +36,8 @@ export const desktopLibraryLayer = (options: {
   readonly musicFolder: string;
   readonly platform: string;
   readonly pickFolder: () => Promise<string | undefined>;
+  /** Opens the system's file manager with [path] selected; none in tests. */
+  readonly showItemInFolder?: (path: string) => void;
   readonly cacheArtwork?: (db: Database["Service"], encoded: string) => Promise<string | null>;
   readonly onlineArtwork?: (
     db: Database["Service"],
@@ -95,6 +101,15 @@ export const desktopLibraryLayer = (options: {
               const path = await options.pickFolder();
               if (path !== undefined) await scanner.exclude(path);
             },
+            showInFolder: (trackId: number) =>
+              showSongInFolder(
+                {
+                  db,
+                  unavailable: scanner.unavailable,
+                  show: (path) => options.showItemInFolder?.(path),
+                },
+                trackId,
+              ),
           };
         }),
         (library) => Effect.promise(() => library.dispose()),

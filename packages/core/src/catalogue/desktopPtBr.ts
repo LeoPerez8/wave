@@ -6,16 +6,32 @@ import { plural } from "../plural.ts";
 export const desktopPtBr = {
   home: {
     noSections:
-      "As seções do Início estão ocultas. Organize o Início no celular para adicioná-las de volta.",
+      "As seções do Início estão ocultas. Escolha Editar Início para adicioná-las de volta.",
   },
   playbackText: {
     thisPhone: "Este computador",
+    holdYourPhoneNearTheMusic: "Aproxime a música do microfone.",
+    listeningToAudioFromThisPhone: "Ouvindo o áudio deste computador.",
+    allowWaveToCaptureAudioInItsAndroidSettingsToRecognizeSongs:
+      "Permita que os apps usem o microfone nas configurações de privacidade do sistema e tente de novo.",
+    thisAppBlocksAudioCapture: "Nenhum som deste computador",
+    tryTheMicrophoneToRecognizeMusicAroundYou:
+      "Toque a música neste computador ou use o microfone para reconhecer músicas ao seu redor.",
+  },
+  shows: {
+    phoneRegion: "Região deste computador",
   },
   settings: {
+    openingLyricsOnASongWithLyrics:
+      "Ao abrir Letras em uma música que tem letra, o Wave mostra a descrição do Genius e destaca os trechos anotados. Desative para interromper todas as consultas ao Genius.",
     missingSongs: {
       missing: (n: number) =>
         `${formatNumber("pt-BR", n)} ${plural("pt-BR", n, { one: "música não está", other: "músicas não estão" })} neste computador`,
     },
+    cardsGroupsSeparatorsAndTextFollowThe:
+      "Cartões, grupos, separadores e texto seguem o fundo escolhido para cada modo. A cor primária aparece no progresso, nos controles e no que está ativo; a secundária marca favoritas e a reprodução atual. Padrão usa branco no modo escuro e a cor do texto no claro. A última amostra aceita qualquer cor. Salvar guarda até quatro cores na linha; o botão ao lado de uma cor salva a remove. Cores sem contraste suficiente são ajustadas.",
+    fourColoursAreSavedToSaveThis:
+      "Já há quatro cores salvas. Para salvar esta, remova antes uma cor salva.",
     waveAccountNote:
       "Opcional. Com a sessão iniciada, sua lista de músicas, playlists, favoritas, histórico " +
       "de ouvidas e preferências vão para o servidor do Wave, e seus celulares e este " +
@@ -63,10 +79,13 @@ export const desktopPtBr = {
     waveLooksUpAPhotoOfEach:
       "O Wave busca uma foto de cada artista no Deezer, enviando os nomes dos artistas, e guarda as fotos neste computador. Desativado, os artistas mostram as capas dos álbuns e o Wave não faz solicitações.",
   },
-  itemActions: {
-    labels: {
-      share: "Copiar Link",
-    },
+  recap: {
+    tapToWatch: "Clique para assistir",
+  },
+  share: {
+    saveImage: "Salvar Imagem",
+    copyImage: "Copiar Imagem",
+    tapToChangeColour: "Clique no cartão para mudar a cor",
   },
   library: {
     offlineTapOnline:

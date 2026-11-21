@@ -1,6 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, lstatSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import builder from "electron-builder";
@@ -13,6 +21,7 @@ import {
 } from "../../updates/src/desktopEvidence.ts";
 import { UPDATES_ORIGIN } from "../../updates/src/layout.ts";
 import { verifyAuthenticodePayload } from "./authenticode-payload.ts";
+import { LINUX_MIME_TYPES, windowsOpenWithScript } from "./file-types.ts";
 
 const [tag, output, mode, input] = process.argv.slice(2);
 const version = tag?.replace(/^v/, "") ?? "";
@@ -95,6 +104,10 @@ if (mode === "finalize") {
 
 if (mode === "installer") acceptSignedFile(input!, "Wave.exe", join(unpacked, "Wave.exe"));
 
+// The installer's "Open with" registration, kept out of the output folder the release uploads.
+const openWith = join(mkdtempSync(join(tmpdir(), "wave-installer-")), "open-with.nsh");
+writeFileSync(openWith, windowsOpenWithScript());
+
 const { Arch, Platform, build } = builder;
 await build({
   targets: (windows ? Platform.WINDOWS : Platform.LINUX).createTarget(
@@ -129,8 +142,9 @@ await build({
       perMachine: false,
       // Keep differential-friendly compression. Finalization replaces the unsigned blockmap.
       differentialPackage: true,
+      include: openWith,
     },
-    linux: { category: "AudioVideo" },
+    linux: { category: "AudioVideo", mimeTypes: LINUX_MIME_TYPES },
     publish: { provider: "generic", url: UPDATES_ORIGIN, channel },
   },
 });

@@ -5,6 +5,7 @@ import {
   answer,
   type AddonEngine,
   type AudioRequest,
+  type OutputsEvent,
   type ResolveAnswer,
   type ResolveEvent,
 } from "./protocol.ts";
@@ -94,7 +95,7 @@ const fakeProcesses = () => {
     stall: () => {
       if (current !== undefined) current.stalled = true;
     },
-    emit: (event: PlaybackEvent | ResolveEvent) => current?.events.message(event),
+    emit: (event: PlaybackEvent | ResolveEvent | OutputsEvent) => current?.events.message(event),
     crash: () => {
       if (current === undefined) return;
       current.alive = false;
@@ -420,5 +421,20 @@ test("a restarted process gets the Buffer's songs again", async () => {
     processes.requests.filter((request) => request.includes("buffer")),
     ["1:buffer aaaaaaaaaaa,bbbbbbbbbbb", "2:buffer aaaaaaaaaaa,bbbbbbbbbbb"],
   );
+  audio.dispose();
+});
+
+test("the outputs the process reports are kept, and a new process plays on the one picked", async () => {
+  const processes = fakeProcesses();
+  const audio = superviseAudio({ fork: processes.fork, ...quick });
+  assert.deepEqual(audio.outputs(), []);
+  const outputs = [{ id: "wasapi:headphones", name: "Headphones" }];
+  processes.emit({ event: "outputs", outputs });
+  assert.deepEqual(audio.outputs(), outputs);
+  await audio.call("setOutput", ["wasapi:headphones"]);
+  processes.crash();
+  await pass();
+  assert.deepEqual(processes.requests.slice(-1), ["2:setOutput wasapi:headphones"]);
+  assert.deepEqual(audio.outputs(), outputs, "the list stays until the new process reports");
   audio.dispose();
 });

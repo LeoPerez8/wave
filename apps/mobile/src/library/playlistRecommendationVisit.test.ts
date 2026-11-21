@@ -3,7 +3,7 @@ import test from "node:test";
 import * as Effect from "effect/Effect";
 import { playlistRecommendationSession } from "@wave/core";
 import { settledTurn } from "../lib/settledWork.ts";
-import { followPlaylistRecommendations } from "./playlistRecommendationVisit.ts";
+import { followPlaylistRecommendations } from "@wave/client/playlistSuggestionsFollow";
 import { onLibraryChange, publishLibraryChange } from "./libraryChanges.ts";
 
 const tick = async () => {

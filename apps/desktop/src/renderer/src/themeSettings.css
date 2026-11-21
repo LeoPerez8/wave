@@ -1,0 +1,165 @@
+/* Settings › Appearance's Theme: four rows of swatches, the colour picker and Reset. */
+.settings-body .theme-settings {
+  margin-top: 28px;
+  max-width: 560px;
+}
+.theme-row {
+  padding: 10px 0 6px;
+  border-bottom: 1px solid var(--color-separator);
+}
+.theme-row-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.theme-row-heading h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 400;
+}
+.theme-row-heading span {
+  color: var(--color-secondary);
+  font-size: 13px;
+}
+.theme-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px -6px 0;
+}
+.settings-body .theme-swatch {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+}
+.theme-swatch-dot {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--color-separator);
+  background: var(--swatch);
+  color: var(--swatch-mark);
+}
+.theme-swatch[aria-checked="true"] .theme-swatch-dot {
+  border: 2px solid var(--color-foreground);
+}
+.theme-swatch-dot svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* The custom swatch: a hue wheel, or its colour inside a rainbow rim once one is picked. */
+.theme-swatch-custom .theme-swatch-dot {
+  border: 0;
+  background:
+    radial-gradient(circle, var(--swatch) 0 56%, transparent 58%),
+    conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+.theme-swatch-custom[aria-checked="true"] .theme-swatch-dot {
+  border: 0;
+  outline: 2px solid var(--color-foreground);
+  outline-offset: 1px;
+}
+.theme-saved {
+  position: relative;
+  display: inline-flex;
+}
+.settings-body .theme-saved-remove {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-separator);
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-foreground);
+}
+.theme-saved-remove svg {
+  width: 10px;
+  height: 10px;
+}
+.theme-picker {
+  margin: 6px 0 8px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--color-grouped);
+}
+.theme-picker-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.theme-picker-fields input[type="color"] {
+  width: 44px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--color-separator);
+  border-radius: 5px;
+  background: none;
+}
+.theme-picker-hex {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-secondary);
+}
+.theme-picker-hex input {
+  width: 8ch;
+  font-variant-numeric: tabular-nums;
+}
+.theme-picker-hex input[aria-invalid="true"] {
+  border-color: var(--color-destructive);
+}
+.theme-picker-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--color-separator);
+  border-radius: 5px;
+  font-size: 13px;
+}
+.theme-picker-ink {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.theme-picker-note {
+  min-height: 1.4em;
+  margin: 8px 0;
+  color: var(--color-secondary);
+  font-size: 13px;
+}
+.theme-picker-actions {
+  display: flex;
+  gap: 8px;
+}
+.theme-hint {
+  margin: 10px 0;
+  color: var(--color-secondary);
+  font-size: 13px;
+}
+.theme-picker-actions button[aria-disabled="true"] {
+  opacity: 0.4;
+}

@@ -16,6 +16,17 @@ export const contentSecurityPolicy = (dev: boolean): string =>
     "form-action 'none'",
   ].join("; ");
 
+/** What every Wave window's page runs with: the main window and the mini player alike. */
+export const windowWebPreferences = (preload: string) =>
+  ({
+    preload,
+    contextIsolation: true,
+    sandbox: true,
+    nodeIntegration: false,
+    webviewTag: false,
+    autoplayPolicy: "no-user-gesture-required",
+  }) as const;
+
 /** The http(s) URL to hand the system browser, or nothing for any other link. */
 const webLink = (url: string): string | undefined => {
   try {

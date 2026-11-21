@@ -1,6 +1,22 @@
-import { formatNumber, type SearchOnline } from "@wave/core";
-import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import {
+  checkedTableRow,
+  desktopKey,
+  formatNumber,
+  tableSelectionOf,
+  type CollectionKind,
+  type SearchOnline,
+} from "@wave/core";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
+import type { CollectionTarget } from "../../shared/collectionActions.ts";
 import {
   searchSections,
   type LibrarySearchView,
@@ -10,11 +26,22 @@ import {
   type SearchSection,
 } from "../../shared/search.ts";
 import { Icon } from "./Icon.tsx";
+import { OnlineLyrics, type OnlineLyricsProps } from "./OnlineLyrics.tsx";
+import { itemMenuEvents, type MenuPoint } from "./Menu.tsx";
 import { language, labels, text, albumName, artistName, tagTitle } from "./text.ts";
 import type { SongState } from "../../shared/songState.ts";
 import { markClass, rowMark, SongMark, useSongStates } from "./SongMark.tsx";
 import { Artwork, time } from "./VirtualTable.tsx";
 import { YtResults, type YtSearchLinks } from "./YtResults.tsx";
+import {
+  openTableSongMenu,
+  rowDrag,
+  SelectionBar,
+  type SongSelectionControls,
+} from "./SongActions.tsx";
+import { songDragProps } from "./songDrag.ts";
+import { useTableSelection, type TableSelectionProps } from "./useTableSelection.ts";
+import { pressOf } from "./keys.ts";
 
 const groupLabel = (): Readonly<Record<SearchKind, string>> => ({
   song: text.playbackText.songs,
@@ -40,42 +67,70 @@ function SongRow({
   onSelect,
   onPlay,
   onMenu,
+  onKey,
+  checkboxes,
   testId,
   states,
+  drag,
 }: {
   readonly states: ReadonlyMap<number, SongState>;
+  /** Drags the row, or the checked rows with it, onto a playlist or the Queue. */
+  readonly drag: Parameters<typeof songDragProps>[0];
   readonly row: BrowseRow;
   readonly subtitle?: ReactNode;
   readonly selected: boolean;
-  readonly onSelect: () => void;
+  readonly onSelect: (event: Pick<MouseEvent, "shiftKey" | "ctrlKey" | "metaKey">) => void;
   readonly onPlay: () => void;
   readonly onMenu: (at: { readonly x: number; readonly y: number }) => void;
+  readonly onKey: (event: KeyboardEvent<HTMLButtonElement>) => boolean;
+  readonly checkboxes: boolean;
   readonly testId: string;
 }) {
   const mark = rowMark(row, states);
   return (
     <button
-      role="listitem"
+      role="option"
       className={`table-row table-columns search-row ${markClass(mark)}`}
       data-testid={testId}
       aria-selected={selected}
       aria-disabled={row.unavailable}
       aria-label={[row.title, artistName(row.artist)].filter(Boolean).join(", ")}
-      onClick={onSelect}
-      onDoubleClick={onPlay}
+      {...songDragProps(drag)}
+      onMouseDown={(event) => {
+        if (event.shiftKey) event.preventDefault();
+      }}
+      onClick={(event) => {
+        event.currentTarget.focus();
+        onSelect(event);
+      }}
+      onDoubleClick={(event) => {
+        if (!checkboxes && !event.shiftKey && !event.ctrlKey && !event.metaKey) onPlay();
+      }}
       onKeyDown={(event) => {
+        if (onKey(event)) {
+          event.preventDefault();
+          return;
+        }
         if (event.key === "Enter") {
           event.preventDefault();
-          onPlay();
+          if (checkboxes) onSelect(event);
+          else onPlay();
         }
       }}
       onContextMenu={(event) => {
         event.preventDefault();
-        onSelect();
         onMenu({ x: event.clientX, y: event.clientY });
       }}
     >
       <span className="title-cell">
+        {checkboxes && (
+          <span
+            className="row-check"
+            role="checkbox"
+            aria-checked={selected}
+            aria-label={text.desktopLibrary.checkSong(row.title)}
+          />
+        )}
         <span className="row-picture">
           <Artwork kind="song" id={row.id} hash={row.artworkHash} />
           <SongMark mark={mark} title={row.title} />
@@ -204,7 +259,10 @@ export interface SearchPageProps {
   readonly onOpen: (route: BrowseScope) => void;
   /** Plays song [index] of the songs Search lists (its Songs group, then its lyrics hits). */
   readonly onPlay: (index: number, row: BrowseRow) => void;
-  readonly onMenu: (row: BrowseRow, at: { readonly x: number; readonly y: number }) => void;
+  readonly selectionFor: (owner: string) => SongSelectionControls;
+  /** The checked albums, artists, playlists or genres, which check with the songs. */
+  readonly collectionSelection: (kind: CollectionKind) => TableSelectionProps;
+  readonly onCollectionMenu: (target: CollectionTarget, title: string, at: MenuPoint) => void;
   /** A song on a drive that isn't connected was asked to play. */
   readonly onUnavailable: () => void;
   /** A recent search was picked. */
@@ -218,6 +276,8 @@ export interface SearchPageProps {
   readonly onYtMenu?: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
   /** Where YouTube Music's artists, albums and song credits lead. */
   readonly ytLinks: YtSearchLinks;
+  /** Search's online lyrics: the account's access, Sign In and a clicked hit. */
+  readonly onlineLyrics: Pick<OnlineLyricsProps, "access" | "onSignIn" | "onOpen">;
 }
 
 /**
@@ -255,6 +315,13 @@ export function SearchPage(props: SearchPageProps) {
         links={props.ytLinks}
       >
         <LibraryResults {...props} view={current} />
+        <OnlineLyrics
+          {...props.onlineLyrics}
+          query={trimmed}
+          ready={current !== undefined}
+          shown={(current?.lyrics ?? []).map((hit) => hit.row)}
+          onError={onError}
+        />
       </YtResults>
     </div>
   );
@@ -265,7 +332,9 @@ function LibraryResults({
   revision,
   onOpen,
   onPlay,
-  onMenu,
+  selectionFor,
+  collectionSelection,
+  onCollectionMenu,
   onUnavailable,
   onPick,
   onError,
@@ -273,7 +342,7 @@ function LibraryResults({
 }: SearchPageProps & { readonly view: LibrarySearchView | undefined }) {
   const trimmed = query.trim();
   const [expanded, setExpanded] = useState<{ query: string; open: SearchExpansion }>();
-  const [selected, setSelected] = useState<number>();
+  const scope = useMemo<BrowseScope>(() => ({ kind: "search", query: trimmed }), [trimmed]);
   const songs = view?.groups.find((group) => group.kind === "song")?.items ?? [];
   const states = useSongStates([
     ...songs.map((row) => row.id),
@@ -304,6 +373,10 @@ function LibraryResults({
   const render = (section: SearchSection) => {
     if (section.type === "top") {
       const { kind, row } = section.result;
+      const menu =
+        kind === "song"
+          ? undefined
+          : itemMenuEvents((at) => onCollectionMenu({ kind, id: row.id }, row.title, at));
       return (
         <section key="top" className="search-section">
           <h2>{text.playbackText.topResult}</h2>
@@ -313,7 +386,9 @@ function LibraryResults({
             aria-label={[tagTitle(row.title, kind), kindLabel()[kind]].join(", ")}
             onDoubleClick={() => openRow(kind, row)}
             onClick={() => kind !== "song" && openRow(kind, row)}
+            onContextMenu={menu?.onContextMenu}
             onKeyDown={(event) => {
+              menu?.onKeyDown(event);
               if (event.key === "Enter") {
                 event.preventDefault();
                 openRow(kind, row);
@@ -353,49 +428,31 @@ function LibraryResults({
         onShowAll={() => showAll(section.type === "lyrics" ? "lyrics" : section.kind)}
       />
     );
-    if (section.type === "lyrics")
+    if (section.type === "lyrics" || section.type === "songs") {
+      const key = section.type;
       return (
-        <section key="lyrics" className="search-section" data-testid="search-lyrics">
+        <section
+          key={key}
+          className="search-section"
+          data-testid={key === "lyrics" ? "search-lyrics" : "search-songs"}
+        >
           {heading}
-          <div role="list">
-            {section.hits.map((hit, i) => (
-              <SongRow
-                states={states}
-                key={hit.row.id}
-                testId="search-lyric"
-                row={hit.row}
-                subtitle={<LyricLine hit={hit} />}
-                selected={selected === section.firstIndex + i}
-                onSelect={() => setSelected(section.firstIndex + i)}
-                onPlay={() => play(hit.row, section.firstIndex + i)}
-                onMenu={(at) => onMenu(hit.row, at)}
-              />
-            ))}
-          </div>
+          <SearchSongList
+            scope={scope}
+            revision={revision}
+            controls={selectionFor(`search-${key}:${trimmed}`)}
+            rows={section.type === "lyrics" ? section.hits.map((hit) => hit.row) : section.rows}
+            lyrics={section.type === "lyrics" ? section : undefined}
+            songs={key === "lyrics" ? view.lyrics.map((hit) => hit.row) : songs}
+            states={states}
+            play={play}
+            onError={onError}
+          />
           {more}
         </section>
       );
-    if (section.type === "songs")
-      return (
-        <section key="song" className="search-section" data-testid="search-songs">
-          {heading}
-          <div role="list">
-            {section.rows.map((row, index) => (
-              <SongRow
-                states={states}
-                key={row.id}
-                testId="search-song"
-                row={row}
-                selected={selected === index}
-                onSelect={() => setSelected(index)}
-                onPlay={() => play(row, index)}
-                onMenu={(at) => onMenu(row, at)}
-              />
-            ))}
-          </div>
-          {more}
-        </section>
-      );
+    }
+    const { kind } = section;
     return (
       <section
         key={section.kind}
@@ -403,37 +460,20 @@ function LibraryResults({
         data-testid={`search-shelf-${section.kind}`}
       >
         {heading}
-        <div role="list" className="search-shelf">
-          {section.rows.map((row) => (
-            <button
-              key={row.id}
-              role="listitem"
-              className="search-tile"
-              aria-label={[tagTitle(row.title, section.kind), artistName(row.artist)]
-                .filter(Boolean)
-                .join(", ")}
-              onClick={() => openRow(section.kind, row)}
-            >
-              <span className={section.kind === "artist" ? "artist-image" : undefined}>
-                <Artwork
-                  large
-                  kind={
-                    section.kind === "song" || section.kind === "album" || section.kind === "artist"
-                      ? section.kind
-                      : undefined
-                  }
-                  id={row.id}
-                  hash={row.artworkHash}
-                  artist={section.kind === "artist"}
-                />
-              </span>
-              <span className="truncate">{tagTitle(row.title, section.kind)}</span>
-              <span className="truncate secondary">
-                {section.kind === "album" ? artistName(row.artist) : labels.songCount(row.count)}
-              </span>
-            </button>
-          ))}
-        </div>
+        <SearchShelf
+          kind={kind}
+          rows={section.rows}
+          controls={kind === "song" ? {} : collectionSelection(kind)}
+          order={view.query}
+          revision={revision}
+          onOpen={(row) => openRow(kind, row)}
+          onMenu={
+            kind === "song"
+              ? undefined
+              : (row, at) => onCollectionMenu({ kind, id: row.id }, row.title, at)
+          }
+          onError={onError}
+        />
         {more}
       </section>
     );
@@ -447,6 +487,178 @@ function LibraryResults({
       ) : (
         sections.map(render)
       )}
+    </>
+  );
+}
+
+/** A shelf of tiles; Ctrl+click and Shift+click check them, and so does a click while selecting. */
+function SearchShelf({
+  kind,
+  rows: items,
+  controls,
+  order,
+  revision,
+  onOpen,
+  onMenu,
+  onError,
+}: {
+  readonly kind: SearchKind;
+  readonly rows: readonly BrowseRow[];
+  readonly controls: TableSelectionProps;
+  readonly order: string;
+  readonly revision: number;
+  readonly onOpen: (row: BrowseRow) => void;
+  readonly onMenu: ((row: BrowseRow, at: MenuPoint) => void) | undefined;
+  readonly onError: () => void;
+}) {
+  const { selection } = controls;
+  const rows = useTableSelection({
+    ...controls,
+    total: items.length,
+    order,
+    revision,
+    onError,
+    read: (start, end) => items.slice(start, end + 1).map((row) => row.id),
+  });
+  return (
+    <div role="list" className="search-shelf">
+      {items.map((row, index) => {
+        const checked = selection !== undefined && checkedTableRow(selection, row.id);
+        return (
+          <button
+            key={row.id}
+            role="listitem"
+            className={checked ? "search-tile selected" : "search-tile"}
+            aria-label={[tagTitle(row.title, kind), artistName(row.artist)]
+              .filter(Boolean)
+              .join(", ")}
+            onClick={(event) => {
+              const selecting =
+                selection?.checkboxes || event.shiftKey || event.ctrlKey || event.metaKey;
+              if (selecting && controls.onSelection) rows.click(index, row.id, event);
+              else onOpen(row);
+            }}
+            {...(onMenu && itemMenuEvents((at) => onMenu(row, at)))}
+          >
+            <span className={kind === "artist" ? "artist-image" : undefined}>
+              <Artwork
+                large
+                kind={kind === "song" || kind === "album" || kind === "artist" ? kind : undefined}
+                id={row.id}
+                hash={row.artworkHash}
+                artist={kind === "artist"}
+              />
+            </span>
+            <span className="truncate">{tagTitle(row.title, kind)}</span>
+            <span className="truncate secondary">
+              {kind === "album" ? artistName(row.artist) : labels.songCount(row.count)}
+            </span>
+            {(checked || selection?.checkboxes) && (
+              <span
+                className="row-check"
+                role="checkbox"
+                aria-checked={checked}
+                aria-label={text.desktopLibrary.checkSong(row.title)}
+              />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SearchSongList({
+  scope,
+  revision,
+  controls,
+  rows: items,
+  lyrics,
+  songs,
+  states,
+  play,
+  onError,
+}: {
+  readonly scope: BrowseScope;
+  readonly revision: number;
+  readonly controls: SongSelectionControls;
+  readonly rows: readonly BrowseRow[];
+  readonly lyrics: Extract<SearchSection, { type: "lyrics" }> | undefined;
+  readonly songs: readonly BrowseRow[];
+  readonly states: ReadonlyMap<number, SongState>;
+  readonly play: (row: BrowseRow, index: number) => void;
+  readonly onError: () => void;
+}) {
+  const list = useRef<HTMLDivElement>(null);
+  const { selection, onSelection, actions } = controls;
+  const selectAll = () =>
+    tableSelectionOf(
+      songs.map((row) => row.id),
+      selection?.checkboxes,
+    );
+  const rows = useTableSelection({
+    ...controls,
+    selectAll,
+    total: items.length,
+    order: scope.query,
+    revision,
+    onError,
+    read: (start, end) => items.slice(start, end + 1).map((row) => row.id),
+  });
+  return (
+    <>
+      {selection && controls.bar !== false && (
+        <SelectionBar
+          scope={scope}
+          revision={revision}
+          selection={selection}
+          actions={actions}
+          onChange={(next) => onSelection?.(next)}
+          onDone={() => onSelection?.(undefined)}
+          selectAll={selectAll}
+        />
+      )}
+      <div
+        ref={list}
+        role="listbox"
+        aria-label={lyrics ? text.playbackText.lyricsSearchSection : text.playbackText.songs}
+        aria-multiselectable="true"
+      >
+        {items.map((row, index) => (
+          <SongRow
+            states={states}
+            key={row.id}
+            testId={lyrics ? "search-lyric" : "search-song"}
+            row={row}
+            subtitle={lyrics && <LyricLine hit={lyrics.hits[index]!} />}
+            selected={selection ? checkedTableRow(selection, row.id) : rows.ordinary === row.id}
+            checkboxes={selection?.checkboxes === true}
+            onSelect={(event) => rows.click(index, row.id, event)}
+            drag={() => rowDrag(controls, scope, row)}
+            onPlay={() => play(row, (lyrics?.firstIndex ?? 0) + index)}
+            onKey={(event) => {
+              const command = desktopKey(pressOf(event), "list");
+              if (command === undefined) return false;
+              if (command === "songMenu") {
+                const rect = event.currentTarget.getBoundingClientRect();
+                openTableSongMenu(controls, scope, row, { x: rect.left + 48, y: rect.bottom });
+                return true;
+              }
+              const move = (next: number) => (list.current?.children[next] as HTMLElement)?.focus();
+              if (rows.key(command, index, move)) return true;
+              if (command === "rowUp" || command === "rowDown") {
+                move(index + (command === "rowDown" ? 1 : -1));
+                return true;
+              }
+              return false;
+            }}
+            onMenu={(at) => {
+              rows.point(row.id);
+              openTableSongMenu(controls, scope, row, at);
+            }}
+          />
+        ))}
+      </div>
     </>
   );
 }

@@ -67,6 +67,13 @@ export interface ActionItem {
   /** A playlist shown with an image of its own instead of its mosaic. */
   readonly hasImage?: boolean | undefined;
   /**
+   * A collaborative playlist (docs/spec.md, "Collaborative playlists"): the account signed in
+   * owns it, or is another member.
+   */
+  readonly collaboration?: "owner" | "member" | undefined;
+  /** The Shazam playlist Recognize saves into: it can't be made collaborative. */
+  readonly shazam?: boolean | undefined;
+  /**
    * A YT Music song checked beside the Library's (Search, a playlist's
    * entry…): streamed, not a file. It joins the queue and playlists, can be
    * downloaded, and starred (which downloads it); what acts on files (Fix
@@ -163,6 +170,11 @@ export type ItemAction =
   | "share"
   | "deletePlaylist"
   | "deletePlaylists"
+  | "makeCollaborative"
+  | "invite"
+  | "members"
+  | "endCollaboration"
+  | "leavePlaylist"
   | "fixSong"
   | "fixSongs"
   | "releaseDate"
@@ -205,13 +217,16 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = en.ite
 /**
  * Entries that delete something for good, shown in the destructive colour:
  * a song's file, a song from the Library, a playlist (its menu's Delete
- * Playlist) or several (the selection bar's Delete Playlists).
+ * Playlist) or several (the selection bar's Delete Playlists), and a
+ * collaborative playlist's End Collaboration and Leave Playlist.
  */
 export const isDestructiveAction = (action: ItemAction): boolean =>
   action === "delete" ||
   action === "removeFromLibrary" ||
   action === "deletePlaylist" ||
-  action === "deletePlaylists";
+  action === "deletePlaylists" ||
+  action === "endCollaboration" ||
+  action === "leavePlaylist";
 
 /**
  * Entries that ask before acting: selection mode stays until the question is
@@ -221,13 +236,15 @@ export const confirmsFirst = (action: ItemAction): boolean =>
   action === "delete" ||
   action === "removeFromLibrary" ||
   action === "deletePlaylist" ||
-  action === "deletePlaylists";
+  action === "deletePlaylists" ||
+  action === "endCollaboration" ||
+  action === "leavePlaylist";
 
 /**
  * A song with no file here yet (missing, or streamed, an unsearched one
  * included): Download fetches it.
  */
-const needsDownload = (item: ActionItem): boolean =>
+export const needsDownload = (item: ActionItem): boolean =>
   item.missing === true || (item.streamed === true && item.downloaded !== true);
 
 /** The value every item has, or undefined when they differ or any lacks one. */
@@ -334,6 +351,17 @@ const offersMagicQueue = (
   return kind === "album" || kind === "artist" || kind === "playlist";
 };
 
+/**
+ * A collaborative playlist's own entries, after Share: the owner invites, sees the members and
+ * ends it; another member only sees the members (and leaves, where Delete Playlist would be).
+ */
+const collaborationEntries = (
+  collaboration: "owner" | "member",
+): { readonly action: "invite" | "members" | "endCollaboration" }[] =>
+  collaboration === "owner"
+    ? [{ action: "invite" }, { action: "members" }, { action: "endCollaboration" }]
+    : [{ action: "members" }];
+
 /** The entries to offer on [subject]'s items, in order. */
 export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
   subject: ActionSubject<A>,
@@ -347,6 +375,8 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
   const streamed = items.filter((item) => item.streamed === true).length;
   const files = items.length - missing - streamed;
   const [only] = items;
+  // One playlist's collaboration, as its menu offers it.
+  const collaboration = kind === "playlist" && items.length === 1 ? only?.collaboration : undefined;
   // A missing song's menu leads with its download, as a YT Music song's offers it.
   const download =
     surface === "menu" && kind === "track" && items.length === 1 && only?.missing === true
@@ -409,6 +439,8 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
         entries.push({ action: "adjustImage" }, { action: "removeImage" });
       // Shared as a playlist on another service, from its menu alone (#483): Spotify always can.
       entries.push({ action: "share" });
+      if (collaboration !== undefined) entries.push(...collaborationEntries(collaboration));
+      else if (only?.shazam !== true) entries.push({ action: "makeCollaborative" });
     }
   }
   // Looks up online what the songs lack and writes it into their files; it
@@ -428,7 +460,9 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     items.some((item) => (item.songs ?? []).some(fixableFile))
   )
     entries.push({ action: "fixSongs" });
-  if (kind === "playlist")
+  // Another member leaves where the owner deletes; the bar deletes only playlists the account owns.
+  if (kind === "playlist" && collaboration === "member") entries.push({ action: "leavePlaylist" });
+  else if (kind === "playlist" && !items.some((item) => item.collaboration === "member"))
     entries.push({ action: items.length === 1 ? "deletePlaylist" : "deletePlaylists" });
   // One song's menu shares it as a card (the song share sheet), whatever kind of song it is,
   // after Release Date, where the owner types the date the song first came out.

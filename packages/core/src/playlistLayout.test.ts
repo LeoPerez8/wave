@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { PLAYLIST_LAYOUTS, parsePlaylistLayout, storedPlaylistLayout } from "./index.ts";
+import {
+  DESKTOP_PLAYLIST_LAYOUTS,
+  PLAYLIST_LAYOUTS,
+  desktopPlaylistLayout,
+  parsePlaylistLayout,
+  storedPlaylistLayout,
+} from "./index.ts";
 
 describe("playlist layout", () => {
   test("a fresh install (nothing stored) shows playlists as a list", () => {
@@ -31,5 +37,18 @@ describe("playlist layout", () => {
       PLAYLIST_LAYOUTS.map(({ label }) => label),
       ["List", "Grid", "Large Cards"],
     );
+  });
+});
+
+describe("the computer's playlist layout", () => {
+  test("the Playlists page offers a table (List) and a grid of covers, in that order", () => {
+    assert.deepEqual(DESKTOP_PLAYLIST_LAYOUTS, ["list", "grid"]);
+  });
+
+  test("reads what it stored, the list when nothing is, and Large Cards as the grid", () => {
+    assert.equal(desktopPlaylistLayout(null), "list");
+    assert.equal(desktopPlaylistLayout(storedPlaylistLayout("grid")), "grid");
+    assert.equal(desktopPlaylistLayout(storedPlaylistLayout("large")), "grid");
+    assert.equal(desktopPlaylistLayout("carousel"), "list");
   });
 });

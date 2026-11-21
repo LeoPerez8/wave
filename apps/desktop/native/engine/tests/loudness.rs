@@ -141,7 +141,7 @@ fn every_format_reads_the_fixture_signal_alike() {
         other => panic!("{name}: {other:?}"),
     };
     let (reference, _) = read("tone.wav");
-    for name in ["tone.flac", "tone.m4a", "tone.ogg", "tone.opus"] {
+    for name in ["tone.flac", "tone.m4a", "tone.ogg", "tone.opus", "tone-alac.m4a"] {
         let (loudness, peak) = read(name);
         assert!(peak > 0.45 && peak <= 0.6, "{name}: peak {peak}");
         assert!(
@@ -151,4 +151,20 @@ fn every_format_reads_the_fixture_signal_alike() {
     }
     let (mp3, _) = read("tone.mp3");
     assert!(mp3 < reference && mp3 > reference - 1.0, "tone.mp3: {mp3:.3} against {reference:.3}");
+}
+
+#[test]
+fn he_aac_loudness_and_peak_match_the_reference_decoder() {
+    for (name, expected_lufs, peak_dbfs) in
+        [("tone-he-aac-v1.m4a", -11.6, -5.9), ("tone-he-aac-v2.m4a", -11.5, -4.0)]
+    {
+        // FFmpeg's ebur128 filter and sample peak on the same fixtures.
+        let result = measure(&fixture(name), &AtomicBool::new(false));
+        let Measurement::Measured { loudness, peak } = result else {
+            panic!("{name}: {result:?}");
+        };
+        assert!((loudness - expected_lufs).abs() <= 0.2, "{name}: {loudness:.3} LUFS");
+        let peak_db = 20.0 * peak.log10();
+        assert!((peak_db - peak_dbfs).abs() <= 0.2, "{name}: peak {peak_db:.3} dBFS");
+    }
 }

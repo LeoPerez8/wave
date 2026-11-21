@@ -35,7 +35,7 @@ test("the queue runner measures the whole album first and delivers completion wi
     startIndex: 0,
     context: { kind: "album", id: String(albumId) },
   }).state;
-  const withManual = reduceQueue(state, { type: "playNext", trackIds: [String(outside)] }).state;
+  const withManual = reduceQueue(state, { type: "addToQueue", trackIds: [String(outside)] }).state;
   const gains = createEntryGains();
   for (const entry of withManual.entries)
     gains.withItem(entry, new Map(), {

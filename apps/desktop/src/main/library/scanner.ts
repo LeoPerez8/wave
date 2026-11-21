@@ -4,6 +4,7 @@ import { watch, realpathSync, type FSWatcher } from "node:fs";
 import { basename, dirname, extname, join, normalize } from "node:path";
 import {
   explicitFromAdvisory,
+  isrcFromTag,
   gainTags,
   isVoiceNoteOrRecording,
   normalizeTrack,
@@ -197,6 +198,7 @@ export const createScanner = ({
     hasLyrics: lyrics !== null,
     explicit: explicitFromAdvisory(tags.advisory ?? null),
     loudness: gainTags(tags.loudnessTags ?? {}),
+    isrc: isrcFromTag(tags.isrc),
   });
 
   const scan = async () => {

@@ -1,5 +1,6 @@
 /// <reference types="node" />
 import {
+  catalogueOf,
   artistStats,
   followSuggestions,
   writePlaylistYtSong,
@@ -8,6 +9,7 @@ import {
 } from "@wave/core";
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import * as Effect from "effect/Effect";
 
 import { creditSplits, relinkCredits } from "./credits.ts";
 import { homePlays, recordPlay } from "./playHistory.ts";
@@ -20,6 +22,7 @@ import {
 import { sql } from "drizzle-orm";
 import * as schema from "./schema.ts";
 import { addTrack, openTestDatabase, traceQueries } from "./testDatabase.ts";
+import { artistListeningStats, statsDatabaseReads } from "./statsQueries.ts";
 
 const song: YtAlbumSong = {
   videoId: "collaboration",
@@ -186,6 +189,27 @@ test("the Library artist's Stats block includes stream credits, skips and downlo
   assert.equal(downloaded.played && downloaded.songsListened, "1 of 1 song");
   assert.equal(after.streamedSongPlays.length, 0);
   assert.equal(downloaded.played && downloaded.mostPlayed[0]!.countedPlays, 1);
+});
+
+test("the shared artist query returns the artist totals with ranked Library songs loaded", async () => {
+  const db = await openTestDatabase();
+  const id = addTrack(db, { title: "Shared Song", artist: "A", album: "Positions" });
+  relinkCredits(db, creditSplits());
+  db.run(sql`UPDATE tracks SET path='/Music/Shared Song.flac' WHERE id=${id}`);
+  recordPlay(db, play(String(id), 1_000));
+  const artistId = db.get<{ id: number }>(sql`SELECT id FROM artists WHERE name = 'A'`).id;
+  const stats = await Effect.runPromise(
+    artistListeningStats(statsDatabaseReads(db), artistId, catalogueOf("en"), () => 10_000),
+  );
+  assert.equal(stats.played, true);
+  if (!stats.played) return;
+  assert.equal(stats.plays, "1 play");
+  assert.equal(stats.songsListened, "1 of 1 song");
+  assert.equal(stats.mostPlayed[0]?.item.source, "library");
+  assert.equal(
+    stats.mostPlayed[0]?.item.source === "library" ? stats.mostPlayed[0].item.track.title : "",
+    "Shared Song",
+  );
 });
 
 test("the artist's Stats block reads the streamed totals once, unless a stream is from the future", async () => {

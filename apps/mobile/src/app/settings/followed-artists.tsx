@@ -1,5 +1,6 @@
 import { FollowCountryRow } from "@/settings/FollowCountryRow";
 import { useLocalisation } from "@/localisation/localisation";
+import { followSearchLine } from "@wave/core";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { Hairline } from "@/catalog/Hairline";
@@ -23,6 +24,10 @@ export default function FollowedArtistsSettingsScreen() {
   const [query, setQuery] = useState("");
   const { results, failed, pending } = useFollowArtistSearch(query, enabled);
   const searching = query.trim() !== "";
+  const searchLine = followSearchLine(
+    { query, pending, failed, results: results.length },
+    searchStrings,
+  );
   useScreenContent(true);
   const open = (artist: Parameters<typeof openFollowedArtist>[0]) => () =>
     void openFollowedArtist(artist).catch((error) =>
@@ -65,18 +70,8 @@ export default function FollowedArtistsSettingsScreen() {
               onOpen={open(artist)}
             />
           ))}
-        {searching && pending && (
-          <Text className="py-3 font-sans text-footnote text-secondary">
-            {searchStrings.searching}
-          </Text>
-        )}
-        {searching && failed && (
-          <Text className="py-3 font-sans text-footnote text-secondary">
-            {searchStrings.unavailable}
-          </Text>
-        )}
-        {searching && results.length === 0 && !failed && !pending && (
-          <Text className="py-3 font-sans text-footnote text-secondary">{searchStrings.empty}</Text>
+        {searchLine !== null && (
+          <Text className="py-3 font-sans text-footnote text-secondary">{searchLine}</Text>
         )}
         <FollowSuggestions enabled={enabled} hidden={searching} follows={follows} />
         {!searching && follows.length === 0 && (

@@ -1,0 +1,54 @@
+.history-page {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.history-find {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  width: min(320px, 100%);
+  margin: 0 0 12px 12px;
+  border: 1px solid var(--color-separator);
+  border-radius: 6px;
+  padding-left: 10px;
+  color: var(--color-secondary);
+}
+.history-find input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 8px 4px;
+  outline-offset: 0;
+}
+.table-area.history-table .table-columns {
+  grid-template-columns: minmax(180px, 1.5fr) minmax(110px, 1fr) 72px;
+}
+.history-day {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 44px;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 12px 6px;
+}
+.history-day h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.history-table .table-row[aria-disabled="true"] .artwork {
+  opacity: 0.5;
+}
+.history-table .table-row.history-moment {
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-background));
+}
+@container (width < 760px) {
+  .table-area.history-table .table-columns {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) 64px;
+  }
+}

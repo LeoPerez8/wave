@@ -1,0 +1,91 @@
+/* The artist page's Follow button with its level card, and Settings › Followed artists. */
+.follow-card {
+  position: fixed;
+  z-index: 21;
+  width: 280px;
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--color-separator);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: 0 8px 28px #0003;
+  font-size: 13px;
+}
+.follow-card h2 {
+  margin: 0;
+  padding: 0 0 10px;
+  font-size: 14px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--color-separator);
+}
+.follow-card p {
+  margin: 0;
+  font-size: 12px;
+}
+.follow-card button {
+  align-self: flex-start;
+  padding: 6px 0;
+}
+.follow-level {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+.follow-level input {
+  accent-color: var(--color-accent);
+}
+
+.followed-artists {
+  max-width: 640px;
+}
+.follow-country {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+.follow-country select {
+  max-width: 280px;
+}
+.follow-search {
+  display: block;
+  width: 100%;
+  margin-top: 20px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-separator);
+  border-radius: 8px;
+  color: var(--color-foreground);
+  background: var(--color-fill);
+}
+.follow-line {
+  margin: 12px 0;
+  font-size: 13px;
+}
+.follow-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.follow-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--color-separator);
+}
+.follow-row .follow-name {
+  flex: 1;
+  min-width: 0;
+  padding-left: 0;
+  text-align: left;
+  color: var(--color-foreground);
+}
+.follow-row select {
+  flex-shrink: 0;
+  max-width: 220px;
+}

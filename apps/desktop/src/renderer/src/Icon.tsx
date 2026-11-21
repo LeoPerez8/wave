@@ -34,7 +34,31 @@ const paths: Record<string, string> = {
   magicQueue:
     "M3 6h10M3 11h10M3 16h7M18 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1ZM17 14l.8 2.2 2.2.8-2.2.8L17 20l-.8-2.2-2.2-.8 2.2-.8Z",
   playlist: "M3 4h12M3 9h12M3 14h6M15 20V9l6-1M15 20c0 2.7-4 2.7-4 0s4-2.7 4 0",
+  /** A collaborative playlist: two people. */
+  collaborative:
+    "M12 8a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0M2 20v-1a6.5 6.5 0 0 1 13 0v1M15.5 4.6a3.5 3.5 0 0 1 0 6.8M18 13.5a6.5 6.5 0 0 1 4 6v.5",
   close: "M6 6l12 12M6 18 18 6",
+  minus: "M4 12h16",
+  grip: "M4 9h16M4 15h16",
+  stats: "M4 20h16M6 16v-4m6 4V5m6 11V9",
+  /** Tabler's language glyph, as the phone's Translate button has. */
+  translate: "M4 5h7M9 3v2c0 4.4-2.2 8-5 8M5 9c0 2.1 3 3.9 6.7 4M12 20l4-9 4 9M19.1 18h-6.2",
+  /** Tabler's microphone 2, as the phone's Karaoke button has. */
+  karaoke: "M15 12.9a5 5 0 1 0-3.9-3.9M15 12.9l-3.9-3.9-7.5 8.6a2 2 0 1 0 2.8 2.8Z",
+  history: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2",
+  /** A small window over a large one. */
+  miniPlayer: "M3 4h18v16H3ZM12 12h6v5h-6Z",
+  /** Out to the corners: back to the main window. */
+  showMain: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
+  up: "m5 15 7-7 7 7",
+  down: "m5 9 7 7 7-7",
+  /** Search's Recognize button, as the phone's. */
+  microphone:
+    "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8",
+  /** Tabler's share 3, as the phone's Share Lyrics button has. */
+  share: "M13 4v4C6.4 9 4 14.8 3 20c0 .2 5.4-6 10-6v4l8-7Z",
+  /** Four squares: the Playlists page's grid of covers. */
+  grid: "M4 4h7v7H4ZM13 4h7v7h-7ZM4 13h7v7H4ZM13 13h7v7h-7Z",
 };
 export function Icon({ name, size = 20 }: { readonly name: string; readonly size?: number }) {
   return (

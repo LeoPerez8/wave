@@ -1,5 +1,6 @@
 import { desktopShortcutsPtBr } from "./catalogue/desktopShortcutsPtBr.ts";
 import { desktopWindowPtBr } from "./catalogue/desktopWindowPtBr.ts";
+import { desktopOutputPtBr } from "./catalogue/desktopOutputPtBr.ts";
 import { libraryPtBr } from "./catalogue/libraryPtBr.ts";
 import { playlistsPtBr } from "./catalogue/playlistsPtBr.ts";
 import { importsPtBr } from "./catalogue/importsPtBr.ts";
@@ -10,6 +11,7 @@ import { djPtBr } from "./catalogue/djPtBr.ts";
 import { statsPtBr } from "./catalogue/statsPtBr.ts";
 import { recapPtBr } from "./catalogue/recapPtBr.ts";
 import { listeningHistoryPtBr } from "./catalogue/listeningHistoryPtBr.ts";
+import { collaborativePagePtBr } from "./catalogue/collaborativePagePtBr.ts";
 import { sharePtBr } from "./catalogue/sharePtBr.ts";
 import { downloadNoticePtBr } from "./catalogue/downloadNoticePtBr.ts";
 import { nativePtBr } from "./catalogue/nativePtBr.ts";
@@ -24,8 +26,10 @@ import { alertPtBr } from "./catalogue/alertPtBr.ts";
 import { fixSongsPtBr } from "./catalogue/fixSongsPtBr.ts";
 import { downloadsPtBr } from "./catalogue/downloadsPtBr.ts";
 import { itemActionsPtBr } from "./catalogue/itemActionsPtBr.ts";
+import { collaborativeMenuPtBr } from "./catalogue/collaborativeMenuPtBr.ts";
 import { songDeletionPtBr } from "./catalogue/songDeletionPtBr.ts";
 import { appUpdatesPtBr } from "./catalogue/appUpdatesPtBr.ts";
+import { inviteJoinPtBr } from "./catalogue/inviteJoinPtBr.ts";
 import { whatsNewPtBr } from "./catalogue/whatsNewPtBr.ts";
 import { versionHistoryPtBr } from "./catalogue/versionHistoryPtBr.ts";
 /**
@@ -38,6 +42,7 @@ import type { Catalogue } from "./catalogueEn.ts";
 
 export const ptBR: Catalogue = {
   desktopWindow: desktopWindowPtBr,
+  desktopOutput: desktopOutputPtBr,
   desktopLayout: {
     language: "Idioma",
     languages: { system: "Sistema", en: "English", "pt-BR": "Português (Brasil)" },
@@ -119,6 +124,11 @@ export const ptBR: Catalogue = {
     unavailableFolder: "Pasta indisponível",
     driveDisconnected: "A unidade não está conectada. Reconecte e tente de novo.",
     actionFailed: "Não foi possível concluir essa ação. Tente de novo.",
+    releaseDateKnown: (date) => `Lançada em ${date}`,
+    releaseDateUnknown: "Nenhuma data de lançamento conhecida.",
+    showInFolder: "Mostrar na Pasta",
+    fileGone:
+      "O arquivo da música não está mais lá. Atualize a Biblioteca para encontrá-lo de novo.",
     downloadStarted: (count) => (count === 1 ? "Baixando a música" : `Baixando ${count} músicas`),
     downloading: (title) => `Baixando ${title}`,
     nothingToPlay:
@@ -131,12 +141,16 @@ export const ptBR: Catalogue = {
     titleColumn: "Título",
     artistColumn: "Artista",
     albumColumn: "Álbum",
+    /** The column of a playlist's own order and of an artist's Popular ranks. */
+    orderColumn: "#",
+    releaseDateColumn: "Data de lançamento",
     previous: "Página anterior",
     next: "Próxima página",
     page: (first: number, last: number, total: number) => `${first}–${last} de ${total}`,
     songMenu: (title: string) => `Ações de “${title}”`,
     chooseArtist: "Escolha um Artista",
     noPlaylists: "Nenhuma playlist ainda",
+    collaborativeOnPhone: "Edite playlists colaborativas no Wave do celular",
     checkSong: (title: string) => `Selecionar “${title}”`,
     showMoreSongs: "Mostrar mais músicas",
   },
@@ -153,6 +167,9 @@ export const ptBR: Catalogue = {
       "Inicie sessão na janela do navegador que abriu e depois feche a janela. O Wave recebe a sessão quando ela é fechada.",
     noBrowser:
       "Iniciar sessão no YouTube precisa do Chrome, Edge, Brave ou Chromium neste computador. Instale um deles e tente novamente.",
+    spotifyUnavailable: "O início de sessão no Spotify não está configurado nesta versão do Wave.",
+    spotifyNote:
+      "Inicie sessão para o Wave ler suas playlists do Spotify e compartilhar as que você criou no Wave.",
   },
   desktopShortcuts: desktopShortcutsPtBr,
   downloadNotice: downloadNoticePtBr,
@@ -177,12 +194,21 @@ export const ptBR: Catalogue = {
   recap: recapPtBr,
   listeningHistory: listeningHistoryPtBr,
   share: sharePtBr,
+  invitePage: {
+    title: "Convite do Wave",
+    heading: "Este é um convite do Wave",
+    body: "Abra este link no seu celular com o Wave atualizado.",
+  },
+  collaborativePage: collaborativePagePtBr,
+  /** Opening an invite link in Wave: the join screen and why it can't join. */
+  inviteJoin: inviteJoinPtBr,
   settings: settingsPtBr,
   downloadStatus: downloadStatusPtBr,
   alert: alertPtBr,
   fixSongs: fixSongsPtBr,
   downloads: downloadsPtBr,
   itemActions: itemActionsPtBr,
+  collaborativeMenu: collaborativeMenuPtBr,
   songDeletion: songDeletionPtBr,
   whatsNew: whatsNewPtBr,
   versionHistory: versionHistoryPtBr,

@@ -23,6 +23,7 @@ import {
   normalizeSearchText,
   prepareSearchEntry,
   searchIndexOver,
+  searchMatcher,
   type Indexed,
   type SearchEntry,
 } from "./search.ts";
@@ -58,7 +59,16 @@ export const FIND_IN_PLAYLIST_NO_MATCH = en.library.noMatch.playlist;
  * Artists, Albums, Genres or Playlists, or an artist page's songs.
  */
 export type FindableListKind =
-  "playlist" | "songs" | "artists" | "albums" | "genres" | "playlists" | "artist" | "history";
+  | "playlist"
+  | "songs"
+  | "artists"
+  | "albums"
+  | "genres"
+  | "playlists"
+  | "artist"
+  | "history"
+  | "favorites"
+  | "genre";
 
 /** What [list]'s field says before anything is typed ("Find in Songs"). */
 export const findPlaceholder = (list: FindableListKind, language: AppLanguage = "en"): string =>
@@ -82,6 +92,22 @@ export const genreFindText = (name: string): PlaylistFindText => ({ title: name 
 
 /** What finds a playlist in the Library's Playlists: its name alone, matched as a song's title is. */
 export const playlistFindText = (name: string): PlaylistFindText => ({ title: name });
+
+/**
+ * Whether a row's [PlaylistFindText] is one [query] finds, matched as a finder
+ * matches (`createPlaylistFinder`), for a list filtered row by row in its
+ * query (the desktop's tables). Null for a query with nothing to find by.
+ */
+export const createFindMatcher = (query: string): ((text: PlaylistFindText) => boolean) | null => {
+  const matches = searchMatcher(query);
+  if (matches === null) return null;
+  return (text) => {
+    const also: string[] = [];
+    if (text.artist != null && text.artist !== "") also.push(text.artist);
+    if (text.album != null && text.album !== "") also.push(text.album);
+    return matches({ kind: "song", name: text.title, also });
+  };
+};
 
 /**
  * Whether [query] has anything to find by: false for a blank or

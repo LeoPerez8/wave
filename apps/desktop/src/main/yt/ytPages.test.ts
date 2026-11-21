@@ -255,3 +255,44 @@ test("Search's artists and albums are nothing offline, and nothing is asked with
   assert.equal((await off.pages.catalog("daft punk")).status, "disabled");
   assert.deepEqual(off.calls, []);
 });
+
+test("an album page's songs carry the album, so a download saves them as one album; its last read is kept", async () => {
+  const { pages, kept } = setup(() => ({
+    title: "Random Access Memories",
+    artists: ["Daft Punk"],
+    year: 2013,
+    artworkUrl: "https://lh3.googleusercontent.com/ram=w544-h544",
+    tracks: [
+      { videoId: "khnokW3Mw24", title: "Give Life Back to Music", artists: ["Daft Punk"] },
+      { videoId: "5NV6Rdv1a3I", title: "Get Lucky", artists: ["Daft Punk"] },
+    ],
+  }));
+  assert.equal(pages.albumSongs("MPREb_ram"), null);
+  const read = await pages.album("MPREb_ram");
+  assert.deepEqual(
+    read.album?.songs.map((song) => [song.videoId, song.album, song.albumId, song.artworkUrl]),
+    [
+      [
+        "khnokW3Mw24",
+        "Random Access Memories",
+        "MPREb_ram",
+        "https://lh3.googleusercontent.com/ram=w544-h544",
+      ],
+      [
+        "5NV6Rdv1a3I",
+        "Random Access Memories",
+        "MPREb_ram",
+        "https://lh3.googleusercontent.com/ram=w544-h544",
+      ],
+    ],
+  );
+  assert.deepEqual(
+    kept.map((song) => song.albumId),
+    ["MPREb_ram", "MPREb_ram"],
+  );
+  assert.equal(pages.albumSongs("MPREb_ram")?.title, "Random Access Memories");
+  assert.deepEqual(
+    pages.albumSongs("MPREb_ram")?.songs.map((song) => song.videoId),
+    ["khnokW3Mw24", "5NV6Rdv1a3I"],
+  );
+});
