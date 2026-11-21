@@ -45,6 +45,8 @@ data class RawTags(
   val advisory: String? = null,
   /** ReplayGain and R128 tags as tagged: Core's `gainTags` reads them. */
   val loudness: LoudnessTags = LoudnessTags(),
+  /** The ISRC tag as tagged: Core's `isrcFromTag` reads it, and DJ's moods look it up. */
+  val isrc: String? = null,
 ) {
   /**
    * The tags as JS receives them, a scanned track's (`NativeScannedTrack`) without the file and
@@ -70,6 +72,7 @@ data class RawTags(
       "bitrateKbps" to bitrateKbps,
       "advisory" to advisory,
       "loudnessTags" to loudness.takeUnless { it.isEmpty() }?.toMap(),
+      "isrc" to isrc,
     )
 }
 

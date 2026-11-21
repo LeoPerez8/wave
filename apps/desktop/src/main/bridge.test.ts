@@ -1450,6 +1450,9 @@ test("the kind of shuffle chosen orders a list's Shuffle, the bar's shuffle and 
 test("the kind of shuffle syncs with the phone in both directions", async () => {
   await withFile(async (file) => {
     const app = await desktop();
+    // Both stamp their edits with the wall clock; the service's runs ahead of it, so it keeps
+    // the times they send (a time ahead of its own it stores as its own).
+    app.service.now = Date.now() + 86_400_000;
     const phone = await app.service.signIn();
     const phoneDb = await openTestDatabase();
     const values = new Map<string, string>([["settings.shuffleKind", "smart"]]);
@@ -2079,6 +2082,8 @@ test("a computer that answered the invitation before Bring your music existed ne
 test("the account's language applies on sign-in and later pulls, and desktop changes sync back", async () => {
   await withFile(async (file) => {
     const app = await desktop();
+    // Both apps stamp a change with the real time, which the service's clock mustn't be behind.
+    app.service.now = Math.max(app.service.now, Date.now() + 60 * 60_000);
     const phone = await app.service.signIn();
     const phoneDb = await openTestDatabase();
     const values = new Map<string, string>([["settings.language", "pt-BR"]]);
@@ -2183,6 +2188,9 @@ test("a theme edit is validated, changes the theme at once and survives reopenin
 test("the account's theme reaches the desktop on a pull, and a desktop edit reaches the phone", async () => {
   await withFile(async (file) => {
     const app = await desktop();
+    // Both stamp their edits with the wall clock; the service's runs ahead of it, so it keeps
+    // the times they send (a time ahead of its own it stores as its own).
+    app.service.now = Date.now() + 86_400_000;
     const phone = await app.service.signIn();
     const phoneDb = await openTestDatabase();
     const values = new Map<string, string>([
@@ -3960,6 +3968,9 @@ test("Home's editor reorders, removes and adds sections at once, and main refuse
 test("Home's arrangement syncs with a phone both ways, and an edit keeps a section only the phone draws", async () => {
   await withFile(async (file) => {
     const app = await desktop();
+    // Both stamp their edits with the wall clock; the service's runs ahead of it, so it keeps
+    // the times they send (a time ahead of its own it stores as its own).
+    app.service.now = Date.now() + 86_400_000;
     const phone = await app.service.signIn();
     const phoneDb = await openTestDatabase();
     const KEY = "settings.homeArrangement";

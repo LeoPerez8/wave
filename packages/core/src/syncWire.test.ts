@@ -7,6 +7,7 @@ import {
   pushBatches,
   pushBody,
   readPullPage,
+  readPushAnswer,
 } from "./index.ts";
 import type { SyncPlayRow, SyncTables } from "./index.ts";
 
@@ -139,6 +140,7 @@ describe("readPullPage", () => {
           ytSong: null,
           removedAt: null,
           addedAt: 12,
+          restoredAt: null,
         },
       ],
       favorites: [{ id: KEY, changedAt: 13, phoneId: "b", deleted: false, addedAt: 13 }],
@@ -424,5 +426,51 @@ describe("pushBatches", () => {
 
     assert.deepEqual(batches[0]?.playlists, playlists);
     assert.equal(batches.length, 2);
+  });
+});
+
+describe("readPushAnswer", () => {
+  test("gives the rows the service stored with another change time", () => {
+    const answer = readPushAnswer(
+      JSON.stringify({
+        accepted: { playlists: 1, favorites: 2 },
+        corrected: {
+          playlists: [{ id: "p1", changedAt: 5_000 }],
+          favorites: [
+            { id: "f1", changedAt: 5_000 },
+            { id: "f2", changedAt: 5_000 },
+          ],
+        },
+      }),
+    );
+    assert.deepEqual(answer.corrected, [
+      { table: "playlists", id: "p1", changedAt: 5_000 },
+      { table: "favorites", id: "f1", changedAt: 5_000 },
+      { table: "favorites", id: "f2", changedAt: 5_000 },
+    ]);
+  });
+
+  test("an answer from a service that corrects nothing has no corrected rows", () => {
+    assert.deepEqual(readPushAnswer('{"accepted":{"playlists":1}}').corrected, []);
+    assert.deepEqual(readPushAnswer("").corrected, []);
+  });
+
+  test("leaves out what isn't a corrected row, and tables it doesn't know or that have no change time", () => {
+    const answer = readPushAnswer(
+      JSON.stringify({
+        corrected: {
+          playlists: [
+            { id: "p1", changedAt: "soon" },
+            { id: 7, changedAt: 1 },
+            null,
+            { id: "p2", changedAt: 3 },
+          ],
+          plays: [{ id: "x", changedAt: 1 }],
+          members: [{ id: "m", changedAt: 1 }],
+          favorites: "all",
+        },
+      }),
+    );
+    assert.deepEqual(answer.corrected, [{ table: "playlists", id: "p2", changedAt: 3 }]);
   });
 });

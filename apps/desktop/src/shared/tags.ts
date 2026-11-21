@@ -30,4 +30,6 @@ export interface SongTags {
   readonly lyrics?: string | null;
   /** ReplayGain and R128 tags as tagged, when the file has any. */
   readonly loudnessTags: Readonly<Record<string, string | null>> | null;
+  /** The ISRC tag as tagged (Core's `isrcFromTag` reads it). */
+  readonly isrc?: string | null;
 }

@@ -58,6 +58,8 @@ interface SyncPlaylistEntryFields {
   readonly ytSong: string | null;
   readonly addedAt: number;
   readonly removedAt?: number | null;
+  /** When Restore or Undo last brought the entry back (Core's `SyncEntryRow`). */
+  readonly restoredAt?: number | null;
 }
 
 /** A star; its id is the song's recording key. */
@@ -214,6 +216,7 @@ export const SYNC_FIELDS: {
     ytSong: "text?",
     removedAt: "int?",
     addedAt: "int",
+    restoredAt: "int?",
   },
   favorites: { addedAt: "int" },
   preferences: { value: "text?" },
@@ -328,6 +331,49 @@ export const readPullPage = (body: string): SyncPullPage | null => {
     }),
   ) as unknown as SyncTables;
   return { ...tables, cursor: raw.cursor, more: raw.more };
+};
+
+/** A pushed row the service stored with another change time than the one sent. */
+export interface CorrectedChangeTime {
+  readonly table: Exclude<keyof SyncTables, "plays">;
+  readonly id: string;
+  /** The change time the service holds for the row. */
+  readonly changedAt: number;
+}
+
+/** What the app reads of a `POST /v1/push` answer. */
+export interface SyncPushAnswer {
+  /**
+   * The rows stored with the service's time because theirs was ahead of its
+   * clock (`withinServiceClock`), in table order: the app adopts each.
+   */
+  readonly corrected: readonly CorrectedChangeTime[];
+}
+
+/**
+ * Reads the body of a `POST /v1/push` answer. A service from before it
+ * corrected change times names none, and an entry that isn't a corrected
+ * row, or a table it doesn't know, is left out.
+ */
+export const readPushAnswer = (body: string): SyncPushAnswer => {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(body);
+  } catch {
+    return { corrected: [] };
+  }
+  const tables = isRecord(raw) && isRecord(raw.corrected) ? raw.corrected : {};
+  return {
+    corrected: SYNC_TABLE_NAMES.flatMap((table) => {
+      const rows = tables[table];
+      if (table === "plays" || !Array.isArray(rows)) return [];
+      return rows.flatMap((row: unknown) =>
+        isRecord(row) && typeof row.id === "string" && Number.isSafeInteger(row.changedAt)
+          ? [{ table, id: row.id, changedAt: row.changedAt as number }]
+          : [],
+      );
+    }),
+  };
 };
 
 /**
