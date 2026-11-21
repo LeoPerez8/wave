@@ -3318,6 +3318,8 @@ export {
   djArtistTile,
   djCanStart,
   djGrid,
+  djFirstLibrarySong,
+  djLibraryCandidates,
   djOpened,
   djReduce,
   djSeedTiles,
