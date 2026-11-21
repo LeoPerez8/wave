@@ -219,8 +219,8 @@ export type SongOrderField =
   | "id";
 
 /** One step of an order the database runs (an `ORDER BY` term). */
-export interface SongOrderTerm {
-  readonly field: SongOrderField;
+export interface SongOrderTerm<Field extends string = SongOrderField> {
+  readonly field: Field;
   readonly descending: boolean;
   /** What a null compares as (a missing disc is disc 1); absent where the field is never null. */
   readonly nullAs?: number | string;
@@ -281,9 +281,22 @@ export const songOrderTerms = (sort: LibrarySongSort): readonly SongOrderTerm[] 
   return [{ field: primary, descending: sort.descending }, ...ties];
 };
 
-/** The field [sort] files a song under on the A–Z spine (`songSpineKeys`); none for the date sorts. */
-export const songSpineField = (sort: LibrarySongSort): SongOrderField | undefined =>
-  songSortHasSpine(sort) ? ORDER_TERMS[sort.key][0] : undefined;
+/** The browse query has the date starred in Favorites and uses song name order until Popular is ranked. */
+export const songBrowseOrderTerms = (
+  sort: SongSort,
+): readonly SongOrderTerm<SongOrderField | "starredAt">[] => {
+  const seen = new Set<SongOrderField>();
+  const terms = songOrderTerms(librarySongSort(sort)).filter(
+    ({ field }) => !seen.has(field) && seen.add(field),
+  );
+  return sort.key === "starred"
+    ? [{ field: "starredAt", descending: sort.descending }, ...terms]
+    : terms;
+};
+
+/** The field [sort] files a song under on the A–Z spine (`songSpineKeys`), when it has one. */
+export const songSpineField = (sort: SongSort): SongOrderField | undefined =>
+  songSortHasSpine(sort) ? ORDER_TERMS[librarySongSort(sort).key][0] : undefined;
 
 /** [sort] as a string to save. */
 export const writeSongSort = (sort: SongSort): string =>
