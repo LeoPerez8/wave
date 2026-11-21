@@ -237,6 +237,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.stats.ranking",
       "wave.stats.play",
       "wave.stats.open",
+      "wave.history.page",
+      "wave.history.play",
     ],
   });
 });

@@ -3249,3 +3249,52 @@ test("playlist, artist and genre pages download their missing songs in page orde
     }
   });
 });
+
+test("the window reads Listening History in pages and main refuses a malformed read", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed, engineCalls } = connect(file);
+    try {
+      const play = await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          const id = addTrack(db, { title: "Pink Moon", artist: "Nick Drake" });
+          const play = recordPlay(db, {
+            trackId: String(id),
+            startedAt: 1000,
+            counted: true,
+            listenedMs: 16000,
+            durationMs: 180000,
+            source: "desktop",
+            endReason: "skipped",
+            context: null,
+          });
+          db.run(sql`DELETE FROM tracks WHERE id = ${id}`);
+          return play;
+        }),
+      );
+      const wave = exposed.get("wave") as WaveBridge;
+      const page = await wave.history.page({ before: undefined }, "");
+      assert.deepEqual(
+        page.rows.map(({ id, song, replays }) => [id, song.title, song.unavailable, replays]),
+        [[play, "Pink Moon", true, null]],
+      );
+      assert.equal((await wave.history.page({ around: play }, "")).rows.length, 1);
+      assert.equal((await wave.history.page({ before: undefined }, "harvest")).rows.length, 0);
+      // A song removed since replays nothing.
+      const calls = engineCalls.length;
+      await wave.history.play(play);
+      assert.equal(engineCalls.length, calls);
+      const refused = [
+        () => wave.history.page({ before: { startedAt: 1.5, id: 1 } }, ""),
+        () => wave.history.page({ after: "1" } as never, ""),
+        () => wave.history.page({ around: -1 }, ""),
+        () => wave.history.page(null as never, ""),
+        () => wave.history.page({ before: undefined }, "x".repeat(501)),
+        () => wave.history.play("1" as never),
+      ];
+      for (const call of refused) await assert.rejects(call, /Refused history\./);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});

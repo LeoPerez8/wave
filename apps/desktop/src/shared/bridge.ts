@@ -77,6 +77,7 @@ import { LINK_CALLS, linkBridge, type LinkContract } from "./links.ts";
 import { MINI_PLAYER_CALLS, miniPlayerBridge, type MiniPlayerContract } from "./miniPlayer.ts";
 import { ARTIST_PAGE_CALLS, artistPageBridge, type ArtistPageContract } from "./artistPage.ts";
 import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
+import { HISTORY_CALLS, historyBridge, type HistoryContract } from "./history.ts";
 import { YT_ACCOUNT_CALLS, ytAccountBridge, type YtAccountContract } from "./ytAccount.ts";
 import {
   SPOTIFY_ACCOUNT_CALLS,
@@ -122,6 +123,7 @@ export interface BridgeContract
     LyricsAndTagsContract,
     YtAccountContract,
     SpotifyAccountContract,
+    HistoryContract,
     SpotifyImportContract,
     MiniPlayerContract,
     SpotifyShareContract {
@@ -612,6 +614,7 @@ export const BRIDGE_CALLS = [
   "stats.ranking",
   "stats.play",
   "stats.open",
+  ...HISTORY_CALLS,
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -628,6 +631,7 @@ export interface WaveBridge {
   readonly artistPage: ReturnType<typeof artistPageBridge>;
   /** A streamed YouTube Music song's menu. */
   readonly streamed: ReturnType<typeof streamedBridge>;
+  readonly history: ReturnType<typeof historyBridge>;
   /** The YouTube account: its session never reaches the window. */
   readonly ytAccount: ReturnType<typeof ytAccountBridge>;
   readonly spotifyAccount: ReturnType<typeof spotifyAccountBridge>;
@@ -998,4 +1002,5 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     play: (period, key, full) => invoke("stats.play", period, key, full),
     open: (ranking, period, key, full) => invoke("stats.open", ranking, period, key, full),
   },
+  history: historyBridge(invoke),
 });

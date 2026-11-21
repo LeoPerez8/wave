@@ -73,3 +73,37 @@ export const findListeningHistory = <T extends { readonly snapshot: PlaySnapshot
   const found = createPlaylistFinder(plays, (play) => play.snapshot).find(query);
   return found === null ? plays : found.map((index) => plays[index]!);
 };
+
+/** What a history row does now and how it shows. */
+export interface ListeningHistoryRowState {
+  /** What activating the row plays: its Library song, its stream, or nothing. */
+  readonly replays: "library" | "stream" | null;
+  /** Its Library song has no file yet: shown as a missing song is elsewhere. */
+  readonly missing: boolean;
+  /** Dimmed: the song left the Library and no stream can play. */
+  readonly unavailable: boolean;
+  /** Nothing to play or to open a menu for. */
+  readonly disabled: boolean;
+}
+
+/**
+ * A play replays its Library song, else its stream while YT Music is on and
+ * YouTube hasn't refused that video ([refused], known this session).
+ */
+export const listeningHistoryRowState = (
+  play: {
+    readonly song: { readonly path: string | null } | null;
+    readonly streamedSong: { readonly videoId: string } | null;
+  },
+  ytMusic: boolean,
+  refused: ReadonlySet<string>,
+): ListeningHistoryRowState => {
+  const { song, streamedSong } = play;
+  const streams = streamedSong !== null && ytMusic && !refused.has(streamedSong.videoId);
+  return {
+    replays: song !== null ? "library" : streams ? "stream" : null,
+    missing: song !== null && song.path === null,
+    unavailable: song === null && !streams,
+    disabled: song === null && streamedSong === null,
+  };
+};
