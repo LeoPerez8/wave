@@ -38,8 +38,11 @@ const LOGO_SIZE = {
   height: 2 * (LOGO_WAVES.gap + LOGO_WAVES.amplitude) + LOGO_WAVES.stroke,
 } as const;
 
-/** The space between the waves and the word, in ems: one 8dp cell at the large title's 36dp. */
-const GAP = 8 / 36;
+/** The space between the waves and the word, in ems: one 8dp cell at the large title's 26dp. */
+const GAP = 8 / 26;
+
+/** Home's waves take this share of the word's capital height. */
+const WAVE_HEIGHT_OF_CAPS = 0.6;
 
 /** About how wide "Wave" sets in Inter Light, in ems, rounded up so the fit errs small. */
 const WORD = 2.75;
@@ -67,7 +70,7 @@ export interface TitleLine {
 /** Where the waves sit beside the title's text, in dp. */
 export interface TitleMarkLayout {
   readonly width: number;
-  /** As tall as the title's capitals. */
+  /** The approved share of the title's capitals' height. */
   readonly height: number;
   /** The waves' stroke width. */
   readonly stroke: number;
@@ -77,12 +80,13 @@ export interface TitleMarkLayout {
   readonly baseline: number;
 }
 
-/** The waves beside a drawn line: as tall as its capitals, on its baseline. */
+/** The waves beside a drawn line: 60% of its capitals' height, on its baseline. */
 const layoutBeside = ({ capHeight, height, baseline }: TitleLine): TitleMarkLayout => {
-  const scale = capHeight / LOGO_SIZE.height;
+  const waveHeight = capHeight * WAVE_HEIGHT_OF_CAPS;
+  const scale = waveHeight / LOGO_SIZE.height;
   return {
     width: LOGO_SIZE.width * scale,
-    height: capHeight,
+    height: waveHeight,
     stroke: LOGO_WAVES.stroke * scale,
     // The gap is a share of the font size, which the capitals give.
     gap: (GAP / INTER.capHeight) * capHeight,

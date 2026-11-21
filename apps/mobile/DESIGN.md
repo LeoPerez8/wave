@@ -211,7 +211,7 @@ These are the shipped tokens; Teal and Ember, presets until #794, are built on t
 ### Hierarchy
 
 - **Display** (300, 56/64): the letter on the A–Z spine's plate while the spine is dragged. Nowhere else.
-- **Headline** (300, 36/44, -0.6 tracking): the large title of a tab screen ("Library"), top-left, scrolling with the content. Home's is Wave's mark: the two waves in the primary over the secondary, as tall as the capitals and on the baseline, one cell before "Wave".
+- **Headline** (300, 26/32, -0.6 tracking): the large title of a tab screen ("Library"), top-left, scrolling with the content. Home's is Wave's mark: the two waves in the primary over the secondary, 60% as tall as the capitals and on the baseline, one cell before "Wave".
 - **Title** (300, 28/34, -0.4 tracking): the title of a pushed screen, under the Back button.
 - **Entry** (400, 20/26): Library entries and settings row labels; one quiet line each.
 - **Body** (400 / 500, 16/22): track rows (title at 500, artist at 400, same size), album titles under covers (500), the settings stepper value (500).
