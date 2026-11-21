@@ -11,6 +11,9 @@ export const desktopPtBr = {
   playbackText: {
     thisPhone: "Este computador",
   },
+  shows: {
+    phoneRegion: "Região deste computador",
+  },
   settings: {
     openingLyricsOnASongWithLyrics:
       "Ao abrir Letras em uma música que tem letra, o Wave mostra a descrição do Genius e destaca os trechos anotados. Desative para interromper todas as consultas ao Genius.",

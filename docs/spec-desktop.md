@@ -110,7 +110,7 @@ D16. As a user, I want Space to press a focused button instead of pausing, and �
 
 D17. As a user, I want my keyboard's media keys and the system's media controls (Windows' media flyout, the Linux desktop's media controls) to show the song and play, pause, skip and seek it, so that I control Wave from anywhere.
 D18. As a user, I want closing the window to keep Wave playing in the tray, with a one-time notice saying so and how to change it, and a setting that makes closing quit, so that music doesn't stop when I close a window.
-D19. As a user, I want the tray icon to show or hide the window on click, and its menu to show the playing song with Play/Pause, Next, Previous, Show Wave and Quit, so that I can control playback without the window.
+D19. As a user, I want the tray icon to show or hide the window on click, and its menu to show the playing song with Play/Pause, Next, Previous, Show Wave, Mini Player and Quit, so that I can control playback without the window.
 D20. As a Linux user without a tray, I want the desktop's media controls and launching Wave again to bring it back, so that a hidden Wave is never lost.
 D21. As a user, I want launching Wave while it runs to show the running window, so that I never get two players.
 D22. As a user, I want to choose in Settings whether Wave starts with the system, hidden in the tray and not playing, off by default, so that it is ready when I want it.
@@ -210,7 +210,12 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
 - The PCM carries its song's identity up to the gain stage, so a per-song gain switches on the
   first frame of the song. Measured: no mismatching sample across 619,534 frames.
 - Loudness measurement for Normalize Volume runs in the engine, which already decodes.
-- Output device: the system default, following changes. Picking a device is later.
+- Output device: the system default, following changes, unless Settings › Playback › Output
+  picks another (#1230). The list is the system's outputs, System default first, read again
+  every second. Picking one moves the stream to it and the song goes on from where it is. While
+  the picked device is away the engine plays on the system default and returns to the device
+  when the system lists it again; the same holds for a device that won't open. The choice is
+  this computer's: its id and name are in `desktop_settings` (`outputDevice`), never synced.
 - Streaming: the Kotlin resolver returns the stream address and its headers. The engine fetches
   the bytes by range, writes them to the bounded audio cache (1 GB, as on the phone) and asks the
   main process to resolve again on a 403 or 410.
@@ -245,6 +250,12 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
   that brought stars or songs, and as Wave starts. Unstarring it before the file arrives cancels
   the download only the star asked for. What the stars asked is kept on this computer
   (`downloads.syncedStars`, `downloads.starAsked`), never synced.
+- The Downloads page is the phone's (`docs/spec.md`, Downloads): the line counting the songs
+  downloading and waiting, the run's panel with the paused line while YouTube limits downloads,
+  the waiting songs under their source's header, and the failed section folded until shown,
+  grouped by reason. It is one virtual list. A group's header drags among the groups and a
+  waiting song among its group's songs, with the mouse or with Move Up and Move Down on the row,
+  and the queue downloads in the order shown.
 - Play and Shuffle on a list with missing songs play what can play (Core's `listPlay`): the
   songs with a file and, with YT Music on, the missing songs downloaded from a YouTube Music
   video, streamed in their place. A toast counts the ones left out and offers Download Missing
@@ -355,9 +366,20 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   stored arrangement names that this Wave doesn't have stays in it, in its place.
 - Home's New from Artists You Follow and Upcoming Shows use the phone's rules and the account's
   follows, hidden releases and switches. Each computer runs its own checks, looks shows up in the
-  system's region and posts no show notification. A release opens its Library album or its
-  YT Music page; a show opens its ticket page in the browser. Following, unfollowing and hiding a
-  release stay on the phone.
+  country chosen in Settings › Followed artists (the system's region until one is chosen) and
+  posts no show notification. A release opens its Library album or its YT Music page; a show
+  opens its ticket page in the browser. Hiding a release stays on the phone.
+- A Library artist's page and a YT Music artist's page have a Follow button in the hero's
+  actions. It reads Follow or Following and opens a card with the levels (Core's
+  `followLevelEntries`): New music, New music and shows while a Wave account is signed in, and
+  Unfollow once followed. Settings › Followed artists has the account's switch, the Country for
+  shows (kept on this computer, as each phone keeps its own), Find artists to follow, and the
+  artists followed A to Z, each with its level in a menu and Unfollow. Unfollow shows the toast
+  "Unfollowed <artist>" with Undo. The search lists the Library's matches and Deezer's, and
+  its one line is Core's `followSearchLine`: searching, no answer from Deezer, or no artists
+  found. With the switch off no artist page has the button, the search is disabled and the
+  follows are listed but can't change. Follows sync with the Wave account as any change does.
+  The phone's level icons, their legend and Suggested aren't on the desktop.
 - Album, artist and playlist pages have a hero: artwork, a light title, and the kind in the line
   under it ("Album · Indie Folk · 1995 · 7 songs · 33 min", or "36 h 43 min" from an hour up, Core's `listDuration`; a table's Time
   column reads "36:43:09"), with no label above the title. Play
@@ -404,8 +426,42 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   addon (`wave-media.node`). On Windows it is Chromium's Media Session with a silent audio
   element: the check in #1157 found `souvlaki` publishing the song there while the system's Pause
   never reached Wave. Linux falls back to Chromium's session when the addon doesn't load.
-- No file associations, no `https` link handler and no floating mini player in v1. Windows lets
-  an app own `https` links only for a domain it proves it owns.
+- Opening files (#1233). Wave is an "Open with" choice for the audio formats the engine plays
+  (`.mp3`, `.m4a`, `.flac`, `.ogg`, `.oga`, `.opus`, `.wav`; not `.mp4`, which is a video more
+  often than a song). It never takes a type's default from another player: the Windows installer
+  adds Wave to each extension's `OpenWithProgids` and to `Applications\Wave.exe\SupportedTypes`
+  under the user's own registry keys and leaves the extension's default alone, and uninstalling
+  removes what it added; the AppImage's desktop entry lists the same formats as `MimeType`
+  (`apps/desktop/scripts/file-types.ts`). The files a launch names play in order as a new queue,
+  with "New queue playing" and Undo when a queue was there. A launch while Wave runs hands its
+  files to the running window. The system starts Wave once per file when several are opened
+  together, so files that arrive within half a second of each other play as one queue, and files
+  that arrive while Wave starts wait for its services. A file the Library has plays as its
+  Library song, so its play is counted. Any other file plays as itself (the queue id
+  `file:<path>`, Core's `openedFiles.ts`): it joins nothing, its play isn't kept or synced, it
+  shows by its tags' title and artist (its name until they're read), without a cover, and the
+  star and the song menus are off for it. A path that isn't one of those formats, or isn't
+  there, is ignored. A file left in the queue plays again after a restart while it still exists.
+- No `https` link handler and no floating mini player in v1. Windows lets an app own `https`
+  links only for a domain it proves it owns.
+
+- No file associations and no `https` link handler in v1. Windows lets an app own `https` links
+  only for a domain it proves it owns.
+- The mini player (#1232) is a small frameless window that stays above other windows: artwork,
+  title and artists, Previous, Play or Pause, Next, the star and a thin progress line. The player
+  bar's Mini Player button and the tray menu's Mini Player entry open it, or show the one already
+  open. Show Wave on it brings the main window back and leaves it open; Close Mini Player closes
+  it, and Wave keeps running. The main window can be hidden while it is open. It drags from
+  anywhere but its buttons. Space, the other player keys and Ctrl+Q work in it, and the media keys
+  reach Wave as they do with the main window hidden. Its position is a device-local setting
+  (`miniPlayer.position`), saved when it is moved and when it closes. It opens where it was left
+  while the screens show all of it, else moved whole onto the screen showing most of it, or onto
+  the primary screen when its own is gone, also when a monitor goes while it is open; never
+  placed, it opens in the primary screen's bottom right corner (Core's `floatingWindowPosition`).
+  It is a second page of the same renderer (`mini.html`) on the same preload, web preferences
+  (`windowWebPreferences`), navigation guard and CSP as the main window, and main answers bridge
+  calls from those two pages only. It adds `miniPlayer.open`, `close` and `showMain`, which take
+  no arguments.
 
 ### Local data
 
@@ -527,7 +583,7 @@ does for the phone. Audio is checked by the engine's golden tests, not by ear.
 These come after v1, in an order decided when v1 is close to done: Spotify, Recap, Stats and
 Listening History, Genius, Recognize, Karaoke, the lyrics image, Shift/Ctrl multi-select in
 tables, sortable table columns, drag and drop onto sidebar playlists and the queue, Show in
-Folder, file associations, a floating mini player, picking an output device.
+Folder, a floating mini player, picking an output device.
 
 ### Risks
 

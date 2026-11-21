@@ -1569,6 +1569,8 @@ export type {
   SpotifyLibraryPlaylist,
   SpotifyLibraryRead,
 } from "./spotifyLibrary.ts";
+export { readSpotifyWebLibrary, readSpotifyWebPlaylist } from "./spotifyWebLibrary.ts";
+export type { SpotifyWebAnswer, SpotifyWebAsk } from "./spotifyWebLibrary.ts";
 export { compareOrderKeys, orderKeyBetween, placeEntries } from "./orderKey.ts";
 export type { EntryPlacement, OrderedEntry } from "./orderKey.ts";
 export { graveyardRemovalsOf, graveyardRestoreIndex, graveyardSongs } from "./playlistGraveyard.ts";
@@ -1984,6 +1986,8 @@ export {
   explicitPlayNotice,
   explicitSkipNotice,
   queuedPassedOver,
+  readDontPlayExplicit,
+  writeDontPlayExplicit,
 } from "./explicitPlayback.ts";
 export type { ExplicitPlayback } from "./explicitPlayback.ts";
 export type { PassOver } from "./queue.ts";
@@ -2211,6 +2215,7 @@ export {
   sharedEditBatches,
   sharedPlaylistChanges,
   sharedPlaylistMoves,
+  sharedSongsCopiedLine,
   sharedSongsLine,
   spotifyPlaylistUrl,
   syncSharedPlaylist,
@@ -2246,6 +2251,7 @@ export {
   spotifyLibraryHas,
   spotifyShareMatch,
   spotifyShareSong,
+  spotifyWebShareMatch,
 } from "./spotifyShare.ts";
 export type { SpotifyPageRead, SpotifyShareItem } from "./spotifyShare.ts";
 export type {
@@ -2539,9 +2545,20 @@ export { RADIO_CACHE_FRESH_MS, radioCacheFresh } from "./radioCache.ts";
 export {
   listeningHistoryDays,
   findListeningHistory,
+  listeningHistoryRowState,
   type ListeningHistoryDay,
+  type ListeningHistoryRowState,
   type PlaySnapshot,
 } from "./listeningHistory.ts";
+export {
+  listeningHistoryReads,
+  startingAt,
+  type ListeningHistoryCursor,
+  type ListeningHistoryFrom,
+  type ListeningHistoryPageOf,
+  type ListeningHistoryRead,
+  type ListeningHistoryReads,
+} from "./listeningHistoryReads.ts";
 export {
   readShuffleCardOpenings,
   shuffleCardOpened,
@@ -2866,6 +2883,15 @@ export type { MarqueeLine, MarqueeLineSize, MarqueePlan } from "./marquee.ts";
 export { desktopSongActions } from "./desktopSongMenu.ts";
 export type { DesktopSongSubject } from "./desktopSongMenu.ts";
 export { DESKTOP_SHORTCUTS, desktopKey, shortcutKeys } from "./desktopKeys.ts";
+export {
+  allTableRows,
+  checkedTableRow,
+  extendTableRange,
+  tableRange,
+  tableSelectionOf,
+  toggleTableRow,
+  type TableSelection,
+} from "./tableSelection.ts";
 export type {
   DesktopCommand,
   DesktopFocus,
@@ -2881,3 +2907,16 @@ export {
   type LanguageChoice,
 } from "./languageChoice.ts";
 export { displayTag } from "./displayTag.ts";
+export {
+  openedAudioFiles,
+  openedFilePath,
+  openedFileTitle,
+  openedFileTrackId,
+  openedFilesQueue,
+} from "./openedFiles.ts";
+export {
+  floatingWindowPosition,
+  readFloatingWindowPosition,
+  storedFloatingWindowPosition,
+} from "./floatingWindow.ts";
+export type { ScreenArea, WindowPosition, WindowSize } from "./floatingWindow.ts";

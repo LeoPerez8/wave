@@ -1,4 +1,4 @@
-import { homeSectionTitle, statsFacts } from "@wave/core";
+import { homeSectionTitle, statsFacts, tableSelectionOf } from "@wave/core";
 import { useEffect, useMemo, useState } from "react";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { HomeSectionView, HomeView } from "../../shared/home.ts";
@@ -10,21 +10,24 @@ import { HomeNewReleases, HomeUpcomingShows, useHomeFollow } from "./HomeFollow.
 import { Shelf } from "./YtLists.tsx";
 import type { YtRoute } from "./YtPages.tsx";
 import { VirtualTable } from "./VirtualTable.tsx";
+import { openTableSongMenu, SelectionBar, type SongSelectionControls } from "./SongActions.tsx";
 import { text, labels, tagTitle, artistName, language } from "./text.ts";
 import "./home.css";
 
-const SONGS: BrowseScope = { kind: "favorites" };
+const SONGS: BrowseScope = { kind: "songs" };
 
 function MostPlayed({
   section,
   onPlay,
   onError,
-  onMenu,
+  controls,
+  revision,
 }: {
   readonly section: HomeSectionView;
   readonly onPlay: (index: number) => void;
   readonly onError: () => void;
-  readonly onMenu: (row: BrowseRow, at: { readonly x: number; readonly y: number }) => void;
+  readonly controls: SongSelectionControls;
+  readonly revision: number;
 }) {
   // The current language's text, so the labels follow a change of language.
   const strings = text;
@@ -39,17 +42,38 @@ function MostPlayed({
     }),
     [section, strings],
   );
+  const selectAll = () =>
+    tableSelectionOf(
+      section.rows.items.map((row) => row.id),
+      controls.selection?.checkboxes,
+    );
   return (
-    <div className="home-table" style={{ height: section.rows.total * 40 + 30 }}>
-      <VirtualTable
-        scope={SONGS}
-        revision={0}
-        preview={preview}
-        onOpen={(_, index) => onPlay(index)}
-        onError={onError}
-        onMenu={onMenu}
-      />
-    </div>
+    <>
+      {controls.selection && (
+        <SelectionBar
+          scope={SONGS}
+          selection={controls.selection}
+          revision={revision}
+          actions={controls.actions}
+          onChange={(selection) => controls.onSelection?.(selection)}
+          onDone={() => controls.onSelection?.(undefined)}
+          selectAll={selectAll}
+        />
+      )}
+      <div className="home-table" style={{ height: section.rows.total * 40 + 30 }}>
+        <VirtualTable
+          scope={SONGS}
+          revision={0}
+          preview={preview}
+          onOpen={(_, index) => onPlay(index)}
+          onError={onError}
+          onMenu={(row, at) => openTableSongMenu(controls, SONGS, row, at)}
+          selection={controls.selection}
+          onSelection={controls.onSelection}
+          selectAll={selectAll}
+        />
+      </div>
+    </>
   );
 }
 
@@ -62,6 +86,7 @@ export function Home({
   onStats,
   onError,
   onMenu,
+  selectionFor,
   notify,
   onCollectionMenu,
 }: {
@@ -73,6 +98,7 @@ export function Home({
   readonly onStats: () => void;
   readonly onError: () => void;
   readonly onMenu: (row: BrowseRow, at: { readonly x: number; readonly y: number }) => void;
+  readonly selectionFor: (owner: string) => SongSelectionControls;
   readonly onCollectionMenu: (target: CollectionTarget, title: string, at: MenuPoint) => void;
 }) {
   const [view, setView] = useState<HomeView>();
@@ -157,7 +183,8 @@ export function Home({
                       section={section}
                       onPlay={(index) => open(section, index)}
                       onError={onError}
-                      onMenu={onMenu}
+                      controls={selectionFor("home-most-played")}
+                      revision={revision}
                     />
                   </section>
                 ) : (

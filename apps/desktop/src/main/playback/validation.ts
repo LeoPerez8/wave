@@ -16,6 +16,8 @@ export const validPlaybackSettings = (value: unknown): value is Partial<Playback
       typeof x === "number" && Number.isFinite(x) && x >= CROSSFADE.min && x <= CROSSFADE.max,
     normalizeVolume: (x) => typeof x === "boolean",
     bufferMinutes: (x) => (STREAM_BUFFER_MINUTES as readonly unknown[]).includes(x),
+    dontPlayExplicit: (x) => typeof x === "boolean",
+    continueQueue: (x) => typeof x === "boolean",
   };
   return Object.entries(value).every(
     ([name, x]) => Object.hasOwn(checks, name) && checks[name as keyof PlaybackSettings](x),
