@@ -468,8 +468,6 @@ export const settingsEn = {
   removeFailure: (line: string) => `Remove ${line} from failed downloads`,
   slot: (n: number) => `Slot ${n}`,
   moveButtonToSlot: (slot: string) => `Move button to ${slot}`,
-  swapSlot: (label: string, title: string, holder: string) =>
-    `${label}, ${title}, swaps with ${holder}`,
   swipeHint: (side: "left" | "right") => `Chooses what swiping ${side} runs`,
   minutes: (n: number) =>
     `${formatNumber("en", n)} ${plural("en", n, { one: "minute", other: "minutes" })}`,
