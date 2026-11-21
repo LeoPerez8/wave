@@ -11,10 +11,12 @@ import {
   UNKNOWN_ALBUM,
   accountTrackIds,
   creditSplitter,
+  duplicatePlaylistEntries,
   leavingSongEntry,
   mergePlaylistEntries,
   mergeRows,
   planSongSync,
+  playlistEntrySong,
   songsLeaving,
   syncsPreference,
   type AccountSongState,
@@ -1001,10 +1003,15 @@ const applyPlaylist = (tx: LibraryDatabase, row: SyncPlaylist, now: number): boo
   return true;
 };
 
+/**
+ * Applies a pulled entry; true when it changed the phone's. A live entry it
+ * places adds its playlist to [placed], for `keepOneEntryPerSong`.
+ */
 const applyEntry = (
   tx: LibraryDatabase,
   row: SyncPlaylistEntry,
   trackIds: ReadonlyMap<string, number>,
+  placed: Set<number>,
 ): boolean => {
   const { playlists, playlistItems } = schema;
   if (!beatsPending(tx, "playlistEntries", row)) return false;
@@ -1050,7 +1057,50 @@ const applyEntry = (
       .values({ syncId: row.id, ...values })
       .run();
   }
+  if (!row.deleted) placed.add(playlist.id);
   return true;
+};
+
+/**
+ * Removes, from the [playlists] given (local ids), each entry of a song the
+ * playlist already holds (Core's `duplicatePlaylistEntries`): the one added
+ * later goes, as a removal that skips the Graveyard and goes up.
+ */
+const keepOneEntryPerSong = (
+  tx: LibraryDatabase,
+  playlists: ReadonlySet<number>,
+  now: number,
+): void => {
+  if (playlists.size === 0) return;
+  const { playlistItems, tracks } = schema;
+  const entries = tx
+    .select({
+      id: playlistItems.id,
+      syncId: playlistItems.syncId,
+      playlistId: playlistItems.playlistId,
+      addedAt: playlistItems.addedAt,
+      songId: tracks.recordingKey,
+      ytSong: playlistItems.ytSong,
+    })
+    .from(playlistItems)
+    .leftJoin(tracks, eq(playlistItems.trackId, tracks.id))
+    .where(and(inArray(playlistItems.playlistId, [...playlists]), eq(playlistItems.deleted, false)))
+    .all()
+    .map((row) => ({
+      local: row.id,
+      id: row.syncId,
+      playlistId: String(row.playlistId),
+      addedAt: row.addedAt,
+      deleted: false,
+      song: playlistEntrySong({ songId: row.songId, ytSong: row.ytSong }),
+    }));
+  const gone = duplicatePlaylistEntries(entries).map((entry) => entry.local);
+  for (const ids of chunks(gone)) {
+    tx.update(playlistItems)
+      .set({ deleted: true, removedAt: null, ...stamped(playlistItems, now) })
+      .where(inArray(playlistItems.id, ids))
+      .run();
+  }
 };
 
 const applyFavorite = (
@@ -1241,10 +1291,13 @@ const applyRows = (
   rows: Pick<SyncTables, "playlistEntries" | "favorites" | "plays">,
   trackIds: ReadonlyMap<string, number>,
   changed: Changed,
+  now: number,
 ): void => {
+  const placed = new Set<number>();
   for (const row of rows.playlistEntries) {
-    if (applyEntry(tx, row, trackIds)) changed.playlists = true;
+    if (applyEntry(tx, row, trackIds, placed)) changed.playlists = true;
   }
+  keepOneEntryPerSong(tx, placed, now);
   for (const row of rows.favorites) {
     if (applyFavorite(tx, row, trackIds)) changed.favorites = true;
   }
@@ -1267,8 +1320,10 @@ const applyRows = (
  * Core's rules (`mergeRows`, plays by id only), recording keys turned into
  * the phone's Tracks by [trackIds] (`selectAccountTrackIds`). Streamed plays
  * and Library plays with snapshots show immediately; other rows whose
- * song or playlist the phone lacks wait in `sync_pending`. The page's
- * cursor is kept for the next pull, in the same transaction.
+ * song or playlist the phone lacks wait in `sync_pending`. A playlist that
+ * receives an entry of a song it already holds keeps one of them
+ * (`keepOneEntryPerSong`). The page's cursor is kept for the next pull, in
+ * the same transaction.
  */
 export const applyPulledPage = (
   db: LibraryDatabase,
@@ -1284,7 +1339,7 @@ export const applyPulledPage = (
     for (const row of page.playlists) {
       if (applyPlaylist(tx, row, now)) changed.playlists = true;
     }
-    applyRows(tx, page, trackIds, changed);
+    applyRows(tx, page, trackIds, changed, now);
     for (const row of page.preferences) {
       const applied = applyPreference(tx, row);
       if (applied !== null) changed.preferences.push(applied);
@@ -1322,6 +1377,7 @@ export const applyPulledPage = (
 export const applyPending = (
   db: LibraryDatabase,
   trackIds: ReadonlyMap<string, number>,
+  now: number = Date.now(),
 ): PulledChanges => {
   const { syncPending, tracks, playlists } = schema;
   return db.transaction((tx) => {
@@ -1351,7 +1407,7 @@ export const applyPending = (
       (rows[row.kind as PendingKind] as unknown[]).push(JSON.parse(row.row));
     }
     const changed = nothingChanged();
-    applyRows(tx, rows, trackIds, changed);
+    applyRows(tx, rows, trackIds, changed, now);
     // A snapshot-only Library play is already visible; attach it once its
     // account song or file arrives, keeping its play id and display snapshot.
     const detached = tx

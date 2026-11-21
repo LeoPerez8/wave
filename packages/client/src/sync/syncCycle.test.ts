@@ -1462,3 +1462,113 @@ describe("a removed playlist entry stays removed", () => {
     assert.equal(liveOnService(), 2);
   });
 });
+
+describe("a playlist keeps one entry per song", () => {
+  const streamed = (videoId: string, title: string, durationMs = 284_000) => ({
+    source: "stream" as const,
+    song: {
+      videoId,
+      title,
+      artists: ["Radiohead"],
+      album: null,
+      durationMs,
+      artworkUrl: null,
+      explicit: false,
+    },
+  });
+
+  /** Two phones holding the playlist Drive (Lucky), synced; b's clock runs ahead of a's. */
+  const twoPhones = async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    const b = await phone(service);
+    const { playlistId: onA } = createPlaylist(
+      a.db,
+      "Drive",
+      [{ source: "library", trackId: a.track("Lucky") }],
+      a.now(),
+    );
+    await a.sync();
+    await b.sync();
+    const onB = selectPlaylists(b.db)[0]!.id;
+    for (let i = 0; i < 5; i++) b.now();
+    const songs = (side: typeof a) => playlistTitles(side.db)[0]?.songs;
+    const liveIds = () =>
+      service
+        .rows()
+        .playlistEntries.filter((row) => !row.deleted)
+        .map((row) => row.id)
+        .toSorted();
+    const syncIds = (side: typeof a) =>
+      side.db
+        .select({ id: schema.playlistItems.syncId })
+        .from(schema.playlistItems)
+        .where(eq(schema.playlistItems.deleted, false))
+        .all()
+        .map((row) => row.id)
+        .toSorted();
+    return { service, a, b, onA, onB, songs, liveIds, syncIds };
+  };
+
+  test("two phones that add one song offline end with one entry, the one added first", async () => {
+    const { a, b, onA, onB, songs, liveIds, syncIds } = await twoPhones();
+    addToPlaylist(a.db, onA, [{ source: "library", trackId: a.track("Airbag") }], a.now());
+    addToPlaylist(b.db, onB, [{ source: "library", trackId: b.track("Airbag") }], b.now());
+    const first = selectPlaylist(a.db, onA)!.items.at(-1)!.itemId;
+    const firstSyncId = a.db
+      .select({ id: schema.playlistItems.syncId })
+      .from(schema.playlistItems)
+      .where(eq(schema.playlistItems.id, first))
+      .get()!.id;
+
+    await b.sync();
+    await a.sync();
+    await b.sync();
+    await a.sync();
+    assert.deepEqual(songs(a), ["Lucky", "Airbag"]);
+    assert.deepEqual(songs(b), ["Lucky", "Airbag"]);
+    assert.ok(syncIds(a).includes(firstSyncId));
+    assert.deepEqual(syncIds(b), syncIds(a));
+    assert.deepEqual(liveIds(), syncIds(a));
+    assert.deepEqual(selectPlaylistGraveyard(a.db, onA), []);
+    assert.deepEqual(selectPlaylistGraveyard(b.db, onB), []);
+
+    // Later syncs don't bring the removed entry back.
+    await b.sync();
+    await a.sync();
+    assert.deepEqual(songs(a), ["Lucky", "Airbag"]);
+    assert.deepEqual(songs(b), ["Lucky", "Airbag"]);
+  });
+
+  test("the phone that added first removes the other's copy when it arrives first", async () => {
+    const { a, b, onA, onB, songs, liveIds, syncIds } = await twoPhones();
+    addToPlaylist(a.db, onA, [streamed("vid1", "Airbag")], a.now());
+    addToPlaylist(b.db, onB, [streamed("vid1", "Airbag")], b.now());
+    await b.sync();
+    await a.sync();
+    assert.deepEqual(songs(a), ["Lucky", "yt:Airbag"]);
+    await b.sync();
+    assert.deepEqual(songs(b), ["Lucky", "yt:Airbag"]);
+    assert.deepEqual(syncIds(b), syncIds(a));
+    assert.deepEqual(liveIds(), syncIds(a));
+    assert.deepEqual(selectPlaylistGraveyard(a.db, onA), []);
+  });
+
+  test("a live take or a copy of another length is another song and stays", async () => {
+    const { a, b, onA, onB, songs } = await twoPhones();
+    addToPlaylist(a.db, onA, [streamed("vid1", "Airbag")], a.now());
+    addToPlaylist(
+      b.db,
+      onB,
+      [streamed("vid2", "Airbag (Live)"), streamed("vid3", "Airbag", 300_000)],
+      b.now(),
+    );
+    await a.sync();
+    await b.sync();
+    await a.sync();
+    // Where the two runs land is another rule's; only which entries stay counts here.
+    const expected = ["Lucky", "yt:Airbag", "yt:Airbag", "yt:Airbag (Live)"];
+    assert.deepEqual(songs(a)?.toSorted(), expected);
+    assert.deepEqual(songs(b)?.toSorted(), expected);
+  });
+});
