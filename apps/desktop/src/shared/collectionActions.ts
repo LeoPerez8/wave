@@ -28,10 +28,18 @@ export const COLLECTION_RUN_ACTIONS = [
 export type CollectionRunAction = (typeof COLLECTION_RUN_ACTIONS)[number];
 export type CollectionRunResult = Extract<SongRunResult, { kind: "queued" | "playlist" | "fixed" }>;
 
-/** The checked rows of one kind's list: the ones named, or all but the unchecked (Select All). */
+/**
+ * The checked rows of one kind's list: the ones named, or all but the unchecked (Select All), of
+ * the rows its Find field [find] finds when it holds one.
+ */
 export type CollectionPick =
   | { readonly kind: CollectionKind; readonly ids: readonly number[] }
-  | { readonly kind: CollectionKind; readonly all: true; readonly except: readonly number[] };
+  | {
+      readonly kind: CollectionKind;
+      readonly all: true;
+      readonly except: readonly number[];
+      readonly find?: string;
+    };
 
 /** Songs and collections checked together: the songs first, then each kind's rows in list order. */
 export interface SelectionTarget {

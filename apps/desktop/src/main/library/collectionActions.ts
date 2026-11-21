@@ -214,11 +214,17 @@ const positiveIds = (value: unknown): value is readonly number[] =>
 
 const validPick = (value: unknown): value is CollectionPick => {
   if (typeof value !== "object" || value === null) return false;
-  const { kind, ids, all, except } = value as { [key: string]: unknown };
+  const { kind, ids, all, except, find } = value as { [key: string]: unknown };
   if (typeof kind !== "string" || !isCollectionKind(kind as CollectionKind)) return false;
   return all === true
-    ? ids === undefined && positiveIds(except)
-    : all === undefined && except === undefined && positiveIds(ids) && ids.length > 0;
+    ? ids === undefined &&
+        positiveIds(except) &&
+        (find === undefined || (typeof find === "string" && find.length <= 500))
+    : all === undefined &&
+        except === undefined &&
+        find === undefined &&
+        positiveIds(ids) &&
+        ids.length > 0;
 };
 
 /** A selection that holds a collection; songs alone go through the song actions. */
@@ -241,7 +247,8 @@ export const validSelectionTarget = (
 const pickedCollections = (db: LibraryDatabase, pick: CollectionPick): CollectionTarget[] => {
   if (!("all" in pick)) return [...new Set(pick.ids)].map((id) => ({ kind: pick.kind, id }));
   const except = new Set(pick.except);
-  return browseRowIds(db, { kind: lists[pick.kind] }, 0, 2 ** 31 - 1)
+  const list = { kind: lists[pick.kind], ...(pick.find === undefined ? {} : { find: pick.find }) };
+  return browseRowIds(db, list, 0, 2 ** 31 - 1)
     .items.filter((id) => !except.has(id))
     .map((id) => ({ kind: pick.kind, id }));
 };

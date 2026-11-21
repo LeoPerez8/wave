@@ -679,7 +679,7 @@ export const playbackLayer = Layer.effect(
         // A playlist with YT Music songs plays them in their places, as its page lists them.
         const mixed =
           scope.kind === "playlist" && scope.id !== undefined
-            ? playlistSongs(db, scope.id)
+            ? playlistSongs(db, scope.id, scope.find)
             : undefined;
         const ids =
           mixed?.map((song) =>

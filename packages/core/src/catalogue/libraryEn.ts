@@ -180,6 +180,8 @@ export const libraryEn = {
     genres: "Find in Genres",
     playlists: "Find in Playlists",
     artist: "Find in artist",
+    favorites: "Find in Favorites",
+    genre: "Find in genre",
   },
   noMatch: {
     history: "No plays match",
@@ -190,6 +192,8 @@ export const libraryEn = {
     genres: "No genres match",
     playlists: "No playlists match",
     artist: "No songs match",
+    favorites: "No songs match",
+    genre: "No songs match",
   },
   /** The Library's shelf, picked from its title's long press. */
   shelfUnderLibrary: "Shelf under the Library",

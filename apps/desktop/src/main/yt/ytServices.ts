@@ -30,6 +30,7 @@ import {
   DISCOVER_LEVEL_SETTING as DISCOVER_LEVEL,
   DISCOVER_SLIDERS_SETTING as DISCOVER_SLIDERS,
   HOME_ARRANGEMENT_SETTING,
+  hasFindQuery,
   SEARCH_ONLINE_SETTING as SEARCH_ONLINE,
   ytTrackId,
   type AppLanguage,
@@ -574,6 +575,7 @@ export const ytFeaturesLayer = (options: {
             "all" in target &&
             target.except.length === 0 &&
             scope.id !== undefined &&
+            !hasFindQuery(scope.find ?? "") &&
             LISTS.includes(scope.kind);
           const title = whole ? browseLibrary(db, scope, 0, 1).hero?.title : undefined;
           if (whole && title !== undefined) {

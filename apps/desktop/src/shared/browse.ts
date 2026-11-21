@@ -1,5 +1,5 @@
 import type { Page } from "./bridge.ts";
-import type { DiscHead, PlaylistSongSort, SongSort } from "@wave/core";
+import type { DiscHead, PlaylistSongSort, PlaylistSort, SongSort } from "@wave/core";
 
 export const MAX_ROW_IDS_PAGE = 1000;
 
@@ -21,6 +21,11 @@ export interface BrowseScope {
   readonly kind: BrowseKind;
   readonly id?: number;
   readonly query?: string;
+  /**
+   * What the page's Find field holds: the list shows, plays and selects only the rows it finds
+   * (Core's `createFindMatcher`). Blank finds everything.
+   */
+  readonly find?: string;
 }
 export interface BrowseRow {
   readonly id: number;
@@ -70,4 +75,6 @@ export interface BrowsePage extends Page<BrowseRow> {
   readonly sort?: SongSort | PlaylistSongSort;
   /** On a page of an album with several discs, the "Disc n" heads over its whole list. */
   readonly discs?: readonly DiscHead[];
+  /** On the Playlists list, its sort. */
+  readonly listSort?: PlaylistSort;
 }

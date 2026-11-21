@@ -334,6 +334,12 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   percentage); the user's playlists with New Playlist; Settings pinned at the bottom. Back and
   forward arrows sit in the title bar. Every entry has its own icon. The sidebar scrolls as one
   when the window is short, keeping the Search field and Settings in view.
+- The Playlists page counts its playlists and has the phone's Sort by (Name, Recently Added,
+  Recently Played, Custom) and a switch between its table and a grid of covers. In Custom a row
+  or a cover drags into another's place, and a playlist's menu has Move Up and Move Down. The
+  sidebar lists playlists in the same order. As on the phone, the sort, the arranged order and
+  the layout stay on the computer (Core's `PLAYLIST_ORDER_SETTING`, `PLAYLIST_LAYOUT_SETTING`)
+  and don't sync. Large Cards reads as the grid.
 - Lyrics and the Queue share the side panel, toggled from the player bar and closed by the
   panel's own control on every tab. Now Playing (artwork,
   title, lyrics) opens from the bar's artwork or title and closes with Esc. Focus lands on Now
@@ -364,6 +370,13 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   the keyboard focus ring. Songs keeps the A–Z spine.
 - Songs and Favorites have the song count under their title, then Play and Shuffle in the accent
   as on a hero; both play the list in the order its table shows (#1220).
+- Each list page (Songs, Albums, Artists, Genres, Favorites, Playlists, a playlist, an artist, a
+  genre) has a Find field under its heading, the phone's pull-down Find: typing narrows the table
+  with Core's matching (case and accents ignored, words matched from their start). Main filters
+  in the page's query (`wave_finds`), so the table still reads pages; a playlist keeps each
+  song's place in its "#". The count, Play, Shuffle and Select All go by the rows found, and a
+  Find with none says so ("No songs match"). Esc clears it and gives the focus back to the list.
+  It has no shortcut: Ctrl+F stays the Library Search (#1213).
 - Artwork has 6 px corners on tiles and heroes, 4 px on row thumbnails, circles for artists.
 - The song menu holds Play Next, Add to Queue, Add to Playlist, Favorite, Go to Album, Go to
   Artist, Start Magic Queue, Share, Select, Fix Song and Remove from Library.
