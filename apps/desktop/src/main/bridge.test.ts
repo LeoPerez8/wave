@@ -1330,6 +1330,7 @@ test("Settings › Playback is kept for the account and reaches the engine at on
         crossfadeSeconds: 0,
         normalizeVolume: true,
         bufferMinutes: 2,
+        shuffleKind: "real",
         dontPlayExplicit: false,
         continueQueue: true,
       });
@@ -1343,6 +1344,7 @@ test("Settings › Playback is kept for the account and reaches the engine at on
         crossfadeSeconds: 4,
         normalizeVolume: false,
         bufferMinutes: 2,
+        shuffleKind: "real",
         dontPlayExplicit: false,
         continueQueue: true,
       });
@@ -1352,6 +1354,7 @@ test("Settings › Playback is kept for the account and reaches the engine at on
         crossfadeSeconds: 4,
         normalizeVolume: false,
         bufferMinutes: 15,
+        shuffleKind: "real",
         dontPlayExplicit: false,
         continueQueue: true,
       });
@@ -1361,6 +1364,7 @@ test("Settings › Playback is kept for the account and reaches the engine at on
         { crossfadeSeconds: Number.NaN },
         { normalizeVolume: "off" },
         { bufferMinutes: 3 },
+        { shuffleKind: "random" },
         { dontPlayExplicit: "on" },
         { continueQueue: 1 },
         { volume: 1 },
@@ -1372,6 +1376,100 @@ test("Settings › Playback is kept for the account and reaches the engine at on
           /refused/i,
           JSON.stringify(change),
         );
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("the kind of shuffle chosen orders a list's Shuffle, the bar's shuffle and a kind picked", async () => {
+  await withFile(async (file) => {
+    const { runtime, exposed } = connect(file);
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const db = (yield* Database) as unknown as TestDatabase;
+          for (const artist of ["Nick Drake", "Vashti Bunyan"])
+            for (const n of [1, 2, 3])
+              addTrack(db, { title: `${artist} ${n}`, artist, album: artist, trackNumber: n });
+        }),
+      );
+      /** The queue's artists from the current song on, which Even Shuffle never repeats in a row. */
+      const artists = async () => {
+        const view = await wave.playback.view();
+        const rows = (await wave.playback.queue(0, 10)).items;
+        return rows.slice(view.index).map((row) => row.artist);
+      };
+      const takesTurns = (names: readonly (string | null)[]) =>
+        names.length === 6 && names.every((name, at) => at === 0 || name !== names[at - 1]);
+      assert.equal((await wave.settings.setPlayback({ shuffleKind: "even" })).shuffleKind, "even");
+      // Real Shuffle leaves two songs by one artist together nine times in ten; six in a row
+      // that take turns are Even Shuffle's.
+      for (let round = 0; round < 6; round++) {
+        await wave.playback.start({ kind: "songs" }, undefined, true);
+        assert.ok(takesTurns(await artists()), "a list's Shuffle");
+        await wave.playback.command({ type: "setShuffle", on: false });
+        await wave.playback.command({ type: "setShuffle", on: true });
+        assert.ok(takesTurns(await artists()), "the bar's shuffle");
+      }
+      // A kind picked on the menu shuffles Up Next by it, turning shuffle on.
+      await wave.playback.command({ type: "setShuffle", on: false });
+      await wave.playback.command({ type: "reshuffle" });
+      assert.equal((await wave.playback.view()).shuffle, true);
+      assert.ok(takesTurns(await artists()), "a kind picked");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("the kind of shuffle syncs with the phone in both directions", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const phone = await app.service.signIn();
+    const phoneDb = await openTestDatabase();
+    const values = new Map<string, string>([["settings.shuffleKind", "smart"]]);
+    const phoneSync = () =>
+      syncCycle({
+        db: phoneDb,
+        splits: creditSplits(),
+        account: "ana@example.com",
+        transport: {
+          request: async (method, path, body) => {
+            const response = await app.service.request(method, path, {
+              session: phone,
+              ...(body === null ? {} : { body, headers: { "content-type": "application/json" } }),
+            });
+            return { status: response.status, body: await response.text() };
+          },
+        },
+        preferences: {
+          value: (key) => values.get(key) ?? null,
+          apply: (key, value) => {
+            if (value === null) values.delete(key);
+            else values.set(key, value);
+          },
+        },
+        now: Date.now,
+        songsChanged: false,
+        wait: async () => {},
+      });
+    stampPreference(phoneDb, "settings.shuffleKind", Date.now());
+    await phoneSync();
+    const { clock, pass } = fakeClock();
+    const { runtime, exposed } = connect(file, undefined, { service: app.open(), clock });
+    const wave = exposed.get("wave") as WaveBridge;
+    try {
+      assert.equal((await wave.settings.playback()).shuffleKind, "real");
+      await wave.account.signIn();
+      await until(async () => (await wave.settings.playback()).shuffleKind === "smart");
+      await wave.settings.setPlayback({ shuffleKind: "even" });
+      await pass(10_000);
+      await until(async () => {
+        await phoneSync();
+        return values.get("settings.shuffleKind") === "even";
+      });
     } finally {
       await runtime.dispose();
     }
@@ -2113,6 +2211,7 @@ test("a phone's Settings › Playback reaches the desktop's engine when a sync p
         crossfadeSeconds: 6,
         normalizeVolume: false,
         bufferMinutes: 2,
+        shuffleKind: "real",
         dontPlayExplicit: true,
         continueQueue: false,
       });

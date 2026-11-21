@@ -78,6 +78,7 @@ export {
   EMPTY_QUEUE,
   REAL_SHUFFLE,
   RESTART_THRESHOLD_MS,
+  SHUFFLE_KINDS,
   currentEntry,
   nextRepeatMode,
   parseQueueState,
@@ -86,11 +87,13 @@ export {
   playReplacesQueue,
   reduceQueue,
   reshuffledUpNext,
+  shuffleReads,
   shuffledTrackIds,
   shufflesQueue,
   upNext,
   upNextMove,
   withPendingMoves,
+  writeShuffleKind,
 } from "./queue.ts";
 export type {
   PendingMove,

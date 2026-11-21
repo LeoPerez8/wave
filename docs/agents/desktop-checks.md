@@ -450,3 +450,15 @@ The output contains the installer, the Windows blockmap on Windows, and `build.j
 the release evidence. Linux packaging uses Ubuntu 22.04 with the ALSA and D-Bus headers
 and the FUSE 2 runtime.
 See [Release provenance](../release-provenance.md#desktop-installers) for publication and rollback.
+
+## Kinds of shuffle
+
+`e2e/shuffleKinds.spec.ts` opens the kinds of shuffle from a hero's Shuffle and the player bar's
+by right-click, Shift+F10 and the Menu key, picks one, reads the queue Even Shuffle made, and
+changes the choice in Settings › Playback. It plays silent WAV files it writes, so it needs the
+audio addon. Screenshots are `shuffle-kinds-menu-<platform>.png` and
+`shuffle-kinds-settings-<platform>.png`.
+
+The choice is `shuffleKind` in `settings.playback()`, the phone's synced `settings.shuffleKind`.
+A pick on the menu also sends the queue command `{ type: "reshuffle" }`. `bridge.test.ts` syncs
+it with a phone both ways and checks the order Even Shuffle gives.

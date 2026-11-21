@@ -63,6 +63,7 @@ import {
   type CollectionPicks,
 } from "./MixedSelection.tsx";
 import { itemMenuEvents, type MenuPoint } from "./Menu.tsx";
+import { shuffleMenuEvents } from "./ShuffleKinds.tsx";
 import { usePlaylistEdits } from "./Playlists.tsx";
 import { Graveyard } from "./Graveyard.tsx";
 import { applyLanguage, labels, text, useLanguage, tagTitle, artistName } from "./text.ts";
@@ -418,6 +419,8 @@ export function App() {
             x: event.clientX,
             y: event.clientY,
           });
+  /** A shuffle control's menu of kinds: the player bar's and a hero's Shuffle. */
+  const shuffleMenu = shuffleMenuEvents(actions.openItems, playback.run);
   /** The song playing's menu, from the player bar. */
   const playingMenu = (element: HTMLElement) => {
     const song = playback.view?.current;
@@ -868,7 +871,7 @@ export function App() {
                   <Icon name="play" size={16} />
                   {labels.play}
                 </button>
-                <button onClick={() => playList(true)}>
+                <button onClick={() => playList(true)} {...shuffleMenu}>
                   <Icon name="shuffle" size={16} />
                   {labels.shuffle}
                 </button>
@@ -1362,6 +1365,7 @@ export function App() {
         onPanel={panel.toggle}
         onNowPlaying={() => setNowPlaying(true)}
         onMenu={playingMenu}
+        shuffleMenu={shuffleMenu}
         links={ytLinks}
       />
       <Links
