@@ -47,6 +47,7 @@ import {
   countPageRead,
   countSummarized,
 } from "./playlistWork.ts";
+import { keptPlaylistPlays } from "./keptPlayTotals.ts";
 import * as schema from "./schema.ts";
 import { stamped } from "./sync.ts";
 import { filePath, hasFile, inScope, songColumns, type TrackScope } from "./tracks.ts";
@@ -1382,7 +1383,10 @@ export const selectPlaylistsLastPlayed = (db: LibraryDatabase): Map<number, numb
 export const selectPlaylistPlays = (db: LibraryDatabase, now: number): PlaylistPlays[] => {
   const { playEvents } = schema;
   const recent = sql`${playEvents.startedAt} >= ${recentWindowStart(now)} AND ${playEvents.startedAt} <= ${now}`;
-  const rows = db
+  // The kept counts (#1349), or summed from the plays until an upgrade seeds them.
+  const rows =
+    keptPlaylistPlays(db, { from: recentWindowStart(now), to: now }) ??
+    db
     .select({
       contextId: playEvents.contextId,
       recentPlays: sql<number>`coalesce(sum(CASE WHEN ${playEvents.counted} AND ${recent} THEN 1 ELSE 0 END), 0)`,

@@ -16,6 +16,7 @@ import { sql } from "drizzle-orm";
 import { saveImportedPlays } from "./blackPlayer.ts";
 import { creditSplits, relinkCredits } from "./credits.ts";
 import { followReleaseListening } from "./followReleases.ts";
+import { selectPlaylistPlays } from "./playlists.ts";
 import {
   keptCreditedPlayTotals,
   keptPlayedTotals,
@@ -333,4 +334,26 @@ test("release listening finds counted recordings in the kept totals, not by scan
     .map((row) => row.key))
     expected.delete(key);
   assert.deepEqual([...after.result.countedPlays].sort(), [...expected].sort());
+});
+
+test("the playlists' plays come from kept counts, also over an upgrade's history", async () => {
+  const { db, solo, duet } = await library({ through: "0064_pull_dislikes" });
+  const fromPlaylist = (trackId: number, playlist: string, at: number, counted = true): PlayEvent => ({
+    ...play(String(trackId), at, counted),
+    context: { kind: "playlist", id: playlist },
+  });
+  for (let index = 0; index < 120; index++)
+    recordPlay(db, fromPlaylist(index % 2 ? solo : duet, index % 3 ? "7" : "12", NOW - index * 9_000_000, index % 5 !== 0));
+  migrateDatabase(db, migrations);
+  recordPlay(db, fromPlaylist(solo, "07", NOW - 1_000));
+  db.run(sql`DELETE FROM play_events WHERE context_id = '12' AND started_at > ${NOW - 2 * DAY}`);
+  const expected = selectPlaylistPlays(db, NOW);
+  settle(db);
+  const kept = traceQueries(db, () => selectPlaylistPlays(db, NOW));
+  assert.deepEqual(kept.result, expected);
+  assert.ok(expected.length === 2 && expected.every((playlist) => playlist.recentPlays > 0));
+  assert.deepEqual(
+    kept.queries.filter((query) => query.plan.some((step) => /play_events_context_idx/u.test(step))),
+    [],
+  );
 });

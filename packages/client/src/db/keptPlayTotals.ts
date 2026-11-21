@@ -95,6 +95,19 @@ const seed = (db: LibraryDatabase, kept: KeptState, rows: number) => {
       WHERE id > ${kept.seededThrough} AND id <= ${to} AND counted AND recording_key IS NOT NULL
       GROUP BY recording_key
       ON CONFLICT (recording_key) DO UPDATE SET counted_plays = counted_plays + excluded.counted_plays`);
+    tx.run(sql`INSERT INTO playlist_play_buckets (context_id, span, bucket, counted_plays, latest_play_at)
+      SELECT * FROM (
+        SELECT context_id, 0, started_at / ${sql.raw(String(DAY_MS))} AS bucket, count(*), max(started_at)
+        FROM play_events WHERE id > ${kept.seededThrough} AND id <= ${to} AND counted
+          AND context_type = 'playlist' AND context_id IS NOT NULL GROUP BY context_id, bucket
+        UNION ALL
+        SELECT context_id, 1, started_at / ${sql.raw(String(BLOCK_MS))} AS bucket, count(*), max(started_at)
+        FROM play_events WHERE id > ${kept.seededThrough} AND id <= ${to} AND counted
+          AND context_type = 'playlist' AND context_id IS NOT NULL GROUP BY context_id, bucket
+      ) WHERE true
+      ON CONFLICT (context_id, span, bucket) DO UPDATE SET
+        counted_plays = counted_plays + excluded.counted_plays,
+        latest_play_at = max(latest_play_at, excluded.latest_play_at)`);
     tx.run(sql`UPDATE kept_totals_state SET seeded_through = ${to} WHERE id = 1`);
   });
 };
@@ -559,6 +572,51 @@ export const countedRecordings = (db: LibraryDatabase, keys: readonly string[]):
       AND recording_key IN (SELECT value FROM json_each(${JSON.stringify(keys)}))`,
     )
     .map((row) => row.key);
+};
+
+/** A playlist's counted plays by play context id: in a window, of all time, and the latest. */
+export interface KeptPlaylistPlays {
+  readonly contextId: string;
+  readonly recentPlays: number;
+  readonly plays: number;
+  readonly latestPlayAt: number | null;
+}
+
+/**
+ * Each playlist play context's counted plays within [window] and of all
+ * time, from the kept counts: null until an upgrade's history is seeded.
+ */
+export const keptPlaylistPlays = (
+  db: LibraryDatabase,
+  window: StatsWindow,
+): KeptPlaylistPlays[] | null => {
+  if (!keepsTotals(db)) return null;
+  const kept = keptState(db);
+  if (kept.seededThrough < kept.seedUntil) return null;
+  const plan = keptTotalsPlan(window);
+  const recent: SQL[] = [];
+  const buckets = (span: number, from: number, to: number) =>
+    sql`SELECT context_id, counted_plays FROM playlist_play_buckets
+      WHERE span = ${span} AND bucket BETWEEN ${from} AND ${to}`;
+  if (plan.blocks !== null) recent.push(buckets(1, plan.blocks.from, plan.blocks.to));
+  for (const days of plan.days) recent.push(buckets(0, days.from, days.to));
+  for (const plays of plan.plays)
+    // The partial days' plays, through their start (not every playlist play through the context's index).
+    recent.push(sql`SELECT context_id, 1 FROM play_events
+      WHERE started_at BETWEEN ${plays.from} AND ${plays.to} AND counted
+        AND +context_type = 'playlist' AND context_id IS NOT NULL`);
+  const inWindow =
+    recent.length === 0 ? sql`SELECT NULL, 0 WHERE false` : sql.join(recent, sql` UNION ALL `);
+  return db.all<KeptPlaylistPlays>(sql`WITH
+    total AS (
+      SELECT context_id, sum(counted_plays) AS plays, max(latest_play_at) AS latest
+      FROM playlist_play_buckets WHERE span = 1 GROUP BY context_id
+    ),
+    recent (context_id, plays) AS (${inWindow}),
+    recent_total AS (SELECT context_id, sum(plays) AS plays FROM recent GROUP BY context_id)
+    SELECT total.context_id AS "contextId", coalesce(recent_total.plays, 0) AS "recentPlays",
+      total.plays AS plays, total.latest AS "latestPlayAt"
+    FROM total LEFT JOIN recent_total ON recent_total.context_id = total.context_id`);
 };
 
 interface KeptTotal {

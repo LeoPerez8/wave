@@ -21,6 +21,8 @@
  * - `played_recordings`: each recording key's counted plays, for the
  *   new-release feed. Its triggers count only plays already seeded or newer
  *   than the migration, so a seeding step adds each older play once.
+ * - `playlist_play_buckets`: each playlist's counted plays (by play context
+ *   id) and latest counted start per day and block, counted the same way.
  *
  * The migration itself reads no history: `seed_until` is the last play it
  * found, and the app seeds and sums the songs of the plays up to it in
@@ -109,6 +111,32 @@ const PLAY_COLUMNS = "track_id, video_id, recording_key, started_at, listened_ms
 const accounted = (id: string) => `(${id} > (SELECT seed_until FROM kept_totals_state)
   OR ${id} <= (SELECT seeded_through FROM kept_totals_state))`;
 
+/** Whether the play [row] was counted from a playlist. */
+const fromPlaylist = (row: string) =>
+  `(${row}.counted AND ${row}.context_type = 'playlist' AND ${row}.context_id IS NOT NULL)`;
+
+/** Adds the playlist play [row], when it is one, to its playlist's day and block. */
+const addPlaylistPlay = (row: string) => `
+  INSERT INTO playlist_play_buckets (context_id, span, bucket, counted_plays, latest_play_at)
+    SELECT * FROM (${spans(row)
+      .map(({ span, bucket }) => `SELECT ${row}.context_id, ${span}, ${bucket}, 1, ${row}.started_at`)
+      .join(" UNION ALL ")}) WHERE ${fromPlaylist(row)}
+    ON CONFLICT (context_id, span, bucket) DO UPDATE SET counted_plays = counted_plays + 1,
+      latest_play_at = max(latest_play_at, excluded.latest_play_at);`;
+
+/** Takes the playlist play [row], when it was one, out of its day and block, finding their latest again. */
+const removePlaylistPlay = (row: string) =>
+  spans(row)
+    .map(
+      ({ span, bucket, size }) => `
+  UPDATE playlist_play_buckets SET counted_plays = counted_plays - 1,
+    latest_play_at = (SELECT max(e.started_at) FROM play_events AS e
+      WHERE e.context_type = 'playlist' AND e.context_id = ${row}.context_id AND e.counted
+        AND e.started_at BETWEEN (${bucket}) * ${size} AND (${bucket}) * ${size} + ${size - 1})
+  WHERE ${fromPlaylist(row)} AND context_id = ${row}.context_id AND span = ${span} AND bucket = ${bucket};`,
+    )
+    .join("");
+
 /** Adds [plays] counted plays to the recording [key]. */
 const countRecording = (key: string, plays: string) => `
   INSERT INTO played_recordings (recording_key, counted_plays) SELECT ${key}, ${plays}
@@ -191,6 +219,17 @@ CREATE TABLE played_recordings (
 	counted_plays integer NOT NULL
 ) WITHOUT ROWID;
 --> statement-breakpoint
+CREATE TABLE playlist_play_buckets (
+	context_id text NOT NULL,
+	span integer NOT NULL,
+	bucket integer NOT NULL,
+	counted_plays integer NOT NULL,
+	latest_play_at integer,
+	PRIMARY KEY (context_id, span, bucket)
+) WITHOUT ROWID;
+--> statement-breakpoint
+CREATE INDEX playlist_play_buckets_bucket_idx ON playlist_play_buckets (span, bucket);
+--> statement-breakpoint
 CREATE TABLE kept_totals_state (
 	id integer PRIMARY KEY NOT NULL CHECK (id = 1),
 	generation integer NOT NULL,
@@ -249,6 +288,22 @@ END;
 CREATE TRIGGER kept_recording_delete AFTER DELETE ON play_events
 WHEN old.counted AND ${accounted("old.id")} BEGIN
 ${countRecording("old.recording_key", "-1")}
+END;
+--> statement-breakpoint
+CREATE TRIGGER kept_playlist_insert AFTER INSERT ON play_events WHEN ${fromPlaylist("new")} BEGIN
+${addPlaylistPlay("new")}
+END;
+--> statement-breakpoint
+CREATE TRIGGER kept_playlist_change
+AFTER UPDATE OF context_type, context_id, started_at, counted ON play_events
+WHEN ${accounted("new.id")} AND (${fromPlaylist("old")} OR ${fromPlaylist("new")}) BEGIN
+${removePlaylistPlay("old")}
+${addPlaylistPlay("new")}
+END;
+--> statement-breakpoint
+CREATE TRIGGER kept_playlist_delete AFTER DELETE ON play_events
+WHEN ${fromPlaylist("old")} AND ${accounted("old.id")} BEGIN
+${removePlaylistPlay("old")}
 END;
 --> statement-breakpoint
 CREATE TRIGGER kept_play_album AFTER UPDATE OF album_id ON play_events
