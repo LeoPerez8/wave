@@ -30,7 +30,16 @@ import {
   type LyricsFollowEvent,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { ActivityIndicator, ScrollView, Text, View, type ScrollViewInstance } from "react-native";
 import Animated, {
   interpolateColor,
@@ -63,6 +72,7 @@ import { GeniusAbout } from "./GeniusAbout";
 import { HighlightedLine, MoreInsights, NO_HIGHLIGHTS, lineAnnotations } from "./GeniusAnnotations";
 import type { LibraryFile } from "./hooks";
 import { isPlayheadLive, playhead, playheadVisibility } from "./playhead";
+import { RelatedRiseArea } from "./ScreenPages";
 import { TrackHeader } from "./TrackHeader";
 import { geniusAboutKey, useGenius, type GeniusAboutCard } from "./useGenius";
 import { useLibraryLyrics, type LibraryLyricsShown } from "./useLibraryLyrics";
@@ -767,6 +777,19 @@ function PickingBar({
   );
 }
 
+/**
+ * Where the Lyrics view has no lyrics to scroll (a search's state, none
+ * found): a drag down drags the sheet, and a drag up raises Related, as from
+ * the rest of the player.
+ */
+function StillArea({ children }: { children: ReactNode }) {
+  return (
+    <RelatedRiseArea style={{ flex: 1 }}>
+      <DismissArea style={{ flex: 1 }}>{children}</DismissArea>
+    </RelatedRiseArea>
+  );
+}
+
 /** How wide each placeholder line of the skeleton is, as a share of the view: ragged, as lyrics are. */
 const SKELETON_LINES = ["72%", "58%", "84%", "46%", "66%", "78%", "52%", "70%"] as const;
 
@@ -778,7 +801,7 @@ const SKELETON_LINES = ["72%", "58%", "84%", "46%", "66%", "78%", "52%", "70%"] 
 function LyricsSkeleton() {
   const { strings } = useLocalisation();
   return (
-    <DismissArea style={{ flex: 1 }}>
+    <StillArea>
       <View
         accessible
         accessibilityLabel={strings.playbackText.searchingForLyrics}
@@ -792,7 +815,7 @@ function LyricsSkeleton() {
           </View>
         ))}
       </View>
-    </DismissArea>
+    </StillArea>
   );
 }
 
@@ -835,9 +858,9 @@ function LyricsBody({
   // Reading takes a moment; an empty field avoids flashing the empty state.
   if (shown === null) {
     return (
-      <DismissArea style={{ flex: 1 }}>
+      <StillArea>
         <View className="flex-1" />
-      </DismissArea>
+      </StillArea>
     );
   }
 
@@ -880,7 +903,7 @@ function LyricsBody({
       return <LyricsSkeleton />;
     case "none":
       return (
-        <DismissArea style={{ flex: 1 }}>
+        <StillArea>
           <EmptyState
             icon={IconQuoteOff}
             title={strings.playbackText.noLyrics}
@@ -888,11 +911,11 @@ function LyricsBody({
               strings.playbackText.addLyricsToThisSongsTagsOrPutAnLrcFileWithTheSameNameBesideIt
             }
           />
-        </DismissArea>
+        </StillArea>
       );
     case "off":
       return (
-        <DismissArea style={{ flex: 1 }}>
+        <StillArea>
           <EmptyState
             icon={IconQuoteOff}
             title={strings.playbackText.noLyrics}
@@ -900,28 +923,28 @@ function LyricsBody({
               strings.playbackText.turnOnFixSongsOnlineInSettingsLyricsAndTagsToFindThisSongsLyrics
             }
           />
-        </DismissArea>
+        </StillArea>
       );
     case "notFound":
       return (
-        <DismissArea style={{ flex: 1 }}>
+        <StillArea>
           <EmptyState
             icon={IconQuoteOff}
             title={strings.playbackText.noLyricsFound}
             message={strings.playbackText.waveCouldntFindLyricsForThisSongOnline}
           />
-        </DismissArea>
+        </StillArea>
       );
     case "failed":
       return (
-        <DismissArea style={{ flex: 1 }}>
+        <StillArea>
           <EmptyState
             icon={IconQuoteOff}
             title={strings.playbackText.couldntSearchForLyrics}
             message={strings.playbackText.checkYourConnectionAndTryAgain}
             action={<TextButton label={strings.playbackText.tryAgain} onPress={retry} />}
           />
-        </DismissArea>
+        </StillArea>
       );
   }
 }
@@ -1067,41 +1090,44 @@ export function LyricsView({
 
   return (
     <View className="flex-1">
-      <DismissArea>
-        {isPicking ? (
-          <PickingBar count={shared.length} onCancel={() => setPicked(null)} onNext={next} />
-        ) : (
-          <View className="flex-row items-center">
-            <View className="flex-1">
-              <TrackHeader item={item} onShowPlayer={onShowPlayer} />
-            </View>
-            {lines !== null && (
-              // The icon's 48dp target reaches past the margin, so the glyph lines up with it.
-              <View className="flex-row" style={{ marginRight: -12 }}>
-                {shown?.kind === "synced" && (
-                  <IconButton
-                    icon={IconMicrophone2}
-                    label={strings.playbackText.karaoke}
-                    accessibilityRole="switch"
-                    accessibilityState={{ checked: karaokeOn }}
-                    tone={karaokeOn ? "accent" : "secondary"}
-                    onPress={() => setKaraokeOn(!karaokeOn)}
-                  />
-                )}
-                <TranslateButton
-                  on={translationOn}
-                  onPress={() => setLyricsTranslationOn(!translationOn)}
-                />
-                <IconButton
-                  icon={IconShare3}
-                  label={strings.playbackText.shareLyrics}
-                  onPress={() => setPicked({ song, selection: null })}
-                />
+      {/* Not the lyrics: a drag up here raises Related, as from the rest of the player. */}
+      <RelatedRiseArea>
+        <DismissArea>
+          {isPicking ? (
+            <PickingBar count={shared.length} onCancel={() => setPicked(null)} onNext={next} />
+          ) : (
+            <View className="flex-row items-center">
+              <View className="flex-1">
+                <TrackHeader item={item} onShowPlayer={onShowPlayer} />
               </View>
-            )}
-          </View>
-        )}
-      </DismissArea>
+              {lines !== null && (
+                // The icon's 48dp target reaches past the margin, so the glyph lines up with it.
+                <View className="flex-row" style={{ marginRight: -12 }}>
+                  {shown?.kind === "synced" && (
+                    <IconButton
+                      icon={IconMicrophone2}
+                      label={strings.playbackText.karaoke}
+                      accessibilityRole="switch"
+                      accessibilityState={{ checked: karaokeOn }}
+                      tone={karaokeOn ? "accent" : "secondary"}
+                      onPress={() => setKaraokeOn(!karaokeOn)}
+                    />
+                  )}
+                  <TranslateButton
+                    on={translationOn}
+                    onPress={() => setLyricsTranslationOn(!translationOn)}
+                  />
+                  <IconButton
+                    icon={IconShare3}
+                    label={strings.playbackText.shareLyrics}
+                    onPress={() => setPicked({ song, selection: null })}
+                  />
+                </View>
+              )}
+            </View>
+          )}
+        </DismissArea>
+      </RelatedRiseArea>
       <LyricsBody
         shown={shown}
         song={song}

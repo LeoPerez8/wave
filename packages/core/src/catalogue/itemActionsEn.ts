@@ -25,6 +25,12 @@ export const itemActionsEn = {
     releaseDate: "Release Date",
     deletePlaylist: "Delete Playlist",
     deletePlaylists: "Delete Playlists",
+    // A collaborative playlist's entries (docs/spec.md, Collaborative playlists, The menu).
+    makeCollaborative: "Make Collaborative",
+    invite: "Invite",
+    members: "Members",
+    endCollaboration: "End Collaboration",
+    leavePlaylist: "Leave Playlist",
     fixSong: "Fix Song",
     fixSongs: "Fix Songs",
     select: "Select",

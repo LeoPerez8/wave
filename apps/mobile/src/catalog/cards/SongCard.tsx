@@ -72,6 +72,8 @@ type Props = {
   size?: number | undefined;
   /** Read out instead of "<title>, song by <artist>" (a tile whose tap does something more particular). */
   label?: string | undefined;
+  /** Its song can't play now (a streamed one with YT Music off): dimmed, read as disabled. */
+  unavailable?: boolean | undefined;
   onPress: () => void;
   onLongPress?: (() => void) | undefined;
 };
@@ -84,6 +86,7 @@ export function SongCard({
   tint,
   size = TILE.size,
   label,
+  unavailable,
   onPress,
   onLongPress,
 }: Props) {
@@ -92,6 +95,7 @@ export function SongCard({
   return (
     <CardTile
       width={size}
+      unavailable={unavailable}
       label={label ?? strings.library.songLabel(title, artist)}
       onPress={onPress}
       onLongPress={onLongPress}

@@ -74,21 +74,21 @@ describe("titleMarkColours", () => {
 });
 
 describe("titleMarkLayout", () => {
-  test("the waves stand as tall as the large title's capitals, on its baseline", () => {
-    // Inter's capitals are 1490 of 2048 units tall: 26.19dp at the large title's 36dp.
-    const layout = titleMarkLayout({ fontSize: 36, lineHeight: 44 });
-    assert.ok(Math.abs(layout.height - 26.19) < 0.01);
+  test("the waves stand at 60% of the large title's capitals, on its baseline", () => {
+    // Inter's capitals are 1490 of 2048 units tall; the waves take 60% of them.
+    const layout = titleMarkLayout({ fontSize: 26, lineHeight: 32 });
+    assert.ok(Math.abs(layout.height - 11.35) < 0.01);
     // The logo is 2.2 units wide and 1.06 tall, round caps included.
-    assert.ok(Math.abs(layout.width - 54.36) < 0.01);
-    // Inter descends 8.68dp below the baseline at 36dp, and its 43.56dp line box is centred in 44dp.
-    assert.ok(Math.abs(layout.baseline - 8.9) < 0.01);
+    assert.ok(Math.abs(layout.width - 23.55) < 0.01);
+    // Inter's line box is centred in the 32dp line, with the waves resting on its baseline.
+    assert.ok(Math.abs(layout.baseline - 6.55) < 0.01);
     // One 8dp cell between the waves and the word.
     assert.ok(Math.abs(layout.gap - 8) < 1e-9);
   });
 
   test("the waves grow with the font size", () => {
-    const base = titleMarkLayout({ fontSize: 36, lineHeight: 44 });
-    const doubled = titleMarkLayout({ fontSize: 72, lineHeight: 88 });
+    const base = titleMarkLayout({ fontSize: 26, lineHeight: 32 });
+    const doubled = titleMarkLayout({ fontSize: 52, lineHeight: 64 });
     assert.ok(Math.abs(doubled.height - 2 * base.height) < 1e-9);
     assert.ok(Math.abs(doubled.width - 2 * base.width) < 1e-9);
     assert.ok(Math.abs(doubled.baseline - 2 * base.baseline) < 1e-9);
@@ -96,33 +96,32 @@ describe("titleMarkLayout", () => {
   });
 
   test("the stroke keeps the logo's proportions", () => {
-    const { width, stroke } = titleMarkLayout({ fontSize: 36, lineHeight: 44 });
+    const { width, stroke } = titleMarkLayout({ fontSize: 26, lineHeight: 32 });
     assert.ok(Math.abs(stroke / width - LOGO_WAVES.stroke / (2 + LOGO_WAVES.stroke)) < 1e-9);
   });
 });
 
 describe("titleMarkPlacement", () => {
-  const type = { fontSize: 36, lineHeight: 44 };
-  // Android 14 at font scale 2.0 draws 36sp at 41.49dp, not 72dp, and 44sp at 48.8dp:
-  // capitals 30.18dp tall, on a baseline 38.4dp down the line.
+  const type = { fontSize: 26, lineHeight: 32 };
+  // Android 14 at font scale 2.0 scales large text by less than 2×.
   const line = { capHeight: 30.18, height: 48.8, baseline: 38.4 };
 
   test("the waves match the word as the phone drew it, not the font scale", () => {
     const placement = titleMarkPlacement({ line, fontScale: 2, type });
     assert.ok(placement !== undefined);
-    assert.ok(Math.abs(placement.height - 30.18) < 1e-9);
+    assert.ok(Math.abs(placement.height - 18.108) < 1e-9);
     // The logo is 2.2 units wide and 1.06 tall.
-    assert.ok(Math.abs(placement.width - 62.64) < 0.01);
+    assert.ok(Math.abs(placement.width - 37.58) < 0.01);
     // The baseline is 38.4dp down a 48.8dp line: 10.4dp above its bottom.
     assert.ok(Math.abs(placement.baseline - 10.4) < 1e-9);
-    // The gap keeps its share of the drawn font size: 8dp at 36dp, so 9.22dp at 41.49dp.
-    assert.ok(Math.abs(placement.gap - 9.22) < 0.01);
+    // The measured cap height scales the 8dp base gap to 12.75dp.
+    assert.ok(Math.abs(placement.gap - 12.75) < 0.02);
   });
 
   test("a measured line wins at the standard font scale too", () => {
     const placement = titleMarkPlacement({ line, fontScale: 1, type });
     assert.ok(placement !== undefined);
-    assert.ok(Math.abs(placement.height - 30.18) < 1e-9);
+    assert.ok(Math.abs(placement.height - 18.108) < 1e-9);
   });
 
   test("before the line is measured, the standard font scale shows Inter's own size", () => {
@@ -141,22 +140,22 @@ describe("titleMarkPlacement", () => {
 
 describe("titleMarkFontScale", () => {
   // A 360dp phone: 24dp margins and Home's 48dp Settings button leave 264dp.
-  const narrow = { fontSize: 36, room: 264 };
+  const narrow = { fontSize: 26, room: 264 };
 
   test("the title follows the phone's font scale while it fits its line", () => {
     assert.equal(titleMarkFontScale({ ...narrow, fontScale: 1 }), 1);
     assert.equal(titleMarkFontScale({ ...narrow, fontScale: 1.3 }), 1.3);
-    assert.equal(titleMarkFontScale({ fontSize: 36, room: 363, fontScale: 2 }), 2);
+    assert.equal(titleMarkFontScale({ fontSize: 26, room: 232, fontScale: 2 }), 2);
   });
 
   test("it stops growing where the waves and the word fill the line", () => {
-    // 54.36dp of waves, 8dp of gap and about 99dp of "Wave" are 161.36dp at scale 1.
-    const scale = titleMarkFontScale({ ...narrow, fontScale: 2 });
-    assert.ok(Math.abs(scale - 264 / 161.36) < 0.001);
+    // About 23.55dp of waves, 8dp of gap and 71.5dp of "Wave" fit in 160dp.
+    const scale = titleMarkFontScale({ fontSize: 26, room: 160, fontScale: 2 });
+    assert.ok(Math.abs(scale - 160 / 103.05) < 0.001);
   });
 
   test("it never goes under the standard size", () => {
-    assert.equal(titleMarkFontScale({ fontSize: 36, room: 100, fontScale: 1.5 }), 1);
+    assert.equal(titleMarkFontScale({ fontSize: 26, room: 80, fontScale: 1.5 }), 1);
     assert.equal(titleMarkFontScale({ ...narrow, fontScale: 0.85 }), 0.85);
   });
 });

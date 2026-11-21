@@ -66,7 +66,8 @@ export function collectionActions({
 
   const itemsFor = async (target: CollectionTarget, about: CollectionMenu): Promise<MenuItem[]> => {
     const edits = target.kind === "playlist" ? await playlistEdits(target.id) : [];
-    const items: MenuItem[] = [];
+    // A collaborative playlist's menu opens with the line that says where it is edited.
+    const items: MenuItem[] = edits.filter((item) => item.key === "collaborative");
     for (const action of about.play) {
       const runPlay =
         action === "play" || action === "shuffle"

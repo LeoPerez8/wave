@@ -25,7 +25,12 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
-import type { ImageEdit, ImportAnswer, PlaylistCreateTarget } from "../../shared/playlists.ts";
+import type {
+  ImageEdit,
+  ImportAnswer,
+  PlaylistCreateTarget,
+  PlaylistInfo,
+} from "../../shared/playlists.ts";
 import type { SpotifyImportResult } from "../../shared/spotifyImport.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
 import "./playlists.css";
@@ -50,6 +55,9 @@ interface Options {
   /** From Spotify's import started: Bring your music marks the source. */
   readonly importStarted?: (source: "spotify") => void;
 }
+
+/** The menu entries that change a collaborative playlist for every member. */
+const EDITS: ReadonlySet<string> = new Set(["renamePlaylist", "graveyard", "deletePlaylist"]);
 
 type Naming =
   | { readonly kind: "create"; readonly initial: string; readonly target?: PlaylistCreateTarget }
@@ -127,10 +135,31 @@ export function usePlaylistEdits({ go, deleted, failed, changed, importStarted }
       .catch(() => failed(problem));
   };
 
-  /** A playlist's menu: Rename, its image, its Graveyard and Delete. */
+  /**
+   * A playlist's menu: Rename, its image, its Graveyard and Delete. A collaborative one keeps
+   * only what is this device's own (its image) and sharing: the desktop edits none of it.
+   */
   const playlistItems = async (playlistId: number): Promise<readonly MenuItem[]> => {
     const info = await window.wave.playlists.info(playlistId);
     if (info === null) return [{ key: "deleted", label: text.playlists.deleted, disabled: true }];
+    const items = await allPlaylistItems(playlistId, info, await window.wave.settings.ytMusic());
+    return info.collaborative
+      ? [
+          {
+            key: "collaborative",
+            label: text.desktopLibrary.collaborativeOnPhone,
+            disabled: true,
+          },
+          ...items.filter((item) => !EDITS.has(item.key)),
+        ]
+      : items;
+  };
+
+  const allPlaylistItems = async (
+    playlistId: number,
+    info: PlaylistInfo,
+    ytMusic: boolean,
+  ): Promise<readonly MenuItem[]> => {
     const labels = text.itemActions.labels;
     return [
       {
@@ -180,7 +209,7 @@ export function usePlaylistEdits({ go, deleted, failed, changed, importStarted }
             },
           ]
         : []),
-      ...((await window.wave.settings.ytMusic())
+      ...(ytMusic
         ? [
             {
               key: "share",
@@ -234,9 +263,12 @@ export function usePlaylistEdits({ go, deleted, failed, changed, importStarted }
           .catch(() => failed(text.desktopLibrary.actionFailed)),
     }));
 
-  /** A drag or Alt+arrow on a playlist's page: [target] goes before row [before], or to the end. */
-  const place = (playlistId: number, target: SongTarget, before: number | null) =>
-    void window.wave.playlists
+  /**
+   * A drag or Alt+arrow on a playlist's page: [target] goes before row [before], or to the end.
+   * Settles once the playlist holds the new order.
+   */
+  const place = (playlistId: number, target: SongTarget, before: number | null): Promise<void> =>
+    window.wave.playlists
       .place(playlistId, target, before)
       .then(changed)
       .catch(() => failed(text.desktopLibrary.actionFailed));

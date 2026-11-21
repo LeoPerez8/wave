@@ -27,6 +27,7 @@
     "./queueSaves": "./src/queueSaves.ts",
     "./recognizeSession": "./src/recognizeSession.ts",
     "./sync/syncCycle": "./src/sync/syncCycle.ts",
+    "./sync/collaborationService": "./src/sync/collaborationService.ts",
     "./testing/syncService": "./src/sync/testSyncService.ts",
     "./geniusSource": "./src/geniusSource.ts",
     "./geniusStorage": "./src/geniusStorage.ts",

@@ -39,16 +39,45 @@ export function CardTitle({ children, centred = false }: { children: string; cen
   );
 }
 
-/** A card's second line: one line of secondary text, footnote under a tile, body in a row. */
-export function CardDetail({ children, size }: { children: string; size: "footnote" | "body" }) {
-  return (
+/**
+ * A card's second line: one line of secondary text, footnote under a tile, body in a row,
+ * after its [lead] glyph when it has one (a collaborative playlist's people).
+ */
+export function CardDetail({
+  children,
+  size,
+  lead,
+}: {
+  children: string;
+  size: "footnote" | "body";
+  lead?: ReactNode;
+}) {
+  const text = (
     <Text
       numberOfLines={1}
       className={`font-sans text-secondary ${size === "body" ? "text-body" : "text-footnote"}`}
-      style={{ fontVariant: ["tabular-nums"] }}
+      style={{ fontVariant: ["tabular-nums"], flexShrink: 1 }}
     >
       {children}
     </Text>
+  );
+  if (lead === undefined) return text;
+  return (
+    <View className="flex-row items-center" style={{ gap: CELL / 2 }}>
+      {lead}
+      {text}
+    </View>
+  );
+}
+
+/** The mark of a card something changed on another device: a dot in the accent. */
+export function ChangedDot() {
+  return (
+    <View
+      accessible={false}
+      className="bg-accent"
+      style={{ width: CELL, height: CELL, borderRadius: CELL / 2 }}
+    />
   );
 }
 
@@ -67,10 +96,19 @@ export function CardRow({
   checked,
   accessibilityActions,
   onAccessibilityAction,
+  detailLead,
+  trail,
+  extraLabel,
 }: {
   lead: ReactNode;
   title: string;
   detail: string;
+  /** A glyph before the detail line's text. */
+  detailLead?: ReactNode;
+  /** What sits at the row's end (a changed dot). */
+  trail?: ReactNode;
+  /** Said after the title and detail to screen readers (what [trail] marks). */
+  extraLabel?: string | undefined;
   onPress: () => void;
   onLongPress?: (() => void) | undefined;
   checked?: boolean | undefined;
@@ -82,7 +120,7 @@ export function CardRow({
   return (
     <Press
       accessibilityRole={selecting ? "checkbox" : "button"}
-      accessibilityLabel={`${title}, ${detail}`}
+      accessibilityLabel={`${title}, ${detail}${extraLabel === undefined ? "" : `, ${extraLabel}`}`}
       accessibilityState={selecting ? { checked } : undefined}
       onPress={onPress}
       onLongPress={onLongPress}
@@ -96,8 +134,11 @@ export function CardRow({
         {lead}
         <View className="flex-1 justify-center">
           <CardTitle>{title}</CardTitle>
-          <CardDetail size="body">{detail}</CardDetail>
+          <CardDetail size="body" lead={detailLead}>
+            {detail}
+          </CardDetail>
         </View>
+        {trail}
       </View>
     </Press>
   );
@@ -114,6 +155,7 @@ export function CardTile({
   onPress,
   onLongPress,
   checked,
+  unavailable = false,
   accessibilityActions,
   onAccessibilityAction,
   children,
@@ -123,6 +165,8 @@ export function CardTile({
   onPress: () => void;
   onLongPress?: (() => void) | undefined;
   checked?: boolean | undefined;
+  /** Dimmed and read as disabled, as an unavailable row is: its song can't play now. */
+  unavailable?: boolean | undefined;
   /** Actions for screen readers beyond a tap and a long press (Move up, Move down). */
   accessibilityActions?: PressableProps["accessibilityActions"];
   onAccessibilityAction?: PressableProps["onAccessibilityAction"];
@@ -133,13 +177,13 @@ export function CardTile({
     <Press
       accessibilityRole={selecting ? "checkbox" : "button"}
       accessibilityLabel={label}
-      accessibilityState={selecting ? { checked } : undefined}
+      accessibilityState={selecting ? { checked } : unavailable ? { disabled: true } : undefined}
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityActions={accessibilityActions}
       onAccessibilityAction={onAccessibilityAction}
       depth={0.02}
-      style={{ width }}
+      style={{ width, opacity: unavailable ? 0.4 : 1 }}
     >
       {children}
     </Press>

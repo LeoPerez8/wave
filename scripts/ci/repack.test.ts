@@ -26,7 +26,7 @@ const app = (files: Record<string, string> = {}) => {
     ...files,
   };
   const root = tree({
-    ".github/workflows/ci.yml":
+    ".github/workflows/mobile.yml":
       "run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a",
     "scripts/ci/prebuilt-bundle.gradle": "// verify the bundle handoff",
     "scripts/ci/bundle.sh": "pnpm exec expo export --platform android",
@@ -103,7 +103,7 @@ describe("apkCacheKey", () => {
     const dir = app();
     const previous = key(dir);
     writeFileSync(
-      resolve(dir, "../../.github/workflows/ci.yml"),
+      resolve(dir, "../../.github/workflows/mobile.yml"),
       "run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,x86_64",
     );
     assert.notEqual(key(dir), previous);

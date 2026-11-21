@@ -67,8 +67,16 @@ export const homePlaceholderSkeleton = (id: HomeSectionId): boolean =>
 /** The room a playlist card's sleeves take above its cover (`SLEEVE_ROOM` in `PlaylistCard`). */
 const PLAYLIST_SLEEVE_ROOM = 10;
 
-/** Only placeholders reserve space; answered sections use their content's height. */
-export const homePlaceholderHeight = (id: HomeSectionId, fontScale: number): number => {
+/**
+ * Only placeholders reserve space; answered sections use their content's
+ * height. [available] is the width inside the screen's margins, which In your
+ * orbit's grid fills as the Magic Queue's does (`magicQueueGrid`).
+ */
+export const homePlaceholderHeight = (
+  id: HomeSectionId,
+  fontScale: number,
+  available: number,
+): number => {
   switch (id) {
     case "most-played":
     case "favorites":
@@ -80,8 +88,9 @@ export const homePlaceholderHeight = (id: HomeSectionId, fontScale: number): num
     case "from-your-library":
       return PLAYLIST_SLEEVE_ROOM + CELL * 19 + CELL + 40 * Math.max(1, fontScale);
     case "most-played-artists":
-    case "in-your-orbit":
       return CELL * 19 + CELL + 22 * Math.max(1, fontScale);
+    case "in-your-orbit":
+      return magicQueueGrid(available, fontScale).height;
     case "stats":
       return homeStatsRowLayout(fontScale).minHeight * STATS_FACT_LABELS.length;
     default:

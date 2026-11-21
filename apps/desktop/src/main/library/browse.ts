@@ -92,6 +92,7 @@ const wholeListing = (scope: BrowseScope, sort?: SongSort): { source: SQL; order
       return {
         source: sql`SELECT p.id, p.name AS title, wave_sort_key(p.name) AS sort, '' AS artist, '' AS album,
       p.image_thumb_path AS imageKey,
+      EXISTS(SELECT 1 FROM collaborations c WHERE c.playlist_sync_id=p.sync_id) AS collaborative,
       (SELECT t.artwork_hash FROM playlist_items i JOIN tracks t ON t.id=i.track_id
         WHERE i.playlist_id=p.id AND i.deleted=0 AND t.artwork_hash IS NOT NULL ORDER BY i.order_key LIMIT 1) AS artworkHash,
       coalesce(sum(t.duration_ms),0) AS durationMs, count(i.id) AS count FROM playlists p
@@ -149,6 +150,8 @@ const row = (value: Partial<BrowseRow> & Pick<BrowseRow, "id" | "title">): Brows
   unavailable: false,
   ...value,
   favorite: Boolean(value.favorite),
+  // SQLite answers 0 or 1; only a playlist's row has it.
+  ...(value.collaborative === undefined ? {} : { collaborative: Boolean(value.collaborative) }),
 });
 
 export type PlaylistSong = (

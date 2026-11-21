@@ -58,3 +58,57 @@ test("desktop rollback republishes both verified installers under a fresh signed
   await publish(v2, false);
   assert.deepEqual(JSON.parse((await bucket.read(desktopLatestKey("ti")))!), latest);
 });
+
+test("desktop rollback leaves the phone's update, history and pointers as they were", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const bucket = { ...memoryStorage(), putFile: async () => {} };
+  // What the phone's releases keep beside the desktop's (layout.ts).
+  const phone = {
+    "updates/ti/history.json": '[{"id":"a"}]',
+    "updates/ti/native-a/latest.json": '{"updateId":"a"}',
+    "assets/bundle-a": "bundle",
+    "apks/ti/latest.json": '{"version":"0.72.0-ti"}',
+    "notes/ti.json": "[]",
+  };
+  for (const [key, value] of Object.entries(phone))
+    await bucket.put(key, value, "application/json");
+  const proof = (version: string): DesktopEvidence => ({
+    source: "a".repeat(40),
+    tag: `v${version}`,
+    publicKeySha256: desktopKeyDigest(publicKey),
+    files: {
+      win32: [
+        {
+          name: artifactName("win32", version),
+          sha512: Buffer.alloc(64).toString("base64"),
+          size: 1,
+        },
+      ],
+      linux: [
+        {
+          name: artifactName("linux", version),
+          sha512: Buffer.alloc(64).toString("base64"),
+          size: 1,
+        },
+      ],
+    },
+  });
+  const publish = (version: string, rollback: boolean) =>
+    publishDesktop({
+      proof: proof(version),
+      root: ".",
+      bucket,
+      signingKey: privateKey,
+      channel: "ti",
+      rollback,
+      now: () => 100,
+    });
+  await publish("0.71.0-ti", false);
+  await publish("0.72.0-ti", false);
+  await publish("0.71.0-ti", true);
+
+  const { objects } = await bucket.list({ prefix: "" });
+  const kept = objects.map(({ key }) => key).filter((key) => !key.startsWith("desktop/"));
+  assert.deepEqual(kept.toSorted(), Object.keys(phone).toSorted());
+  for (const [key, value] of Object.entries(phone)) assert.equal(await bucket.read(key), value);
+});

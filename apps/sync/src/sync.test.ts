@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { readPullPage } from "@wave/core";
 import { migrate } from "./migrations.ts";
-import { favorite, harness, pull, pullAll, push } from "./testing.ts";
+import { type Harness, favorite, harness, pull, pullAll, push } from "./testing.ts";
 
 const song = (
   id: string,
@@ -60,6 +60,10 @@ const preference = (changedAt: number, value: unknown) => ({
   deleted: false,
   value,
 });
+
+/** The id of the one account [service] holds. */
+const onlyAccount = async (service: Harness): Promise<string> =>
+  String((await service.db.execute("SELECT id FROM accounts")).rows[0]?.id);
 
 describe("POST /v1/push and GET /v1/pull", () => {
   test("a desktop play is stored and returned unchanged to another device", async () => {
@@ -723,6 +727,11 @@ describe("POST /v1/push and GET /v1/pull", () => {
           ytSong: '{"videoId":"u7K72X4eo_s"}',
           addedAt: 10,
           restoredAt: null,
+          title: null,
+          credit: null,
+          album: null,
+          durationMs: null,
+          videoId: null,
         },
       ],
       favorites: [
@@ -774,7 +783,13 @@ describe("POST /v1/push and GET /v1/pull", () => {
     await push(service, session, rows);
     const response = await service.request("GET", "/v1/pull", { session });
     const page = readPullPage(await response.text());
-    assert.deepEqual({ ...page, cursor: undefined }, { ...rows, cursor: undefined, more: false });
+    // The service names the account that added an entry.
+    const addedBy = await onlyAccount(service);
+    const entries = rows.playlistEntries.map((row) => ({ ...row, addedBy }));
+    assert.deepEqual(
+      { ...page, cursor: undefined },
+      { ...rows, playlistEntries: entries, cursor: undefined, more: false },
+    );
   });
 
   test("a cursor that isn't one is refused", async () => {
@@ -816,10 +831,17 @@ test("Graveyard tombstones keep their song and manual removal date through push 
     addedAt: 100,
     removedAt: 300,
     restoredAt: null,
+    title: null,
+    credit: null,
+    album: null,
+    durationMs: null,
+    videoId: null,
   };
   await push(service, session, { playlistEntries: [entry] });
   const page = await pullAll(service, session);
-  assert.deepEqual(readPullPage(JSON.stringify(page))?.playlistEntries, [entry]);
+  assert.deepEqual(readPullPage(JSON.stringify(page))?.playlistEntries, [
+    { ...entry, addedBy: await onlyAccount(service) },
+  ]);
 });
 
 describe("a removed playlist entry stays removed", () => {
@@ -839,12 +861,18 @@ describe("a removed playlist entry stays removed", () => {
     addedAt: 100,
     removedAt: null,
     restoredAt: null,
+    title: null,
+    credit: null,
+    album: null,
+    durationMs: null,
+    videoId: null,
     ...overrides,
   });
   const removed = (changedAt: number, phoneId: string) =>
     entry(changedAt, phoneId, { deleted: true, removedAt: changedAt });
+  // Who added an entry is not what these tests are about.
   const held = async (service: Parameters<typeof pullAll>[0], session: string) =>
-    (await pullAll(service, session)).playlistEntries;
+    (await pullAll(service, session)).playlistEntries.map(({ addedBy: _addedBy, ...row }) => row);
   const acceptedEntries = (answer: Readonly<Record<string, unknown>>) =>
     (answer.accepted as Record<string, number>).playlistEntries;
 
@@ -949,7 +977,7 @@ describe("a removed playlist entry stays removed", () => {
     const service = await harness();
     const session = await service.signIn();
     await push(service, session, { playlistEntries: [entry(100, "phone-a")] });
-    // Recreate the deployed schema with an existing entry, before migration 0014.
+    // Recreate the deployed schema with an existing entry, before migration 0015.
     await service.db.batch(
       [
         "ALTER TABLE playlist_entries DROP COLUMN restored_at",

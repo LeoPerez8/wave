@@ -194,13 +194,6 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
       "The explicit start uses the indexed recording match to resolve its picked stream to a Library file before playback, while keeping the session seeded by the stream. The matchingSong.test.ts fixture checks the indexed query returns fewer than ten rows in a 1,000-track Library.",
     capabilities: ["library/LibraryStore.ts#matchingSong"],
   },
-  "home/discoveriesRead.ts#readDiscoveries": {
-    howOften:
-      "Once per catalog song the Discoveries page is about to show, eighteen at most a batch, on a background read; each indexed query finds one match.",
-    reason:
-      "Discoveries passes over a catalog song whose recording the Library has, since its plays are credited to the Library song and the play history can't tell it was heard. Only the ranked songs about to fill the nine tiles are asked, never the whole catalog. Covered by home/discoveriesRead.test.ts.",
-    capabilities: ["library/LibraryStore.ts#matchingSong"],
-  },
   "home/mixBuildLibrary.ts#readMixBuildLibrary": {
     howOften:
       "Once per returned streamed radio song in a cold Home mix build; each indexed query finds one match.",
@@ -530,8 +523,10 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedInLibrary"],
   },
   "ytmusic/YtSongActions.tsx#runYtSongSwipe": {
-    howOften: "Once per completed song swipe; finder reads are shared per Library version.",
-    reason: "Explicit song menus and completed swipes resolve Library identity for their action.",
+    howOften:
+      "Once per completed song swipe or Magic Queue slot tap in Now Playing; finder reads are shared per Library version.",
+    reason:
+      "Explicit song menus, completed swipes and the Magic Queue slot's tap on a streamed playing song resolve Library identity for their action.",
     capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
   },
   "ytmusic/YtSongActions.tsx#YtSongActionsMenu": {

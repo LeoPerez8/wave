@@ -2,11 +2,12 @@
  * The track rows every song list reads (a `SongRow`). Kept free of Expo so
  * the store tests run them against a real SQLite (`testDatabase.ts`).
  */
-import { readStoredGenres } from "@wave/core";
+import { leavingSongEntry, readStoredGenres, writePlaylistEntrySong } from "@wave/core";
 import { and, asc, eq, inArray, isNotNull, notInArray, sql, type SQL } from "drizzle-orm";
 
 import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
+import { leavingSong, leavingSongColumns } from "./leavingSong.ts";
 import * as schema from "./schema.ts";
 
 /** The ids in a `group_concat` of them ("3,7"), in order; none for null. */
@@ -241,6 +242,42 @@ export const deleteTracksById = (db: LibraryDatabase, ids: readonly number[]): v
   for (const some of chunks(ids)) deleteTracksWhere(db, inArray(schema.tracks.id, some));
 };
 
+/**
+ * The entries of the Tracks [which] picks in collaborative playlists of other accounts stay: each
+ * becomes the entry a song without a file is here (Core's `leavingSongEntry`), and keeps the
+ * Library entry it came as, so nothing changes for the other members and no removal goes to
+ * this device's account.
+ */
+const keepMemberEntries = (db: LibraryDatabase, which: SQL): void => {
+  const { tracks, albums, playlistItems, playlists, collaborations } = schema;
+  // Most devices are in no other account's playlist: nothing to keep, and no join to run.
+  const member = db
+    .select({ id: collaborations.playlistSyncId })
+    .from(collaborations)
+    .where(eq(collaborations.owned, false))
+    .limit(1)
+    .all();
+  if (member.length === 0) return;
+  const entries = db
+    .select({ id: playlistItems.id, ...leavingSongColumns })
+    .from(playlistItems)
+    .innerJoin(tracks, eq(playlistItems.trackId, tracks.id))
+    .innerJoin(albums, eq(tracks.albumId, albums.id))
+    .innerJoin(playlists, eq(playlistItems.playlistId, playlists.id))
+    .innerJoin(
+      collaborations,
+      and(eq(collaborations.playlistSyncId, playlists.syncId), eq(collaborations.owned, false)),
+    )
+    .where(which)
+    .all();
+  for (const entry of entries) {
+    db.update(playlistItems)
+      .set({ trackId: null, ytSong: writePlaylistEntrySong(leavingSongEntry(leavingSong(entry))) })
+      .where(eq(playlistItems.id, entry.id))
+      .run();
+  }
+};
+
 /** Deletes the tracks [which] picks (a chunk's worth), keeping what their plays need. */
 const deleteTracksWhere = (db: LibraryDatabase, which: SQL): void => {
   const { tracks, playEvents, trackArtists, deletedTrackArtists } = schema;
@@ -269,6 +306,7 @@ const deleteTracksWhere = (db: LibraryDatabase, which: SQL): void => {
     )
     .onConflictDoNothing()
     .run();
+  keepMemberEntries(db, which);
   // An entry no longer goes with its track by itself (migration 0056).
   db.delete(schema.playlistItems).where(inArray(schema.playlistItems.trackId, leaving)).run();
   db.delete(tracks).where(which).run();

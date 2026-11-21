@@ -19,6 +19,7 @@ import { useListSelection, type ListSelection } from "@/selection/useListSelecti
 import { LibraryReadFeedback } from "./LibraryReadFeedback";
 import { ArrangeablePlaylists, TILE_GRIP_INSET } from "./ArrangeablePlaylists";
 import { FavoritesExportLine } from "./FavoritesExportLine";
+import { useShownCollaborations } from "./collaborativePlaylists";
 import { ImportBatchLine } from "./ImportBatchLine";
 import { openPlaylistImport } from "./importPlaylistLink";
 import { useImportProgress } from "./importProgress";
@@ -102,8 +103,11 @@ function PlaylistView({
   tile,
   selection,
   arrangeable,
+  collaboration,
 }: {
   playlist: PlaylistRow;
+  /** Collaborative here: the mark before its count, and whether another device changed it. */
+  collaboration?: { readonly unseen: boolean } | undefined;
   /** Its place in the list: an index of [ids], the order on screen. */
   index: number;
   ids: readonly number[];
@@ -121,21 +125,27 @@ function PlaylistView({
   // ring over its cover (Core's `importProgressLine`, `importRing`).
   const progress = useImportProgress(playlist.id);
   const download = useListDownloadProgress("playlist", playlist.id);
+  const collaborative = collaboration !== undefined;
+  const count = songCount(playlist.trackCount, strings);
   const detail =
     download ??
     (progress === null
-      ? songCount(playlist.trackCount, strings)
+      ? collaborative
+        ? strings.collaborativePage.libraryDetail(count)
+        : count
       : importProgressLine(progress, language));
   const ring = importRing(progress);
+  const marks = { collaborative, changed: collaboration?.unseen === true };
   if (layout === "list") {
     return (
       <PlaylistCardRow
         name={playlist.name}
         detail={detail}
-        plainDetail={download !== null}
+        plainDetail={download !== null || (collaborative && progress === null)}
         paths={playlist.thumbPaths}
         ring={ring}
         sleeves={false}
+        {...marks}
         {...press}
         {...moves}
       />
@@ -150,6 +160,7 @@ function PlaylistView({
       size={tile}
       sleeves={false}
       nameInset={TILE_GRIP_INSET}
+      {...marks}
       {...press}
       {...moves}
     />
@@ -187,6 +198,7 @@ export function PlaylistsList({ empty }: { empty: string }) {
   const { fontScale } = useWindowDimensions();
   const selection = useListSelection({ items: playlists, keyOf, target: playlistsOf });
   const ids = useMemo(() => playlists.map((playlist) => playlist.id), [playlists]);
+  const collaborations = useShownCollaborations();
   const renderPlaylist = useCallback(
     (playlist: PlaylistRow, index: number, arrangeable: boolean) => (
       <PlaylistView
@@ -197,9 +209,10 @@ export function PlaylistsList({ empty }: { empty: string }) {
         tile={tile}
         selection={selection}
         arrangeable={arrangeable}
+        collaboration={collaborations.get(playlist.id)}
       />
     ),
-    [ids, layout, tile, selection],
+    [ids, layout, tile, selection, collaborations],
   );
 
   if (playlists.length === 0 && !libraryQueryHasContent("playlists"))

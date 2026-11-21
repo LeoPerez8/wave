@@ -43,13 +43,15 @@ declare class WaveAccountModule extends NativeModule<{
    */
   deleteAccount(webClientId: string): Promise<WaveSession | null>;
   /**
-   * Sends `POST /v1/push` or `GET /v1/pull?since=…` with the session; any
-   * other route rejects with `ERR_WAVE_FORBIDDEN_REQUEST`. Signed out, rejects
-   * with `ERR_WAVE_SIGNED_OUT` and sends nothing; a 401 ends the session and
+   * Sends `POST /v1/push`, `GET /v1/pull?since=…`, a Genius or Ticketmaster
+   * request, or a collaborative playlist's (Core's `isCollaborationRequest`)
+   * with the session; any other route rejects with
+   * `ERR_WAVE_FORBIDDEN_REQUEST`. Signed out, rejects with
+   * `ERR_WAVE_SIGNED_OUT` and sends nothing; a 401 ends the session and
    * rejects with `ERR_WAVE_SESSION_ENDED`.
    */
   request(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "PUT" | "DELETE",
     path: string,
     /** JSON, or null for none. */
     body: string | null,

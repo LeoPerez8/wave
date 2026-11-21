@@ -1524,6 +1524,25 @@ const m0064 = `UPDATE sync_state SET cursor = NULL;`;
 
 const m0067 = `ALTER TABLE playlist_items ADD COLUMN restored_at integer;`;
 
+const m0068 = `ALTER TABLE playlist_items ADD COLUMN added_by text;
+--> statement-breakpoint
+ALTER TABLE playlist_items ADD COLUMN library_entry text;
+--> statement-breakpoint
+CREATE TABLE collaborations (
+  playlist_sync_id text PRIMARY KEY NOT NULL,
+  owned integer NOT NULL,
+  owner_account_id text,
+  members text NOT NULL,
+  cursor text,
+  unseen integer DEFAULT false NOT NULL,
+  invite_url text,
+  invite_expires_at integer
+);
+--> statement-breakpoint
+CREATE TABLE private_copy_notices (
+  playlist_id integer PRIMARY KEY NOT NULL REFERENCES playlists(id) ON DELETE CASCADE
+);`;
+
 export default {
   journal: {
     entries: [
@@ -1625,6 +1644,12 @@ export default {
         tag: "0067_playlist_entry_restores",
         breakpoints: true,
       },
+      {
+        idx: 68,
+        when: 1_797_681_600_000,
+        tag: "0068_collaborative_playlists",
+        breakpoints: true,
+      },
     ],
   },
   migrations: {
@@ -1696,5 +1721,6 @@ export default {
     m0065,
     m0066,
     m0067,
+    m0068,
   },
 };

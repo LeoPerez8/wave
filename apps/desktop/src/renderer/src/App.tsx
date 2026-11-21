@@ -1046,11 +1046,18 @@ export function App() {
             <button
               key={row.id}
               className={`nav-item ${playlistDrop.over === row.id ? "drop-over" : ""}`}
-              aria-label={row.title}
+              aria-label={
+                row.collaborative
+                  ? `${row.title}, ${text.collaborativePage.libraryDetail(labels.songCount(row.count))}`
+                  : row.title
+              }
               title={row.title}
               aria-current={route.kind === "playlist" && route.id === row.id ? "page" : undefined}
               onClick={() => go({ kind: "playlist", id: row.id })}
-              {...playlistDrop.props(row.id, (songs) => dropSongs(songs, { playlist: row.id }))}
+              // The desktop adds nothing to a collaborative playlist, so it takes no drop.
+              {...(row.collaborative
+                ? {}
+                : playlistDrop.props(row.id, (songs) => dropSongs(songs, { playlist: row.id })))}
               {...itemMenuEvents((at) =>
                 openCollectionMenu(
                   { kind: "playlist", id: row.id },
@@ -1060,7 +1067,7 @@ export function App() {
                 ),
               )}
             >
-              <Icon name="playlist" />
+              <Icon name={row.collaborative ? "collaborative" : "playlist"} />
               <span className="nav-monogram" aria-hidden="true">
                 {Array.from(row.title.trim())[0]?.toLocaleUpperCase()}
               </span>
@@ -1139,7 +1146,9 @@ export function App() {
                   labels[route.kind as "album" | "artist" | "playlist" | "genre"],
                   hero.genre,
                   hero.year,
-                  labels.songCount(albumTracklist?.length ?? hero.count),
+                  hero.collaborative
+                    ? text.collaborativePage.libraryDetail(labels.songCount(hero.count))
+                    : labels.songCount(albumTracklist?.length ?? hero.count),
                   listDuration(hero.durationMs, text.library),
                 ]
                   .filter(Boolean)
@@ -1697,7 +1706,9 @@ export function App() {
                     !picks &&
                     scope.kind === "playlist" &&
                     scope.id !== undefined &&
-                    shownSort?.key === "custom"
+                    shownSort?.key === "custom" &&
+                    // A collaborative playlist's order is the members' to change, on a phone.
+                    !hero?.collaborative
                       ? (target, before) => playlistEdits.place(scope.id!, target, before)
                       : undefined
                   }
@@ -1744,9 +1755,11 @@ export function App() {
                             row,
                             at,
                             // Move Up and Move Down only where the playlist shows its own order.
+                            // A collaborative playlist's order is the members' to change, on a phone.
                             scope.kind === "playlist" &&
                               scope.id !== undefined &&
-                              shownSort?.key === "custom"
+                              shownSort?.key === "custom" &&
+                              !hero?.collaborative
                               ? playlistEdits.moveItems(scope.id, row.id)
                               : [],
                           );

@@ -13,7 +13,7 @@ import type { PlayableSongRow } from "@wave/client";
 const BATCH = MAGIC_QUEUE_PICKS * 2;
 
 /**
- * The carousel's Most listened recently page at [now] (Core's
+ * In your orbit's most listened recent songs at [now] (Core's
  * `mostListenedRecently` and `carouselPageSongs`): up to nine songs with the
  * most counted plays in the recent window, as the tiles the Magic Queue page
  * draws, or none when fewer than three can show. Read from the phone's play

@@ -9,10 +9,13 @@ import { fileURLToPath } from "node:url";
 /**
  * The events a workflow may start on. `pull_request` gives a fork's PR a read-only token and
  * no secrets; the others start only from a push or a run by someone with write access.
- * Events such as `pull_request_target` or `workflow_run` run with the base repository's token
- * and secrets while reading what a fork sent, so adding one needs its own review.
+ * `workflow_call` starts nothing itself: a workflow in this repo (ci.yml) calls it as one of its
+ * jobs, with the caller's event and no more token than the calling job has, so these rules
+ * still hold through the caller. Events such as `pull_request_target` or `workflow_run` run with
+ * the base repository's token and secrets while reading what a fork sent, so adding one needs
+ * its own review.
  */
-const ALLOWED_TRIGGERS = new Set(["pull_request", "push", "workflow_dispatch"]);
+const ALLOWED_TRIGGERS = new Set(["pull_request", "push", "workflow_dispatch", "workflow_call"]);
 
 /** A line without its trailing `# comment`, trimmed: empty for a blank or comment line. */
 const valueOf = (line: string): string => line.replace(/(^|[ \t])#.*$/, "").trim();

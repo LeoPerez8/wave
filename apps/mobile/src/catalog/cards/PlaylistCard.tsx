@@ -1,3 +1,4 @@
+import { IconUsers } from "@tabler/icons-react-native";
 import type { ImportRing } from "@wave/core";
 import { useColorScheme, View, type PressableProps } from "react-native";
 
@@ -6,8 +7,9 @@ import { CELL } from "../grid";
 import { Mosaic } from "../Mosaic";
 import { TileCheck } from "../CheckCell";
 import { useLocalisation } from "@/localisation/localisation";
+import { useThemeColor } from "@/theme/useThemeColor";
 
-import { CAPTION_TOP, CardDetail, CardRow, CardTile, CardTitle } from "./CardParts";
+import { CAPTION_TOP, CardDetail, CardRow, CardTile, CardTitle, ChangedDot } from "./CardParts";
 import { coverTop, ROW_SLEEVES, TILE_SLEEVES } from "./sleeves";
 
 /** The playlist's mosaic in a row: 40dp. */
@@ -93,9 +95,19 @@ type Props = {
   /** Actions for screen readers beyond a tap and a long press (Move up, Move down). */
   accessibilityActions?: PressableProps["accessibilityActions"];
   onAccessibilityAction?: PressableProps["onAccessibilityAction"];
+  /** A collaborative playlist: the people glyph before its detail ("Collaborative · 42 songs"). */
+  collaborative?: boolean | undefined;
+  /** Another device changed it since it was last opened here: the dot. */
+  changed?: boolean | undefined;
   /** Whether sleeves show above the cover: on Home and in Search, not on the Playlists page. */
   sleeves?: boolean | undefined;
 };
+
+/** A collaborative playlist's people glyph, in the detail line's colour. */
+function PeopleGlyph({ size }: { size: number }) {
+  const secondary = useThemeColor("secondary");
+  return <IconUsers size={size} color={secondary} strokeWidth={1.75} />;
+}
 
 /**
  * A playlist on a shelf or in a grid: its mosaic at [size] with sleeves above
@@ -117,12 +129,15 @@ export function PlaylistCard({
   onAccessibilityAction,
   sleeves = true,
   nameInset,
+  collaborative = false,
+  changed = false,
 }: Props & { size: number; nameInset?: number | undefined }) {
   const { strings } = useLocalisation();
+  const said = label ?? strings.library.playlistLabel(name, detail);
   return (
     <CardTile
       width={size}
-      label={label ?? strings.library.playlistLabel(name, detail)}
+      label={changed ? `${said}, ${strings.collaborativePage.changed}` : said}
       onPress={onPress}
       onLongPress={onLongPress}
       checked={checked}
@@ -139,8 +154,15 @@ export function PlaylistCard({
         ring={ring}
       />
       <View style={{ paddingTop: CAPTION_TOP, paddingRight: nameInset }}>
-        <CardTitle>{name}</CardTitle>
-        <CardDetail size="footnote">{detail}</CardDetail>
+        <View className="flex-row items-center" style={{ gap: CELL }}>
+          <View className="flex-1">
+            <CardTitle>{name}</CardTitle>
+          </View>
+          {changed && <ChangedDot />}
+        </View>
+        <CardDetail size="footnote" lead={collaborative ? <PeopleGlyph size={13} /> : undefined}>
+          {detail}
+        </CardDetail>
       </View>
     </CardTile>
   );
@@ -162,6 +184,8 @@ export function PlaylistCardRow({
   ring,
   accessibilityActions,
   onAccessibilityAction,
+  collaborative = false,
+  changed = false,
   sleeves = true,
 }: Props & { plainDetail?: boolean }) {
   const { strings } = useLocalisation();
@@ -180,6 +204,9 @@ export function PlaylistCardRow({
       }
       title={name}
       detail={plainDetail ? detail : strings.library.playlistRow(detail)}
+      detailLead={collaborative ? <PeopleGlyph size={15} /> : undefined}
+      trail={changed ? <ChangedDot /> : undefined}
+      extraLabel={changed ? strings.collaborativePage.changed : undefined}
       onPress={onPress}
       onLongPress={onLongPress}
       checked={checked}

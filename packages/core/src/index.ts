@@ -493,7 +493,7 @@ export {
   tabsOffBar,
 } from "./tabBar.ts";
 export type { TabBar, TabBarEdit, TabBarTab } from "./tabBar.ts";
-export { catalogueOf, resolveAppLanguage } from "./localisation.ts";
+export { acceptedLanguages, catalogueOf, resolveAppLanguage } from "./localisation.ts";
 export type { AppLanguage, Catalogue, CatalogueVariants, Device } from "./localisation.ts";
 export { plural } from "./plural.ts";
 export type { PluralForms } from "./plural.ts";
@@ -882,7 +882,13 @@ export type {
 export { pendingWriteDelay } from "./writePacing.ts";
 export type { WritePacing } from "./writePacing.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
-export { NOW_PLAYING_OPENS_ON, stepNowPlayingScreens } from "./nowPlayingScreens.ts";
+export {
+  NOW_PLAYING_OPENS_ON,
+  nowPlayingPageSwipesEnabled,
+  nowPlayingRelatedSwipeEnabled,
+  settleRelatedRise,
+  stepNowPlayingScreens,
+} from "./nowPlayingScreens.ts";
 export {
   nowPlayingEditHintDue,
   readNowPlayingEditHintShown,
@@ -954,6 +960,7 @@ export {
   magicBatchFailed,
   magicBatchLoading,
   magicPickDue,
+  magicQueueFootnote,
 } from "./magicQueue.ts";
 export { magicPickEnded } from "./magicQueue.ts";
 export { magicBatchLine } from "./magicBatchReport.ts";
@@ -1054,6 +1061,85 @@ export {
   writeGeniusInsights,
 } from "./geniusSetting.ts";
 export type { AccountSession, AccountSignInEvent, AccountSignInState } from "./accountSignIn.ts";
+export { ACCOUNT_NAME_MAX_LENGTH, accountName } from "./accountName.ts";
+export {
+  COLLABORATIVE_TEXT_MAX_LENGTH,
+  collaborativeRow,
+  isCollaborativeCoverUrl,
+  memberPlaylistFields,
+} from "./collaborativeRows.ts";
+export {
+  accountNameCall,
+  collaborationAnswer,
+  createInviteCall,
+  endCollaborationCall,
+  isCollaborationRequest,
+  joinInviteCall,
+  leaveCollaborationCall,
+  lookUpInviteCall,
+  makeCollaborationCall,
+  membersCall,
+  playlistPullCall,
+  playlistPushCall,
+  readCollaboration,
+  readInviteCall,
+  removeMemberCall,
+  turnOffInviteCall,
+} from "./collaborationRequests.ts";
+export {
+  membershipChanges,
+  privateCopyId,
+  readPullMembership,
+  refusalEndsMembership,
+} from "./collaborativeSync.ts";
+export {
+  COLLABORATIVE_PAGE_PULL_MS,
+  collaborativePageMembers,
+  collaborativePagePull,
+  entryAdder,
+} from "./collaborativePage.ts";
+export type {
+  CollaborativePageMembers,
+  CollaborativePagePull,
+  CollaborativePagePullInput,
+  EntryAdder,
+} from "./collaborativePage.ts";
+export type {
+  CollaborationEndReason,
+  EndedCollaboration,
+  HeldCollaboration,
+  KeptCollaboration,
+  MembershipChanges,
+  PullMembership,
+} from "./collaborativeSync.ts";
+export type {
+  ActiveInvite,
+  Collaboration,
+  CollaborationCall,
+  CollaborationMember,
+  CollaborationMethod,
+  CollaborationRefusal,
+  CollaborationRequest,
+  CollaborationResult,
+  CreatedInvite,
+  InviteDetails,
+} from "./collaborationRequests.ts";
+export {
+  inviteHost,
+  inviteJoinOutcome,
+  inviteJoinView,
+  inviteLookUpOutcome,
+  inviteOpening,
+  inviteSignInNotice,
+  inviteSignInPrompt,
+  inviteToken,
+} from "./inviteJoin.ts";
+export type {
+  InviteJoinOutcome,
+  InviteJoinView,
+  InviteLookUpOutcome,
+  InviteNotice,
+} from "./inviteJoin.ts";
 export {
   SPOTIFY_ACCOUNT_SIGNED_OUT,
   SPOTIFY_CHANGED_LINE,
@@ -2433,6 +2519,13 @@ export type { MagicQueuePicking, MagicQueuePicks } from "./magicQueueSection.ts"
 export { randomMagicQueuePicks } from "./randomMagicQueuePicks.ts";
 export type { MagicQueuePool, MagicQueueSeedId } from "./randomMagicQueuePicks.ts";
 export {
+  MAGIC_QUEUE_PAGES,
+  magicQueuePages,
+  magicQueuePopularitySteps,
+  redrawMagicQueuePage,
+} from "./magicQueuePages.ts";
+export type { MagicQueuePagesDraw, MagicQueuePagesPool } from "./magicQueuePages.ts";
+export {
   magicQueueMixPicks,
   magicQueueRow,
   magicQueueSeedId,
@@ -2447,23 +2540,17 @@ export type {
 export {
   CAROUSEL_PAGE_MIN_SONGS,
   carouselPageSongs,
-  MAGIC_QUEUE_CAROUSEL_PAGES,
-  magicQueueCarouselKeptPage,
   magicQueueCarouselPage,
   magicQueueCarouselPageLabel,
-  magicQueueCarouselPageTitle,
-  magicQueueCarouselPages,
   magicQueueCarouselRestarts,
+  inYourOrbitSongs,
+  inYourOrbitTap,
+  inYourOrbitTileUnavailable,
+  IN_YOUR_ORBIT_SONGS,
   mostListenedRecently,
   recentPlaysWindow,
 } from "./magicQueueCarousel.ts";
-export type { MagicQueueCarouselPageId, MagicQueueCarouselRow } from "./magicQueueCarousel.ts";
-export { discoveries } from "./discoveries.ts";
-export type {
-  DiscoveriesInput,
-  DiscoveryCatalogSong,
-  DiscoveryLibrarySong,
-} from "./discoveries.ts";
+export type { InYourOrbitTap, MagicQueueCarouselRow } from "./magicQueueCarousel.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios, discoverMixesOfRadiosSteps } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
@@ -2919,11 +3006,14 @@ export {
   NOW_PLAYING_PREVIOUS_ROW_KEY,
   NOW_PLAYING_TRANSPORT_SLOTS,
   editNowPlayingButtons,
+  moveNowPlayingButton,
   nowPlayingButtonsAreDefault,
   nowPlayingRelatedChevronShown,
   nowPlayingSlotRoute,
+  nowPlayingSlotChoiceHolder,
   nowPlayingSlotChoices,
   nowPlayingSlotShow,
+  nowPlayingSlotRunsSongMenu,
   nowPlayingSongMenuShow,
   readNowPlayingButtons,
   readNowPlayingSlotRoute,
@@ -2934,6 +3024,7 @@ export type {
   NowPlayingButtons,
   NowPlayingButtonsEdit,
   NowPlayingSlot,
+  NowPlayingSlotPlace,
   NowPlayingSlotSong,
 } from "./nowPlayingButtons.ts";
 
@@ -3098,6 +3189,29 @@ export {
 export { displayTag } from "./displayTag.ts";
 export { duplicatePlaylistEntries, playlistEntrySong, sameEntrySong } from "./oneEntryPerSong.ts";
 export type { DuplicateCandidate, EntrySong } from "./oneEntryPerSong.ts";
+export { collaborativeEntryMatcher, libraryEntryFields } from "./collaborativeEntry.ts";
+export type {
+  CollaborativeEntryMatch,
+  CollaborativeLibraryEntry,
+  EntryTrack,
+  LibraryEntryFields,
+} from "./collaborativeEntry.ts";
+export {
+  collaborationFailure,
+  collaborativeMemberRows,
+  collaborativeSignInAlert,
+  confirmEndCollaboration,
+  confirmLeavePlaylist,
+  confirmMakeCollaborative,
+  confirmRemoveMember,
+  inviteView,
+} from "./collaborativeMenu.ts";
+export type {
+  CollaborativeAction,
+  CollaborativeConfirmation,
+  CollaborativeMemberRow,
+  InviteView,
+} from "./collaborativeMenu.ts";
 export {
   openedAudioFiles,
   openedFilePath,

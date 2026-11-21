@@ -36,7 +36,9 @@ const stallJsThread = (): void => {
   }, 0);
 };
 
-/** Settings › Developer: logs, the Design preview and, in a debug build, the log's triggers. */
+/**
+ * Settings › Developer: logs, the Design preview and, in a debug build, the log's triggers.
+ */
 export default function DeveloperSettingsScreen() {
   useScreenContent(true);
   return (

@@ -1,33 +1,34 @@
-import type { PlayedArtist } from "@wave/client/db/playedEntities";
-import { inYourOrbit, inYourOrbitWindow } from "@wave/core";
-import * as Effect from "effect/Effect";
-import { useMemo } from "react";
+import { inYourOrbitSongs, inYourOrbitTap, type MagicQueueSeed } from "@wave/core";
+import type { PlayableSongRow } from "@wave/client";
 
-import { libraryQuery, useLibraryQuery } from "@/library/hooks";
-import { LibraryStore } from "@/library/LibraryStore";
-import { useLastDefined, useLocalDay } from "./useLocalDay";
+import { playSongs } from "@/playback/actions";
+import { ytMusicEnabled } from "@/settings/ytMusic";
 
-const readInYourOrbit = (day: string) =>
-  libraryQuery(
-    `home:inYourOrbit:${day}`,
-    { tracks: true, plays: true },
-    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-    LibraryStore.use((store) =>
-      Effect.map(
-        Effect.suspend(() => store.playedArtistTotals(inYourOrbitWindow(Date.now()))),
-        (totals): readonly PlayedArtist[] => inYourOrbit(totals).map(({ item }) => item),
-      ),
-    ),
-  );
+import { startMagicQueueFrom, startStreamedMagicQueueFrom } from "./magicQueueSection";
+import { useMostListenedRecently } from "./mostListenedRecently";
+
+/** Songs played from In your orbit with YT Music off are queued from it. */
+const IN_YOUR_ORBIT_CONTEXT = { kind: "home", id: "in-your-orbit" } as const;
+
+/** Home's In your orbit: the carousel's shared recent ranking, shown only at nine songs (Core's `inYourOrbitSongs`). */
+export const useInYourOrbit = (): readonly MagicQueueSeed<PlayableSongRow>[] | undefined => {
+  const songs = useMostListenedRecently(true);
+  return songs === undefined ? undefined : inYourOrbitSongs(songs);
+};
 
 /**
- * Home's In your orbit: the artists played most in the last 14 days (Core's
- * `inYourOrbit`), credited as Stats credits them, or undefined while it first
- * loads. Re-read as `useMostPlayedOfAllTime` is, and when the local day
- * changes, so the 14 days move on with nothing played.
+ * A tap on In your orbit's tile at [index] of [tiles] (Core's
+ * `inYourOrbitTap`): a Magic Queue from its song, or with YT Music off the
+ * grid's Library songs played from it.
  */
-export const useInYourOrbit = (): readonly PlayedArtist[] | undefined => {
-  const day = useLocalDay();
-  const query = useMemo(() => readInYourOrbit(day), [day]);
-  return useLastDefined(useLibraryQuery<readonly PlayedArtist[] | undefined>(query, undefined));
+export const tapInYourOrbit = (
+  tiles: readonly MagicQueueSeed<PlayableSongRow>[],
+  index: number,
+): void => {
+  const tap = inYourOrbitTap(tiles, index, ytMusicEnabled());
+  if (tap.kind === "play") void playSongs(tap.songs, tap.start, IN_YOUR_ORBIT_CONTEXT);
+  else if (tap.kind === "magicQueue") {
+    if (tap.seed.source === "library") startMagicQueueFrom(tap.seed.song);
+    else startStreamedMagicQueueFrom(tap.seed.song);
+  }
 };

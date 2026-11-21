@@ -111,17 +111,31 @@ describe("itemActions", () => {
     assert.ok(!names(itemActions({ kind: "album", items: [{}], here: "/" })).includes("delete"));
   });
 
-  test("Delete Playlist and Delete Playlists are red like Delete and Remove from Library, and no other entry is", () => {
+  test("Delete Playlist, Delete Playlists, End Collaboration and Leave Playlist are red like Delete and Remove from Library, and no other entry is", () => {
     assert.deepEqual(
       Object.keys(ITEM_ACTION_LABELS).filter((action) => isDestructiveAction(action as ItemAction)),
-      ["deletePlaylist", "deletePlaylists", "delete", "removeFromLibrary"],
+      [
+        "deletePlaylist",
+        "deletePlaylists",
+        "endCollaboration",
+        "leavePlaylist",
+        "delete",
+        "removeFromLibrary",
+      ],
     );
   });
 
-  test("Delete and Remove from Library ask first, so the selection only ends once it's confirmed", () => {
+  test("Delete, Remove from Library and the playlist removals ask first, so the selection only ends once it's confirmed", () => {
     assert.deepEqual(
       Object.keys(ITEM_ACTION_LABELS).filter((action) => confirmsFirst(action as ItemAction)),
-      ["deletePlaylist", "deletePlaylists", "delete", "removeFromLibrary"],
+      [
+        "deletePlaylist",
+        "deletePlaylists",
+        "endCollaboration",
+        "leavePlaylist",
+        "delete",
+        "removeFromLibrary",
+      ],
     );
   });
 
@@ -282,10 +296,11 @@ describe("itemActions", () => {
       selectable: true,
       onlineLookups: true,
     });
-    assert.deepEqual(names(menu).slice(-6), [
+    assert.deepEqual(names(menu).slice(-7), [
       "renamePlaylist",
       "changeImage",
       "share",
+      "makeCollaborative",
       "fixSongs",
       "deletePlaylist",
       "select",
@@ -542,13 +557,19 @@ describe("itemActions", () => {
   test("a playlist's menu always offers Share after its image entries: Spotify needs no switch", () => {
     const menu = (hasImage?: boolean) =>
       names(itemActions({ kind: "playlist", items: [{ hasImage }], here: "/" }));
-    assert.deepEqual(menu().slice(-4), [
+    assert.deepEqual(menu().slice(-5), [
       "renamePlaylist",
       "changeImage",
       "share",
+      "makeCollaborative",
       "deletePlaylist",
     ]);
-    assert.deepEqual(menu(true).slice(-3), ["removeImage", "share", "deletePlaylist"]);
+    assert.deepEqual(menu(true).slice(-4), [
+      "removeImage",
+      "share",
+      "makeCollaborative",
+      "deletePlaylist",
+    ]);
     const selected = itemActions({
       kind: "playlist",
       items: [{}],
@@ -562,19 +583,21 @@ describe("itemActions", () => {
   test("a playlist's menu changes its image, and adjusts or removes it once it has one", () => {
     const menu = (hasImage?: boolean) =>
       names(itemActions({ kind: "playlist", items: [{ hasImage }], here: "/" }));
-    assert.deepEqual(menu().slice(-5), [
+    assert.deepEqual(menu().slice(-6), [
       "addToPlaylist",
       "renamePlaylist",
       "changeImage",
       "share",
+      "makeCollaborative",
       "deletePlaylist",
     ]);
-    assert.deepEqual(menu(true).slice(-6), [
+    assert.deepEqual(menu(true).slice(-7), [
       "renamePlaylist",
       "changeImage",
       "adjustImage",
       "removeImage",
       "share",
+      "makeCollaborative",
       "deletePlaylist",
     ]);
     assert.equal(ITEM_ACTION_LABELS.changeImage, "Change Image");
