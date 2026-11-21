@@ -30,6 +30,7 @@ node scripts/perf/perf.ts run --scenario now-playing,queue --label 304-after
 node scripts/perf/perf.ts run --scenario push-playlist --playlist "Alternative pop" --label playlist
 node scripts/perf/perf.ts run --scenario soak-routes,soak-player --label 318-soak
 node scripts/perf/perf.ts run --scenario screen-off,screen-off-lyrics --label 712-screen-off
+node scripts/perf/perf.ts emulator-check --artist <a> --playlist <p>  # #1359, exits 1 on a block (docs/agents/emulator-checks.md)
 node scripts/perf/perf.ts summary perf-results/<file>.jsonl
 node scripts/perf/perf.ts compare <before.jsonl> <after.jsonl>
 node scripts/perf/perf.ts run --dry-run             # the whole pipeline on a simulated phone

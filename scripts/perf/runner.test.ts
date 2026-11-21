@@ -550,6 +550,30 @@ describe("runPerf on the simulated phone", () => {
     for (const launch of launches) assert.match(launch, / --es wave\.perf\.glass off\b/);
   });
 
+  it("launches the launcher component by name, where the package alone resolves nothing", async () => {
+    // An emulator whose data holds several enabled launcher-icon aliases: `am start -p` fails.
+    const device = new FakeDevice({ launcherByPackageFails: true });
+    const { out } = await runPerf(device, options("aliases", { scenarios: ["push-settings"] }));
+    const results = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(results.errors, []);
+    const launches = device.commands.filter((command) => command.startsWith("am start -W"));
+    assert.ok(launches.length > 0);
+    for (const launch of launches)
+      assert.match(launch, / -n dev\.leoperez\.wave\/\.LauncherIcon_teal_ember\b/);
+  });
+
+  it("goes on when a cold launch outlasts am start's wait but Wave comes up", async () => {
+    const lines: string[] = [];
+    const { out } = await runPerf(
+      new FakeDevice({ coldLaunchTimesOut: true }),
+      options("slow-launch", { scenarios: ["push-settings"], log: (line) => lines.push(line) }),
+    );
+    const results = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(results.errors, []);
+    assert.ok(results.steps.some((step) => step.scenario === "push-settings"));
+    assert.ok(lines.some((line) => /outlasted am start/.test(line)));
+  });
+
   it("stops before measuring when the app didn't take the glass probe", async () => {
     await assert.rejects(
       runPerf(
