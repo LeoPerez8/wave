@@ -4,6 +4,7 @@ import type { YtStatus } from "../../shared/yt.ts";
 import { songRowMark } from "../../shared/songState.ts";
 import { Icon } from "./Icon.tsx";
 import { itemMenuEvents } from "./Menu.tsx";
+import { listRowDrag, songDragProps } from "./songDrag.ts";
 import { markClass, SongMark, useSongStates } from "./SongMark.tsx";
 import { labels, albumName, artistName, text } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
@@ -57,6 +58,7 @@ export function YtSongList({
             className="table-row table-columns yt-row"
             aria-selected={selected === index}
             aria-label={[row.title, artistName(row.artist)].filter(Boolean).join(", ")}
+            {...songDragProps(() => listRowDrag(row))}
             onClick={() => setSelected(index)}
             onDoubleClick={() => onPlay(index)}
             onContextMenu={

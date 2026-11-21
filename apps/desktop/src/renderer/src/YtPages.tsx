@@ -28,6 +28,7 @@ export function YtPage({
   run,
   revision,
   go,
+  onLibraryAlbum,
   onSongMenu,
   onError,
 }: {
@@ -36,6 +37,8 @@ export function YtPage({
   /** The player's revision, so the Magic Queue page follows the queue. */
   readonly revision: number;
   readonly go: (route: YtRoute) => void;
+  /** Opens a Library album's page, by its id. */
+  readonly onLibraryAlbum: (albumId: number) => void;
   readonly onSongMenu: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
   /** Shows [message] as the window's error line. */
   readonly onError: (message: string) => void;
@@ -53,11 +56,20 @@ export function YtPage({
           run={run}
           onSongMenu={onSongMenu}
           onAlbum={(id) => go({ kind: "ytAlbum", id })}
+          onLibraryAlbum={onLibraryAlbum}
           onArtist={(id) => go({ kind: "ytArtist", id })}
           onError={onError}
         />
       );
     case "ytAlbum":
-      return <YtAlbumPage key={route.id} id={route.id} run={run} onSongMenu={onSongMenu} />;
+      return (
+        <YtAlbumPage
+          key={route.id}
+          id={route.id}
+          run={run}
+          onSongMenu={onSongMenu}
+          onError={onError}
+        />
+      );
   }
 }

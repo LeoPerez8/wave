@@ -39,7 +39,12 @@ import type {
   YtRelatedView,
 } from "./ytPages.ts";
 import type { AccountView } from "./account.ts";
-import type { MissingSongsDownloadAction, SleepTimer, SleepTimerChoice } from "@wave/core";
+import type {
+  MissingSongsDownloadAction,
+  SleepTimer,
+  SleepTimerChoice,
+  YtSongsDownloadAction,
+} from "@wave/core";
 import type {
   DownloadMove,
   DownloadRow,
@@ -47,6 +52,8 @@ import type {
   FailedReasonAction,
   MissingSongsList,
   MissingSongsView,
+  YtListDownloadView,
+  YtSongsList,
 } from "./downloads.ts";
 import type { GeniusHitOpened, GeniusLyricsSearchView } from "./geniusLyricsSearch.ts";
 import type { GeniusPhase, SongGenius, SongLyrics, SongTranslation } from "./lyrics.ts";
@@ -66,6 +73,7 @@ import {
   type FollowsContract,
 } from "./follows.ts";
 import type { RecapPeriod, StatsPeriod, StatsRanking } from "@wave/core";
+import type { UpNextPlace } from "@wave/core";
 import type { ArtistStatsPage, DesktopRecap, StatsOverview, StatsRow } from "./stats.ts";
 import type {
   ActionSurface,
@@ -165,7 +173,7 @@ export interface BridgeContract
     readonly result: PlayStart;
   };
   readonly "playback.startYt": {
-    readonly args: readonly [videoIds: readonly string[], index: number];
+    readonly args: readonly [videoIds: readonly string[], index: number, shuffle?: boolean];
     readonly result: void;
   };
   readonly "playback.command": {
@@ -327,6 +335,16 @@ export interface BridgeContract
     readonly args: readonly [reason: string, action: FailedReasonAction];
     readonly result: void;
   };
+  /** A YT Music album page's download button and head line; null before its page was read. */
+  readonly "downloads.ytList": {
+    readonly args: readonly [list: YtSongsList];
+    readonly result: YtListDownloadView | null;
+  };
+  /** The button's click: Download, Retry Failed or Cancel on the list's songs. */
+  readonly "downloads.ytListAction": {
+    readonly args: readonly [action: YtSongsDownloadAction, list: YtSongsList];
+    readonly result: void;
+  };
   /** A YouTube Music artist page, by its browse id. */
   readonly "yt.artist": {
     readonly args: readonly [browseId: string];
@@ -446,16 +464,24 @@ export interface BridgeContract
     readonly args: readonly [target: SelectionTarget];
     readonly result: SelectionMenu;
   };
+  /** [at]: Add to Queue dropped in Up Next, between those neighbours. */
   readonly "collections.runSelection": {
     readonly args: readonly [
       target: SelectionTarget,
       action: SelectionRunAction,
       playlistId?: number,
+      at?: UpNextPlace,
     ];
     readonly result: SelectionRunResult;
   };
+  /** [at]: Add to Queue dropped in Up Next, between those neighbours. */
   readonly "songs.run": {
-    readonly args: readonly [target: SongTarget, action: SongRunAction, playlistId?: number];
+    readonly args: readonly [
+      target: SongTarget,
+      action: SongRunAction,
+      playlistId?: number,
+      at?: UpNextPlace,
+    ];
     readonly result: SongRunResult;
   };
   /** Opens an audio file by its absolute path, paused at its start. */
@@ -671,6 +697,8 @@ export const BRIDGE_CALLS = [
   "downloads.setBestQuality",
   "downloads.move",
   "downloads.failedReason",
+  "downloads.ytList",
+  "downloads.ytListAction",
   "account.view",
   "account.signIn",
   "account.cancelSignIn",
@@ -853,6 +881,7 @@ export interface WaveBridge {
       target: SongTarget,
       action: SongRunAction,
       playlistId?: number,
+      at?: UpNextPlace,
     ) => Promise<SongRunResult>;
   };
   /** One song at a time; each call answers with the engine's status after it. */
@@ -941,6 +970,8 @@ export interface WaveBridge {
     readonly setBestQuality: (on: boolean) => Promise<boolean>;
     readonly move: (move: DownloadMove) => Promise<void>;
     readonly failedReason: (reason: string, action: FailedReasonAction) => Promise<void>;
+    readonly ytList: (list: YtSongsList) => Promise<YtListDownloadView | null>;
+    readonly ytListAction: (action: YtSongsDownloadAction, list: YtSongsList) => Promise<void>;
   };
   /** The Wave account: the session itself never reaches the window. */
   readonly account: {
@@ -972,6 +1003,7 @@ export interface WaveBridge {
       target: SelectionTarget,
       action: SelectionRunAction,
       playlistId?: number,
+      at?: UpNextPlace,
     ) => Promise<SelectionRunResult>;
   };
   readonly playlists: PlaylistBridge;
@@ -991,7 +1023,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   playback: {
     view: () => invoke("playback.view"),
     start: (scope, index, shuffle) => invoke("playback.start", scope, index, shuffle),
-    startYt: (videoIds, index) => invoke("playback.startYt", videoIds, index),
+    startYt: (videoIds, index, shuffle) => invoke("playback.startYt", videoIds, index, shuffle),
     command: (command) => invoke("playback.command", command),
     play: () => invoke("playback.play"),
     pause: () => invoke("playback.pause"),
@@ -1039,7 +1071,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   songs: {
     states: (ids) => invoke("songs.states", ids),
     actions: (target, surface) => invoke("songs.actions", target, surface),
-    run: (target, action, playlistId) => invoke("songs.run", target, action, playlistId),
+    run: (target, action, playlistId, at) => invoke("songs.run", target, action, playlistId, at),
   },
   player: {
     load: (path) => invoke("player.load", path),
@@ -1107,6 +1139,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     setBestQuality: (on) => invoke("downloads.setBestQuality", on),
     move: (move) => invoke("downloads.move", move),
     failedReason: (reason, action) => invoke("downloads.failedReason", reason, action),
+    ytList: (list) => invoke("downloads.ytList", list),
+    ytListAction: (action, list) => invoke("downloads.ytListAction", action, list),
   },
   account: {
     view: () => invoke("account.view"),
@@ -1122,8 +1156,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     actions: (target, options) => invoke("collections.actions", target, options),
     run: (target, action, playlistId) => invoke("collections.run", target, action, playlistId),
     selectionActions: (target) => invoke("collections.selectionActions", target),
-    runSelection: (target, action, playlistId) =>
-      invoke("collections.runSelection", target, action, playlistId),
+    runSelection: (target, action, playlistId, at) =>
+      invoke("collections.runSelection", target, action, playlistId, at),
   },
   playlists: playlistBridge(invoke),
   lyricsAndTags: lyricsAndTagsBridge(invoke),
