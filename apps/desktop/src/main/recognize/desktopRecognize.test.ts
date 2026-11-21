@@ -195,7 +195,9 @@ test("a capture that failed tells the JVM, whose report ends the session as a fa
   const { session } = recognize.state().capture!;
   recognize.captureEnded(session, "failed");
   await settle();
-  assert.ok(calls.some((call) => call.method === "recognize.end" && call.params.session === session));
+  assert.ok(
+    calls.some((call) => call.method === "recognize.end" && call.params.session === session),
+  );
   assert.equal(recognize.state().capture, null);
 });
 

@@ -23,7 +23,9 @@ const fake = {
 } satisfies RecognizeShape;
 const call = (name: keyof typeof recognizeHandlers, ...args: unknown[]) =>
   Effect.runPromise(
-    recognizeHandlers[name](args).pipe(Effect.provideService(Recognize, fake)) as Effect.Effect<unknown>,
+    recognizeHandlers[name](args).pipe(
+      Effect.provideService(Recognize, fake),
+    ) as Effect.Effect<unknown>,
   );
 
 test("main hears only well-formed Recognize calls", async () => {

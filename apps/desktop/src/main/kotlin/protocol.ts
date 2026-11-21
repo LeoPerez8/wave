@@ -244,13 +244,23 @@ export interface KotlinRecognizeMethods {
     readonly result: null;
   };
   /** The capture stopped on its own: the JVM reports it as `recognizeCaptureFailed`. */
-  readonly "recognize.end": { readonly params: { readonly session: number }; readonly result: null };
+  readonly "recognize.end": {
+    readonly params: { readonly session: number };
+    readonly result: null;
+  };
   /** Shazam's answer about the latest [windowMs] heard (Core's `RecognizeAnswer`). */
   readonly "recognize.ask": {
-    readonly params: { readonly session: number; readonly last: boolean; readonly windowMs: number };
+    readonly params: {
+      readonly session: number;
+      readonly last: boolean;
+      readonly windowMs: number;
+    };
     readonly result: unknown;
   };
-  readonly "recognize.stop": { readonly params: { readonly session: number }; readonly result: null };
+  readonly "recognize.stop": {
+    readonly params: { readonly session: number };
+    readonly result: null;
+  };
 }
 
 export type KotlinMethod = keyof KotlinMethods;

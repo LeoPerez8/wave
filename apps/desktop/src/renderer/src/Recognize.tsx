@@ -3,7 +3,11 @@
  * listening. Main runs the session; the card shows it, captures only the session main names
  * and runs the result's buttons through `window.wave.recognize`.
  */
-import { recognizeCardActionLabels, type RecognizeCardAction, type RecognizeSource } from "@wave/core";
+import {
+  recognizeCardActionLabels,
+  type RecognizeCardAction,
+  type RecognizeSource,
+} from "@wave/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
 import type {
@@ -183,9 +187,10 @@ export function Recognize({
         return;
       case "addToPlaylist":
         if (playlists !== undefined) return setPlaylists(undefined);
-        void window.wave.library
-          .browse({ kind: "playlists" }, 0, 200)
-          .then((page) => setPlaylists(page.items), () => setToast(text.desktopLibrary.actionFailed));
+        void window.wave.library.browse({ kind: "playlists" }, 0, 200).then(
+          (page) => setPlaylists(page.items),
+          () => setToast(text.desktopLibrary.actionFailed),
+        );
         return;
       default:
         if (RUN.has(action)) run(action as RecognizeRunAction);

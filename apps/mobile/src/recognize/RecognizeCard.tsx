@@ -37,7 +37,11 @@ import { resolveRecognitionSave } from "./resolveRecognitionSave";
 import { hasMicrophone } from "./microphone";
 import { createRecognizeEntry } from "./recognizeEntry";
 import { recognizeDeps } from "./recognizeDeps";
-import { startRecognizeSession, type RecognizeNative, type RecognizeRun } from "@wave/client/recognizeSession";
+import {
+  startRecognizeSession,
+  type RecognizeNative,
+  type RecognizeRun,
+} from "@wave/client/recognizeSession";
 import { cancelRecognizeTile, trackCardSession, recognizeTileResult } from "./startRecognizeTile";
 
 const COVER = CELL * 9;

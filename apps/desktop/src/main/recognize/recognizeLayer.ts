@@ -35,7 +35,11 @@ import { Kotlin } from "../kotlin/kotlin.ts";
 import type { KotlinEvent, KotlinMethod } from "../kotlin/protocol.ts";
 import { Playback } from "../playback/playback.ts";
 import { keepPreference, syncedPreference } from "../sync/desktopSync.ts";
-import { runStreamedAction, streamedLibraryFacts, type StreamedSongPorts } from "../yt/streamedSong.ts";
+import {
+  runStreamedAction,
+  streamedLibraryFacts,
+  type StreamedSongPorts,
+} from "../yt/streamedSong.ts";
 import { YtMusic, ytSongs } from "../yt/ytMusic.ts";
 import { createDesktopRecognize } from "./desktopRecognize.ts";
 
@@ -169,7 +173,9 @@ export const recognizeLayer = (options: RecognizeOptions) =>
         return {
           inLibrary: hasFile,
           status:
-            track !== null && !hasFile ? downloads.status(track.id) : downloads.ytStatus(song.videoId),
+            track !== null && !hasFile
+              ? downloads.status(track.id)
+              : downloads.ytStatus(song.videoId),
         };
       };
 
@@ -187,7 +193,8 @@ export const recognizeLayer = (options: RecognizeOptions) =>
               ytMusic: yt.enabled(),
               status: facts?.status ?? null,
               inLibrary: facts?.inLibrary ?? false,
-              denied: options.openPrivacySettings === null ? ["tryAgain"] : ["openSettings", "tryAgain"],
+              denied:
+                options.openPrivacySettings === null ? ["tryAgain"] : ["openSettings", "tryAgain"],
             },
             options.catalogue(),
           ),
@@ -230,7 +237,11 @@ export const recognizeLayer = (options: RecognizeOptions) =>
               return { kind: "queued", count: 1 };
             }
             if (result.kind !== "stream") throw new Error("The song has nothing to play");
-            return (await runStreamedAction(streamPorts(), result.song, "playNext")) as RecognizeRunResult;
+            return (await runStreamedAction(
+              streamPorts(),
+              result.song,
+              "playNext",
+            )) as RecognizeRunResult;
           case "addToShazam": {
             const saved = addToShazam(
               db,

@@ -28,11 +28,7 @@ import type {
 
 /** The JVM's `recognize.*` calls (`DesktopRecognize.call`). */
 export type RecognizeKotlinMethod =
-  | "recognize.start"
-  | "recognize.audio"
-  | "recognize.end"
-  | "recognize.ask"
-  | "recognize.stop";
+  "recognize.start" | "recognize.audio" | "recognize.end" | "recognize.ask" | "recognize.stop";
 
 export interface DesktopRecognizePorts<L extends RecognizeTrack, S extends YtSong = YtSong> {
   readonly kotlin: (method: RecognizeKotlinMethod, params: object) => Promise<unknown>;
@@ -197,8 +193,7 @@ export const createDesktopRecognize = <L extends RecognizeTrack, S extends YtSon
       run = null;
       if (current === attempt) card = { kind: "denied" };
     },
-    allows: (kind) =>
-      capture !== null && (kind === "systemAudio") === (capture.via === "loopback"),
+    allows: (kind) => capture !== null && (kind === "systemAudio") === (capture.via === "loopback"),
     dispose: close,
   };
 };

@@ -592,7 +592,12 @@ else {
       trustedFrame: (frame) => window !== undefined && frame === window.webContents.mainFrame,
       allows: (kind) => recognize?.allows(kind) ?? false,
       screen: async () =>
-        (await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 0, height: 0 } }))[0],
+        (
+          await desktopCapturer.getSources({
+            types: ["screen"],
+            thumbnailSize: { width: 0, height: 0 },
+          })
+        )[0],
       loopback: process.platform === "win32",
     });
     const readTheme = () =>

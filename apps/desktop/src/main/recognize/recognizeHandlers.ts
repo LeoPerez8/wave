@@ -48,7 +48,8 @@ export const recognizeHandlers: Handlers = {
       (action === "addToPlaylist" ? positive(playlistId) : playlistId === undefined)
       ? Effect.flatMap(Recognize, (recognize) =>
           Effect.tryPromise({
-            try: () => recognize.run(action as RecognizeRunAction, playlistId as number | undefined),
+            try: () =>
+              recognize.run(action as RecognizeRunAction, playlistId as number | undefined),
             catch: (error) => error,
           }),
         )
