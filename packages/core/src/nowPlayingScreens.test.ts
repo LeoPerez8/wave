@@ -4,6 +4,9 @@ import { describe, test } from "node:test";
 import {
   NOW_PLAYING_OPENS_ON,
   relatedTimingKind,
+  nowPlayingPageSwipesEnabled,
+  nowPlayingRelatedSwipeEnabled,
+  settleRelatedRise,
   stepNowPlayingScreens,
   type NowPlayingScreens,
 } from "./index.ts";
@@ -223,5 +226,73 @@ describe("relatedTimingKind", () => {
     assert.equal(relatedTimingKind(related, { type: "ytMusicOff" }), null);
     assert.equal(relatedTimingKind(related, { type: "show", screen: "related" }), null);
     assert.equal(relatedTimingKind(player, { type: "show", screen: "queue" }), null);
+  });
+});
+
+describe("nowPlayingPageSwipesEnabled", () => {
+  test("page swipes stay available on the player and Queue but not under Related", () => {
+    assert.equal(nowPlayingPageSwipesEnabled(player), true);
+    assert.equal(nowPlayingPageSwipesEnabled(queue), true);
+    assert.equal(nowPlayingPageSwipesEnabled(related), false);
+    assert.equal(nowPlayingPageSwipesEnabled(editing), false);
+  });
+});
+
+describe("nowPlayingRelatedSwipeEnabled", () => {
+  const on = { ytMusic: true, playing: true } as const;
+
+  test("an upward drag on the player opens Related, with YouTube Music on and a song on", () => {
+    assert.equal(nowPlayingRelatedSwipeEnabled({ screens: player, ...on }), true);
+  });
+
+  test("with YouTube Music off there is no Related to open", () => {
+    assert.equal(
+      nowPlayingRelatedSwipeEnabled({ screens: player, ytMusic: false, playing: true }),
+      false,
+    );
+  });
+
+  test("with nothing playing there is no Related to open", () => {
+    assert.equal(
+      nowPlayingRelatedSwipeEnabled({ screens: player, ytMusic: true, playing: false }),
+      false,
+    );
+  });
+
+  test("edit mode keeps the drag off", () => {
+    assert.equal(nowPlayingRelatedSwipeEnabled({ screens: editing, ...on }), false);
+  });
+
+  test("only the player takes the drag: not the Queue, nor Related itself", () => {
+    assert.equal(nowPlayingRelatedSwipeEnabled({ screens: queue, ...on }), false);
+    assert.equal(nowPlayingRelatedSwipeEnabled({ screens: related, ...on }), false);
+  });
+});
+
+describe("settleRelatedRise", () => {
+  const height = 800;
+
+  test("a short slow drag up springs back", () => {
+    assert.equal(settleRelatedRise({ translationY: -100, velocityY: -100, height }), "closed");
+  });
+
+  test("a drag past a quarter of the screen opens Related", () => {
+    assert.equal(settleRelatedRise({ translationY: -220, velocityY: 0, height }), "open");
+  });
+
+  test("a fast flick up opens Related even when short", () => {
+    assert.equal(settleRelatedRise({ translationY: -40, velocityY: -1200, height }), "open");
+  });
+
+  test("a flick back down cancels it, even past the distance", () => {
+    assert.equal(settleRelatedRise({ translationY: -300, velocityY: 1200, height }), "closed");
+  });
+
+  test("a finger that ends below where it started springs back", () => {
+    assert.equal(settleRelatedRise({ translationY: 60, velocityY: 0, height }), "closed");
+  });
+
+  test("a tremor on a tap doesn't count as a flick", () => {
+    assert.equal(settleRelatedRise({ translationY: -4, velocityY: -1500, height }), "closed");
   });
 });

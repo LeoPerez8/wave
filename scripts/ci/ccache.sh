@@ -2,7 +2,7 @@
 # ccache in front of the NDK's compilers, for the CMake builds of the app and its
 # native libraries. CMake 3.17+ reads CMAKE_<LANG>_COMPILER_LAUNCHER from the
 # environment, so no library's build files change. Its settings (CCACHE_*) are
-# in the job's env in ci.yml.
+# in the Android APK job's env in mobile.yml.
 #   scripts/ci/ccache.sh setup   install ccache and start this build's statistics from zero
 #   scripts/ci/ccache.sh stats   print this build's statistics
 set -euo pipefail

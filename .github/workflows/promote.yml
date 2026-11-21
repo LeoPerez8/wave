@@ -1,7 +1,8 @@
 name: Promote to main
 
-# Publishes a -ti release to the main channel under the same number without the suffix, from the
-# same commit (docs/spec.md, Releases). scripts/ci/promote.sh tags it and starts CI on the tag.
+# Publishes a -ti release to the main channel under the same number without the suffix, each app
+# from its own newest -ti release at or below it (docs/spec.md, Promotion). scripts/ci/promote.sh
+# picks and checks those releases, tags the version and starts CI on the tag.
 on:
   workflow_dispatch:
     inputs:
@@ -9,6 +10,12 @@ on:
         description: The version to promote, such as 0.51.0-ti. Empty takes the newest -ti release.
         required: false
         type: string
+      app:
+        description: The app to promote. both promotes each app that has something new, and the desktop only while RELEASE_DESKTOP_MAIN is on.
+        required: false
+        type: choice
+        options: [both, mobile, desktop]
+        default: both
 
 permissions: {}
 
@@ -18,7 +25,7 @@ concurrency:
 
 jobs:
   promote:
-    name: Promote ${{ inputs.version || 'the newest -ti release' }}
+    name: Promote ${{ inputs.version || 'the newest -ti release' }} (${{ inputs.app || 'both' }})
     runs-on: ubuntu-latest
     permissions:
       # Pushes the stable tag and starts CI on it.
@@ -41,4 +48,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
-        run: scripts/ci/promote.sh "$VERSION"
+          APP: ${{ inputs.app || 'both' }}
+          RELEASE_DESKTOP_MAIN: ${{ vars.RELEASE_DESKTOP_MAIN }}
+        run: scripts/ci/promote.sh "$VERSION" "$APP"

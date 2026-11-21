@@ -40,7 +40,7 @@ const harness = {
   loads: [] as string[],
   /** Whether the pool has songs: without them the row shows the mixes' songs. */
   pool: true,
-  answers: new Map<string, readonly MagicQueueSeed<never>[]>(),
+  answers: new Map<string, readonly (readonly MagicQueueSeed<never>[])[]>(),
   toasts: 0,
 };
 Object.assign(globalThis, { __magicQueueSectionTest: harness });
@@ -85,7 +85,7 @@ const builds = await reactCompilerBuilds<Section>(
            test.loads.push(query.key);
            test.answers.set(
              query.key,
-             test.pool ? [{ source: "stream", song: { videoId: query.key } }] : [],
+             test.pool ? [[{ source: "stream", song: { videoId: query.key } }]] : [],
            );
          }
          return test.answers.get(query.key);
@@ -100,6 +100,19 @@ const builds = await reactCompilerBuilds<Section>(
       `export const showToast = async () => { globalThis.__magicQueueSectionTest.toasts++; };`,
     ),
     "@/lib/backgroundWork": stubModule(`export const freeTurnEffect = undefined;`),
+    "@/lib/recommendationWork": stubModule(`export const recommendationTurnEffect = undefined;`),
+    "./magicQueuePopularity": stubModule(
+      `import * as Effect from ${effect};
+       export const magicQueuePopularity = () => Effect.die("unused");`,
+    ),
+    "@/lib/discoverSettings": stubModule(
+      `export const discoverLevel = { get: () => 3 };
+       export const discoverSliders = { get: () => ({ faithfulness: 3, popularity: 3 }) };`,
+    ),
+    "./recommendationSnapshot": stubModule(
+      `import * as Effect from ${effect};
+       export const recommendationSnapshot = { library: Effect.die("unused"), catalog: Effect.die("unused") };`,
+    ),
     "@/library/libraryChanges": stubModule(`export const onLibraryChange = () => {};`),
     // No song is disliked here; the set is the store's, which isn't run.
     "@/library/dislikes": stubModule(
@@ -167,7 +180,7 @@ for (const [build, hooks] of Object.entries(builds)) {
     const row = open(hooks, NO_MIXES);
     try {
       const before = row.section().shown;
-      assert.equal(before.kind, "seeds");
+      assert.equal(before.kind, "pages");
       assert.equal(harness.loads.length, 1);
 
       leaveAndReturn();
@@ -175,10 +188,10 @@ for (const [build, hooks] of Object.entries(builds)) {
 
       assert.equal(harness.loads.length, 1, "no new read");
       const after = row.section().shown;
-      assert.equal(after.kind, "seeds");
+      assert.equal(after.kind, "pages");
       assert.equal(
-        after.kind === "seeds" && after.seeds,
-        before.kind === "seeds" && before.seeds,
+        after.kind === "pages" && after.pages,
+        before.kind === "pages" && before.pages,
         "the same songs",
       );
     } finally {
@@ -217,7 +230,7 @@ for (const [build, hooks] of Object.entries(builds)) {
     const row = open(hooks, NO_MIXES);
     try {
       const before = row.section().shown;
-      act(() => row.section().refresh());
+      act(() => row.section().refresh(0));
       assert.equal(harness.loads.length, 2, "a new read");
       assert.notDeepEqual(row.section().shown, before);
       assert.equal(harness.toasts, 1);

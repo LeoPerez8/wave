@@ -17,6 +17,7 @@ import {
 } from "@wave/core";
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -178,7 +179,8 @@ export function VirtualTable({
    * A playlist in its own order: its rows drag to a new place, and Alt+Up and Alt+Down move
    * the focused one. [target] goes before row ID [before], or to the end when it is null.
    */
-  readonly onPlace?: ((target: SongTarget, before: number | null) => void) | undefined;
+  readonly onPlace?:
+    ((target: SongTarget, before: number | null) => Promise<void> | void) | undefined;
   /** A bounded ranking uses these rows with the same table, focus and menus. */
   readonly preview?: {
     readonly id: string;
@@ -198,6 +200,13 @@ export function VirtualTable({
   const [top, setTop] = useState(0);
   const [height, setHeight] = useState(400);
   const [active, setActive] = useState(0);
+  /** The focused row as of the last move, for keyboard moves that wait on the one before. */
+  const focused = useRef(0);
+  useLayoutEffect(() => {
+    focused.current = active;
+  }, [active]);
+  /** Alt+arrow moves, one after another. */
+  const keyMoves = useRef(Promise.resolve());
   const [ready, setReady] = useState(false);
   const [sort, setSort] = useState<SongSort | PlaylistSongSort>();
   const [changingSort, setChangingSort] = useState(false);
@@ -375,6 +384,7 @@ export function VirtualTable({
   );
   const move = (index: number) => {
     const next = Math.max(0, Math.min(total - 1, index));
+    focused.current = next;
     setActive(next);
     const element = viewport.current!;
     const slot = slotOf(next);
@@ -422,7 +432,7 @@ export function VirtualTable({
           ? null
           : (get(at)?.id ?? (await window.wave.library.rowIds(scope, at, 1)).items[0]);
       if (before === undefined) return false;
-      onPlace(target, before);
+      void onPlace(target, before);
       return true;
     } catch {
       onError();
@@ -533,15 +543,22 @@ export function VirtualTable({
       !event.metaKey &&
       (event.key === "ArrowUp" || event.key === "ArrowDown")
     ) {
-      // Alt+Up and Alt+Down move the focused row, as in the Queue.
+      // Alt+Up and Alt+Down move the focused row, as in the Queue. Each waits for the move
+      // before it and reads its rows from main: the pages shown may predate that move.
       event.preventDefault();
       const up = event.key === "ArrowUp";
-      const row = get(active);
-      if (row === undefined || (up ? active === 0 : active >= total - 1)) return;
-      const from = active;
-      void placeAt({ scope, ids: [row.id] }, up ? from - 1 : from + 2).then(
-        (placed) => placed && move(up ? from - 1 : from + 1),
-      );
+      const step = async () => {
+        const from = focused.current;
+        if (up ? from === 0 : from >= total - 1) return;
+        const at = up ? from - 1 : from + 2;
+        const { items } = await window.wave.library.rowIds(scope, Math.min(from, at), 3);
+        const id = items[up ? 1 : 0];
+        const before = at >= total ? null : items[up ? 0 : 2];
+        if (id === undefined || before === undefined) return;
+        await onPlace({ scope, ids: [id] }, before);
+        move(up ? from - 1 : from + 1);
+      };
+      keyMoves.current = keyMoves.current.then(step).catch(onError);
       return;
     }
     const page = Math.max(1, Math.floor(height / HEIGHT));

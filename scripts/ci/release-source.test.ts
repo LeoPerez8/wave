@@ -394,6 +394,8 @@ describe("release-source.ts manifest", () => {
         "com.github.MetrolistGroup.innertubex:innertubex:0.8.6",
         "com.github.MetrolistGroup.quackjs:quackjs:0.1.4",
         "net.jthink:jaudiotagger:3.0.1",
+        "crate:symphonia-codec-alac",
+        "crate:oxideav-aac",
       ],
     );
     assert.deepEqual(manifest.pending, []);

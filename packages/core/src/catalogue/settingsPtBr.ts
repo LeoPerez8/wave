@@ -218,6 +218,9 @@ export const settingsPtBr: typeof settingsEn = {
     "As posições 1 a 5 são o rodapé de Tocando Agora, da esquerda para a direita; as outras duas ficam ao lado de Anterior e Próxima. Nenhum deixa a posição sem botão, e os botões do rodapé se distribuem.",
   slotLeftOfPrevious: "À Esquerda de Anterior",
   slotRightOfNext: "À Direita de Próxima",
+  slotInFooter: "No rodapé",
+  slotBesidePrevious: "Ao lado de Anterior",
+  slotBesideNext: "Ao lado de Próxima",
   resetToDefault: "Restaurar Padrão",
   aButtonAnotherSlotHoldsSwapsPlaces:
     "Um botão que já ocupa outra posição troca de lugar com o desta posição.",
@@ -451,7 +454,7 @@ export const settingsPtBr: typeof settingsEn = {
   retryLine: (line) => `Tentar novamente ${line}`,
   removeFailure: (line) => `Remover ${line} dos downloads que falharam`,
   slot: (n) => `Posição ${n}`,
-  swapSlot: (label, title, holder) => `${label}, ${title}, troca com ${holder}`,
+  moveButtonToSlot: (slot) => `Mover botão para ${slot}`,
   swipeHint: (side) =>
     `Escolhe a ação de deslizar para a ${side === "left" ? "esquerda" : "direita"}`,
   minutes: (n) =>

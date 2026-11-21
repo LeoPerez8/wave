@@ -29,8 +29,9 @@ Pick tickets whose blockers are closed.
   a full build.
 - The `main` channel gets a version only when the owner says so: run the **Promote to main**
   workflow (`gh workflow run promote.yml`, with `-f version=0.5.6-ti` for one that isn't the
-  newest). It publishes that release's commit as `0.5.6`, in a full build, once the owner
-  approves its run in the `main` Environment. See `docs/spec.md`, Build and CI.
+  newest, and `-f app=mobile` or `-f app=desktop` for one app). It publishes each app as `0.5.6`
+  from its own newest release at or below `0.5.6-ti`, in a full build, once the owner approves
+  its run in the `main` Environment. See `docs/spec.md`, Build and CI.
 - PR runs check, test and compile native code but build no APK, so they get no secret and no
   signing key. Test on a phone after the merge, with the `ti` release the push to `main` makes.
   To try a change before merging, build it locally (`pnpm android`, or `scripts/emulator-apk.sh`
@@ -44,8 +45,8 @@ Pick tickets whose blockers are closed.
   that. Released APKs are signed only by the release job, with the release key and its rotation
   proof from Expo's public debug key, all three in the release Environments (`docs/spec.md`, APK
   signing); the Android job and its artifacts hold no keystore. Undo a bad update that doesn't
-  crash with the **Roll back an update** workflow (channel and version); it can't cross a runtime
-  version.
+  crash with the **Roll back an update** workflow (app, channel and version); it can't cross a
+  runtime version.
 - Both Workers are deployed by hand from the owner's machine, never by CI, and a change to them
   doesn't release: `pnpm --filter @wave/updates run deploy` for `apps/updates`, and
   `pnpm --filter @wave/sync run deploy` for `apps/sync`, which goes out before any app release
@@ -66,6 +67,12 @@ Pick tickets whose blockers are closed.
 
 - `scripts/check-guards.sh` runs the fast repo-wide checks; tests near a change miss what they catch.
   Enable its pre-commit hook once per clone with `git config core.hooksPath .githooks`.
+- Run `scripts/install-for.sh mobile` or `scripts/install-for.sh desktop` (or both) in a
+  worktree. With no argument it installs every app the paths changed against `origin/main` reach;
+  what the apps share (Core, the client, the theme, the shared Kotlin, the lockfile) reaches both.
+  `scripts/check-guards.sh` runs the repo-wide checks and the guards of each installed app, and
+  names the install that would run the ones it skips. `scripts/merge-ticket.sh` installs and
+  typechecks every app the merge reaches.
 - `scripts/merge-ticket.sh` merges a ticket into an integration branch; an agent only resolves its
   conflicts. Keep the integration branch out of every checkout so worktrees can use it.
 - `docs/agents/emulator-checks.md` is how to check a ticket without a phone.

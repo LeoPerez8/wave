@@ -22,6 +22,7 @@ import {
   magicYtSong,
   magicPlaySignal,
   magicQueueEdits,
+  magicQueueFootnote,
   magicQueueLabel,
   magicQueueKeepsPlayingSong,
   magicQueueShare,
@@ -206,6 +207,30 @@ const subscribeBatchLoading = subscribeAll(queueState, magicSession, picking, sl
  */
 export const useMagicBatchLoading = (): boolean =>
   useSyncExternalStore(subscribeBatchLoading, batchLoadingNow);
+
+const footnoteNow = (): boolean =>
+  magicQueueFootnote(
+    activeMagicSession(),
+    { picking: picking.get(), failed: failedBatch.get(), empty: emptyBatch.get() },
+    queueState.get(),
+    sleepTimerState.get(),
+  );
+const subscribeFootnote = subscribeAll(
+  queueState,
+  magicSession,
+  picking,
+  failedBatch,
+  emptyBatch,
+  sleepTimerState,
+);
+
+/**
+ * Whether the footnote sits under Up Next's last song: the Magic Queue under
+ * way has its songs loaded and more can come (`magicQueueFootnote`). Hidden
+ * while a batch loads, fails or finds nothing. Re-renders on change.
+ */
+export const useMagicQueueFootnote = (): boolean =>
+  useSyncExternalStore(subscribeFootnote, footnoteNow);
 
 /** When the current batch first became wanted, including starting the seed's queue. */
 let batchStart: { readonly id: string; readonly at: number; readonly first: boolean } | null = null;
