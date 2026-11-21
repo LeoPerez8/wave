@@ -208,10 +208,11 @@ input::placeholder {
   padding: 8px 4px;
   outline-offset: 0;
 }
+/* 32 px rows: with Stats and Listening History, the whole sidebar still fits a 1000 px window. */
 .nav-item {
   width: 100%;
-  min-height: 34px;
-  padding: 7px 10px;
+  min-height: 32px;
+  padding: 6px 10px;
   display: flex;
   align-items: center;
   gap: 10px;

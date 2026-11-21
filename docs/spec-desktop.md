@@ -342,7 +342,7 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   wavy scrubber with elapsed and remaining time. Right: sleep timer, Lyrics, Queue, the song
   menu, mute and volume.
 - Sidebar: Search field (Ctrl+F) and Home; Library (Playlists, Artists, Albums, Songs, Genres,
-  Favorites); YT Music (Discover, Magic Queue, Downloads, whose count shows the download
+  Favorites, Stats, Listening History); YT Music (Discover, Magic Queue, Downloads, whose count shows the download
   percentage); the user's playlists with New Playlist; Settings pinned at the bottom. Back and
   forward arrows sit in the title bar. Every entry has its own icon. The sidebar scrolls as one
   when the window is short, keeping the Search field and Settings in view.
