@@ -2893,3 +2893,9 @@ export {
   type LanguageChoice,
 } from "./languageChoice.ts";
 export { displayTag } from "./displayTag.ts";
+export {
+  floatingWindowPosition,
+  readFloatingWindowPosition,
+  storedFloatingWindowPosition,
+} from "./floatingWindow.ts";
+export type { ScreenArea, WindowPosition, WindowSize } from "./floatingWindow.ts";

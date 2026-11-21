@@ -327,6 +327,17 @@ start and Settings › Window. Two variables add the real system controls to it:
 The spec never turns on Start with the system, so it writes no login entry. `autostart.test.ts`
 covers what the switch registers.
 
+## Mini player
+
+`e2e/miniPlayer.spec.ts` opens the mini player from the player bar and from the tray menu's
+entry (read off the menu template Wave builds, since Playwright can't click a tray), checks that
+it is above other windows with the main window's web preferences and CSP, drives its buttons and
+Space, hides and brings back the main window, and checks the position after a restart and after
+a stored position that is on no screen. The screenshot is `mini-player-<platform>.png`. Find the
+windows by title: the main one is "Wave", the mini player is the catalogue's "Mini Player".
+`src/main/system/miniPlayer.test.ts` covers the window's placement against fake screens.
+Dragging it by hand and unplugging a monitor remain owner checks.
+
 ## Linux under WSLg
 
 Windows' `node_modules` can't run in WSL. Clone into WSL's own disk and install there (worktree
