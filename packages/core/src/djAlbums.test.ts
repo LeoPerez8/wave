@@ -19,6 +19,7 @@ import {
   parseMagicSession,
   startDjQueue,
   type ArtistGraph,
+  type DjArtistTile,
   type DjState,
   type DjTile,
   type MagicSeedSong,
@@ -330,12 +331,22 @@ describe("an album in the DJ seed", () => {
     })!;
     assert.equal(session.seedSongs!.length, 7);
     const artistOf = new Map(session.seedSongs!.map((seed) => [seed.id, seed.artists[0]]));
-    for (const ids of radiosOf(session, 4)) {
+    const drawn = radiosOf(session, 4);
+    const selectedIds = tiles
+      .filter((tile): tile is DjArtistTile => tile.kind === "artist")
+      .map((tile) => tile.key);
+    assert.deepEqual(
+      drawn[0]!.filter((id) => selectedIds.includes(id)),
+      selectedIds,
+    );
+    for (const ids of drawn.slice(1)) {
       assert.ok(ids.length <= 3);
       const artists = ids.map((id) => artistOf.get(id));
       assert.equal(new Set(artists).size, artists.length);
     }
-    assert.equal(radiosOf(session, 1)[0]!.length, 3);
+    const firstBatchExtras = drawn[0]!.filter((id) => !selectedIds.includes(id));
+    assert.ok(firstBatchExtras.length <= 3);
+    assert.equal(radiosOf(session, 1)[0]!.length, selectedIds.length);
   });
 
   test("an album whose songs couldn't be read stands for its album artist's radio", () => {

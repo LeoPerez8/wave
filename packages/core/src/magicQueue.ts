@@ -28,6 +28,17 @@ export type MagicArtistKey = string & { readonly magicArtist: true };
 export const magicArtistKey = (name: string): MagicArtistKey =>
   artistPhotoName(name) as MagicArtistKey;
 
+/** Records the first DJ song so its batch can cover other selected artists. */
+export const magicDjFirstSong = (
+  session: MagicSession,
+  artists: readonly string[],
+): MagicSession => {
+  if (session.seed.kind !== "dj" || session.batches !== 0) return session;
+  const started = new Set(session.djStartedArtists ?? []);
+  for (const artist of artists) started.add(magicArtistKey(artist));
+  return { ...session, djStartedArtists: [...started] };
+};
+
 /** A song as the Magic Queue weighs it. */
 export interface MagicSong {
   /** Its queue track id. */
@@ -208,6 +219,8 @@ export interface MagicSession {
   readonly dj?: DjSettings;
   /** Artist tiles selected in DJ, used to cover the first batch. */
   readonly djArtistSeeds?: readonly string[];
+  /** Artists credited on the song #1411 started before its first batch. */
+  readonly djStartedArtists?: readonly string[];
   /** Family constraints for radios contributed by selected DJ family tiles. */
   readonly djGenreRadios?: readonly { readonly id: string; readonly families: readonly string[] }[];
   /** Signals consumed by the shared radio ranking. Old sessions have none. */
@@ -592,14 +605,34 @@ export const magicBatchRadios = (
     songs.map((song) => ({ id: song.id, artist: song.artists[0] ?? "", plays: song.plays })),
     { weight: "plays", recent: session.seedDraws ?? [], random },
   ).map((song) => song.id);
-  const again = new Set(drawn);
+  const artistTileIds = new Set(
+    (session.djArtistSeeds ?? []).map((name) => `artist:${magicArtistKey(name)}`),
+  );
+  const artistTileKeys = new Set((session.djArtistSeeds ?? []).map(magicArtistKey));
+  const firstDjBatch = session.seed.kind === "dj" && session.batches === 0;
+  const requested = firstDjBatch
+    ? [
+        ...(session.djArtistSeeds ?? []).slice(0, 10).flatMap((name) => {
+          const seed = songs.find((candidate) => candidate.id === `artist:${magicArtistKey(name)}`);
+          return seed === undefined ? [] : [seed.id];
+        }),
+        ...drawn.filter((id) => {
+          const seed = byId.get(id);
+          return (
+            !artistTileIds.has(id) &&
+            !seed?.artists.some((artist) => artistTileKeys.has(magicArtistKey(artist)))
+          );
+        }),
+      ]
+    : drawn;
+  const again = new Set(requested);
   return {
     session: {
       ...session,
       seedDraws: [...(session.seedDraws ?? []).filter((id) => !again.has(id)), ...drawn],
-      seedRadios: { batch: session.batches, ids: drawn },
+      seedRadios: { batch: session.batches, ids: requested },
     },
-    seeds: drawn.flatMap((id) => byId.get(id) ?? []),
+    seeds: requested.flatMap((id) => byId.get(id) ?? []),
   };
 };
 
@@ -1018,6 +1051,9 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
       : {}),
     ...(seed["kind"] === "dj" ? { dj: parseDjSettings(value["dj"]) } : {}),
     ...(isStrings(value["djArtistSeeds"]) ? { djArtistSeeds: value["djArtistSeeds"] } : {}),
+    ...(isStrings(value["djStartedArtists"])
+      ? { djStartedArtists: value["djStartedArtists"] }
+      : {}),
     ...(validDjGenreRadios
       ? {
           djGenreRadios: djGenreRadios as unknown as NonNullable<MagicSession["djGenreRadios"]>,

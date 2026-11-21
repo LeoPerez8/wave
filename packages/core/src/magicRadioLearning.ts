@@ -203,7 +203,10 @@ export const completeMagicRadioBatch = (
     session.batches === 0 &&
     (session.djArtistSeeds?.length ?? 0) > 1
   ) {
-    const selectedArtists = session.djArtistSeeds ?? [];
+    const startedArtists = new Set(session.djStartedArtists ?? []);
+    const selectedArtists = (session.djArtistSeeds ?? []).filter(
+      (name) => !startedArtists.has(magicArtistKey(name)),
+    );
     const byArtist = new Map<string, RankedRadioSong[]>();
     for (const song of [...seed.filter(eligible), ...liked.filter(eligible)])
       for (const artist of song.artists) {
@@ -224,7 +227,7 @@ export const completeMagicRadioBatch = (
         chosen.push(song);
       }
     }
-    const remaining = [...primary, ...seed.filter(eligible), ...liked.filter(eligible)];
+    const remaining = primary;
     while (chosen.length < limit) {
       const lastArtists = new Set(chosen.at(-1)?.artists ?? []);
       const at = remaining.findIndex(

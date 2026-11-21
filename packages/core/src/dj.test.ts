@@ -24,6 +24,7 @@ import {
   startDjQueue,
   DEFAULT_DJ_SETTINGS,
   magicBatchRadios,
+  magicDjFirstSong,
   magicQueueLabel,
   magicSessionSliders,
   parseMagicSession,
@@ -638,8 +639,8 @@ describe("a Magic Queue with a DJ seed", () => {
     assert.equal(startDjQueue([], { id: "dj1" }), null);
   });
 
-  test("each batch reads the radios of up to 3 different selected artists", () => {
-    const { session, seeds } = magicBatchRadios(started(), () => 0);
+  test("later batches read the radios of up to 3 different selected artists", () => {
+    const { session, seeds } = magicBatchRadios({ ...started(), batches: 1 }, () => 0);
     assert.equal(seeds.length, 3);
     assert.equal(new Set(seeds.map((seed) => seed.artists[0])).size, 3);
     for (const seed of seeds) {
@@ -651,13 +652,43 @@ describe("a Magic Queue with a DJ seed", () => {
     assert.deepEqual(parseMagicSession(JSON.parse(JSON.stringify(session))), session);
   });
 
+  test("the first batch reads every selected artist radio, up to ten", () => {
+    for (const count of [4, 12]) {
+      const selected = artistTiles(count);
+      const session = startDjQueue(selected, { id: `dj-${count}` })!;
+      const read = magicBatchRadios(session, () => 0);
+      const selectedNames = selected.slice(0, 10).map((tile) => tile.name);
+      assert.deepEqual(
+        read.seeds.map((seed) => seed.title),
+        selectedNames,
+        `${count} selected artists`,
+      );
+      assert.equal(read.session.seedRadios?.batch, 0);
+      assert.deepEqual(
+        magicBatchRadios(read.session, () => 0.9).seeds.map((seed) => seed.title),
+        selectedNames,
+        "the first batch keeps its requested radios across retries",
+      );
+    }
+  });
+
+  test("an artist already started from the Library or radio is recorded once", () => {
+    const session = started();
+    assert.deepEqual(magicDjFirstSong(session, ["Artist 0"]).djStartedArtists, [
+      magicArtistKey("Artist 0"),
+    ]);
+    assert.deepEqual(
+      magicDjFirstSong(magicDjFirstSong(session, ["Artist 0"]), ["ARTIST 0", "Artist 1"])
+        .djStartedArtists,
+      [magicArtistKey("Artist 0"), magicArtistKey("Artist 1")],
+    );
+  });
+
   test("the next batch reads the artists the last one left out", () => {
     const first = magicBatchRadios(started(), () => 0);
     const second = magicBatchRadios({ ...first.session, batches: 1 }, () => 0);
-    const before = new Set(first.seeds.map((seed) => seed.id));
-    const fresh = second.seeds.filter((seed) => !before.has(seed.id));
     assert.equal(second.seeds.length, 3);
-    assert.equal(fresh.length, 2);
+    assert.ok(second.seeds.every((seed) => tiles.some((tile) => tile.name === seed.title)));
   });
 
   test("a single selected artist's radio is every batch's", () => {
@@ -681,7 +712,8 @@ describe("a Magic Queue with a DJ seed", () => {
     let leading = 0;
     for (let draw = 0; draw < 50; draw++) {
       const random = () => (draw + 0.5) / 50;
-      if (magicBatchRadios(session, random).seeds[0]!.title === "Artist 4") leading += 1;
+      if (magicBatchRadios({ ...session, batches: 1 }, random).seeds[0]!.title === "Artist 4")
+        leading += 1;
     }
     assert.ok(leading > 25, `Artist 4 led ${leading} of 50 draws`);
   });

@@ -12,6 +12,7 @@ import {
   magicPickEnded,
   magicQueueDislikedEntries,
   magicBatchRadios,
+  magicDjFirstSong,
   djFirstLibrarySong,
   djLibraryCandidates,
   magicLibrarySongs,
@@ -697,7 +698,10 @@ export const startDjMagicQueue = (
     );
     if (closed?.aborted) return "failed" satisfies DjStart;
     if (localAlbumSession !== null && firstLibrarySong !== null) {
-      const session = { ...drawnLibrary.session, used: [String(firstLibrarySong.id)] };
+      const session = {
+        ...magicDjFirstSong(drawnLibrary.session, firstLibrarySong.artistNames),
+        used: [String(firstLibrarySong.id)],
+      };
       const needsAlbumPages = tiles.some(
         (tile) => tile.kind === "album" && tile.browseId !== null && !localAlbumSongs.has(tile.key),
       );
@@ -754,7 +758,7 @@ export const startDjMagicQueue = (
       startingLibrary = { songs: library.songs.filter(songHasFile), artists: library.artists };
       const start = djStartWhileOpen(closed, () =>
         begin(
-          { ...drawn.session, used: [firstId] },
+          { ...magicDjFirstSong(drawn.session, firstRadioSong.artists), used: [firstId] },
           startedAt,
           toYtQueueTrack(firstRadioSong, null),
         ),
