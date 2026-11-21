@@ -332,7 +332,7 @@ export function SearchResultsList({
                   ? ignore
                   : () => {
                       onOpen();
-                      openYtArtist(artist.browseId, artist.name);
+                      openYtArtist(artist.browseId, artist.name, artist.artworkUrl);
                     }
               }
               onLongPress={selection.selecting ? ignore : () => openYtArtistActions(artist)}

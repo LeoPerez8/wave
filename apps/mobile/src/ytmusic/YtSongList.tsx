@@ -77,6 +77,7 @@ import { occurrenceKeys } from "@/songs/songRowState";
 
 import { artistOpeningRequest } from "@wave/client/ytArtistFetch";
 import { askYtMusic } from "./askYtMusic";
+import { keepYtList, keptYtList } from "./knownYtPages";
 import {
   useInLibraryBetweenFrames,
   useLibraryFinder,
@@ -182,14 +183,19 @@ export const useYtListPage = (screen: YtListScreen, id: string) => {
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
   const key = `${screen}/${id}/${attempt}`;
+  // A page read whole this session draws its songs in the first frame and isn't asked again,
+  // offline too; Try Again (a later attempt) reads it anew.
+  const [kept] = useState(() => keptYtList(screen, id));
+  const known = attempt === 0 ? kept : undefined;
   const [answer, setAnswer] = useState<{ readonly key: string; readonly load: YtListLoad } | null>(
     null,
   );
   useEffect(() => {
-    if (!settled || !connected) return;
+    if (!settled || !connected || known !== undefined) return;
     let current = true;
     const cancel = new AbortController();
     const show = (load: YtListLoad) => {
+      keepYtList(screen, id, load);
       if (current) setAnswer({ key, load });
     };
     let shown: YtListPage | null = null;
@@ -223,13 +229,15 @@ export const useYtListPage = (screen: YtListScreen, id: string) => {
       current = false;
       cancel.abort();
     };
-  }, [screen, id, key, settled, connected]);
+  }, [screen, id, key, settled, connected, known]);
   const load: YtListLoad =
     answer?.key === key
       ? answer.load
-      : connected
-        ? LOADING
-        : { status: "quiet", reason: "offline" };
+      : known !== undefined
+        ? known
+        : connected
+          ? LOADING
+          : { status: "quiet", reason: "offline" };
   return { load, retry };
 };
 
