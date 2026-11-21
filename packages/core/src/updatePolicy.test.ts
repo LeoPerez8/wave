@@ -688,7 +688,7 @@ describe("a version's place in the sequence", () => {
   });
 });
 
-describe("the update button in Settings", () => {
+describe("the update action in Settings' Version History row", () => {
   const idle = {
     nativeUpdate: "none",
     bundleDownloaded: false,
@@ -697,51 +697,75 @@ describe("the update button in Settings", () => {
     updateRequest: "none",
     downloadingApk: false,
   } as const;
+  const pull = { ...idle, gesture: "pull" } as const;
+  const installNow = { ...idle, gesture: "installNow" } as const;
 
-  describe("a tap", () => {
-    it("installs a downloaded APK", () => {
-      assert.equal(updateButtonAction({ ...idle, nativeUpdate: "downloaded" }), "install");
+  describe("a pull on Settings", () => {
+    it("checks when no update is ready", () => {
+      assert.equal(updateButtonAction(pull), "check");
+      assert.equal(updateButtonAction({ ...pull, nativeUpdate: "available" }), "check");
     });
 
-    it("checks when the downloaded APK isn't one on offer, which an install tap couldn't take", () => {
+    it("checks when the downloaded APK isn't one on offer, which Install Now couldn't take", () => {
       assert.equal(
-        updateButtonAction({ ...idle, nativeUpdate: "downloaded", offeredApkVersion: null }),
+        updateButtonAction({ ...pull, nativeUpdate: "downloaded", offeredApkVersion: null }),
         "check",
       );
     });
 
-    it("checks when no APK is ready", () => {
-      assert.equal(updateButtonAction(idle), "check");
-      assert.equal(updateButtonAction({ ...idle, nativeUpdate: "available" }), "check");
-    });
-
-    it("installs a downloaded bundle, whoever downloaded it", () => {
-      assert.equal(updateButtonAction({ ...idle, bundleDownloaded: true }), "installBundle");
-    });
-
-    it("never installs a bundle while an APK is pending", () => {
+    it("checks while an APK is pending, which holds a downloaded bundle back", () => {
       assert.equal(
-        updateButtonAction({ ...idle, nativeUpdate: "available", bundleDownloaded: true }),
+        updateButtonAction({ ...pull, nativeUpdate: "available", bundleDownloaded: true }),
         "check",
       );
-      assert.equal(
-        updateButtonAction({ ...idle, nativeUpdate: "downloaded", bundleDownloaded: true }),
-        "install",
-      );
+    });
+
+    it("never installs what's ready: Install Now on the row does that", () => {
+      assert.equal(updateButtonAction({ ...pull, nativeUpdate: "downloaded" }), "none");
+      assert.equal(updateButtonAction({ ...pull, bundleDownloaded: true }), "none");
     });
 
     it("joins a download already running, to install what it brings", () => {
       assert.equal(
-        updateButtonAction({ ...idle, nativeUpdate: "available", downloadingApk: true }),
+        updateButtonAction({ ...pull, nativeUpdate: "available", downloadingApk: true }),
         "followDownload",
       );
     });
 
-    it("does nothing while an earlier tap is under way", () => {
-      assert.equal(updateButtonAction({ ...idle, updateRequest: "check" }), "none");
-      assert.equal(updateButtonAction({ ...idle, updateRequest: "download" }), "none");
+    it("does nothing while an earlier check or install is under way", () => {
+      assert.equal(updateButtonAction({ ...pull, updateRequest: "check" }), "none");
+      assert.equal(updateButtonAction({ ...pull, updateRequest: "download" }), "none");
       assert.equal(
-        updateButtonAction({ ...idle, nativeUpdate: "downloaded", installTap: "handedOver" }),
+        updateButtonAction({ ...pull, nativeUpdate: "downloaded", installTap: "handedOver" }),
+        "none",
+      );
+    });
+  });
+
+  describe("a tap on Install Now", () => {
+    it("installs a downloaded APK", () => {
+      assert.equal(updateButtonAction({ ...installNow, nativeUpdate: "downloaded" }), "install");
+    });
+
+    it("installs a downloaded bundle, whoever downloaded it", () => {
+      assert.equal(updateButtonAction({ ...installNow, bundleDownloaded: true }), "installBundle");
+    });
+
+    it("never installs a bundle while an APK is pending", () => {
+      assert.equal(
+        updateButtonAction({ ...installNow, nativeUpdate: "available", bundleDownloaded: true }),
+        "none",
+      );
+      assert.equal(
+        updateButtonAction({ ...installNow, nativeUpdate: "downloaded", bundleDownloaded: true }),
+        "install",
+      );
+    });
+
+    it("does nothing with no update ready, or while an install is under way", () => {
+      assert.equal(updateButtonAction(installNow), "none");
+      assert.equal(
+        updateButtonAction({ ...installNow, nativeUpdate: "downloaded", installTap: "handedOver" }),
         "none",
       );
     });

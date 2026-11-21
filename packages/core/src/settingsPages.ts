@@ -112,7 +112,7 @@ export const SETTINGS_PAGES = [
     route: "/settings/developer",
     icon: "code",
   },
-  // Last, just above the version line.
+  // Last; its row carries the running version.
   {
     page: "versionHistory",
     title: en.settings.pages.versionHistory,
