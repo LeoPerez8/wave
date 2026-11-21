@@ -1,0 +1,41 @@
+name: Cache budget
+
+# Keeps the Actions cache inside its budget per app (docs/spec.md, Build and CI › Caches). CI's
+# jobs only read and save entries, and none of them can delete one; this job does, on each push to
+# main: it deletes every entry a newer one of the same family superseded, and the caches CI no
+# longer writes, then reports each app's usage against its budget (scripts/ci/cache-budget.ts).
+# It runs beside that push's CI run, so the newest entry of each family, the one CI restores,
+# always stays.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: cache-budget
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    name: Prune the Actions cache
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Listing and deleting cache entries.
+      actions: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Prune superseded entries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci/cache-budget.ts prune
