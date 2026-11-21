@@ -3359,5 +3359,10 @@ export { djSearchTiles } from "./djSearch.ts";
 export { djSeedFull } from "./dj.ts";
 export type { DjSearchFound } from "./djSearch.ts";
 
-export { stagedMounts, type StagedMountsInput } from "./stagedMounts.ts";
+export {
+  pagerMounts,
+  stagedMounts,
+  type PagerMountsInput,
+  type StagedMountsInput,
+} from "./stagedMounts.ts";
 export { knownPages, type KnownPages } from "./knownPages.ts";
