@@ -1,5 +1,4 @@
 import { beginTiming } from "@/lib/timing";
-import { currentLocalisation } from "@/localisation/localisation";
 import {
   itemActions,
   parseTrackId,
@@ -15,15 +14,14 @@ import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoi
 import { useLinkRows } from "@/library/hooks";
 import { openAlbum, useCurrentPath } from "@/library/routes";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import { showError } from "@/overlay/alert";
 import { targetFacts, type ActionItems } from "@/playback/actionTargets";
 import { goToArtistPress } from "@/playback/goToArtistPress";
 import { itemActionPress } from "@/playback/itemActions";
-import { startMagicQueueFromStream } from "@/playback/magicQueueStart";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
-import { currentLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
+import type { FindInLibrary } from "@/ytmusic/libraryFinder";
 import { openYtAlbum, ytAlbumPageHere } from "@/ytmusic/routes";
 import { useStreamedArtistLink } from "@/ytmusic/streamedArtist";
+import { runYtSongSwipe } from "@/ytmusic/YtSongActions";
 
 import { usePlayingSongAnswer, usePlayingSongTarget } from "./playingSong";
 import { closeNowPlayingForLink } from "./sheet";
@@ -73,9 +71,6 @@ const libraryCard = (
     playing: true,
   });
 
-const songLoadFailed = (error: unknown): void =>
-  void showError(currentLocalisation().strings.playbackText.couldntLoadTheSong, error);
-
 /** Runs a Library song's card entry for a slot. */
 const runLibraryEntry = (
   entry: ItemActionEntry<ArtistRow>,
@@ -124,10 +119,9 @@ const runStreamEntry = (entry: YtSongActionEntry<ArtistRow>, song: NativeYtSong)
       return;
     }
     case "magicQueue":
-      // As the card does: grown from the Library's song when it has a file by now.
-      currentLibraryFinder()
-        .then((find) => startMagicQueueFromStream(song, find(song)))
-        .catch(songLoadFailed);
+      // The card's own runner, on the press: it reads the Library's song (the
+      // Magic Queue grows from its file when it has one by now) and starts it.
+      runYtSongSwipe(song, "magicQueue");
       return;
     default:
       return;

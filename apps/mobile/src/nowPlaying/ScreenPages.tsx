@@ -168,8 +168,9 @@ export const useScreenPages = (): ScreenPages => {
       relatedHere.set(screen === "related");
       if (screen === "queue") setQueueMounted(true);
       if (screen === "related") {
-        // Asked for with Now Playing closed, the sheet rises already on it.
-        if (before.screen !== "related") movePanel(true, 0, !still && isNowPlayingShown());
+        // Asked for with Now Playing closed, the sheet rises already on it. A released
+        // rise carries its speed, so a flick up keeps moving into the open panel.
+        if (before.screen !== "related") movePanel(true, velocity, !still && isNowPlayingShown());
       } else if (before.screen === "related") {
         // The pages are covered until the panel moves, so they turn at once.
         turnTo(screen, 0, false);
@@ -234,9 +235,10 @@ export const useScreenPages = (): ScreenPages => {
         latest.current.screen === "player" && isNowPlayingShown()
           ? settleRelatedRise({ translationY, velocityY, height })
           : "closed";
-      if (rise === "open") send({ type: "show", screen: "related" });
-      // The panel's position falls as the finger goes down.
-      else movePanel(false, height > 0 ? -velocityY / height : 0, !still && isNowPlayingShown());
+      // The panel's position rises as the finger goes up, either way it settles.
+      const velocity = height > 0 ? -velocityY / height : 0;
+      if (rise === "open") send({ type: "show", screen: "related" }, velocity);
+      else movePanel(false, velocity, !still && isNowPlayingShown());
     },
     [send, movePanel, height, still],
   );

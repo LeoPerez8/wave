@@ -88,18 +88,15 @@ export function NowPlayingSlotPickerScreen({ slot }: { slot: number }) {
         <View accessibilityRole="radiogroup" accessibilityLabel={title}>
           {SLOT_CHOICES.map((choice) => {
             const label = nowPlayingSlotLabel(choice);
-            const holder = choice === null ? -1 : buttons.indexOf(choice);
             return (
               <ChoiceRow
                 key={label}
                 label={label}
                 line={nowPlayingSlotCaption(buttons, slot, choice)}
+                // The caption names where another slot holds it, heard once after the name
+                // ("Lyrics, Slot 1, In the footer"); the note under the list says it swaps.
                 lineRead="label"
-                accessibilityLabel={
-                  holder === -1 || holder === slot
-                    ? `${label}, ${title}`
-                    : strings.settings.swapSlot(label, title, nowPlayingSlotTitle(holder))
-                }
+                accessibilityLabel={`${label}, ${title}`}
                 chosen={choice === chosen}
                 onPress={() => {
                   editSavedNowPlayingButtons({ slot, action: choice });
