@@ -42,6 +42,7 @@ import type {
   MissingSongsList,
   MissingSongsView,
 } from "./downloads.ts";
+import type { GeniusHitOpened, GeniusLyricsSearchView } from "./geniusLyricsSearch.ts";
 import type { GeniusPhase, SongGenius, SongLyrics, SongTranslation } from "./lyrics.ts";
 import {
   PLAYLIST_CALLS,
@@ -192,6 +193,16 @@ export interface BridgeContract
   readonly "lyrics.cancelGenius": {
     readonly args: readonly [requestId: string];
     readonly result: void;
+  };
+  /** Search's online lyrics for a query: Genius's songs, or the line to show instead. */
+  readonly "lyrics.searchOnline": {
+    readonly args: readonly [query: string];
+    readonly result: GeniusLyricsSearchView;
+  };
+  /** A click on a hit of the last answer, by Genius's song id. */
+  readonly "lyrics.openOnlineHit": {
+    readonly args: readonly [id: number];
+    readonly result: GeniusHitOpened;
   };
   /** Whether the Lyrics view's Translate button is on; kept on this computer. */
   readonly "lyrics.translateOn": { readonly args: readonly []; readonly result: boolean };
@@ -532,6 +543,8 @@ export const BRIDGE_CALLS = [
   "lyrics.song",
   "lyrics.genius",
   "lyrics.cancelGenius",
+  "lyrics.searchOnline",
+  "lyrics.openOnlineHit",
   "lyrics.translateOn",
   "lyrics.setTranslateOn",
   "lyrics.translation",
@@ -721,6 +734,8 @@ export interface WaveBridge {
       phase: GeniusPhase,
     ) => Promise<SongGenius>;
     readonly cancelGenius: (requestId: string) => Promise<void>;
+    readonly searchOnline: (query: string) => Promise<GeniusLyricsSearchView>;
+    readonly openOnlineHit: (id: number) => Promise<GeniusHitOpened>;
     readonly translateOn: () => Promise<boolean>;
     readonly setTranslateOn: (on: boolean) => Promise<boolean>;
     readonly translation: (
@@ -910,6 +925,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     song: (trackId) => invoke("lyrics.song", trackId),
     genius: (trackId, requestId, phase) => invoke("lyrics.genius", trackId, requestId, phase),
     cancelGenius: (requestId) => invoke("lyrics.cancelGenius", requestId),
+    searchOnline: (query) => invoke("lyrics.searchOnline", query),
+    openOnlineHit: (id) => invoke("lyrics.openOnlineHit", id),
     translateOn: () => invoke("lyrics.translateOn"),
     setTranslateOn: (on) => invoke("lyrics.setTranslateOn", on),
     translation: (trackId, language) => invoke("lyrics.translation", trackId, language),

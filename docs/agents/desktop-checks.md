@@ -335,6 +335,20 @@ does nothing, that a paste into the search field stays a paste, and that Copy Li
 system clipboard. What a link opens with YT Music on is tested in
 `src/main/links/links.test.ts`, against a fake JVM and `fetch`.
 
+## Online lyrics search
+
+`lyrics.searchOnline(query)` asks Genius through the sync service with the Wave session
+(`src/main/lyrics/geniusLyricsSearch.ts`, the phone's `requestGeniusLyricsSearch` from
+`@wave/client/geniusLyricsSearch`), and `lyrics.openOnlineHit(id)` plays or opens a hit of the
+last answer. The window waits for the typing pause and lists the hits (`OnlineLyrics.tsx`).
+
+`e2e/geniusLyricsSearch.spec.ts` runs it against the sync service in memory and a fake Genius
+(`e2e/geniusFixture.ts`), with YT Music off: the three-word rule, the signed-out, failed and
+offline lines, five hits then twenty, the hit a Library Lyrics row hides, a Library song that
+plays and a Genius page that opens. A hit that plays from YT Music is tested in
+`src/main/lyrics/geniusLyricsSearch.test.ts` against a fake search; the live one is an owner
+check.
+
 ## Opening files
 
 `e2e/openFiles.spec.ts` starts Wave with a file outside the Library as its argument, then launches
