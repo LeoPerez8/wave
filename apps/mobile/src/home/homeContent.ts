@@ -1,3 +1,5 @@
+import { useMemo } from "react";
+
 import { useHomeContent } from "@/library/hooks";
 
 import { homeOpeningState, type HomeContent } from "./homeOpening";
@@ -13,5 +15,6 @@ export const useHomeScreenContent = (): HomeContent => {
   const read = useHomeContent();
   const cold = snapshotSection("content");
   useSnapshotted("content", homeOpeningState(read).settled ? read : undefined);
-  return cold === undefined ? read : { ...cold, ...read };
+  // One object per read, so the memoized sections it reaches keep their props (#1423).
+  return useMemo(() => (cold === undefined ? read : { ...cold, ...read }), [cold, read]);
 };
