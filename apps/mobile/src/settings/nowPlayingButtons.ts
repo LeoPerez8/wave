@@ -38,9 +38,6 @@ const ACTION_LABELS: Readonly<Record<NowPlayingAction, string>> = {
   get lyrics() {
     return currentLocalisation().strings.playbackText.lyrics;
   },
-  get related() {
-    return currentLocalisation().strings.playbackText.related;
-  },
   get sleepTimer() {
     return currentLocalisation().strings.playbackText.sleepTimer;
   },
@@ -58,9 +55,6 @@ const ACTION_LABELS: Readonly<Record<NowPlayingAction, string>> = {
   },
   get share() {
     return currentLocalisation().strings.playbackText.share;
-  },
-  get songMenu() {
-    return currentLocalisation().strings.playbackText.songMenu;
   },
 };
 

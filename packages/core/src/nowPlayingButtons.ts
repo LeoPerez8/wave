@@ -1,20 +1,13 @@
 /**
  * Now Playing's bottom row: four slots the owner fills (Settings › Layout ›
- * Now Playing), then Queue, fixed on the right. Related is only offered,
- * and only shows, with YouTube Music on.
+ * Now Playing), then Queue, fixed on the right. Related and Song menu have
+ * places of their own (the chevron beside the title, the header's button),
+ * so no slot holds them.
  */
 
 /** What a slot can hold. */
 export type NowPlayingAction =
-  | "lyrics"
-  | "related"
-  | "sleepTimer"
-  | "addToPlaylist"
-  | "download"
-  | "shuffle"
-  | "repeat"
-  | "share"
-  | "songMenu";
+  "lyrics" | "sleepTimer" | "addToPlaylist" | "download" | "shuffle" | "repeat" | "share";
 
 /** A slot: an action, or null for None (no button). */
 export type NowPlayingSlot = NowPlayingAction | null;
@@ -39,15 +32,20 @@ export const NOW_PLAYING_BUTTONS_KEY = "settings.nowPlayingRow";
 /** Every action, in the order a slot's choices list them. */
 export const NOW_PLAYING_ACTIONS: readonly NowPlayingAction[] = [
   "lyrics",
-  "related",
   "sleepTimer",
   "addToPlaylist",
   "download",
   "shuffle",
   "repeat",
   "share",
-  "songMenu",
 ];
+
+/**
+ * The actions a slot held before they got places of their own. A stored slot
+ * holding one (an edited row from before, or one a phone on an older Wave
+ * synced) reads as empty.
+ */
+const RETIRED_ACTIONS: readonly unknown[] = ["related", "songMenu"];
 
 const isSlot = (value: unknown): value is NowPlayingSlot =>
   value === null || NOW_PLAYING_ACTIONS.some((action) => action === value);
@@ -59,29 +57,24 @@ const isButtons = (value: unknown): value is NowPlayingButtons => {
   return new Set(actions).size === actions.length;
 };
 
-/** The actions that read YouTube Music, offered and shown only with it on. */
-const NEEDS_YT_MUSIC: ReadonlySet<NowPlayingAction> = new Set(["related"]);
-
 /**
  * The actions a slot's choices list (its picker in Settings, its long-press
- * card), in order: every one, but Related only with YouTube Music on.
+ * card), in order.
  */
-export const nowPlayingSlotChoices = (ytMusic: boolean): readonly NowPlayingAction[] =>
-  ytMusic
-    ? NOW_PLAYING_ACTIONS
-    : NOW_PLAYING_ACTIONS.filter((action) => !NEEDS_YT_MUSIC.has(action));
+export const nowPlayingSlotChoices = (): readonly NowPlayingAction[] => NOW_PLAYING_ACTIONS;
 
 /**
- * The default row: Lyrics, Add to Playlist, Download, Song menu. It replaced
- * Lyrics, Sleep timer, Add to Playlist, Download, Sleep timer moving into the
- * playing song's card (docs/spec.md, story 46b).
+ * The default row: Lyrics, Add to Playlist, Download, Shuffle. Shuffle took
+ * Song menu's slot when the song menu moved to the header (docs/spec.md,
+ * story 46b).
  */
-const DEFAULT_BUTTONS: NowPlayingButtons = ["lyrics", "addToPlaylist", "download", "songMenu"];
+const DEFAULT_BUTTONS: NowPlayingButtons = ["lyrics", "addToPlaylist", "download", "shuffle"];
 
 /**
- * The slots a stored value holds. Nothing stored, unreadable JSON or anything
- * but four slots of known actions, each once (a newer Wave's action
- * included), reads as the default row.
+ * The slots a stored value holds. A slot holding Related or Song menu reads
+ * as empty. Nothing stored, unreadable JSON or anything but four slots of
+ * known actions, each once (a newer Wave's action included), reads as the
+ * default row.
  */
 export const readNowPlayingButtons = (stored: string | null): NowPlayingButtons => {
   if (stored === null) return DEFAULT_BUTTONS;
@@ -91,7 +84,10 @@ export const readNowPlayingButtons = (stored: string | null): NowPlayingButtons 
   } catch {
     return DEFAULT_BUTTONS;
   }
-  return isButtons(raw) ? raw : DEFAULT_BUTTONS;
+  const slots: unknown = Array.isArray(raw)
+    ? raw.map((slot: unknown) => (RETIRED_ACTIONS.includes(slot) ? null : slot))
+    : raw;
+  return isButtons(slots) ? slots : DEFAULT_BUTTONS;
 };
 
 /**
@@ -134,30 +130,33 @@ export const editNowPlayingButtons = (
 export type NowPlayingSlotSong = "nothing" | "unsearched" | "song";
 
 /** The actions that need a song on to show: with nothing playing their slots stay empty. */
-const NEEDS_SONG: ReadonlySet<NowPlayingAction> = new Set([
-  "related",
-  "addToPlaylist",
-  "download",
-  "share",
-  "songMenu",
-]);
+const NEEDS_SONG: ReadonlySet<NowPlayingAction> = new Set(["addToPlaylist", "download", "share"]);
 
 /**
- * How slot [action]'s button shows with [song] on and YouTube Music on or
- * off ([ytMusic]): hidden, off (it shows disabled and only long-presses to
- * change the slot), or on. Song menu is off while an unsearched entry's
- * search runs, since the song has no menu yet. Related is hidden with
- * YouTube Music off, so its slot stays empty.
+ * How slot [action]'s button shows with [song] on: hidden (its slot stays
+ * empty) or on.
  */
 export const nowPlayingSlotShow = (
   action: NowPlayingAction,
   song: NowPlayingSlotSong,
+): "hidden" | "on" => (song === "nothing" && NEEDS_SONG.has(action) ? "hidden" : "on");
+
+/**
+ * How the song menu button (⋯) in Now Playing's header shows with [song] on:
+ * hidden with nothing playing, off (disabled) while an unsearched entry's
+ * search runs, since the song has no card yet, else on.
+ */
+export const nowPlayingSongMenuShow = (song: NowPlayingSlotSong): "hidden" | "off" | "on" =>
+  song === "nothing" ? "hidden" : song === "unsearched" ? "off" : "on";
+
+/**
+ * Whether the chevron beside the title, which opens Related, shows: with
+ * something on and YouTube Music on ([ytMusic]), which Related reads.
+ */
+export const nowPlayingRelatedChevronShown = (
+  song: NowPlayingSlotSong,
   ytMusic: boolean,
-): "hidden" | "off" | "on" => {
-  if (!ytMusic && NEEDS_YT_MUSIC.has(action)) return "hidden";
-  if (song === "nothing") return NEEDS_SONG.has(action) ? "hidden" : "on";
-  return song === "unsearched" && action === "songMenu" ? "off" : "on";
-};
+): boolean => ytMusic && song !== "nothing";
 
 /** The slot pickers' routes, `1` to `4`, left to right. */
 const SLOT_ROUTES = ["1", "2", "3", "4"];
