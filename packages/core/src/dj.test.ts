@@ -455,6 +455,7 @@ describe("a Magic Queue with a DJ seed", () => {
       discovery: "blend",
       popularity: "balanced",
       newReleases: false,
+      mood: null,
     });
     assert.equal(session.faithful, undefined);
   });
