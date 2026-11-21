@@ -11,6 +11,8 @@ export const djEn = {
   artistTile: (name: string) => `Artist, ${name}`,
   /** An album tile's name for screen readers: its kind, then the album and its artist. */
   albumTile: (title: string, artist: string) => `Album, ${title}, ${artist}`,
+  /** A genre family tile's name for screen readers. */
+  genreTile: (name: string) => `Genre, ${name}`,
   /** The placeholder tiles' name for screen readers while the chart's artists are on their way. */
   loadingArtists: "Loading artists",
   nothingToPick: "Nothing to pick from yet. Play some music and come back.",

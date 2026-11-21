@@ -15,6 +15,7 @@ import {
   type DjAlbum,
   type DjAlbumTile,
   type DjArtistTile,
+  type DjGenreTile,
   type DjOpeningGrid,
   type DjState,
   type DjTile,
@@ -38,6 +39,7 @@ import { IconButton } from "@/components/IconButton";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
 import { TextButton } from "@/components/TextButton";
 import { useBuiltArtistMixes } from "@/home/discoverMixes";
+import { magicProfileOf } from "@/home/artistGenres";
 import { magicQueueGrid } from "@/home/homeOpening";
 import type { MixIndexes } from "@/home/mixKnown";
 import { recommendationSnapshot } from "@/home/recommendationSnapshot";
@@ -95,6 +97,13 @@ const gridSources = (library: MixIndexes) => ({
   taste: latestTasteProfile(),
   played: library.topArtists,
   graph: recommendationSnapshot.peek().graph,
+  genreLibrary: {
+    artists: library.artists,
+    songs: library.songs,
+    plays: library.plays,
+    graph: recommendationSnapshot.peek().graph,
+    profileOf: magicProfileOf(library),
+  },
 });
 
 /**
@@ -107,7 +116,12 @@ const gridSources = (library: MixIndexes) => ({
  */
 const albumsOver = (library: MixIndexes): Promise<DjAlbum[]> => {
   const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
-  return readDjAlbums(djGrid(gridSources(library)).map(djTileArtist), {
+  const artists = new Set(
+    djGrid(gridSources(library)).flatMap((tile) =>
+      tile.kind === "genre" ? tile.opens.map(djTileArtist) : [djTileArtist(tile)],
+    ),
+  );
+  return readDjAlbums([...artists], {
     library: () =>
       appRuntime.runPromise(
         Effect.gen(function* () {
@@ -200,6 +214,9 @@ const useDjGrid = () => {
       remembered: djRemembered.get().tiles,
       artists: libraryArtists,
       albums: albums ?? [],
+      genreLibrary:
+        library === null || library === "failed" ? null : gridSources(library).genreLibrary,
+      taste: latestTasteProfile(),
     });
     if (reopened.tiles.length > 0) setState(reopened);
   }
@@ -366,6 +383,45 @@ function AlbumTile({
         <View style={{ paddingTop: CELL }}>
           <CardTitle>{tile.name}</CardTitle>
           <CardDetail size="footnote">{tile.artist}</CardDetail>
+        </View>
+      </CardTile>
+    </View>
+  );
+}
+
+/** A family tile: a square named for its family, with a check when selected. */
+function GenreTile({
+  tile,
+  size,
+  selected,
+  selectable,
+  onPress,
+}: {
+  tile: DjGenreTile;
+  size: number;
+  selected: boolean;
+  selectable: boolean;
+  onPress: () => void;
+}) {
+  const { strings } = useLocalisation();
+  return (
+    <View
+      style={{ opacity: selectable ? 1 : 0.4 }}
+      pointerEvents={selectable ? "auto" : "none"}
+      accessibilityState={{ disabled: !selectable }}
+    >
+      <CardTile
+        width={size}
+        label={strings.dj.genreTile(tile.name)}
+        checked={selected}
+        onPress={onPress}
+      >
+        <View
+          className="bg-fill items-center justify-center"
+          style={{ width: size, height: size, borderRadius: CELL * 0.75, padding: CELL * 2 }}
+        >
+          <CardTitle centred>{tile.name}</CardTitle>
+          {selected && <TileCheck checked />}
         </View>
       </CardTile>
     </View>
@@ -550,6 +606,8 @@ export function DjScreen() {
                 };
                 return tile.kind === "album" ? (
                   <AlbumTile key={cell.key} tile={tile} {...picking} />
+                ) : tile.kind === "genre" ? (
+                  <GenreTile key={cell.key} tile={tile} {...picking} />
                 ) : (
                   <ArtistTile
                     key={cell.key}

@@ -3018,6 +3018,10 @@ export {
 export { displayTag } from "./displayTag.ts";
 export {
   DJ_GRID_TILES,
+  DJ_GENRE_TILES,
+  djFamilyRadioAllowed,
+  djGenreTiles,
+  djGenreTile,
   DJ_MAX_SELECTED,
   djArtistTile,
   djCanStart,
@@ -3071,7 +3075,7 @@ export { djOpeningGrid } from "./djOpening.ts";
 export type { DjOpeningGrid, DjOpeningSources } from "./djOpening.ts";
 export { DJ_OPENED_TILES, djCells, djPageRead, djPagesNeeded } from "./dj.ts";
 export { djAlbumTile, djTileArtist } from "./dj.ts";
-export type { DjAlbum, DjAlbumTile } from "./dj.ts";
+export type { DjAlbum, DjAlbumTile, DjGenreTile } from "./dj.ts";
 export type { DjCell, DjPageRead, DjRow, DjSavedPage } from "./dj.ts";
 export { djSearchTiles } from "./djSearch.ts";
 export { djSeedFull } from "./dj.ts";
