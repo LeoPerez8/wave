@@ -32,6 +32,9 @@ export interface DjMoodRankable {
   readonly score: number;
   readonly song: { readonly videoId: string } | null;
   readonly genre?: string | null;
+  /** A Library song's Track id, which [djMoodRanked]'s Library features are kept against. */
+  readonly trackId?: string;
+  readonly source?: "stream" | "library";
 }
 
 /** Mood's score adjustment, centred on neutral and bounded to roughly +/- 2. */
@@ -61,13 +64,23 @@ export const djMoodRanked = <S extends DjMoodRankable>(
   mood: DjMood | null,
   features: ReadonlyMap<string, DjAudioFeatures>,
   genres: ReadonlyMap<string, string | null>,
+  /** Features found by Library files' ISRC tags, by Track id. */
+  libraryFeatures: ReadonlyMap<string, DjAudioFeatures> = new Map(),
 ): S[] => {
   if (mood === null) return [...songs];
   const ranked = songs.map((candidate) => {
     const videoId = candidate.song?.videoId;
-    if (videoId === undefined) return candidate;
+    const library =
+      candidate.source === "library" && candidate.trackId !== undefined
+        ? (libraryFeatures.get(candidate.trackId) ?? null)
+        : null;
+    // A Library song with no stream match uses only its ISRC tag's features: else neutral.
+    if (videoId === undefined)
+      return library === null
+        ? candidate
+        : { ...candidate, score: candidate.score + djMoodScore(mood, library, null) };
     const genre = genres.get(videoId) ?? candidate.genre ?? null;
-    const adjustment = djMoodScore(mood, features.get(videoId) ?? null, genre);
+    const adjustment = djMoodScore(mood, features.get(videoId) ?? library, genre);
     return adjustment === 0 ? candidate : { ...candidate, score: candidate.score + adjustment };
   });
   return ranked.sort((a, b) => b.score - a.score);

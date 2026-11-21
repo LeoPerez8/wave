@@ -148,6 +148,23 @@ export default function RootLayout() {
     };
   }, [granted]);
 
+  // Library songs' mood features, by their file's ISRC tag, while Fix songs online is on.
+  useEffect(() => {
+    if (!granted || !genreLookups) return;
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    const cancel = afterFirstSettled("djLibraryMoodFeatures", () => {
+      void import("@/dj/djLibraryMoodLookup").then(({ startDjLibraryMoodLookup }) => {
+        if (!disposed) stop = startDjLibraryMoodLookup();
+      });
+    });
+    return () => {
+      disposed = true;
+      cancel();
+      stop?.();
+    };
+  }, [granted, genreLookups]);
+
   // SQLite gathers the planner statistics the Library database lacks (src/library/db/connection.ts).
   useEffect(() => afterFirstSettled("optimize", optimizeLibraryDatabase), []);
 

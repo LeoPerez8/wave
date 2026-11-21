@@ -3062,6 +3062,7 @@ export {
 export type { DjFilter, DjMood } from "./djSettings.ts";
 export { djMedianAudioFeatures, djMoodRanked, djMoodScore } from "./djMood.ts";
 export type { DjAudioFeatures, DjMoodRankable } from "./djMood.ts";
+export { djAudioFeaturesByIsrc, isrcFromTag } from "./isrcTag.ts";
 export {
   DJ_NEW_RELEASE_BOOST,
   DJ_RELEASE_PAGES,

@@ -31,6 +31,11 @@ export interface IndexedTrack extends LibraryTrack {
    */
   readonly loudness?: TagGains;
   /**
+   * Its ISRC tag (Core's `isrcFromTag`): DJ's moods look the song up by it. Absent or null:
+   * none, and a save clears the one the Track had.
+   */
+  readonly isrc?: string | null;
+  /**
    * The YouTube video id of a song just downloaded from YouTube Music. Saving
    * the file again without one (a rescan) keeps the one it has.
    */

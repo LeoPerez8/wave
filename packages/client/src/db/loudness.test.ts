@@ -200,6 +200,8 @@ describe("measurements", () => {
     const old = await openTestDatabase({ through: "0057_loudness_tags" });
     const id = addTrack(old, { title: "Airbag", album: "OK Computer", addedAt: 1_234 });
     await migrateTestDatabase(old);
+    // Later migrations ask the scan to read every file again (modified_at = 0); the scan does.
+    old.update(schema.tracks).set({ modifiedAt: 1 }).where(eq(schema.tracks.id, id)).run();
     assert.deepEqual(selectSongLoudness(old, [id]), new Map());
     assert.deepEqual(
       selectSongsToMeasure(old, [id]).map((song) => song.id),

@@ -58,4 +58,40 @@ describe("DJ mood ranking", () => {
     );
     assert.deepEqual(ranked[1], { id: "unknown", score: 10, song: { videoId: "unknown" } });
   });
+
+  test("a Library song ranks by the features of its ISRC tag, else stays neutral", () => {
+    const loud = { energy: 0.9, valence: 0.5, acousticness: 0.1, mode: 1 as const };
+    const calm = { energy: 0.1, valence: 0.5, acousticness: 0.8, mode: 1 as const };
+    const ranked = djMoodRanked(
+      [
+        { trackId: "1", source: "library" as const, score: 10, song: null },
+        { trackId: "2", source: "library" as const, score: 10, song: null, genre: "Nu Metal" },
+        { trackId: "3", source: "library" as const, score: 10, song: { videoId: "matched" } },
+        { trackId: "4", source: "library" as const, score: 10, song: null },
+      ],
+      "energetic",
+      new Map(),
+      new Map(),
+      new Map([
+        ["1", calm],
+        ["3", loud],
+      ]),
+    );
+    assert.deepEqual(
+      ranked.map(({ trackId }) => trackId),
+      ["3", "2", "4", "1"],
+    );
+    assert.equal(ranked[1]!.score, 10);
+  });
+
+  test("a stream song's own features come before its Library match's", () => {
+    const ranked = djMoodRanked(
+      [{ trackId: "1", source: "library" as const, score: 10, song: { videoId: "v" } }],
+      "energetic",
+      new Map([["v", { energy: 0.9, valence: 0.5, acousticness: 0.1, mode: 1 as const }]]),
+      new Map(),
+      new Map([["1", { energy: 0.1, valence: 0.5, acousticness: 0.8, mode: 1 as const }]]),
+    );
+    assert.ok(ranked[0]!.score > 10);
+  });
 });

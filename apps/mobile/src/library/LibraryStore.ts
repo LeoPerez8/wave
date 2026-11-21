@@ -55,6 +55,13 @@ import {
   type DjMoodLookupSong,
 } from "@wave/client/db/djMoodFeatures";
 import {
+  pendingDjLibraryMoodSongs,
+  keepDjLibraryMoodFeatures,
+  selectDjLibraryMoodFeatures,
+  type DjLibraryMoodFeatureWrite,
+  type DjLibraryMoodSong,
+} from "@wave/client/db/djLibraryMoodFeatures";
+import {
   readFollowShows,
   saveFollowShows,
   markShowNotified,
@@ -1240,6 +1247,20 @@ export class LibraryStore extends Context.Service<
       ReadonlyMap<string, import("@wave/core").DjAudioFeatures>,
       LibraryStoreError
     >;
+    /** Library songs with an ISRC tag due for a mood feature lookup, after Track [afterTrackId]. */
+    readonly pendingDjLibraryMoodSongs: (
+      afterTrackId: number,
+      now: number,
+    ) => Effect.Effect<readonly DjLibraryMoodSong[], LibraryStoreError>;
+    /** Keeps Library songs' feature matches for their ISRC, and misses for their retry window. */
+    readonly keepDjLibraryMoodFeatures: (
+      writes: readonly DjLibraryMoodFeatureWrite[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Library songs' cached ReccoBeats features, by Track id as Core's candidates name it. */
+    readonly djLibraryMoodFeatures: () => Effect.Effect<
+      ReadonlyMap<string, import("@wave/core").DjAudioFeatures>,
+      LibraryStoreError
+    >;
     /** Library tags and cached streamed answers by ranking id; pass the Fix songs online setting. */
     readonly songGenres: (
       ids: readonly (number | string)[],
@@ -2070,6 +2091,14 @@ const make = Effect.gen(function* () {
       writeAttempt("save DJ mood features", () => keepDjMoodFeatures(db, writes)),
     djMoodFeatures: (videoIds) =>
       attempt("read DJ mood features", () => selectDjMoodFeatures(db, videoIds)),
+    pendingDjLibraryMoodSongs: (afterTrackId, now) =>
+      attempt("read pending DJ Library mood songs", () =>
+        pendingDjLibraryMoodSongs(db, afterTrackId, now),
+      ),
+    keepDjLibraryMoodFeatures: (writes) =>
+      writeAttempt("save DJ Library mood features", () => keepDjLibraryMoodFeatures(db, writes)),
+    djLibraryMoodFeatures: () =>
+      attempt("read DJ Library mood features", () => selectDjLibraryMoodFeatures(db)),
     songGenres: (ids, includeStreamedGenres = true) =>
       attempt("read the songs' genres", () => songGenres(db, ids, includeStreamedGenres)),
 
