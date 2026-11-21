@@ -44,7 +44,7 @@ export const startDjLibraryMoodLookup = (): (() => void) => {
       const store = await appRuntime.runPromise(LibraryStore);
       let after = 0;
       while (enabled()) {
-        await freeTurn();
+        await freeTurn("DJ Library mood lookup");
         if (!enabled()) break;
         const page = await appRuntime.runPromise(
           store.pendingDjLibraryMoodSongs(after, Date.now()),

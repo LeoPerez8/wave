@@ -7,6 +7,7 @@
  * each slice on a free turn, after the owner's touch and the motion it
  * started, never holding the JavaScript thread for a tap.
  */
+import { runReplayPassesWith } from "@wave/client/db/offThreadReads";
 import { createBackgroundWork, createJsBlockLog } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { AppState, type GestureResponderEvent } from "react-native";
@@ -23,12 +24,49 @@ import { perfMark, registerPerfMeta } from "@/perf/perf";
 
 /**
  * A JS block over 50 ms while a screen is shown writes one app log line
- * naming the work (#1350): the slice or free turn it ran in, else none.
+ * naming the work (#1350, #1359): the slice it ran in, else the named work
+ * still running, else "startup" before the first screen settled, else none.
  */
 const blocks = createJsBlockLog({
   write: (line) => appLog("warn", "WaveTiming", line),
   screen: () => (AppState.currentState === "active" ? timingRoute() : null),
 });
+
+// Blocks before the first screen settles, with no named work, are startup's.
+if (isScreenSettled()) blocks.firstSettled(performance.now());
+else {
+  const stop = onScreenSettled(() => {
+    if (!isScreenSettled()) return;
+    blocks.firstSettled(performance.now());
+    stop();
+  });
+}
+
+/**
+ * Runs [run] now as a slice of [name]'s work, for the block log: a continuation after an
+ * `await`, which no free turn gave, still says whose it is. Returns what [run] returns.
+ */
+export const inSlice = <A>(name: string, run: () => A): A => {
+  const startedAt = performance.now();
+  try {
+    return run();
+  } finally {
+    blocks.sliceRan(name, startedAt, performance.now() - startedAt);
+  }
+};
+
+// An off-thread read's replay maps its rows on the JS thread once its last answer is in.
+runReplayPassesWith((run) => inSlice("Library read replay", run));
+
+/**
+ * Runs [run], [name]'s asynchronous work, saying to the block log that it runs until its promise
+ * settles: a block meanwhile with no slice of its own is put down to it.
+ */
+export const namedWork = <A>(name: string, run: () => Promise<A>): Promise<A> => {
+  const ended = blocks.workBegan(name, performance.now());
+  const end = () => ended(performance.now());
+  return run().finally(end);
+};
 
 const work = createBackgroundWork({
   // The perf build's marks and React Native's startup timings use this clock too.
@@ -140,11 +178,11 @@ export const firstContentShown = (): void => {
 };
 
 /** Runs [run], [name]'s work, on the next free turn; returns the cancel. */
-export const whenFree = (run: () => void, name = "unnamed background work"): (() => void) =>
+export const whenFree = (run: () => void, name: string): (() => void) =>
   work.whenFree(named(name, run));
 
 /** Resolves on the next free turn, for [name]'s work. */
-export const freeTurn = (name?: string): Promise<void> =>
+export const freeTurn = (name: string): Promise<void> =>
   new Promise((resolve) => whenFree(resolve, name));
 
 /** Waits for the next free turn, for the fiber's `BackgroundWorkName`; interrupted, it gives the turn up. */

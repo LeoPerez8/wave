@@ -275,6 +275,17 @@ export interface ReplayedRead<A> {
 }
 
 /** Runs [read] with its statements on [connection], as described at the top. */
+/** Runs a replay pass: as it is, unless the app names it (`runReplayPassesWith`). */
+let replayPass: <B>(run: () => B) => B = (run) => run();
+
+/**
+ * Runs each replay pass through [runner], which the app uses to name the JS
+ * thread's block after the read's last answer arrives (#1359).
+ */
+export const runReplayPassesWith = (runner: <B>(run: () => B) => B): void => {
+  replayPass = runner;
+};
+
 export const replayRead = <A>(
   connection: ReadConnection,
   read: (db: LibraryDatabase) => A,
@@ -288,7 +299,7 @@ export const replayRead = <A>(
       let missed: Miss;
       answers = rows;
       try {
-        const value = read(replayDb());
+        const value = replayPass(() => read(replayDb()));
         return { value, heldMs: heldMs + now() - start, statements: rows.size };
       } catch (error) {
         const reason = replayReason(error);

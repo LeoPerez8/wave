@@ -20,8 +20,8 @@
  * - `GENRES_AHEAD` genre openings (a header and a first page each).
  * - `RECENT_SCREENS_KEPT` pushed screens opened last (`keepRecentlyOpened`).
  * - Settings › Disliked songs' list (one row per dislike), read again on a
- *   free turn when the dislikes change; Stats' opening period (`STATS_KEPT`
- *   readings, a few dozen rows each); DJ's opening for the last snapshot;
+ *   free turn when the dislikes change; Stats' opening period and its See all
+ *   (`statsOpeningQueries`: seven rankings of at most `STATS_SEE_ALL` rows); DJ's opening for the last snapshot;
  *   Settings › History's head (`HISTORY_KEPT_ROWS` plays); the saved YouTube
  *   Music answers of `ARTIST_PAGES_AHEAD` most played artists, within
  *   `knownYtArtists`' 16.
@@ -31,9 +31,8 @@ import { identityKey, librarySongSort } from "@wave/core";
 import { listCollaborations } from "@/collaboration/collaborativePlaylists";
 import { prepareDjOpening } from "@/dj/djOpening";
 import { homeReadyQueries } from "@/home/homeReady";
-import { freeTurn, whenFree } from "@/lib/backgroundWork";
-import { currentLocalisation } from "@/localisation/localisation";
-import { readStatsOpening, statsOpeningArtists } from "@/stats/hooks";
+import { freeTurn, inSlice, whenFree } from "@/lib/backgroundWork";
+import { statsOpeningArtists, statsOpeningQueries } from "@/stats/hooks";
 import { readSaved } from "@/ytmusic/artistSection";
 import { registerPerfMeta } from "@/perf/perf";
 
@@ -88,6 +87,7 @@ const playlistsAhead = async (): Promise<readonly number[]> => {
     libraryQueryResult(libraryListQueries.playlists),
     libraryQueryResult(listCollaborations),
   ]);
+  return inSlice("Playlist pages", () => {
   const short = new Set(
     (playlists ?? [])
       .filter((playlist) => playlist.trackCount <= PLAYLIST_ENTRIES_AHEAD)
@@ -98,15 +98,33 @@ const playlistsAhead = async (): Promise<readonly number[]> => {
   );
   const ids = [...new Set([...shared, ...short])];
   return ids.slice(0, PLAYLISTS_AHEAD);
+  });
 };
 
 /** The genres whose opening is kept ahead, in the genre screens' saved sort. */
 const genresAhead = async (): Promise<readonly LibraryQuery<unknown>[]> => {
   const genres = (await libraryQueryResult(libraryListQueries.genres)) ?? [];
-  const sort = librarySongSort(settingSongSortNow("genre"));
-  return genres
-    .slice(0, GENRES_AHEAD)
-    .map((genre) => genreOpeningQuery(genre.id, sort) as LibraryQuery<unknown>);
+  return inSlice("Genre pages", () => {
+    const sort = librarySongSort(settingSongSortNow("genre"));
+    return genres
+      .slice(0, GENRES_AHEAD)
+      .map((genre) => genreOpeningQuery(genre.id, sort) as LibraryQuery<unknown>);
+  });
+};
+
+/** Reads the saved YouTube Music answers of Stats' most played artists, one per free turn. */
+const artistPagesAhead = async (): Promise<void> => {
+  const artists = await statsOpeningArtists();
+  const names = inSlice("Artist pages", () =>
+    artists
+      .flatMap(({ item }) => ("albumCount" in item ? [item.name] : []))
+      .slice(0, ARTIST_PAGES_AHEAD),
+  );
+  for (const name of names) {
+    await freeTurn("Artist pages");
+    if (stopped) return;
+    await appRuntime.runPromise(readSaved(identityKey(name))).catch(() => null);
+  }
 };
 
 /** Starts keeping the local screens' data; returns how to let it all go. */
@@ -138,21 +156,10 @@ export const startReadyScreens = (): (() => void) => {
   };
   whenFree(readDislikes, "Disliked songs page");
   releases.push(onDislikesChanged(() => whenFree(readDislikes, "Disliked songs page")));
-  whenFree(() => {
-    if (stopped) return;
-    const { language } = currentLocalisation();
-    void readStatsOpening(language, () => freeTurn("Stats page")).then(async () => {
-      // The most played artists' pages draw Fans might also like and About in their first frame.
-      const names = statsOpeningArtists(language)
-        .flatMap(({ item }) => ("albumCount" in item ? [item.name] : []))
-        .slice(0, ARTIST_PAGES_AHEAD);
-      for (const name of names) {
-        await freeTurn("Artist pages");
-        if (stopped) return;
-        await appRuntime.runPromise(readSaved(identityKey(name))).catch(() => null);
-      }
-    });
-  }, "Stats page");
+  // Stats and its See all, kept like the Library's pages (`statsOpeningQueries`).
+  keepReady("Stats page", statsOpeningQueries());
+  // The most played artists' pages draw Fans might also like and About in their first frame.
+  whenFree(() => void artistPagesAhead(), "Artist pages");
   whenFree(() => {
     if (!stopped) void prepareDjOpening().catch(() => {});
   }, "DJ opening");
