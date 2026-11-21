@@ -110,7 +110,7 @@ test("mix, graph and taste pages seek past a cursor with indexed projection look
   }
 });
 
-test("daily mix pages preserve complete Library order/credits/genres and all-time play totals", async () => {
+test("daily mix reads preserve complete Library order/credits/genres and all-time play totals", async () => {
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
@@ -178,8 +178,9 @@ test("daily mix pages preserve complete Library order/credits/genres and all-tim
       assert.equal(traced.result.known.known(online), known.known(online));
       assert.deepEqual(traced.result.known.inLibrary(online), known.inLibrary(online));
     }
-    assert.ok(turns > 100);
-    assert.ok(traced.queries.every((q) => q.rows <= 128));
+    // Each source whole, one read off the JS thread (#1351); its JS steps still take turns.
+    assert.ok(turns > 10);
+    assert.ok(traced.queries.length <= 16, `${traced.queries.length} statements`);
     assert.ok(traced.queries.every((q) => !/OFFSET/.test(q.sql)));
   } finally {
     fixture.close();

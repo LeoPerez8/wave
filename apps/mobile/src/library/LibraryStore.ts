@@ -140,7 +140,11 @@ import type {
 import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
 import { followSaved } from "./followsSaved";
 import { publishSavedRecordings } from "./libraryChanges";
-import { backfillRecordingTitles, selectMatchingSong } from "@wave/client/db/matchingSong";
+import {
+  backfillRecordingTitles,
+  selectMatchingSong,
+  selectMatchingSongs,
+} from "@wave/client/db/matchingSong";
 import {
   tastePlaysPage,
   tasteFavoritesPage,
@@ -159,8 +163,19 @@ import {
   mixSongsPage,
   mixArtistsPage,
   mixHistoryPage,
+  mixSongs,
+  mixArtists,
+  mixPlayTotals,
+  mixPlayedRecordingKeys,
+  mixCredits,
+  mixStreamedPlays,
+  mixCreditNames,
+  mixStreamed,
+  mixPlaylisted,
 } from "@wave/client/db/mixInputs";
 import {
+  mixCatalog,
+  graphRadios,
   mixCatalogPage,
   graphRadioPage,
   graphCatalogPage,
@@ -620,6 +635,10 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<boolean, LibraryStoreError>;
     /** The streamed recording's Library row, including missing songs, without a Library read. */
     readonly matchingSong: (song: YtSong) => Effect.Effect<SongRow | null, LibraryStoreError>;
+    /** Each of [songs]' `matchingSong`, in their order, in one read (a mix build's radio songs). */
+    readonly matchingSongs: (
+      songs: readonly YtSong[],
+    ) => Effect.Effect<readonly (SongRow | null)[], LibraryStoreError>;
     readonly downloadsToForget: (
       jobs: readonly YtDownloadJournalJob[],
     ) => Effect.Effect<readonly string[], LibraryStoreError>;
@@ -1518,6 +1537,29 @@ export class LibraryStore extends Context.Service<
     readonly mixCatalogPage: (
       after: number,
     ) => Effect.Effect<ReturnType<typeof mixCatalogPage>, LibraryStoreError>;
+    /**
+     * Home's mix build reads each source whole, one read a source, off the JS
+     * thread (#1351): the same rows, in the same order, as all of its pages.
+     */
+    readonly mixSongs: Effect.Effect<ReturnType<typeof mixSongs>, LibraryStoreError>;
+    readonly mixArtists: Effect.Effect<ReturnType<typeof mixArtists>, LibraryStoreError>;
+    /** Each Library song's counted plays started by [now], summed (`mixHistoryPage`'s rows). */
+    readonly mixPlayTotals: (
+      now: number,
+    ) => Effect.Effect<ReturnType<typeof mixPlayTotals>, LibraryStoreError>;
+    /** The recording keys of the Library songs' plays, each once. */
+    readonly mixPlayedRecordingKeys: Effect.Effect<readonly string[], LibraryStoreError>;
+    readonly mixCredits: Effect.Effect<ReturnType<typeof mixCredits>, LibraryStoreError>;
+    readonly mixStreamedPlays: Effect.Effect<
+      ReturnType<typeof mixStreamedPlays>,
+      LibraryStoreError
+    >;
+    readonly mixCreditNames: Effect.Effect<readonly string[], LibraryStoreError>;
+    readonly mixStreamed: Effect.Effect<ReturnType<typeof mixStreamed>, LibraryStoreError>;
+    readonly mixPlaylisted: Effect.Effect<ReturnType<typeof mixPlaylisted>, LibraryStoreError>;
+    /** The whole candidate catalog, and its radios, each as one page. */
+    readonly mixCatalog: Effect.Effect<ReturnType<typeof mixCatalog>, LibraryStoreError>;
+    readonly graphRadios: Effect.Effect<ReturnType<typeof graphRadios>, LibraryStoreError>;
     readonly graphSimilarPage: (
       after: string | null,
     ) => Effect.Effect<GraphPage<YtArtistSimilar, string>, LibraryStoreError>;
@@ -1749,6 +1791,8 @@ const make = Effect.gen(function* () {
         acceptPlaylistRecommendation(db, id, offer, Date.now()),
       ),
     matchingSong: (song) => attempt("read matching song", (db) => selectMatchingSong(db, song)),
+    matchingSongs: (songs) =>
+      attempt("read matching songs", (db) => selectMatchingSongs(db, songs)),
     downloadsToForget: (jobs) =>
       attempt("read downloaded files", (db) => selectDownloadsToForget(db, jobs)),
     listSongs: attempt("list songs", (db) => listSongs(db)),
@@ -2369,6 +2413,19 @@ const make = Effect.gen(function* () {
       attempt("read a mix history page", (db) => mixHistoryPage(db, after)),
     mixCatalogPage: (after) =>
       attempt("read a mix catalog page", (db) => mixCatalogPage(db, after)),
+    mixSongs: attempt("read Home's mix songs", (db) => mixSongs(db)),
+    mixArtists: attempt("read Home's mix artists", (db) => mixArtists(db)),
+    mixPlayTotals: (now) => attempt("read Home's mix play totals", (db) => mixPlayTotals(db, now)),
+    mixPlayedRecordingKeys: attempt("read Home's mix played recordings", (db) =>
+      mixPlayedRecordingKeys(db),
+    ),
+    mixCredits: attempt("read Home's mix credits", (db) => mixCredits(db)),
+    mixStreamedPlays: attempt("read Home's mix streamed plays", (db) => mixStreamedPlays(db)),
+    mixCreditNames: attempt("read Home's mix credit names", (db) => mixCreditNames(db)),
+    mixStreamed: attempt("read Home's mix streamed songs", (db) => mixStreamed(db)),
+    mixPlaylisted: attempt("read Home's mix playlist entries", (db) => mixPlaylisted(db)),
+    mixCatalog: attempt("read Home's mix catalog", (db) => mixCatalog(db)),
+    graphRadios: attempt("read Home's mix catalog radios", (db) => graphRadios(db)),
     graphRadioPage: (after) =>
       attempt("read a graph radio page", (db) => graphRadioPage(db, after)),
     graphCatalogPage: (after) =>

@@ -1,4 +1,8 @@
-/** The daily mix input reader, shared by production and the desktop replay. */
+/**
+ * The daily mix input reader, shared by production and the desktop replay.
+ * Each source is one read, whatever the Library's size (#1351); the JS work
+ * on its rows runs in steps between [between]'s turns.
+ */
 import {
   rankEntityPlaysSteps,
   mapSteps,
@@ -25,39 +29,26 @@ type MixSong = SongRow & { readonly genres?: readonly string[] };
 export const readMixInputs = (
   store: Pick<
     LibraryStore["Service"],
-    | "mixCreditPage"
-    | "mixSongsPage"
-    | "mixArtistsPage"
-    | "mixHistoryPage"
-    | "mixStreamedPage"
-    | "mixStreamedPlaysPage"
-    | "mixCreditNamesPage"
-    | "mixPlaylistedPage"
+    | "mixSongs"
+    | "mixArtists"
+    | "mixPlayTotals"
+    | "mixPlayedRecordingKeys"
+    | "mixCredits"
+    | "mixStreamedPlays"
+    | "mixCreditNames"
+    | "mixStreamed"
+    | "mixPlaylisted"
   >,
   between: Effect.Effect<void>,
   now: number,
 ) =>
   Effect.gen(function* () {
-    const allSongs: MixSong[] = [];
-    let after = 0;
-    for (;;) {
-      yield* between;
-      const page = yield* store.mixSongsPage(after);
-      if (page.length === 0) break;
-      for (const song of page) allSongs.push(song);
-      after = page.at(-1)!.id;
-    }
+    yield* between;
+    const allSongs: MixSong[] = [...(yield* store.mixSongs)];
     // SQLite's order, restored in yielding JS steps.
     const songs = yield* runSteps(sortSteps(allSongs, byTitleArtistPath), between);
-    const allArtists: ArtistRow[] = [];
-    after = 0;
-    for (;;) {
-      yield* between;
-      const page = yield* store.mixArtistsPage(after);
-      if (page.length === 0) break;
-      for (const artist of page) allArtists.push(artist);
-      after = page.at(-1)!.id;
-    }
+    yield* between;
+    const allArtists: ArtistRow[] = [...(yield* store.mixArtists)];
     const artists = yield* runSteps(
       sortSteps(allArtists, (a, b) => binary(a.sort, b.sort) || a.id - b.id),
       between,
@@ -69,52 +60,35 @@ export const readMixInputs = (
       }),
       between,
     );
-    const playedKeys = new Set<string>();
+    yield* between;
+    const playedKeys = new Set<string>(yield* store.mixPlayedRecordingKeys);
     const totals = new Map<number, PlayTotals>();
     const allTotals = new Map<number, PlayTotals>();
-    after = 0;
-    for (;;) {
-      yield* between;
-      const page = yield* store.mixHistoryPage(after);
-      if (page.length === 0) break;
-      yield* runSteps(
-        (function* () {
-          for (const row of page) {
-            if (row.recordingKey !== null) playedKeys.add(row.recordingKey);
-            const song = byId.get(row.trackId);
-            if (row.counted && row.startedAt <= now) {
-              const before = allTotals.get(row.trackId);
-              allTotals.set(row.trackId, {
-                id: row.trackId,
-                sortKey: "",
-                countedPlays: (before?.countedPlays ?? 0) + 1,
-                listenedMs: (before?.listenedMs ?? 0) + row.listenedMs,
-                latestPlayAt: Math.max(before?.latestPlayAt ?? -Infinity, row.startedAt),
-              });
-            }
-            if (row.counted && row.startedAt <= now && song !== undefined) {
-              const previous = totals.get(row.trackId);
-              totals.set(row.trackId, {
-                id: row.trackId,
-                sortKey: song.titleSort,
-                countedPlays: (previous?.countedPlays ?? 0) + 1,
-                listenedMs: (previous?.listenedMs ?? 0) + row.listenedMs,
-                latestPlayAt: Math.max(previous?.latestPlayAt ?? -Infinity, row.startedAt),
-              });
-            }
-            yield;
-          }
-        })(),
-        between,
-      );
-      after = page.at(-1)!.id;
-    }
+    // Each song's counted plays, summed by SQLite as the history walk summed them.
+    yield* between;
+    const songTotals = yield* store.mixPlayTotals(now);
+    yield* runSteps(
+      (function* () {
+        for (const row of songTotals) {
+          const total = (sortKey: string): PlayTotals => ({
+            id: row.trackId,
+            sortKey,
+            countedPlays: row.countedPlays,
+            listenedMs: row.listenedMs,
+            latestPlayAt: row.latestPlayAt,
+          });
+          allTotals.set(row.trackId, total(""));
+          const song = byId.get(row.trackId);
+          if (song !== undefined) totals.set(row.trackId, total(song.titleSort));
+          yield;
+        }
+      })(),
+      between,
+    );
     const artistTotals = new Map<number, PlayTotals>();
-    after = 0;
-    for (;;) {
+    {
       yield* between;
-      const page = yield* store.mixCreditPage(after);
-      if (page.length === 0) break;
+      const page = yield* store.mixCredits;
       yield* runSteps(
         (function* () {
           for (const row of page) {
@@ -138,19 +112,17 @@ export const readMixInputs = (
         })(),
         between,
       );
-      after = page.at(-1)!.id;
     }
     // Streamed plays, from their kept per-video totals: known by video and
     // recording key, and credited as Stats credits them (`playedEntityTotals`).
     const streamedPlays: StreamedPlays[] = [];
     const countedStreams: MixStreamedPlays[] = [];
-    after = 0;
-    for (;;) {
+    {
       yield* between;
-      const page = yield* store.mixStreamedPlaysPage(after);
+      const rows = yield* store.mixStreamedPlays;
       yield* runSteps(
         (function* () {
-          for (const row of page.rows) {
+          for (const row of rows) {
             if (row.song !== null)
               streamedPlays.push({
                 song: row.song,
@@ -166,8 +138,6 @@ export const readMixInputs = (
         })(),
         between,
       );
-      if (page.next === null) break;
-      after = page.next;
     }
     // An online artist (`artist:<name>`) keeps the name it was last credited by.
     type Credited = EntityPlayTotals & { readonly name?: string };
@@ -192,15 +162,8 @@ export const readMixInputs = (
     let resolve: ((song: YtAlbumSong) => ReturnType<ReturnType<typeof streamedCredits>>) | null =
       null;
     if (countedStreams.some((row) => row.trackId === null && row.song !== null)) {
-      const credits: string[] = [];
-      after = 0;
-      for (;;) {
-        yield* between;
-        const page = yield* store.mixCreditNamesPage(after);
-        for (const name of page.rows) credits.push(name);
-        if (page.next === null) break;
-        after = page.next;
-      }
+      yield* between;
+      const credits = yield* store.mixCreditNames;
       yield* between;
       resolve = streamedCredits({ artists, albums: [], credits });
     }
@@ -250,24 +213,10 @@ export const readMixInputs = (
       sortSteps([...totals.values()], (a, b) => a.id - b.id),
       between,
     );
-    const streamed: StreamedSong[] = [];
-    after = 0;
-    for (;;) {
-      yield* between;
-      const page = yield* store.mixStreamedPage(after);
-      for (const row of page.rows) streamed.push(row);
-      if (page.next === null) break;
-      after = page.next;
-    }
-    const playlisted: MixPlaylistEntry[] = [];
-    after = 0;
-    for (;;) {
-      yield* between;
-      const page = yield* store.mixPlaylistedPage(after);
-      for (const row of page.rows) playlisted.push(row);
-      if (page.next === null) break;
-      after = page.next;
-    }
+    yield* between;
+    const streamed: readonly StreamedSong[] = yield* store.mixStreamed;
+    yield* between;
+    const playlisted: readonly MixPlaylistEntry[] = yield* store.mixPlaylisted;
     const known = yield* runSteps(
       mixKnownSongsSteps({
         library: songs,
