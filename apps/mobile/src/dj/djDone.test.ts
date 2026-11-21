@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { runDjDone, type DjDone } from "./djDone.ts";
+import { djDone, type DjDone } from "./djDone.ts";
 
 /** Done's states as the screen saw them, and whether DJ closed. */
 const screen = () => {
@@ -17,7 +17,7 @@ const screen = () => {
 
 test("Done loads while the first batch is read, then closes DJ once the queue plays", async () => {
   const dj = screen();
-  await runDjDone("idle", () => Promise.resolve("started"), dj.set, dj.close);
+  await djDone(dj.set, dj.close).run(() => Promise.resolve("started"));
   assert.deepEqual(dj.states, ["loading"]);
   assert.equal(dj.closed(), 1);
 });
@@ -25,7 +25,7 @@ test("Done loads while the first batch is read, then closes DJ once the queue pl
 test("a batch that comes back empty or fails leaves DJ open with its line", async () => {
   for (const outcome of ["empty", "failed"] as const) {
     const dj = screen();
-    await runDjDone("idle", () => Promise.resolve(outcome), dj.set, dj.close);
+    await djDone(dj.set, dj.close).run(() => Promise.resolve(outcome));
     assert.deepEqual(dj.states, ["loading", outcome]);
     assert.equal(dj.closed(), 0);
   }
@@ -33,20 +33,57 @@ test("a batch that comes back empty or fails leaves DJ open with its line", asyn
 
 test("a start that throws shows the failed line", async () => {
   const dj = screen();
-  await runDjDone("idle", () => Promise.reject(new Error("offline")), dj.set, dj.close);
+  await djDone(dj.set, dj.close).run(() => Promise.reject(new Error("offline")));
   assert.deepEqual(dj.states, ["loading", "failed"]);
 });
 
-test("Try Again starts again, and a tap while loading starts nothing", async () => {
+test("two quick taps on Done start one queue", async () => {
   const dj = screen();
+  const done = djDone(dj.set, dj.close);
   let starts = 0;
   const start = () => {
     starts++;
     return Promise.resolve("started" as const);
   };
-  await runDjDone("loading", start, dj.set, dj.close);
-  assert.equal(starts, 0);
-  await runDjDone("failed", start, dj.set, dj.close);
+  // Both taps land before the screen renders "loading".
+  await Promise.all([done.run(start), done.run(start)]);
   assert.equal(starts, 1);
   assert.equal(dj.closed(), 1);
+});
+
+test("Done can run again once its start has come back", async () => {
+  const dj = screen();
+  const done = djDone(dj.set, dj.close);
+  let starts = 0;
+  const start = () => {
+    starts++;
+    return Promise.resolve("failed" as const);
+  };
+  await done.run(start);
+  await done.run(start);
+  assert.equal(starts, 2);
+});
+
+test("a start still loading when DJ closes is cancelled, and never closes DJ again", async () => {
+  const dj = screen();
+  const done = djDone(dj.set, dj.close);
+  let finish: (outcome: "started") => void = () => {};
+  let signal: AbortSignal | undefined;
+  const running = done.run((given) => {
+    signal = given;
+    return new Promise((resolve) => (finish = resolve));
+  });
+  done.cancel();
+  assert.equal(signal?.aborted, true);
+  finish("started");
+  await running;
+  assert.equal(dj.closed(), 0);
+  assert.deepEqual(dj.states, ["loading"]);
+  // A tap after DJ closed starts nothing.
+  let starts = 0;
+  await done.run(() => {
+    starts++;
+    return Promise.resolve("started" as const);
+  });
+  assert.equal(starts, 0);
 });
