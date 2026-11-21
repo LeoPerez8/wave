@@ -759,6 +759,18 @@ const createHandlers = (
     "spotifyAccount.signOut": spotifyAccountCall("spotifyAccount.signOut", (a) => a.signOut()),
     "spotifyAccount.check": spotifyAccountCall("spotifyAccount.check", (a) => a.check()),
     "spotifyAccount.photo": spotifyAccountCall("spotifyAccount.photo", (a) => a.photo()),
+    "spotifyShare.playlist": (args) =>
+      args.length === 1 && songId(args[0])
+        ? Effect.gen(function* () {
+            const links = yield* DesktopLinks;
+            const account = yield* SpotifyAccount;
+            const playlistId = args[0] as number;
+            return yield* Effect.tryPromise({
+              try: () => links.shareToSpotify(playlistId, account),
+              catch: () => new Error("Sharing the playlist failed"),
+            });
+          })
+        : refuse("spotifyShare.playlist", "invalid playlist"),
   };
 };
 

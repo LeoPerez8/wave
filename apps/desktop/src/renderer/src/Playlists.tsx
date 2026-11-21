@@ -28,6 +28,7 @@ import {
 import type { ImageEdit, ImportAnswer, PlaylistCreateTarget } from "../../shared/playlists.ts";
 import "./playlists.css";
 import { copyLink } from "./copyLink.ts";
+import { shareToSpotify } from "./shareToSpotify.ts";
 import type { MenuItem, MenuPoint } from "./Menu.tsx";
 import { ConfirmDialog, trapTab, useMenuAndToast } from "./SongActions.tsx";
 import { language, text } from "./text.ts";
@@ -181,6 +182,18 @@ export function usePlaylistEdits({ go, deleted, failed, changed }: Options) {
               run: () => {
                 void copyLink(window.wave.links.copyPlaylist(playlistId));
               },
+            },
+          ]
+        : []),
+      ...((await window.wave.spotifyAccount.view()).configured
+        ? [
+            {
+              key: "shareToSpotify",
+              label: text.share.shareToSpotify,
+              run: () =>
+                void shareToSpotify({ id: playlistId, name: info.name }, ask, (message) =>
+                  setToast({ message, id: Date.now() }),
+                ),
             },
           ]
         : []),
