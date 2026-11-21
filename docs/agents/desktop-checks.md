@@ -193,6 +193,20 @@ to Playlist and Remove from Library. A target is `{scope, ids}` or `{scope, all:
 until Settings includes it again; the file stays on disk. The renderer's keys go through Core's
 `desktopKey`, with focus read by `keys.ts`.
 
+## Listening History
+
+`e2e/listeningHistory.spec.ts` seeds 3,000 counted plays, a streamed play with YT Music off, a
+play of a song removed since and one that never counted. It checks the day headers, the dimmed
+rows, that scrolling reads more pages while few rows are drawn, the search, Go to This Moment
+with its 3-second tint, Back to the results, a double click that plays, and the Settings entry.
+Screenshots are `listening-history-<platform>.png` and `listening-history-moment-<platform>.png`.
+
+`history.page(from, query)` returns 50 plays: the newest (`{ before: undefined }`), older than a
+cursor, newer than one (`{ after }`) or around a play (`{ around }`). `history.play(playId)`
+replays that play's song alone; main reads the play again and does nothing for a dimmed one.
+The rows come from `src/main/library/history.ts`, over Client's `db/listeningHistory`; the
+paging is Core's `listeningHistoryReads`, which the phone uses too.
+
 ## Downloads and Fix Songs
 
 `Downloads` (`src/main/downloads/downloadsLayer.ts`) follows the shared JVM's durable download

@@ -2536,9 +2536,20 @@ export { RADIO_CACHE_FRESH_MS, radioCacheFresh } from "./radioCache.ts";
 export {
   listeningHistoryDays,
   findListeningHistory,
+  listeningHistoryRowState,
   type ListeningHistoryDay,
+  type ListeningHistoryRowState,
   type PlaySnapshot,
 } from "./listeningHistory.ts";
+export {
+  listeningHistoryReads,
+  startingAt,
+  type ListeningHistoryCursor,
+  type ListeningHistoryFrom,
+  type ListeningHistoryPageOf,
+  type ListeningHistoryRead,
+  type ListeningHistoryReads,
+} from "./listeningHistoryReads.ts";
 export {
   readShuffleCardOpenings,
   shuffleCardOpened,

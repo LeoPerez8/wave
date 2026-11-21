@@ -8,4 +8,5 @@ export const listeningHistoryPtBr: typeof listeningHistoryEn = {
   tryAgain: "Tentar novamente",
   unknownSong: "Música desconhecida",
   goToMoment: "Ir para este momento",
+  timeColumn: "Hora",
 };

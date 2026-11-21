@@ -50,6 +50,8 @@ import { geniusAccess } from "./useSongGenius.ts";
 import { Home } from "./Home.tsx";
 import { Stats } from "./Stats.tsx";
 import type { StatsRoute } from "../../shared/stats.ts";
+import { ListeningHistory } from "./ListeningHistory.tsx";
+import type { HistoryRoute } from "../../shared/history.ts";
 import { isYtRoute, YtPage, type YtRoute } from "./YtPages.tsx";
 import { AlbumArtistLink, ArtistPage, ArtistToggle, useArtistSection } from "./ArtistPage.tsx";
 import {
@@ -66,6 +68,7 @@ type Route =
   | { readonly kind: "downloads" }
   | { readonly kind: "graveyard"; readonly id: number }
   | StatsRoute
+  | HistoryRoute
   | YtRoute;
 const defaultStats: StatsRoute = { kind: "stats", period: "month" };
 const sections = ["playlists", "artists", "albums", "songs", "genres", "favorites"] as const;
@@ -276,6 +279,7 @@ export function App() {
       route.kind === "downloads" ||
       route.kind === "graveyard" ||
       route.kind === "stats" ||
+      route.kind === "history" ||
       isYtRoute(route)
         ? { kind: "songs" }
         : route,
@@ -516,10 +520,12 @@ export function App() {
         ? route.ranking === undefined
           ? text.home.sections.stats
           : text.stats.rankings[route.ranking]
-        : ((hero && tagTitle(hero.title, route.kind)) ??
-          (route.kind in labels
-            ? (labels[route.kind as keyof typeof labels] as string)
-            : labels.library));
+        : route.kind === "history"
+          ? text.settings.pages.history
+          : ((hero && tagTitle(hero.title, route.kind)) ??
+            (route.kind in labels
+              ? (labels[route.kind as keyof typeof labels] as string)
+              : labels.library));
   const playlistId = route.kind === "playlist" ? route.id : undefined;
   const scanning = scan?.status === "scanning";
   // A playlist's image is an edit none of the three counts, and its page shows it.
@@ -623,6 +629,16 @@ export function App() {
           >
             <Icon name="stats" />
             <span>{text.home.sections.stats}</span>
+          </button>
+          <button
+            className="nav-item"
+            aria-label={text.settings.pages.history}
+            title={text.settings.pages.history}
+            aria-current={route.kind === "history" ? "page" : undefined}
+            onClick={() => go({ kind: "history" })}
+          >
+            <Icon name="history" />
+            <span>{text.settings.pages.history}</span>
           </button>
           {(ytMusic || (downloads?.rows ?? 0) > 0) && (
             <>
@@ -862,6 +878,7 @@ export function App() {
                   {key === "appearance" ? text.settings.appearance : labels[key]}
                 </button>
               ))}
+              <button onClick={() => go({ kind: "history" })}>{text.settings.pages.history}</button>
             </nav>
             <section className="settings-body">
               {setting === "library" ? (
@@ -1050,6 +1067,26 @@ export function App() {
                   at,
                 );
               }
+            }}
+          />
+        ) : route.kind === "history" ? (
+          <ListeningHistory
+            route={route}
+            revision={revision}
+            ytMusic={ytMusic}
+            go={go}
+            run={playback.run}
+            onMenu={(row, at, extra) => {
+              if (row.id > 0)
+                actions.openMenu({ scope: { kind: "songs" }, ids: [row.id] }, row.title, at, extra);
+              else if (row.videoId !== undefined || extra.length > 0)
+                actions.openItems(
+                  text.desktopLibrary.songMenu(row.title),
+                  row.videoId === undefined
+                    ? extra
+                    : streamed.items(row.videoId).then((items) => [...items, ...extra]),
+                  at,
+                );
             }}
           />
         ) : (
