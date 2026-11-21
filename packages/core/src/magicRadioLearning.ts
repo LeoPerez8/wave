@@ -117,8 +117,9 @@ export const magicRadioBatch = (
   return result;
 };
 
+/** A seed song plays ahead of a session's first batch, except a continued queue's and DJ's. */
 const batchSize = (session: MagicSession): number =>
-  session.batches === 0 && !session.continuation ? 9 : 10;
+  session.batches === 0 && !session.continuation && session.seed.kind !== "dj" ? 9 : 10;
 
 /** Whether each radio pool needs continuations to fill its batch and New music share. */
 export const magicRadioReadPlan = (
