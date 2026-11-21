@@ -764,6 +764,16 @@ export { leavingSongEntry, songsLeaving } from "./songsLeaving.ts";
 export type { LeavingSong, LeavingTrack, SongsLeaving } from "./songsLeaving.ts";
 export { artistArtwork, artistInitial } from "./artistImage.ts";
 export type { ArtistAlbumLink } from "./artistImage.ts";
+export { isRecent, RECENT_WINDOW_DAYS, recentWindowStart } from "./recentWindow.ts";
+export { IN_YOUR_ORBIT_ARTISTS, inYourOrbit, inYourOrbitWindow } from "./inYourOrbit.ts";
+export {
+  FROM_YOUR_LIBRARY_PLAYLISTS,
+  fromYourLibrary,
+  playlistOfContextId,
+  playlistPlays,
+  type PlaylistPlayEvent,
+  type PlaylistPlays,
+} from "./fromYourLibrary.ts";
 export { rowWindow, windowRows } from "./rowWindow.ts";
 export type { RowView, RowWindow } from "./rowWindow.ts";
 export {
@@ -2307,6 +2317,24 @@ export type {
   MagicQueueSeed,
   MagicQueueShown,
 } from "./magicQueueRow.ts";
+export {
+  CAROUSEL_PAGE_MIN_SONGS,
+  carouselPageSongs,
+  MAGIC_QUEUE_CAROUSEL_PAGES,
+  magicQueueCarouselPage,
+  magicQueueCarouselPageLabel,
+  magicQueueCarouselPageTitle,
+  magicQueueCarouselPages,
+  mostListenedRecently,
+  recentPlaysWindow,
+} from "./magicQueueCarousel.ts";
+export type { MagicQueueCarouselPageId } from "./magicQueueCarousel.ts";
+export { discoveries } from "./discoveries.ts";
+export type {
+  DiscoveriesInput,
+  DiscoveryCatalogSong,
+  DiscoveryLibrarySong,
+} from "./discoveries.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios, discoverMixesOfRadiosSteps } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
