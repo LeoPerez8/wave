@@ -66,12 +66,15 @@ export const withCollection = (
   return withPick(picks, kind, tableSelectionOf([...(current?.ids ?? []), id], true), true);
 };
 
-const picked = (picks: CollectionPicks): CollectionPick[] =>
+/** [picks] as the bridge takes them; Select All checks the rows the page's Find [find] finds. */
+const picked = (picks: CollectionPicks, find?: string): CollectionPick[] =>
   KINDS.flatMap((kind): CollectionPick[] => {
     const selection = picks[kind];
     if (selection === undefined) return [];
     const ids = [...selection.ids];
-    return selection.all ? [{ kind, all: true, except: ids }] : [{ kind, ids }];
+    return selection.all
+      ? [{ kind, all: true, except: ids, ...(find === undefined ? {} : { find }) }]
+      : [{ kind, ids }];
   });
 
 /** The checked songs [songs] with [picks], as one selection's target. */
@@ -99,6 +102,7 @@ export interface PickedSongs {
 /** The bar for collections checked together or with songs: how many, the phone's shared actions, Done. */
 export function MixedSelectionBar({
   picks,
+  find,
   songs,
   revision,
   actions,
@@ -107,6 +111,8 @@ export function MixedSelectionBar({
   done,
 }: {
   readonly picks: CollectionPicks;
+  /** The page's Find, when it narrows the list the collections are checked in. */
+  readonly find?: string | undefined;
   readonly songs: PickedSongs | undefined;
   readonly revision: number;
   readonly actions: Pick<ReturnType<typeof useSongActions>, "notify" | "openItems">;
@@ -121,8 +127,8 @@ export function MixedSelectionBar({
       scope === undefined || checked === undefined
         ? null
         : selectionTarget(JSON.parse(scope) as BrowseScope, checked);
-    return { ...(listed ? { songs: listed } : {}), collections: picked(picks) };
-  }, [picks, scope, checked]);
+    return { ...(listed ? { songs: listed } : {}), collections: picked(picks, find) };
+  }, [picks, find, scope, checked]);
   const [about, setAbout] = useState<{
     readonly target: SelectionTarget;
     readonly menu: SelectionMenu;

@@ -37,6 +37,7 @@ import { labels, language, text, albumName, artistName, tagTitle } from "./text.
 import { tableColumns } from "../../shared/tableColumns.ts";
 import { useTableSelection, type TableSelectionProps } from "./useTableSelection.ts";
 import { TableSortHeader } from "./TableSortHeader.tsx";
+import { findNoMatchFor } from "./FindField.tsx";
 import { rowDrag } from "./SongActions.tsx";
 import { songDragProps } from "./songDrag.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
@@ -152,6 +153,7 @@ export function VirtualTable({
   onError,
   onMenu,
   onSort,
+  onTotal,
   selection,
   onSelection,
   selectAll,
@@ -167,6 +169,8 @@ export function VirtualTable({
   readonly onMenu?: (row: BrowseRow, at: { readonly x: number; readonly y: number }) => void;
   /** The order the table shows, each time it reads one: a playlist rearranges only in Custom. */
   readonly onSort?: (sort: BrowsePage["sort"]) => void;
+  /** How many rows [scope] holds (those its Find finds), each time the table reads them. */
+  readonly onTotal?: (listed: { readonly scope: BrowseScope; readonly total: number }) => void;
   readonly selectAll?: Parameters<typeof useTableSelection>[0]["selectAll"];
   /**
    * A playlist in its own order: its rows drag to a new place, and Alt+Up and Alt+Down move
@@ -232,9 +236,11 @@ export function VirtualTable({
     songSortHasSpine(sort as SongSort);
   const jumpByName = !preview && !changingSort && (spine || scope.kind === "playlists");
   const emptyMessage =
-    scope.kind in text.library.sectionEmpty
-      ? text.library.sectionEmpty[scope.kind as keyof typeof text.library.sectionEmpty]
-      : labels.noResults;
+    scope.find !== undefined
+      ? (findNoMatchFor(scope.kind) ?? labels.noResults)
+      : scope.kind in text.library.sectionEmpty
+        ? text.library.sectionEmpty[scope.kind as keyof typeof text.library.sectionEmpty]
+        : labels.noResults;
   const rowId = (index: number) => `${preview?.id ?? "library-row"}-${index}`;
 
   useEffect(() => {
@@ -274,6 +280,7 @@ export function VirtualTable({
         setReady(true);
         setSort(results[0]![1].sort);
         onSort?.(results[0]![1].sort);
+        onTotal?.({ scope, total: results[0]![1].total });
         setActive((index) => Math.max(0, Math.min(index, results[0]![1].total - 1)));
         onHero?.(results[0]![1].hero);
         // Read both pages ahead so a quick scroll has time to fetch its next rows.
@@ -298,7 +305,18 @@ export function VirtualTable({
     return () => {
       current = false;
     };
-  }, [scope, revision, firstPage, lastPage, onHero, onSort, onError, preview, changingSort]);
+  }, [
+    scope,
+    revision,
+    firstPage,
+    lastPage,
+    onHero,
+    onSort,
+    onTotal,
+    onError,
+    preview,
+    changingSort,
+  ]);
   const get = (index: number) =>
     changingSort ? undefined : pages.get(Math.floor(index / SIZE))?.items[index % SIZE];
   // A new sort moves every row, so a Shift range starts over from the next click.

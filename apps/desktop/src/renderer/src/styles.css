@@ -1606,3 +1606,8 @@ kbd {
   height: 100%;
   background: var(--color-accent);
 }
+/* A list page's Find field (#1213), under its heading. */
+.find-field {
+  max-width: 280px;
+  margin-top: 16px;
+}

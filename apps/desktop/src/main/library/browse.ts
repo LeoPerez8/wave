@@ -5,7 +5,9 @@ import {
   albumDiscHeads,
   artistPopularSongs,
   artistSongOrder,
+  createFindMatcher,
   defaultSongSort,
+  hasFindQuery,
   identityKey,
   joinArtists,
   readPlaylistYtSong,
@@ -36,7 +38,26 @@ const SONGS = sql`SELECT t.id, t.title, t.artist_credit AS artist, a.title AS al
   t.disc_number AS disc, t.album_id AS albumId, t.release_date AS releaseDate
   FROM tracks t JOIN artists p ON p.id=t.artist_id JOIN albums a ON a.id=t.album_id LEFT JOIN genres g ON g.id=t.genre_id`;
 
+/** What [scope]'s Find field finds by, when it has anything to find by. */
+const findOf = (scope: BrowseScope): string | undefined =>
+  scope.find !== undefined && hasFindQuery(scope.find) ? scope.find : undefined;
+
+/**
+ * [scope]'s rows and their order; with a Find, only the rows it finds (`wave_finds`, over each
+ * row's title, artist and album: a list of lists names its rows in `title`).
+ */
 const listing = (scope: BrowseScope, sort?: SongSort): { source: SQL; order: SQL } => {
+  const listed = wholeListing(scope, sort);
+  const find = findOf(scope);
+  return find === undefined
+    ? listed
+    : {
+        source: sql`SELECT * FROM (${listed.source}) WHERE wave_finds(${find}, title, artist, album)`,
+        order: listed.order,
+      };
+};
+
+const wholeListing = (scope: BrowseScope, sort?: SongSort): { source: SQL; order: SQL } => {
   const name = sort?.descending ? desc(sql`sort`) : asc(sql`sort`);
   const order = sql`${name}, id`;
   switch (scope.kind) {
@@ -189,9 +210,16 @@ const released = (song: { readonly releaseDate?: string | null; readonly year: n
 
 /**
  * The playlist's every entry in [sort]'s order (Core's `sortPlaylistSongs`), each with its place
- * in the playlist's own order. A sort reads the whole playlist: SQLite can't page Core's order.
+ * in the playlist's own order; with [find], only the entries it finds, by title, artist and album.
+ * A sort reads the whole playlist: SQLite can't page Core's order.
  */
-const sortedEntries = (db: LibraryDatabase, id: number, sort: PlaylistSongSort): PlaylistSong[] => {
+const sortedEntries = (
+  db: LibraryDatabase,
+  id: number,
+  sort: PlaylistSongSort,
+  find?: string,
+): PlaylistSong[] => {
+  const finds = find === undefined ? null : createFindMatcher(find);
   const entries = db
     .all<{
       itemId: number;
@@ -241,25 +269,41 @@ const sortedEntries = (db: LibraryDatabase, id: number, sort: PlaylistSongSort):
             },
           ];
     })
-    .map((entry, index) => ({ ...entry, song: { ...entry.song, order: index + 1 } }));
+    .map((entry, index) => ({ ...entry, song: { ...entry.song, order: index + 1 } }))
+    .filter((entry) => finds === null || finds(entry));
   return sortPlaylistSongs(entries, sort).map((entry) => entry.song);
 };
 
-/** The sort the playlist's page shows in, when it isn't the playlist's own order. */
-const chosenSort = (db: LibraryDatabase, id: number): PlaylistSongSort | undefined => {
+/**
+ * The playlist's entries as its page shows them, when SQLite can't page them in its own order:
+ * sorted, or narrowed by a Find (which keeps each entry's place in `order`). Undefined otherwise.
+ */
+const arrangedEntries = (
+  db: LibraryDatabase,
+  id: number,
+  find: string | undefined,
+): PlaylistSong[] | undefined => {
   const sort = playlistSongSort(db, id);
-  return sort.key === "custom" ? undefined : sort;
+  return sort.key === "custom" && find === undefined
+    ? undefined
+    : sortedEntries(db, id, sort, find);
 };
 
 /**
  * The playlist's songs as its page shows them, YT Music songs in their places, for starting
- * playback; undefined when `browseTrackIds` gives the same (a playlist of files in its own order).
+ * playback; with [find], the ones its Find field finds. Undefined when `browseTrackIds` gives the
+ * same (a playlist of files in its own order).
  */
-export const playlistSongs = (db: LibraryDatabase, id: number): PlaylistSong[] | undefined => {
-  const sort = chosenSort(db, id);
-  if (sort !== undefined) return sortedEntries(db, id, sort);
-  return hasStoredEntries(db, id) ? orderedEntries(db, listableEntries(id)) : undefined;
-};
+export const playlistSongs = (
+  db: LibraryDatabase,
+  id: number,
+  find?: string,
+): PlaylistSong[] | undefined =>
+  arrangedEntries(
+    db,
+    id,
+    findOf({ kind: "playlist", id, ...(find === undefined ? {} : { find }) }),
+  ) ?? (hasStoredEntries(db, id) ? orderedEntries(db, listableEntries(id)) : undefined);
 
 /** The saved list an artist's Popular sort ranks by: YouTube Music's order of their songs. */
 const popularSongs = (db: LibraryDatabase, artistId: number): readonly YtSong[] | null => {
@@ -335,8 +379,10 @@ export const browseLibrary = (
     scope.kind === "artist" && scope.id !== undefined ? popularSongs(db, scope.id) : null;
   let total: number;
   let items: BrowseRow[];
-  if (playlist !== undefined && ownSort !== undefined && ownSort.key !== "custom") {
-    const sorted = sortedEntries(db, playlist, ownSort);
+  const arranged =
+    playlist === undefined ? undefined : arrangedEntries(db, playlist, findOf(scope));
+  if (arranged !== undefined) {
+    const sorted = arranged;
     total = sorted.length;
     items = playlistRows(db, sorted.slice(offset, offset + limit), keepStreams);
   } else if (popular !== null && sort?.key === "popular") {
@@ -480,14 +526,10 @@ export const browseRowIds = (
  */
 export const arrangedRowIds = (db: LibraryDatabase, scope: BrowseScope): number[] | undefined => {
   if (scope.id === undefined) return undefined;
-  if (scope.kind === "playlist") {
-    const sort = chosenSort(db, scope.id);
-    return sort === undefined
-      ? undefined
-      : sortedEntries(db, scope.id, sort).map((entry) =>
-          "trackId" in entry ? entry.trackId : -entry.itemId,
-        );
-  }
+  if (scope.kind === "playlist")
+    return arrangedEntries(db, scope.id, findOf(scope))?.map((entry) =>
+      "trackId" in entry ? entry.trackId : -entry.itemId,
+    );
   if (scope.kind !== "artist") return undefined;
   const sort = readBrowseSort(db, "artist");
   const popular = sort?.key === "popular" ? popularSongs(db, scope.id) : null;

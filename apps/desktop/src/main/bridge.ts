@@ -112,8 +112,9 @@ import {
 
 const validScope = (value: unknown): value is BrowseScope => {
   if (typeof value !== "object" || value === null) return false;
-  const { kind, id, query } = value as BrowseScope;
+  const { kind, id, query, find } = value as BrowseScope;
   return (
+    (find === undefined || (typeof find === "string" && find.length <= 500)) &&
     BROWSE_KINDS.includes(kind) &&
     (!["album", "artist", "playlist", "genre"].includes(kind) ||
       (Number.isSafeInteger(id) && id! > 0)) &&

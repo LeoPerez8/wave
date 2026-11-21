@@ -21,6 +21,11 @@ export interface BrowseScope {
   readonly kind: BrowseKind;
   readonly id?: number;
   readonly query?: string;
+  /**
+   * What the page's Find field holds: the list shows, plays and selects only the rows it finds
+   * (Core's `createFindMatcher`). Blank finds everything.
+   */
+  readonly find?: string;
 }
 export interface BrowseRow {
   readonly id: number;

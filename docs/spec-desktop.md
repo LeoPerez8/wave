@@ -364,6 +364,13 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   the keyboard focus ring. Songs keeps the A–Z spine.
 - Songs and Favorites have the song count under their title, then Play and Shuffle in the accent
   as on a hero; both play the list in the order its table shows (#1220).
+- Each list page (Songs, Albums, Artists, Genres, Favorites, Playlists, a playlist, an artist, a
+  genre) has a Find field under its heading, the phone's pull-down Find: typing narrows the table
+  with Core's matching (case and accents ignored, words matched from their start). Main filters
+  in the page's query (`wave_finds`), so the table still reads pages; a playlist keeps each
+  song's place in its "#". The count, Play, Shuffle and Select All go by the rows found, and a
+  Find with none says so ("No songs match"). Esc clears it and gives the focus back to the list.
+  It has no shortcut: Ctrl+F stays the Library Search (#1213).
 - Artwork has 6 px corners on tiles and heroes, 4 px on row thumbnails, circles for artists.
 - The song menu holds Play Next, Add to Queue, Add to Playlist, Favorite, Go to Album, Go to
   Artist, Start Magic Queue, Share, Select, Fix Song and Remove from Library.
