@@ -220,12 +220,16 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
           const stalled = waiting.get(id);
           if (stalled === undefined) return;
           waiting.delete(id);
+          process.stderr.write(`[TRACE] stalled ${call} at ${Date.now()}
+`);
           stalled.reject(new AudioEngineError("stalled", `the audio engine didn't answer ${call}`));
           if (current === target) target.kill();
         },
         fetching ? streamCallTimeoutMs : callTimeoutMs,
       );
       waiting.set(id, { call, args, resolve, reject, restoring, timer });
+      if (call !== "status") process.stderr.write(`[TRACE] send ${call} ${JSON.stringify(args).slice(0, 80)} at ${Date.now()}
+`);
       target.send({ id, call, args });
     });
 
@@ -282,6 +286,8 @@ export const superviseAudio = (options: AudioSupervisorOptions): AudioSupervisor
 
   const onExit = (owner: AudioProcess) => () => {
     if (owner !== current) return;
+    process.stderr.write(`[TRACE] audio exit at ${Date.now()}
+`);
     current = undefined;
     failAll("restarted", "the audio engine restarted");
     dropMeasurements("restarted", "the audio engine restarted");

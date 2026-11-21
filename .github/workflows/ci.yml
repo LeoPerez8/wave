@@ -1082,7 +1082,11 @@ jobs:
             # MPRIS needs a session bus, which only this check gets: playerctl drives Wave.
             scripts/ci/step.sh "System media controls" env WAVE_PLAYERCTL=1 dbus-run-session -- xvfb-run -a pnpm --filter @wave/desktop exec playwright test e2e/system.spec.ts
           else
-            scripts/ci/step.sh "Smoke test" pnpm --filter @wave/desktop test:e2e
+            mkdir -p apps/desktop/diag
+            pnpm --filter @wave/desktop exec electron-vite build
+            TRACE_LOG="$PWD/apps/desktop/diag/trace-repeat.log" pnpm --filter @wave/desktop exec playwright test e2e/nowPlaying.spec.ts e2e/playback.spec.ts --repeat-each=12 --reporter=list > apps/desktop/diag/repeat.txt 2>&1 || true
+            tail -40 apps/desktop/diag/repeat.txt
+            TRACE_LOG="$PWD/apps/desktop/diag/trace-full.log" scripts/ci/step.sh "Smoke test" pnpm --filter @wave/desktop test:e2e
           fi
 
       # Separate from the smoke suite: one window, no retries, real native services.
@@ -1105,6 +1109,15 @@ jobs:
           path: apps/desktop/perf-results
           if-no-files-found: error
           retention-days: 90
+
+      - name: Keep the playback traces
+        if: always() && matrix.platform == 'win32'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-playback-traces
+          path: apps/desktop/diag
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Keep the smoke test's screenshots
         if: failure()

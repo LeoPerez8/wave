@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { appendFileSync } from "node:fs";
 
 import { _electron as electron, expect, test, type Page } from "@playwright/test";
 import { Database } from "@wave/client";
@@ -52,6 +53,8 @@ const read = (page: Page) =>
   ) as Promise<PlayerView>;
 
 test("a row plays its list; the keys pause and skip; a relaunch restores it paused", async () => {
+  appendFileSync(process.env["TRACE_LOG"] ?? "trace.log", `==== TRACE test start playback ${Date.now()}
+`);
   const data = mkdtempSync(join(tmpdir(), "wave-e2e-playback-"));
   await Effect.runPromise(
     Effect.gen(function* () {
@@ -79,7 +82,9 @@ test("a row plays its list; the keys pause and skip; a relaunch restores it paus
       args: [appFolder, "--lang=en-US"],
       env: { ...process.env, WAVE_DATA_DIR: data, WAVE_MUSIC_DIR: join(data, "Absent") },
     });
-  let app = await launch();
+  const traced = async () => { const a = await launch(); a.process().stderr?.on("data", (d) => appendFileSync(process.env["TRACE_LOG"] ?? "trace.log", `[${Date.now()}] ${String(d).trimEnd().split(String.fromCharCode(10)).join(" | ")}
+`)); return a; };
+  let app = await traced();
   try {
     let page = await app.firstWindow();
     const pause = () => page.getByRole("button", { name: "Pause", exact: true });
@@ -114,7 +119,7 @@ test("a row plays its list; the keys pause and skip; a relaunch restores it paus
     await page.screenshot({ path: test.info().outputPath(`playback-${process.platform}.png`) });
     await app.close();
 
-    app = await launch();
+    app = await traced();
     page = await app.firstWindow();
     await expect.poll(async () => (await read(page)).current?.title).toBe("Song 3");
     const after = await read(page);

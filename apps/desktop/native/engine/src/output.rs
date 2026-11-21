@@ -182,6 +182,7 @@ fn run(
     let mut last_check: Option<Instant> = None;
     let mut clock = Instant::now();
     let mut silence = Vec::new();
+    let mut last_loop: Option<Instant> = None;
     loop {
         match stopped.recv_timeout(TICK) {
             Ok(()) | Err(RecvTimeoutError::Disconnected) => return,
@@ -189,6 +190,7 @@ fn run(
         }
         let rate = player.progress().track.map_or(44_100, |track| track.sample_rate);
         if !silent && last_check.is_none_or(|at| at.elapsed() >= DEVICE_CHECK) {
+            let started = Instant::now();
             last_check = Some(Instant::now());
             let default_id =
                 host.default_output_device().and_then(|d| d.id().ok()).map(|id| id.to_string());
@@ -204,12 +206,22 @@ fn run(
                     .map(|d| d.name().to_string());
                 clock = Instant::now();
             }
+            let took = started.elapsed();
+            if took > Duration::from_millis(100) {
+                eprintln!("[NTRACE] device check took {} ms, open={}", took.as_millis(), playing.is_some());
+            }
         } else if let Some(current) = playing.as_ref() {
             // A broken stream or a new rate shouldn't wait for the next device check.
             if current.broken.load(Ordering::Relaxed) || current.opened.rate != rate {
                 last_check = None;
             }
         }
+        if let Some(gap) = last_loop.map(|at: Instant| at.elapsed()) {
+            if gap > Duration::from_millis(300) {
+                eprintln!("[NTRACE] output loop gap {} ms", gap.as_millis());
+            }
+        }
+        last_loop = Some(Instant::now());
         if playing.is_none() {
             // No device: the song keeps time in silence. A stalled thread doesn't race to catch up.
             if clock.elapsed() > DEVICE_CHECK {

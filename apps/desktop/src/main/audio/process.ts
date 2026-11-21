@@ -38,19 +38,35 @@ process.parentPort.on("message", (event) => {
     streams.resolved(message);
     return;
   }
-  void streams
-    .handle(message)
-    .then((response) => process.parentPort.postMessage(stamped(response, Date.now())));
+  const got = Date.now();
+  process.stderr.write(`[ATRACE] got ${message.call} #${message.id} at ${got}
+`);
+  void streams.handle(message).then((response) => {
+    const out = stamped(response, Date.now());
+    process.stderr.write(
+      `[ATRACE] answer #${message.id} ${message.call} ok=${response.ok} ${response.ok ? `${response.result.state} ${response.result.positionMs}` : JSON.stringify(response.error)} after ${Date.now() - got}ms
+`,
+    );
+    process.parentPort.postMessage(out);
+  });
 });
 
 // Main hears of every move to the preloaded song, and of the position, without asking, even
 // while the window is hidden. The move itself happens in Rust's output callback.
 let reported: PlaybackStatus | undefined;
 if (engine !== undefined) {
+  let lastTick = Date.now();
   setInterval(() => {
+    const tick = Date.now();
+    if (tick - lastTick > 250) process.stderr.write(`[ATRACE] tick gap ${tick - lastTick}ms at ${tick}
+`);
+    lastTick = tick;
     streams.pump();
     const event = playbackEvent(engine, reported, Date.now());
     if (event === undefined) return;
+    if (reported?.state !== event.status.state || Math.abs(event.status.positionMs - (reported?.positionMs ?? 0)) > 400)
+      process.stderr.write(`[ATRACE] event ${event.status.state} ${event.status.positionMs} at ${tick}
+`);
     reported = event.status;
     process.parentPort.postMessage(event);
   }, 25);

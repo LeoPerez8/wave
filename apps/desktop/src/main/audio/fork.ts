@@ -15,7 +15,10 @@ export const forkAudio =
     const child = utilityProcess.fork(entry, [], {
       serviceName: AUDIO_SERVICE_NAME,
       env: { ...process.env, WAVE_AUDIO_ADDON: addon, WAVE_AUDIO_CACHE: cache ?? "" },
+      stdio: "pipe",
     });
+    child.stderr?.on("data", (data) => process.stderr.write(data));
+    child.stdout?.on("data", (data) => process.stderr.write(data));
     // Requests sent before the process is up wait for it.
     let queued: (AudioRequest | ResolveAnswer)[] | undefined = [];
     child.once("spawn", () => {
