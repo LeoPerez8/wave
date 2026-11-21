@@ -1,6 +1,7 @@
 /**
- * The Follows check: each followed artist's releases from Deezer, matched on YT Music so a card
- * can open and play, with the show check beside it. The phone and the desktop run this one
+ * The Follows check: each followed artist's releases from Deezer, then an Albums search on YT
+ * Music for each release in the feed that isn't matched yet, so its card can show, open and play,
+ * with the show check beside it. The phone and the desktop run this one
  * check; each gives its own settings and its own way to read YT Music.
  */
 import {
@@ -10,33 +11,29 @@ import {
   deezerReleases,
   deezerReleasesNext,
   followCheckDue,
-  followFeed,
+  followReleaseOpening,
+  followReleaseQuery,
+  followReleasesToSearch,
   keepFollowReleases,
-  matchFollowRelease,
-  pickYtArtist,
   resolveDeezerFollowArtist,
   type FollowCheckContext,
   type FollowRelease,
   type ReleaseType,
-  type YtArtistCandidate,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import type { FollowStore } from "./followStore.ts";
 
-interface YtRelease {
+/** An Albums search's result. */
+export interface YtAlbumResult {
   readonly title: string;
   readonly browseId: string;
   readonly releaseType?: ReleaseType | null;
+  readonly artists: readonly string[];
 }
 /** The YT Music reads the check makes. */
 export interface FollowYt<E = unknown> {
-  readonly searchArtists: (name: string) => Effect.Effect<readonly YtArtistCandidate[], E>;
-  readonly artist: (
-    browseId: string,
-  ) => Effect.Effect<
-    { readonly albums: readonly YtRelease[]; readonly singles: readonly YtRelease[] },
-    E
-  >;
+  /** One Albums search. */
+  readonly searchAlbums: (query: string) => Effect.Effect<readonly YtAlbumResult[], E>;
   readonly album: (
     browseId: string,
   ) => Effect.Effect<{ readonly tracks: readonly { readonly videoId: string }[] }, E>;
@@ -70,7 +67,10 @@ export interface FollowReleasesPorts<Y = unknown, R = never> {
 /**
  * The check on Home opening and in the phone's daily background task; the context picks the due
  * window. Failed artists retain their last successful answers and due time. With the switch
- * off, nothing followed or nothing due, it sends no request. Succeeds with whether it saved
+ * off, nothing followed or nothing due, it sends no request. After Deezer, with YT Music on, it
+ * searches every release Core's `followReleasesToSearch` names, newest first and one at a time,
+ * with no cap: the match is the tap's (`followReleaseOpening`), saved with the album's songs; a
+ * miss or a failed read is searched again at the next check. Succeeds with whether it saved
  * anything.
  */
 export const followReleasesCheck = <Y = unknown, R = never>(ports: FollowReleasesPorts<Y, R>) => {
@@ -93,6 +93,57 @@ export const followReleasesCheck = <Y = unknown, R = never>(ports: FollowRelease
       });
       return yield* ports.ytTurn ? ports.ytTurn(query, guarded) : guarded;
     });
+  /** Searches the releases Core names, saving each match found; true when one was saved. */
+  const matchReleases = <E>(store: FollowStore<E>, yt: FollowYt<Y>) =>
+    Effect.gen(function* () {
+      const follows = yield* store.listFollows;
+      const cache = yield* store.followReleaseCache;
+      const toSearch = followReleasesToSearch({
+        follows,
+        releases: cache.artists.flatMap((a) => a.releases),
+        hidden: cache.hidden,
+        countedPlays: [],
+        now: Date.now(),
+      });
+      let matched = false;
+      for (const release of toSearch) {
+        if (!ytAllowed()) break;
+        const follow = follows.find((f) => f.key === release.artistKey);
+        if (follow === undefined) continue;
+        const saved = yield* Effect.gen(function* () {
+          const query = followReleaseQuery(release, follow.name);
+          const found = yield* ytRead(query, yt.searchAlbums(query));
+          if (found === undefined) return false;
+          const opening = followReleaseOpening(release, { ytMusic: true, found });
+          if (opening.kind !== "open") return false;
+          const album = yield* ytRead(opening.browseId, yt.album(opening.browseId));
+          if (album === undefined || !allowed()) return false;
+          // Do not resurrect a follow removed while the search ran.
+          const current = yield* store.getFollow(follow.name);
+          if (current === null || current.followedAt !== follow.followedAt) return false;
+          const kept = (yield* store.followReleaseCache).artists.find(
+            (a) => a.key === release.artistKey,
+          );
+          if (kept === undefined) return false;
+          yield* store.saveFollowReleases(
+            release.artistKey,
+            kept.releases.map((r) =>
+              r.key === release.key
+                ? {
+                    ...r,
+                    browseId: opening.browseId,
+                    videoIds: album.tracks.map((t) => t.videoId),
+                  }
+                : r,
+            ),
+            kept.checkedAt,
+          );
+          return true;
+        }).pipe(Effect.orElseSucceed(() => false));
+        if (saved) matched = true;
+      }
+      return matched;
+    }).pipe(Effect.orElseSucceed(() => false));
   return <E>(
     store: FollowStore<E>,
     yt: FollowYt<Y>,
@@ -148,59 +199,7 @@ export const followReleasesCheck = <Y = unknown, R = never>(ports: FollowRelease
             fresh.push(...parsed);
             url = deezerReleasesNext(response, id);
           }
-          let releases = keepFollowReleases(fresh, previous?.releases);
-          const eligible = followFeed({
-            follows: [follow],
-            releases,
-            hidden: cache.hidden,
-            countedPlays: [],
-            now: Date.now(),
-          }).releaseCards;
-          if (youtubeEnabled && ytAllowed() && eligible.some((r) => r.browseId === null)) {
-            const unmatched = releases;
-            const deezerId = id;
-            releases = yield* Effect.gen(function* () {
-              let browseId = follow.ytBrowseId;
-              if (browseId === null) {
-                const candidates = yield* ytRead(follow.name, yt.searchArtists(follow.name));
-                browseId = candidates === undefined ? null : pickYtArtist(follow.name, candidates);
-              }
-              if (browseId === null) return unmatched;
-              const current = yield* store.getFollow(follow.name);
-              if (current === null || current.followedAt !== follow.followedAt) return unmatched;
-              yield* store.setFollow({ ...current, deezerId, ytBrowseId: browseId }, current.level);
-              const page = yield* ytRead(browseId, yt.artist(browseId));
-              if (page === undefined) return unmatched;
-              const albums = [
-                ...page.albums.map((a) => ({
-                  ...a,
-                  releaseType: a.releaseType ?? ("album" as const),
-                })),
-                ...page.singles.map((a) => ({
-                  ...a,
-                  releaseType: a.releaseType ?? ("single" as const),
-                })),
-              ];
-              return yield* Effect.forEach(
-                unmatched,
-                (r) =>
-                  Effect.gen(function* () {
-                    if (r.browseId !== null || !eligible.some((e) => e.key === r.key)) return r;
-                    const match = matchFollowRelease(r, albums);
-                    if (!match) return r;
-                    const album = yield* ytRead(match.browseId, yt.album(match.browseId));
-                    return album === undefined
-                      ? r
-                      : {
-                          ...r,
-                          browseId: match.browseId,
-                          videoIds: album.tracks.map((t) => t.videoId),
-                        };
-                  }),
-                { concurrency: 1 },
-              );
-            }).pipe(Effect.orElseSucceed(() => unmatched));
-          }
+          const releases = keepFollowReleases(fresh, previous?.releases);
           if (!allowed()) return;
           // Do not resurrect a follow removed while its requests were in flight.
           const current = yield* store.getFollow(follow.name);
@@ -209,6 +208,7 @@ export const followReleasesCheck = <Y = unknown, R = never>(ports: FollowRelease
           changed = true;
         }).pipe(Effect.ignore);
       }
+      if (youtubeEnabled && ytAllowed() && (yield* matchReleases(store, yt))) changed = true;
       return changed;
     });
 };
