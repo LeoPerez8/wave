@@ -183,6 +183,10 @@ describe("the app log of the search allowance", () => {
       'A YouTube Music search for a Discover mix failed (failed): "Daft Punk"',
     );
     assert.equal(
+      searchFailedLine("artistPage", "Daft Punk", "failed"),
+      'A YouTube Music search for an artist page failed (failed): "Daft Punk"',
+    );
+    assert.equal(
       searchFailedLine("tryAgain", "Within Daft Punk", "failed"),
       'A YouTube Music search for Try Again failed (failed): "Within Daft Punk"',
     );
