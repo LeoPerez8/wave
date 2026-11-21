@@ -21,7 +21,13 @@ export type DjOpeningGrid =
   /** A line saying there's nothing to pick yet; Done stays disabled. */
   | { readonly kind: "nothing" };
 
-/** Work a DJ opening needs; a stored grid renders while its full candidates are read. */
+/**
+ * Work a DJ opening needs; a stored grid renders while its full candidates are read.
+ * An unread Library snapshot is read after the first frame even under a kept grid: its
+ * artists give restored tiles their pictures, similar-artist rows their Library, and
+ * search adds their Library identity. A kept grid skips only the build and the
+ * startup preparation.
+ */
 export const djOpeningWork = ({
   keptGrid,
   libraryReady,
@@ -33,7 +39,7 @@ export const djOpeningWork = ({
   readonly buildGrid: boolean;
   readonly prepareStartup: boolean;
 } => ({
-  readLibrary: !keptGrid && !libraryReady,
+  readLibrary: !libraryReady,
   buildGrid: !keptGrid && libraryReady,
   prepareStartup: !keptGrid,
 });
