@@ -97,6 +97,13 @@ test("the frame: scrollbars, sidebar room and icons, the narrow window and the p
     await expect(playlists.getByRole("button", { name: labels.newPlaylist })).toBeInViewport({
       ratio: 1,
     });
+    console.log(
+      "DIAG frame",
+      process.platform,
+      JSON.stringify(
+        await sidebar.evaluate((e) => [e.scrollHeight, e.clientHeight, window.innerHeight]),
+      ),
+    );
     expect(await sidebar.evaluate((element) => element.scrollHeight - element.clientHeight)).toBe(
       0,
     );
