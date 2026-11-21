@@ -432,8 +432,14 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
 
 - Installers: an NSIS installer for Windows x64 (MSI can't carry a version like `0.68.0-ti`) and
   an AppImage for Linux x64, the only Linux format that updates itself without root.
-- The desktop takes the Android version from the "Release Wave" commit; every release commit
-  builds both installers. Promote to main publishes the desktop too once v1 is complete.
+- The desktop takes the Android version from the "Release Wave" commit, but builds its installers
+  only when what it is built from changed since its previous release (`desktop.yml`, called by
+  `ci.yml`; `docs/spec.md` › Build and CI, Phone and desktop builds). A push that changes only the
+  desktop still gets a version and publishes only the installers; one that changes only the phone
+  builds none. The desktop's release gate waits only for the shared jobs and the Desktop jobs, so
+  the two apps never hold each other back. A desktop `feat/` PR makes the bump minor. Promote to
+  main publishes the desktop too once v1 is complete (`app=both` or `app=desktop`), from its
+  newest release at or below the promoted version.
   `apps/updates` serves the desktop's updates per channel.
 - Updates are whole-app in v1 (the NSIS blockmap downloads only what changed); no JS-only
   bundles. electron-updater only downloads.
@@ -441,7 +447,8 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   (Ed25519, in the release Environments), and the app checks them against the public key built
   into it before installing, on Windows and Linux alike, as the phone does. The channel is fixed
   in the build; Wave's code never sets the update endpoint or channel at run time.
-- Roll back an update republishes the previous version for the channel with downgrade allowed.
+- Roll back an update (`app=desktop`) republishes the previous version for the channel with
+  downgrade allowed, and leaves the phone's update alone.
 - Windows code signing: SignPath Foundation, free for OSI-licensed projects, once the GPL-3.0-only
   licence is in the repo (#1122). The key stays in SignPath's HSM and the release job asks for
   the signature. Until then `ti` builds are unsigned and Windows warns on each new version.

@@ -15,7 +15,7 @@ import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { useHomeArrangement, homeTitleLongPress } from "@/home/homeArrangement";
 import { HomeSection, SECTION_GAP } from "@/home/HomeSection";
 import { HomeSectionSkeleton } from "@/home/HomeSectionSkeleton";
-import { afterHomeFrame, homeOpeningState } from "@/home/homeOpening";
+import { afterHomeFrame, homeOpeningState, homePlaceholderSkeleton } from "@/home/homeOpening";
 import { useHomeContent } from "@/library/hooks";
 import { useRenderCount } from "@/perf/perf";
 import { useRecapToAnnounce } from "@/stats/hooks";
@@ -89,10 +89,10 @@ function HomePlaceholders({ newRecap }: { newRecap: RecapPeriod | null }) {
       <HomeRecap period={newRecap} />
       <View style={newRecap === null ? FIRST_SECTION : undefined}>
         {arrangement.sections.map((id) =>
-          id === "new-releases" || id === "upcoming-shows" ? (
-            <HomeSection key={id} id={id} home={{}} />
-          ) : (
+          homePlaceholderSkeleton(id) ? (
             <HomeSectionSkeleton key={id} id={id} />
+          ) : (
+            <HomeSection key={id} id={id} home={{}} />
           ),
         )}
       </View>

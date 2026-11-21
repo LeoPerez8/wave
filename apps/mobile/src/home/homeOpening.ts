@@ -56,6 +56,14 @@ export const homeSectionWaiting = (id: HomeSectionId, home: HomeContent): boolea
   }
 };
 
+/**
+ * Whether the section [id] shows a skeleton before Home paints. The followed
+ * artists' sections and Community playlists draw themselves instead: each is
+ * left out with nothing to show, so a skeleton would flash its header and go.
+ */
+export const homePlaceholderSkeleton = (id: HomeSectionId): boolean =>
+  id !== "new-releases" && id !== "upcoming-shows" && id !== "community-playlists";
+
 /** The room a playlist card's sleeves take above its cover (`SLEEVE_ROOM` in `PlaylistCard`). */
 const PLAYLIST_SLEEVE_ROOM = 10;
 
