@@ -6,7 +6,7 @@ import {
   type playlistRecommendationSession,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { createSerialWork } from "../lib/serialWork.ts";
+import { createSerialWork } from "./serialWork.ts";
 
 type Session = ReturnType<typeof playlistRecommendationSession>;
 export const followPlaylistRecommendations = (
