@@ -19,9 +19,14 @@ const BATCH = MAGIC_QUEUE_PICKS * 2;
  * draws, or none when fewer than three can show. Read from the phone's play
  * history alone, with no network. A ranked song that can't start a Magic
  * Queue (a Library song without a file, a streamed one whose song wasn't
- * kept) is passed over for the next.
+ * kept) is passed over for the next, as is an explicit streamed song while
+ * [dontPlayExplicit] is on.
  */
-export const readMostListenedRecently = (store: LibraryStore["Service"], now: number) =>
+export const readMostListenedRecently = (
+  store: LibraryStore["Service"],
+  now: number,
+  dontPlayExplicit = false,
+) =>
   Effect.gen(function* () {
     const ranked = mostListenedRecently(yield* store.songPlayTotals(recentPlaysWindow(now)));
     const seeds: MagicQueueSeed<PlayableSongRow>[] = [];
@@ -39,7 +44,8 @@ export const readMostListenedRecently = (store: LibraryStore["Service"], now: nu
           if (file !== undefined) seeds.push({ source: "library", song: file });
         } else {
           const stream = streams?.get(song.videoId);
-          if (stream !== undefined) seeds.push({ source: "stream", song: stream });
+          if (stream !== undefined && !(dontPlayExplicit && stream.explicit))
+            seeds.push({ source: "stream", song: stream });
         }
       }
     }

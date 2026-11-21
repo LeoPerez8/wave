@@ -34,14 +34,14 @@ const play = (trackId: number | string, startedAt: number, counted = true): Play
   source: "phone",
 });
 
-const streamedSong = (videoId: string): YtAlbumSong => ({
+const streamedSong = (videoId: string, explicit = false): YtAlbumSong => ({
   videoId,
   title: `Streamed ${videoId}`,
   artists: ["Someone"],
   album: null,
   durationMs: 180_000,
   artworkUrl: null,
-  explicit: false,
+  explicit,
   albumId: null,
 });
 
@@ -74,6 +74,33 @@ test("the page lists the songs with the most counted plays of the last 14 days, 
       b,
       "v-online",
       a,
+    ]);
+  } finally {
+    closeTestDatabase(db);
+  }
+});
+
+test("Don't play explicit skips explicit streamed songs and fills the page with the next clean song", async () => {
+  const db = await openTestDatabase();
+  try {
+    const store = await loadLibraryStore(root, db);
+    const explicit = streamedSong("v-explicit", true);
+    const clean = streamedSong("v-clean");
+    listen(store, explicit, 5);
+    listen(store, clean, 4);
+    const recent = [
+      streamedSong("v-a"),
+      streamedSong("v-b"),
+      streamedSong("v-c"),
+      streamedSong("v-d"),
+    ];
+    recent.forEach((song, index) => listen(store, song, 3 - Math.floor(index / 2)));
+    assert.deepEqual(shown(Effect.runSync(readMostListenedRecently(store, NOW, true))), [
+      "v-clean",
+      "v-a",
+      "v-b",
+      "v-c",
+      "v-d",
     ]);
   } finally {
     closeTestDatabase(db);

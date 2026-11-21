@@ -9,6 +9,7 @@ import {
   homeSectionTitle,
   MAGIC_QUEUE_PICKS,
   magicQueueCarouselPage,
+  magicQueueCarouselKeptPage,
   magicQueueCarouselPageLabel,
   magicQueueCarouselPages,
   magicQueueCarouselPageTitle,
@@ -22,7 +23,7 @@ import {
   type YtAlbumSong,
 } from "@wave/core";
 import { router } from "@/lib/timingRouter";
-import { useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { AccessibilityInfo, Text, View, useWindowDimensions } from "react-native";
 import { IconRefresh } from "@tabler/icons-react-native";
 
@@ -381,9 +382,16 @@ function MagicQueueRow({
   const { width, fontScale } = useWindowDimensions();
   const [available, setAvailable] = useState(width - grid.margin * 2);
   const [kept, setKept] = useState(keptPage);
+  // The first page drawn is remembered as a swiped-to one is: a page that joins before it
+  // then moves the row, and the page in sight stays.
+  const remembered = magicQueueCarouselKeptPage(pages, kept);
+  if (remembered !== kept) setKept(remembered);
+  useEffect(() => {
+    if (remembered !== null) keptPage = remembered;
+  }, [remembered]);
   const { size } = magicQueueGrid(available, fontScale);
   const { shown } = section;
-  const index = magicQueueCarouselPage(pages, kept);
+  const index = magicQueueCarouselPage(pages, remembered);
   const current = pages[index];
   if (current === undefined) return null;
   const paged = pages.length > 1;
