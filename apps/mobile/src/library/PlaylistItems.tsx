@@ -9,6 +9,7 @@ import {
 } from "./PlaylistRecommendations";
 import { useGoToSuggestionsPill } from "./useGoToSuggestionsPill";
 import { IconGripVertical } from "@tabler/icons-react-native";
+import { IconPlus } from "@tabler/icons-react-native";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import {
   entryAdder,
@@ -31,7 +32,7 @@ import {
   useState,
   type ReactElement,
 } from "react";
-import { View, type AccessibilityActionInfo } from "react-native";
+import { Text, View, type AccessibilityActionInfo } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedReaction,
@@ -42,6 +43,7 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 
 import { CompactTitleHead, useCompactTitleList } from "@/components/CompactTitle";
+import { router } from "@/lib/timingRouter";
 import { FLOATING_PILL_ROOM } from "@/components/FloatingPill";
 import { afterPaint } from "@/lib/afterPaint";
 import { makeExternalStore } from "@wave/client/externalStore";
@@ -57,6 +59,7 @@ import type { ActionItems, TrackItem } from "@/playback/actionTargets";
 import { runTrackSwipe } from "@/playback/rowSwipe";
 import { useListSelection } from "@/selection/useListSelection";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
+import { useCurrentPath } from "@/library/routes";
 import { SongList, type SongListSelection } from "@/songs/SongList";
 import { librarySongEntry, type SongListEntry } from "@/songs/songListSources";
 import type { SongRowActions } from "@/songs/SongRow";
@@ -68,6 +71,7 @@ import { explainUnavailable, openUnavailableEntryActions } from "./UnavailableEn
 import type { PlaylistEntryRow } from "@wave/client";
 import { entryText, FindFrame, FindHead, useFindInLegendList } from "./FindInPlaylist";
 import { movePlaylistItem, removePlaylistItems } from "./playlists";
+import { Press } from "@/motion/Press";
 
 /** What the list holds besides the entries: the empty note, then the recommendations. */
 type Slot = { readonly kind: "empty" } | { readonly kind: "recommendations" };
@@ -161,6 +165,31 @@ function Grip({ shown, color }: { shown: boolean; color: string }) {
       {/* Hidden, not removed, while selecting or finding: the rows keep their width. */}
       {shown && <IconGripVertical size={20} color={color} strokeWidth={1.5} />}
     </View>
+  );
+}
+
+/** The playlist's first song-list item: a route into the song-only add search. */
+function AddSongsTile({ playlistId }: { playlistId: number }) {
+  const { strings } = useLocalisation();
+  const background = useThemeColor("background");
+  return (
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel={strings.playlists.addSongs}
+      onPress={() => router.push(`/library/playlist/${playlistId}/add`)}
+    >
+      <View className="flex-row items-center" style={{ height: ROW, gap: CELL * 1.5 }}>
+        <View
+          className="items-center justify-center rounded-lg bg-primary"
+          style={{ width: CELL * 5, height: CELL * 5 }}
+        >
+          <IconPlus size={24} color={background} strokeWidth={1.75} />
+        </View>
+        <Text className="flex-1 font-sans text-body text-foreground">
+          {strings.playlists.addSongs}
+        </Text>
+      </View>
+    </Press>
   );
 }
 
@@ -265,6 +294,7 @@ export function PlaylistItems({
   members = NO_MEMBERS,
 }: Props) {
   const { strings } = useLocalisation();
+  const path = useCurrentPath();
   const scrollable = useListScrollable();
   const read = items ?? NO_ITEMS;
   const bottomInset = useChromeInset();
@@ -639,6 +669,9 @@ export function PlaylistItems({
           ListHeaderComponent={
             <CompactTitleHead onLayout={(event) => setLead(event.nativeEvent.layout.height)}>
               <FindHead find={find} header={header} />
+              {playlistId > 0 && !path.includes("/favorites/") && found === null && !selecting && (
+                <AddSongsTile playlistId={playlistId} />
+              )}
             </CompactTitleHead>
           }
         />

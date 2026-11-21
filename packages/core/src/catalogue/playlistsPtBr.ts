@@ -78,6 +78,8 @@ export const playlistsPtBr: typeof playlistsEn = {
   nameTaken: "Outra playlist já tem esse nome.",
   nameTooLong: "O nome pode ter até 100 caracteres.",
   addToPlaylist: "Adicionar à playlist",
+  addSongs: "Adicionar músicas",
+  addedToPlaylist: (playlist: string): string => `Adicionada à ${playlist}`,
   created: (name: string): string => `${name} criada`,
   couldntList: "Não foi possível listar as playlists",
   couldntAdd: "Não foi possível adicionar à playlist",

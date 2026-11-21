@@ -1626,6 +1626,9 @@ export {
 } from "./pagePlayback.ts";
 export type { PagePlayback, PlayableSongs } from "./pagePlayback.ts";
 export {
+  playlistAddVisit,
+  holdPlaylistAddVisitSong,
+  stepPlaylistAddVisit,
   planPlaylistSongs,
   playlistEntryLinks,
   playlistPlayback,
@@ -1648,6 +1651,7 @@ export {
   writePlaylistYtSong,
 } from "./playlistEntries.ts";
 export type {
+  PlaylistAddVisit,
   HeldPlaylistTrack,
   PlaylistEntryLink,
   PlaylistEntryLinks,
