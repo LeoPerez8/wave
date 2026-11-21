@@ -1161,3 +1161,16 @@ export const streamedGenres = sqliteTable("streamed_genres", {
   videoId: text("video_id").primaryKey(),
   genre: text("genre"),
 });
+
+/** ReccoBeats features for candidate catalog songs. Phone-local, keyed by YT Music video id. */
+export const djMoodFeatures = sqliteTable("dj_mood_features", {
+  videoId: text("video_id")
+    .primaryKey()
+    .references(() => candidateSongs.videoId, { onDelete: "cascade" }),
+  isrc: text("isrc"),
+  energy: real("energy"),
+  valence: real("valence"),
+  acousticness: real("acousticness"),
+  mode: integer("mode"),
+  checkedAt: integer("checked_at").notNull(),
+});

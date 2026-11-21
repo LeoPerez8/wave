@@ -5,10 +5,12 @@ import { catalogueOf } from "./localisation.ts";
 import {
   DEFAULT_DJ_SETTINGS,
   DJ_FILTERS,
+  DJ_MOOD_FILTERS,
   djFilterOn,
   djMixSliders,
   djNewMusicShare,
   djToggleFilter,
+  djToggleMood,
   parseDjSettings,
   type DjSettings,
 } from "./index.ts";
@@ -34,6 +36,7 @@ describe("DJ's ranking choices", () => {
       discovery: "familiar",
       popularity: "trending",
       newReleases: true,
+      mood: "energetic",
     } as const;
     assert.deepEqual(parseDjSettings(JSON.parse(JSON.stringify(chosen))), chosen);
     assert.deepEqual(parseDjSettings(null), DEFAULT_DJ_SETTINGS);
@@ -85,11 +88,37 @@ describe("Adjust's filters", () => {
       newReleases: "New releases",
     });
     const pt = catalogueOf("pt-BR").dj;
+    assert.equal(en.mood, "Mood");
+    assert.deepEqual(en.moodNames, {
+      energetic: "Energetic",
+      relaxing: "Relaxing",
+      upbeat: "Upbeat",
+    });
+    assert.equal(pt.mood, "Humor");
+    assert.deepEqual(pt.moodNames, {
+      energetic: "Agitada",
+      relaxing: "Relaxante",
+      upbeat: "Animada",
+    });
     assert.equal(pt.filters, "Filtros");
     assert.deepEqual(pt.filterNames, {
       trending: "Em alta",
       lesserKnown: "Músicas pouco conhecidas",
       newReleases: "Lançamentos",
     });
+  });
+});
+
+describe("Adjust's mood filters", () => {
+  test("offers three mutually exclusive moods, all off by default, and remembers the choice", () => {
+    assert.deepEqual(DJ_MOOD_FILTERS, ["energetic", "relaxing", "upbeat"]);
+    assert.equal(DEFAULT_DJ_SETTINGS.mood, null);
+    const energetic = djToggleMood(DEFAULT_DJ_SETTINGS, "energetic");
+    assert.equal(energetic.mood, "energetic");
+    assert.equal(djToggleMood(energetic, "energetic").mood, null);
+    assert.equal(djToggleMood(energetic, "relaxing").mood, "relaxing");
+    assert.equal(parseDjSettings(JSON.parse(JSON.stringify(energetic))).mood, "energetic");
+    assert.equal(parseDjSettings({ mood: "melancholic" }).mood, null);
+    assert.equal(parseDjSettings({}).mood, null);
   });
 });

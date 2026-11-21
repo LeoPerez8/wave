@@ -3052,8 +3052,16 @@ export {
   storedDjRemembered,
 } from "./djRemembered.ts";
 export type { DjRemembered } from "./djRemembered.ts";
-export { DJ_FILTERS, djFilterOn, djToggleFilter } from "./djSettings.ts";
-export type { DjFilter } from "./djSettings.ts";
+export {
+  DJ_FILTERS,
+  DJ_MOOD_FILTERS,
+  djFilterOn,
+  djToggleFilter,
+  djToggleMood,
+} from "./djSettings.ts";
+export type { DjFilter, DjMood } from "./djSettings.ts";
+export { djMedianAudioFeatures, djMoodRanked, djMoodScore } from "./djMood.ts";
+export type { DjAudioFeatures, DjMoodRankable } from "./djMood.ts";
 export {
   DJ_NEW_RELEASE_BOOST,
   DJ_RELEASE_PAGES,

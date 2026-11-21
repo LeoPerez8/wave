@@ -261,6 +261,32 @@ plausibility check.
 - **Acousticness and danceability** look plausible (piano pieces 0.93 to 0.99, metal 0.00;
   Brazilian funk 0.78 to 0.98 danceable) but were not checked song by song.
 
+### Melancholic rule check (#1273, 2026-11-21)
+
+I checked five low-valence songs from the sample against a conjunctive rule: energy at or below
+0.40, valence at or below 0.40, minor mode, and acousticness at or above 0.50. For each song I
+resolved its exact Deezer track and ISRC, then queried ReccoBeats by ISRC. I took the median of
+all returned rows for each feature, as the cache will. Requests were anonymous and spaced at
+least 1.25 seconds apart. These are the same plausibility checks as the table above, not listening
+tests.
+
+| Song                             | ISRC         | Rows | Energy | Valence | Minor mode | Acousticness | Rule |
+| -------------------------------- | ------------ | ---: | -----: | ------: | ---------- | -----------: | ---- |
+| Creep, Radiohead                 | GBAYE9200070 |    7 |  0.430 |   0.104 | No         |        0.010 | No   |
+| Skinny Love, Bon Iver            | US38Y0811503 |    1 |  0.263 |   0.109 | Yes        |        0.845 | Yes  |
+| Hurt, Johnny Cash                | USDJ20200650 |    3 |  0.378 |   0.149 | Yes        |        0.719 | Yes  |
+| Epitáfio, Titãs                  | BRAMD0100815 |    9 |  0.612 |   0.261 | No         |        0.481 | No   |
+| Evidências, Chitãozinho & Xororó | BRMCA9000007 |    8 |  0.446 |   0.330 | No         |        0.710 | No   |
+
+Minor mode alone matched 2 of 5 melancholic examples. The full rule matched 2 of 5. It matched
+none of ten upbeat or energetic controls: Raining Blood, Sandstorm, Mulher de Fases, Balada,
+Happy, September, Vou Festejar, Deixa a Vida Me Levar, I Will Survive and Don't Stop Me Now.
+Minor mode appeared in 5 of those 10 controls, so it also fails as a standalone signal there.
+The false-positive bar passes, but the rule misses three melancholic songs and fails the required
+4 of 5 recall. Melancholic does not ship. ReccoBeats mode also remains weak evidence on its own;
+the research's earlier 14% disagreement across repeated ISRC rows is another reason not to use
+it as a standalone mood label.
+
 ### Tempo against Deezer's BPM
 
 Deezer's `/track/<id>` gives a `bpm` for many songs. It is another estimate, not ground truth,

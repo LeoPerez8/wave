@@ -3,6 +3,7 @@ import {
   catalogSeedKey,
   djFamilyRadioAllowed,
   djNewReleasesRanked,
+  djMoodRanked,
   djVarietyCandidates,
   identityKey,
   recordingMatches,
@@ -106,6 +107,17 @@ export const magicQueueYtCandidates = (
     // A DJ session's New releases ranks with its artists' saved pages; none is asked for.
     const store = yield* LibraryStore;
     savedPage = (name) => Effect.runPromise(store.ytArtist(identityKey(name)));
+    const mood = (sessionNow?.() ?? session).dj?.mood ?? null;
+    const catalogVideos = catalog.map(({ song }) => song.videoId);
+    const moodFeatures =
+      mood === null
+        ? new Map()
+        : yield* store.djMoodFeatures(catalogVideos).pipe(Effect.orElseSucceed(() => new Map()));
+    const genreRows =
+      mood === null
+        ? []
+        : yield* store.songGenres(catalogVideos).pipe(Effect.orElseSucceed(() => []));
+    const moodGenres = new Map(genreRows.map(({ id, genre }) => [String(id), genre] as const));
     const releases = yield* Effect.promise(() => releasePages(sessionNow?.() ?? session, graph));
     const seeds = drawn.length > 0 ? drawn : [legacySeed(session)];
     const liked = ((sessionNow?.() ?? session).likedRadios ?? []).filter(
@@ -141,11 +153,16 @@ export const magicQueueYtCandidates = (
     yield* Effect.promise(loadDislikes);
     // A DJ session's New releases raises the songs on its artists' recent releases; any other keeps the order.
     const rank = (group: readonly SongRadioSeed[], original: boolean, faithfulFallback = false) =>
-      djNewReleasesRanked(
-        sessionNow?.() ?? session,
-        radioRanked(group, original, faithfulFallback),
-        releases,
-        Date.now(),
+      djMoodRanked(
+        djNewReleasesRanked(
+          sessionNow?.() ?? session,
+          radioRanked(group, original, faithfulFallback),
+          releases,
+          Date.now(),
+        ),
+        mood,
+        moodFeatures,
+        moodGenres,
       );
     const radioRanked = (
       group: readonly SongRadioSeed[],
