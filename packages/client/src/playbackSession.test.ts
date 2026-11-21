@@ -543,6 +543,51 @@ test("a Recap's music plays in place of the queue, counts no play, and gives the
   );
 });
 
+test("turning Don't play explicit on during a Recap removes explicit songs from the queue it gives back", async (t) => {
+  const db = await openTestDatabase();
+  const explicit = addTrack(db, { title: "Explicit", explicit: "explicit" });
+  const clean = addTrack(db, { title: "Clean" });
+  const top = addTrack(db, { title: "Recap song" });
+  let on = false;
+  const session = await createPlaybackSession({
+    db,
+    audio: device(),
+    source: "desktop",
+    dontPlayExplicit: () => on,
+  });
+  t.after(() => session.close());
+  await session.dispatch({
+    type: "play",
+    trackIds: [String(explicit), String(clean), String(explicit)],
+    context: { kind: "album", id: "1" },
+  });
+  await session.seek(12000);
+  await session.pause();
+
+  const loan = await session.borrow();
+  await loan.play(String(top));
+  on = true;
+  await session.dropExplicit();
+  assert.equal(session.snapshot().queue.entries[0]?.trackId, String(top));
+  const saved = loadPlayback(db)!;
+  on = false;
+  await loan.giveBack();
+
+  const { queue, status } = session.snapshot();
+  assert.deepEqual(
+    queue.entries.map((entry) => entry.trackId),
+    [String(clean)],
+  );
+  assert.equal(queue.index, 0);
+  assert.equal(status.state, "paused");
+  assert.equal(status.positionMs, 0);
+  assert.deepEqual(
+    savedQueueState(saved.parts)?.entries.map((entry) => entry.trackId),
+    [String(clean)],
+  );
+  assert.equal(saved.positionMs, 0);
+});
+
 test("a queue played during a Recap stays when the Recap closes", async (t) => {
   const db = await openTestDatabase();
   const a = addTrack(db, { title: "First" });

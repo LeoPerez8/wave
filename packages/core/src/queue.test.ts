@@ -264,6 +264,20 @@ describe("Play Next and Add to Queue", () => {
     assert.equal(show(state), "a [b] x c d");
   });
 
+  test("Add to Queue goes after songs dropped among the upcoming context tracks", () => {
+    const playing = start("a b c d e", 1);
+    const state = apply(
+      playing,
+      {
+        type: "addToQueue",
+        trackIds: ["x"],
+        at: { after: keyOf(playing, "d"), before: keyOf(playing, "e") },
+      },
+      { type: "addToQueue", trackIds: ["y"] },
+    );
+    assert.equal(show(state), "a [b] c d x y e");
+  });
+
   test("on an empty queue they start playing the tracks", () => {
     for (const type of ["playNext", "addToQueue"] as const) {
       const { state, playback } = reduceQueue(EMPTY_QUEUE, { type, trackIds: ["x", "y"] });

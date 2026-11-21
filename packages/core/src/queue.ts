@@ -825,7 +825,7 @@ const isQueued = (entry: QueueEntry): boolean => entry.contextIndex === null;
 
 /**
  * Inserts tracks as queued entries: right after the current entry (Play Next)
- * or after the queued entries that already follow it (Add to Queue).
+ * or after the last queued entry in Up Next (Add to Queue).
  */
 const enqueue = (
   state: QueueState,
@@ -837,7 +837,12 @@ const enqueue = (
   if (state.index < 0) return result({ ...state, entries: added, index: 0, nextKey }, "play");
   let at = typeof where === "string" ? state.index + 1 : placeIn(state.entries, state.index, where);
   if (where === "last") {
-    while (at < state.entries.length && isQueued(state.entries[at]!)) at += 1;
+    for (let i = state.entries.length - 1; i > state.index; i -= 1) {
+      if (isQueued(state.entries[i]!)) {
+        at = i + 1;
+        break;
+      }
+    }
   }
   const entries = [...state.entries.slice(0, at), ...added, ...state.entries.slice(at)];
   return result({ ...state, entries, nextKey });
