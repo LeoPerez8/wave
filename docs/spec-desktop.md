@@ -338,6 +338,12 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   panel's own control on every tab. Now Playing (artwork,
   title, lyrics) opens from the bar's artwork or title and closes with Esc. Focus lands on Now
   Playing itself, so Space still plays and pauses; Tab reaches its close button.
+- Share in the Lyrics view (the panel's tab and Now Playing, after Karaoke and Translate) picks
+  up to five lines next to each other as the phone does (Core's `tapLyricLine`); while picking, a
+  click picks instead of seeking and synced lyrics stop following the song. Cancel, Esc or a new
+  song leaves picking. Next previews the phone's lyrics card, 1080 px wide; a click on it moves
+  to the cover's next colour, and Save Image (the save dialog, at the phone's file name) and Copy
+  Image (the PNG on the clipboard) stand in for the share sheet.
 - Minimum window 960×600. Below 1120 px wide the sidebar shows icons only, a playlist as
   its first letter, and Ctrl+F opens the Search field in the title bar. When the content is
   narrower than 760 px, tables drop the Album column, the search top result stacks and hero
@@ -358,7 +364,13 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   the keyboard focus ring. Songs keeps the A–Z spine.
 - Artwork has 6 px corners on tiles and heroes, 4 px on row thumbnails, circles for artists.
 - The song menu holds Play Next, Add to Queue, Add to Playlist, Favorite, Go to Album, Go to
-  Artist, Start Magic Queue, Copy Link, Select, Fix Song and Remove from Library.
+  Artist, Start Magic Queue, Share, Select, Fix Song and Remove from Library.
+- Share, on a Library song and on a streamed song (#1209), is a submenu in place of the phone's
+  share sheet: Copy Link (song.link), Copy Spotify Link (Spotify's own search as #1201's
+  account), Copy YT Music Link, then Save Image (the system's save dialog) and Copy Image, which
+  draw the phone's song card 1080 px wide. A link that can't work is disabled and says why under
+  its label (No Match, Signed Out, Offline, Unavailable); offline every link reads Offline. With
+  YT Music off the submenu holds the two image items only.
 - Selection takes albums, artists, genres and playlists too (#1216): Select, Ctrl+click and
   Shift+click check their rows in the tables and their tiles in Search, where they check together
   with the songs. One collection checked alone keeps its menu's entries. Several, or collections
