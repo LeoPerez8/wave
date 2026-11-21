@@ -159,23 +159,66 @@ export interface FollowRelease {
   readonly libraryAlbumId?: number | null;
 }
 const DAY = 86_400_000;
-/** Played and hidden releases never return; show notification receipts survive country changes. */
-export const followFeed = (input: {
+/** What decides whether a release is in the feed at all, matched or not. */
+interface FeedInput {
   readonly follows: readonly FollowedArtist[];
   readonly releases: readonly FollowRelease[];
   readonly hidden: readonly string[];
   readonly countedPlays: readonly string[];
   readonly now: number;
-  readonly enabled?: boolean;
   readonly blockExplicit?: boolean;
-  readonly shows?: readonly FollowShow[];
-  readonly country?: string;
-  readonly notified?: readonly string[];
-}) => {
+}
+/**
+ * The releases inside a follow's window (from 30 days before the follow's day to [now]), neither
+ * hidden, played nor blocked as explicit, in the feed's order: newest first.
+ */
+const feedReleases = (input: FeedInput): FollowRelease[] => {
   const follows = new Map(input.follows.map((f) => [f.key, f]));
   const hidden = new Set(input.hidden);
   const played = new Set(input.countedPlays);
+  return input.releases
+    .filter((r) => {
+      const follow = follows.get(r.artistKey);
+      const date = Date.parse(r.releaseDate);
+      return (
+        follow !== undefined &&
+        Number.isFinite(date) &&
+        date <= input.now &&
+        date >= Math.floor(follow.followedAt / DAY) * DAY - 30 * DAY &&
+        !hidden.has(r.key) &&
+        !(input.blockExplicit && r.explicit) &&
+        ![...r.videoIds, ...r.recordingKeys].some((id) => played.has(id))
+      );
+    })
+    .sort((a, b) => b.releaseDate.localeCompare(a.releaseDate) || a.key.localeCompare(b.key));
+};
+/** Whether the owner can play [release]: it's in the Library, or matched on YT Music while it's on. */
+const playable = (release: FollowRelease, ytMusic: boolean): boolean =>
+  Boolean(release.libraryAlbumId) || (ytMusic && release.browseId !== null);
+/** [releases] with one release per key: a collaboration followed through two artists is one. */
+const oncePerKey = (releases: readonly FollowRelease[]): FollowRelease[] => {
   const seen = new Set<string>();
+  return releases.filter((r) => {
+    if (seen.has(r.key)) return false;
+    seen.add(r.key);
+    return true;
+  });
+};
+/**
+ * Played and hidden releases never return; show notification receipts survive country changes.
+ * Only a release the owner can play is a card (`ytMusic`, on unless false, is YT Music's switch);
+ * `followReleasesToSearch` names the others a check looks for.
+ */
+export const followFeed = (
+  input: FeedInput & {
+    readonly enabled?: boolean;
+    readonly ytMusic?: boolean;
+    readonly shows?: readonly FollowShow[];
+    readonly country?: string;
+    readonly notified?: readonly string[];
+  },
+) => {
+  const follows = new Map(input.follows.map((f) => [f.key, f]));
   const showIds = new Set<string>();
   const eligibleShows =
     input.enabled === false
@@ -204,6 +247,7 @@ export const followFeed = (input: {
     return true;
   });
   const notified = new Set(input.notified);
+  const ytMusic = input.ytMusic !== false;
   return {
     showCards,
     artistShows,
@@ -211,27 +255,22 @@ export const followFeed = (input: {
     releaseCards:
       input.enabled === false
         ? []
-        : input.releases
-            .filter((r) => {
-              if (seen.has(r.key)) return false;
-              const follow = follows.get(r.artistKey);
-              const date = Date.parse(r.releaseDate);
-              const shown =
-                follow !== undefined &&
-                Number.isFinite(date) &&
-                date <= input.now &&
-                date >= Math.floor(follow.followedAt / DAY) * DAY - 30 * DAY &&
-                !hidden.has(r.key) &&
-                !(input.blockExplicit && r.explicit) &&
-                ![...r.videoIds, ...r.recordingKeys].some((id) => played.has(id));
-              if (shown) seen.add(r.key);
-              return shown;
-            })
-            .sort(
-              (a, b) => b.releaseDate.localeCompare(a.releaseDate) || a.key.localeCompare(b.key),
-            ),
+        : oncePerKey(feedReleases(input).filter((r) => playable(r, ytMusic))),
   };
 };
+/**
+ * The releases a Follows check looks for on YT Music, in the order it asks: each in the feed
+ * (`followFeed`'s rule, whatever the switches) with no YT Music match and no Library album,
+ * newest first. One already playable through another followed artist isn't asked for.
+ */
+export const followReleasesToSearch = (input: FeedInput): FollowRelease[] => {
+  const feed = feedReleases(input);
+  const playableKeys = new Set(feed.filter((r) => playable(r, true)).map((r) => r.key));
+  return oncePerKey(feed.filter((r) => !playableKeys.has(r.key)));
+};
+/** The Albums search that looks for [release] by [artist] on YT Music. */
+export const followReleaseQuery = (release: FollowRelease, artist: string): string =>
+  `${artist} ${release.title}`;
 
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -320,7 +359,9 @@ export type FollowReleaseOpening =
   | { readonly kind: "search" }
   | { readonly kind: "ytMusicOff" }
   | { readonly kind: "noAnswer" }
-  | { readonly kind: "notFound" };
+  | { readonly kind: "notFound" }
+  /** A matched release's album is gone from YT Music (`followAlbumOpening`). */
+  | { readonly kind: "gone" };
 /**
  * Opening a new release the Library lacks: with YT Music off it says so, even
  * for a matched release; a matched one opens; an unmatched one asks for an
@@ -354,6 +395,31 @@ export const followReleaseOpening = (
   );
   return match === null ? { kind: "notFound" } : { kind: "open", browseId: match.browseId };
 };
+/** What reading a matched release's album page said: its songs, or why it has none. */
+export type FollowAlbumRead = { readonly videoIds: readonly string[] } | "offline" | "failed";
+/**
+ * Opening a matched release on its album [browseId], by what reading the page said ([read]): it
+ * opens with songs; offline is no answer; a page YT Music doesn't give, or one with no songs, is
+ * gone, and the release then loses its match (`unmatchFollowRelease`).
+ */
+export const followAlbumOpening = (
+  browseId: string,
+  read: FollowAlbumRead,
+): Extract<FollowReleaseOpening, { kind: "open" | "noAnswer" | "gone" }> =>
+  read === "offline"
+    ? { kind: "noAnswer" }
+    : read === "failed" || read.videoIds.length === 0
+      ? { kind: "gone" }
+      : { kind: "open", browseId };
+/**
+ * [releases] with [key]'s YT Music match and songs dropped: it hides until a later check's
+ * search finds it again (`followReleasesToSearch`).
+ */
+export const unmatchFollowRelease = (
+  releases: readonly FollowRelease[],
+  key: string,
+): FollowRelease[] =>
+  releases.map((r) => (r.key === key ? { ...r, browseId: null, videoIds: [] } : r));
 /** Home opening checks after 12 hours, the daily background task after 24. */
 export type FollowCheckContext = "home" | "background";
 export const checkDue = (last: number | null, now: number, context: FollowCheckContext): boolean =>

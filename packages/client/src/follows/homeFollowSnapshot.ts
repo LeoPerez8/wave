@@ -1,5 +1,6 @@
 import {
   followFeed,
+  followReleasesToSearch,
   homeFollowCards,
   boundHomeFollowSnapshot,
   type HomeFollowSnapshot,
@@ -30,8 +31,12 @@ export const readHomeFollowSnapshot = <E>(
     const options = { now, hidden: releases.hidden };
     const current = homeFollowCards(raw, options);
     const visit = homeFollowCards(raw, { ...options, admitted });
+    // Unmatched releases too: only the listening read knows which are in the Library.
+    const unmatched = followReleasesToSearch({ ...raw, ...options, countedPlays: [] });
     const candidates = [
-      ...new Map([...current.releaseCards, ...visit.releaseCards].map((r) => [r.key, r])).values(),
+      ...new Map(
+        [...current.releaseCards, ...visit.releaseCards, ...unmatched].map((r) => [r.key, r]),
+      ).values(),
     ];
     const listening = yield* store.followReleaseListening(candidates);
     const source = { ...raw, releases: listening.releases };

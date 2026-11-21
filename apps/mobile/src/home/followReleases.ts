@@ -23,8 +23,8 @@ const check = followReleasesCheck<YtMusicError, LibraryStore>({
   showsCheckable: async () => showsConfigured && (await waveSignedIn()),
   checkShows: (context) => checkFollowShows(context, false),
   settle: settledTurnEffect,
-  // All automatic YT reads, including pages, share the search allowance.
-  ytTurn: (query, read) => withSearchTurn("discover", query, read),
+  // Its Albums searches and album pages share the search allowance, last in line.
+  ytTurn: (query, read) => withSearchTurn("newReleases", query, read),
 });
 
 /**

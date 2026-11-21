@@ -11,6 +11,7 @@ import {
 } from "@tabler/icons-react-native";
 import {
   currentEntry,
+  followQueueLabel,
   queueHistory,
   upNext,
   upNextMove,
@@ -189,7 +190,8 @@ function BarGround({ colors, top, scroll, start }: Ground) {
  * The Queue list's sticky bar, between History and Up Next: the shuffle and
  * repeat toggles (a long press on shuffle opens the shuffle card; it reads
  * Smart Shuffle or Even Shuffle, each with its own icon, while that's chosen), then the Up Next
- * heading ("Magic Queue · from <seed>" over a Magic Queue).
+ * heading ("Magic Queue · from <seed>" over a Magic Queue, "Up next · from <section>" over
+ * one Home's New from Artists You Follow played).
  */
 function UpNextBar() {
   const { strings } = useLocalisation();
@@ -212,7 +214,9 @@ function UpNextBar() {
       </View>
       <Hairline />
       <View className="flex-1 flex-row items-end justify-between" style={{ paddingBottom: CELL }}>
-        <CatalogLine className="shrink">{magic ?? strings.playbackText.upNext}</CatalogLine>
+        <CatalogLine className="shrink">
+          {magic ?? followQueueLabel(queue.context, strings) ?? strings.playbackText.upNext}
+        </CatalogLine>
         {count > 0 && (
           <Text
             className="font-sans text-footnote text-secondary"

@@ -106,6 +106,18 @@ describe("the YouTube Music search allowance", () => {
     assert.deepEqual(searchTurns(playing, 2000).go, [4]);
   });
 
+  test("the New releases check goes last, as the fill does, and leaves playing its 200", () => {
+    let allowance: SearchAllowance = spent(799);
+    allowance = searchTurnWanted(allowance, { id: 1, asker: "newReleases" }, 1000);
+    allowance = searchTurnWanted(allowance, { id: 2, asker: "discover" }, 1000);
+    allowance = searchTurnWanted(allowance, { id: 3, asker: "newReleases" }, 1000);
+    const first = searchTurns(allowance, 1000);
+    assert.deepEqual(first.go, [2], "a Discover mix first; then the window holds 800");
+    const playing = searchTurnWanted(first.allowance, { id: 4, asker: "playing" }, 2000);
+    assert.deepEqual(searchTurns(playing, 2000).go, [4]);
+    assert.match(searchFailedLine("newReleases", "ABBA Voyage", "failed"), /New releases check/);
+  });
+
   test("a search given up while it waits leaves the line and spends nothing", () => {
     let allowance = spent(SEARCH_ALLOWANCE);
     allowance = searchTurnWanted(allowance, { id: 1, asker: "discover" }, 10);
