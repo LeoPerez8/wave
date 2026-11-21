@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type HTMLAttributes,
   type MouseEvent,
 } from "react";
 
@@ -12,6 +13,7 @@ import type { PlaybackCommand, PlayerView } from "../../shared/playerView.ts";
 import { Icon } from "./Icon.tsx";
 import type { PanelTab } from "./SidePanel.tsx";
 import { SleepTimer } from "./SleepTimer.tsx";
+import { useSongDrop, type DraggedSongs } from "./songDrag.ts";
 import { useDesktopKeys } from "./keys.ts";
 import { albumName, artistName, labels, text } from "./text.ts";
 import { Artwork, time } from "./VirtualTable.tsx";
@@ -143,6 +145,7 @@ export function PlayerBar({
   onNowPlaying,
   onMenu,
   links,
+  onSongDrop,
 }: {
   readonly playback: ReturnType<typeof usePlayback>;
   /** The side panel's open tab, or null while it is closed. */
@@ -153,8 +156,11 @@ export function PlayerBar({
   readonly onMenu: (element: HTMLElement) => void;
   /** Where a streamed song's artist and album names lead. */
   readonly links: YtCreditLinks;
+  /** Songs dragged from a list onto the Queue button, for the end of the queue. */
+  readonly onSongDrop?: (songs: DraggedSongs) => void;
 }) {
   const { view, run } = playback;
+  const queueDrop = useSongDrop<"queue">();
   const [drag, setDrag] = useState<number>();
   usePlayerKeys(view, run);
   const song = view?.current ?? null;
@@ -180,9 +186,11 @@ export function PlayerBar({
     pressed?: boolean,
     disabled = song === null,
     badge?: string,
+    extra?: { readonly className?: string } & HTMLAttributes<HTMLButtonElement>,
   ) => (
     <button
-      className="icon-button"
+      {...extra}
+      className={`icon-button ${extra?.className ?? ""}`}
       aria-label={label}
       title={label}
       disabled={disabled}
@@ -302,7 +310,18 @@ export function PlayerBar({
         <div className="player-tools">
           <SleepTimer timer={view?.sleepTimer ?? null} disabled={song === null} run={run} />
           {button("lyrics", labels.lyrics, () => onPanel("lyrics"), panel === "lyrics", !view)}
-          {button("queue", labels.queue, () => onPanel("queue"), panel === "queue", !view)}
+          {button(
+            "queue",
+            labels.queue,
+            () => onPanel("queue"),
+            panel === "queue",
+            !view,
+            undefined,
+            onSongDrop && {
+              ...queueDrop.props("queue", (songs) => onSongDrop(songs)),
+              className: queueDrop.over === "queue" ? "drop-over" : "",
+            },
+          )}
           {button(
             "menu",
             labels.menu,

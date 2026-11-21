@@ -33,7 +33,13 @@ import type { SongState } from "../../shared/songState.ts";
 import { markClass, rowMark, SongMark, useSongStates } from "./SongMark.tsx";
 import { Artwork, time } from "./VirtualTable.tsx";
 import { YtResults, type YtSearchLinks } from "./YtResults.tsx";
-import { openTableSongMenu, SelectionBar, type SongSelectionControls } from "./SongActions.tsx";
+import {
+  openTableSongMenu,
+  rowDrag,
+  SelectionBar,
+  type SongSelectionControls,
+} from "./SongActions.tsx";
+import { songDragProps } from "./songDrag.ts";
 import { useTableSelection, type TableSelectionProps } from "./useTableSelection.ts";
 import { pressOf } from "./keys.ts";
 
@@ -65,8 +71,11 @@ function SongRow({
   checkboxes,
   testId,
   states,
+  drag,
 }: {
   readonly states: ReadonlyMap<number, SongState>;
+  /** Drags the row, or the checked rows with it, onto a playlist or the Queue. */
+  readonly drag: Parameters<typeof songDragProps>[0];
   readonly row: BrowseRow;
   readonly subtitle?: ReactNode;
   readonly selected: boolean;
@@ -86,6 +95,7 @@ function SongRow({
       aria-selected={selected}
       aria-disabled={row.unavailable}
       aria-label={[row.title, artistName(row.artist)].filter(Boolean).join(", ")}
+      {...songDragProps(drag)}
       onMouseDown={(event) => {
         if (event.shiftKey) event.preventDefault();
       }}
@@ -624,6 +634,7 @@ function SearchSongList({
             selected={selection ? checkedTableRow(selection, row.id) : rows.ordinary === row.id}
             checkboxes={selection?.checkboxes === true}
             onSelect={(event) => rows.click(index, row.id, event)}
+            drag={() => rowDrag(controls, scope, row)}
             onPlay={() => play(row, (lyrics?.firstIndex ?? 0) + index)}
             onKey={(event) => {
               const command = desktopKey(pressOf(event), "list");

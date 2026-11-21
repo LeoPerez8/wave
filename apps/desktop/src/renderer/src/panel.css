@@ -414,6 +414,16 @@
 .queue-row.dragging {
   opacity: 0.4;
 }
+/* Songs dragged from a list drop before an Up Next row, or right after the playing one. */
+.queue-row.drop-over {
+  box-shadow: inset 0 2px 0 var(--color-accent);
+}
+.queue-row.playing.drop-over {
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
+.queue-list.drop-over {
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
 .queue-row.active-row {
   background: var(--color-fill);
 }

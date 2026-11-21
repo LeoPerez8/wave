@@ -1,5 +1,5 @@
 import type { AudioStatus } from "@wave/client/playbackSession";
-import type { RepeatMode, SleepTimer } from "@wave/core";
+import type { RepeatMode, SleepTimer, UpNextPlace } from "@wave/core";
 
 import type { BrowseRow } from "./browse.ts";
 
@@ -47,7 +47,13 @@ export type PlaybackCommand =
   | { readonly type: "setShuffle"; readonly on: boolean }
   | { readonly type: "setRepeat"; readonly mode: RepeatMode }
   | { readonly type: "jumpTo" | "remove"; readonly key: string }
-  | { readonly type: "playNext" | "addToQueue"; readonly trackIds: readonly string[] }
+  | { readonly type: "playNext"; readonly trackIds: readonly string[] }
+  /** [at]: dropped in Up Next, between those neighbours. */
+  | {
+      readonly type: "addToQueue";
+      readonly trackIds: readonly string[];
+      readonly at?: UpNextPlace;
+    }
   | {
       readonly type: "move";
       readonly key: string;

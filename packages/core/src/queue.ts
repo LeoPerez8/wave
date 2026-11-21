@@ -64,7 +64,15 @@ export type QueueCommand =
   | { readonly type: "reshuffle" }
   | { readonly type: "setRepeat"; readonly mode: RepeatMode }
   | { readonly type: "playNext"; readonly trackIds: readonly string[] }
-  | { readonly type: "addToQueue"; readonly trackIds: readonly string[] }
+  /**
+   * Lines tracks up after the ones already lined up; [at], a drop in Up Next, puts them
+   * between those neighbours instead, found as a move finds them (`UpNextMove`).
+   */
+  | {
+      readonly type: "addToQueue";
+      readonly trackIds: readonly string[];
+      readonly at?: UpNextPlace | undefined;
+    }
   /**
    * Plays [trackIds]' first song now, as the current one (a related song
    * tapped): the song that was playing goes to History, and Up Next and the
@@ -799,12 +807,12 @@ const isQueued = (entry: QueueEntry): boolean => entry.contextIndex === null;
 const enqueue = (
   state: QueueState,
   trackIds: readonly string[],
-  where: "next" | "last",
+  where: "next" | "last" | UpNextPlace,
 ): QueueResult => {
   if (trackIds.length === 0) return result(state);
   const { entries: added, nextKey } = makeEntries(trackIds, state.nextKey, () => null);
   if (state.index < 0) return result({ ...state, entries: added, index: 0, nextKey }, "play");
-  let at = state.index + 1;
+  let at = typeof where === "string" ? state.index + 1 : placeIn(state.entries, state.index, where);
   if (where === "last") {
     while (at < state.entries.length && isQueued(state.entries[at]!)) at += 1;
   }
@@ -894,20 +902,29 @@ const playerMoved = (
   return result(select(state, key));
 };
 
+/** Where [place] falls among [entries] (the current one at [index]), as `UpNextMove` says. */
+const placeIn = (
+  entries: readonly QueueEntry[],
+  index: number,
+  { after, before }: UpNextPlace,
+): number => {
+  const upcoming = (anchor: string | null): number => {
+    if (anchor === null) return -1;
+    const at = entries.findIndex((other) => other.key === anchor);
+    return at > index ? at : -1;
+  };
+  const afterAt = upcoming(after);
+  const beforeAt = upcoming(before);
+  return afterAt >= 0 ? afterAt + 1 : beforeAt >= 0 ? beforeAt : index + 1;
+};
+
 /** Moves an Up Next entry to another Up Next position (clamped). */
 const move = (state: QueueState, { key, after, before }: UpNextMove): QueueResult => {
   const from = indexOfKey(state, key);
   if (from <= state.index) return result(state);
   const entries = [...state.entries];
   const [entry] = entries.splice(from, 1);
-  const upcoming = (anchor: string | null): number => {
-    if (anchor === null) return -1;
-    const at = entries.findIndex((other) => other.key === anchor);
-    return at > state.index ? at : -1;
-  };
-  const afterAt = upcoming(after);
-  const beforeAt = upcoming(before);
-  const to = afterAt >= 0 ? afterAt + 1 : beforeAt >= 0 ? beforeAt : state.index + 1;
+  const to = placeIn(entries, state.index, { after, before });
   if (to === from) return result(state);
   entries.splice(to, 0, entry!);
   return result({ ...state, entries });
@@ -1011,7 +1028,7 @@ export const reduceQueue = (
     case "playNext":
       return enqueue(state, playing(command.trackIds, passOver), "next");
     case "addToQueue":
-      return enqueue(state, playing(command.trackIds, passOver), "last");
+      return enqueue(state, playing(command.trackIds, passOver), command.at ?? "last");
     case "playNow":
       return playNow(state, playing(command.trackIds, passOver));
     case "append":
@@ -1046,8 +1063,12 @@ export const reduceQueue = (
  * one is still upcoming, else right before [before], else to the top of Up
  * Next. Null neighbours: dropped at the top ([after]) or the bottom ([before]).
  */
-export interface UpNextMove {
+export interface UpNextMove extends UpNextPlace {
   readonly key: string;
+}
+
+/** A place in Up Next, between two neighbours named by key (see `UpNextMove`). */
+export interface UpNextPlace {
   readonly after: string | null;
   readonly before: string | null;
 }

@@ -17,6 +17,7 @@ import {
   type AlertSpec,
   type ItemActionEntry,
   type TableSelection,
+  type UpNextPlace,
 } from "@wave/core";
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import type { BrowseRow, BrowseScope } from "../../shared/browse.ts";
@@ -30,6 +31,8 @@ import { Menu, type MenuItem, type OpenMenu } from "./Menu.tsx";
 import { copyLink } from "./copyLink.ts";
 import { songActionToast } from "./songActionToast.ts";
 import { language, text } from "./text.ts";
+import type { DraggedSongs } from "./songDrag.ts";
+import type { SelectionTarget } from "../../shared/collectionActions.ts";
 import type { TableSelectionProps } from "./useTableSelection.ts";
 
 export function selectionTarget(scope: BrowseScope, selection: TableSelection): SongTarget | null {
@@ -82,11 +85,17 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
   );
 
   const run = useCallback(
-    async (target: SongTarget, action: SongRunAction, surface: ActionSurface, id?: number) => {
+    async (
+      target: SongTarget,
+      action: SongRunAction,
+      surface: ActionSurface,
+      id?: number,
+      at?: UpNextPlace,
+    ) => {
       try {
         // Each song waits on LRCLIB and Deezer: say it's under way.
         if (action === "fixSong" || action === "fixSongs") notify(text.fixSongs.progress);
-        const result = await window.wave.songs.run(target, action, id);
+        const result = await window.wave.songs.run(target, action, id, at);
         changed();
         switch (result.kind) {
           case "downloaded":
@@ -342,6 +351,8 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
     openMenu,
     openItems,
     itemFor,
+    /** Runs an entry on [target] with its toast, as a drop onto a playlist or the Queue does. */
+    run,
     overlays,
     /** Shows [message] as the window's toast, with Undo or another [action] to offer. */
     notify,
@@ -505,7 +516,25 @@ export type SongSelectionControls = TableSelectionProps & {
   readonly actions: ReturnType<typeof useSongActions>;
   /** False where the songs are checked with collections, whose bar acts on them all. */
   readonly bar?: false;
+  /** Where songs are checked with collections: the checked songs with them, as one target. */
+  readonly picks?: (songs: SongTarget) => SelectionTarget;
 };
+
+/**
+ * What dragging [row] carries: the checked rows, in the list's order, when it is one of them
+ * (with the collections checked beside them), else the row alone.
+ */
+export function rowDrag(
+  controls: Pick<SongSelectionControls, "selection" | "picks">,
+  scope: BrowseScope,
+  row: BrowseRow,
+): DraggedSongs {
+  const { selection, picks } = controls;
+  const target =
+    selection && checkedTableRow(selection, row.id) ? selectionTarget(scope, selection) : null;
+  if (target === null) return { kind: "songs", target: { scope, ids: [row.id] } };
+  return picks ? { kind: "selection", target: picks(target) } : { kind: "songs", target };
+}
 
 /** A selected row opens the group's menu. Other rows keep their own actions. */
 export function openTableSongMenu(

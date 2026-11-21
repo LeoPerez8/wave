@@ -60,6 +60,7 @@ import {
   type FollowsContract,
 } from "./follows.ts";
 import type { StatsPeriod, StatsRanking } from "@wave/core";
+import type { UpNextPlace } from "@wave/core";
 import type { ArtistStatsPage, StatsOverview, StatsRow } from "./stats.ts";
 import type {
   ActionSurface,
@@ -429,16 +430,24 @@ export interface BridgeContract
     readonly args: readonly [target: SelectionTarget];
     readonly result: SelectionMenu;
   };
+  /** [at]: Add to Queue dropped in Up Next, between those neighbours. */
   readonly "collections.runSelection": {
     readonly args: readonly [
       target: SelectionTarget,
       action: SelectionRunAction,
       playlistId?: number,
+      at?: UpNextPlace,
     ];
     readonly result: SelectionRunResult;
   };
+  /** [at]: Add to Queue dropped in Up Next, between those neighbours. */
   readonly "songs.run": {
-    readonly args: readonly [target: SongTarget, action: SongRunAction, playlistId?: number];
+    readonly args: readonly [
+      target: SongTarget,
+      action: SongRunAction,
+      playlistId?: number,
+      at?: UpNextPlace,
+    ];
     readonly result: SongRunResult;
   };
   /** Opens an audio file by its absolute path, paused at its start. */
@@ -773,6 +782,7 @@ export interface WaveBridge {
       target: SongTarget,
       action: SongRunAction,
       playlistId?: number,
+      at?: UpNextPlace,
     ) => Promise<SongRunResult>;
   };
   /** One song at a time; each call answers with the engine's status after it. */
@@ -890,6 +900,7 @@ export interface WaveBridge {
       target: SelectionTarget,
       action: SelectionRunAction,
       playlistId?: number,
+      at?: UpNextPlace,
     ) => Promise<SelectionRunResult>;
   };
   readonly playlists: PlaylistBridge;
@@ -952,7 +963,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   songs: {
     states: (ids) => invoke("songs.states", ids),
     actions: (target, surface) => invoke("songs.actions", target, surface),
-    run: (target, action, playlistId) => invoke("songs.run", target, action, playlistId),
+    run: (target, action, playlistId, at) => invoke("songs.run", target, action, playlistId, at),
   },
   player: {
     load: (path) => invoke("player.load", path),
@@ -1034,8 +1045,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     actions: (target, options) => invoke("collections.actions", target, options),
     run: (target, action, playlistId) => invoke("collections.run", target, action, playlistId),
     selectionActions: (target) => invoke("collections.selectionActions", target),
-    runSelection: (target, action, playlistId) =>
-      invoke("collections.runSelection", target, action, playlistId),
+    runSelection: (target, action, playlistId, at) =>
+      invoke("collections.runSelection", target, action, playlistId, at),
   },
   playlists: playlistBridge(invoke),
   lyricsAndTags: lyricsAndTagsBridge(invoke),
