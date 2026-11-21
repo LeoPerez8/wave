@@ -1,17 +1,25 @@
 /**
- * Settings › Playback (docs/spec.md, stories 22a–22c): Crossfade, Normalize Volume and Buffer.
+ * Settings › Playback (docs/spec.md, stories 22a–22c): Crossfade, Normalize Volume, Buffer,
+ * Don't Play Explicit and Continue with Magic Queue.
  * They are the account-wide synced settings, stored under the phone's keys and in the phone's
  * formats with the account's synced values (`desktop_synced_preferences`, which sync pulls
  * into), so a signed-in desktop plays by the values the phone shows. An owner's change is
  * stamped (`stampPreference`) for sync to push.
  */
 import {
+  DONT_PLAY_EXPLICIT_SETTING,
+  readContinueQueue,
   readCrossfade,
+  readDontPlayExplicit,
   readNormalizeVolume,
+  readShuffleKind,
   readStreamBuffer,
   snapCrossfade,
   STREAM_BUFFER_DEFAULT,
+  writeContinueQueue,
+  writeDontPlayExplicit,
   writeNormalizeVolume,
+  writeShuffleKind,
   type StreamBufferMinutes,
 } from "@wave/core";
 import type { LibraryDatabase } from "@wave/client/db/database";
@@ -20,11 +28,14 @@ import { sql } from "drizzle-orm";
 
 import type { PlaybackSettings } from "../../shared/playbackSettings.ts";
 
-/** The phone's keys for the three settings. */
+/** The phone's keys for the settings. */
 export const PLAYBACK_SETTING_KEYS = {
   crossfadeSeconds: "settings.crossfadeSeconds",
   normalizeVolume: "settings.normalizeVolume",
   bufferMinutes: "settings.streamBufferMinutes",
+  shuffleKind: "settings.shuffleKind",
+  dontPlayExplicit: DONT_PLAY_EXPLICIT_SETTING,
+  continueQueue: "settings.continueQueue",
 } as const;
 
 /** Whether a pull that changed the synced settings [keys] changed Settings › Playback. */
@@ -51,6 +62,9 @@ export const readPlaybackSettings = (db: LibraryDatabase): PlaybackSettings => (
   crossfadeSeconds: readCrossfade(stored(db, PLAYBACK_SETTING_KEYS.crossfadeSeconds)),
   normalizeVolume: readNormalizeVolume(stored(db, PLAYBACK_SETTING_KEYS.normalizeVolume)),
   bufferMinutes: readStreamBuffer(stored(db, PLAYBACK_SETTING_KEYS.bufferMinutes)),
+  shuffleKind: readShuffleKind(stored(db, PLAYBACK_SETTING_KEYS.shuffleKind)),
+  dontPlayExplicit: readDontPlayExplicit(stored(db, PLAYBACK_SETTING_KEYS.dontPlayExplicit)),
+  continueQueue: readContinueQueue(stored(db, PLAYBACK_SETTING_KEYS.continueQueue)),
 });
 
 const writeBuffer = (minutes: StreamBufferMinutes): string | null =>
@@ -70,11 +84,17 @@ export const savePlaybackSettings = (
     crossfadeSeconds: snapCrossfade(change.crossfadeSeconds ?? before.crossfadeSeconds),
     normalizeVolume: change.normalizeVolume ?? before.normalizeVolume,
     bufferMinutes: readStreamBuffer(String(change.bufferMinutes ?? before.bufferMinutes)),
+    shuffleKind: change.shuffleKind ?? before.shuffleKind,
+    dontPlayExplicit: change.dontPlayExplicit ?? before.dontPlayExplicit,
+    continueQueue: change.continueQueue ?? before.continueQueue,
   };
   const writes: [keyof PlaybackSettings, string | null][] = [
     ["crossfadeSeconds", String(after.crossfadeSeconds)],
     ["normalizeVolume", writeNormalizeVolume(after.normalizeVolume)],
     ["bufferMinutes", writeBuffer(after.bufferMinutes)],
+    ["shuffleKind", writeShuffleKind(after.shuffleKind)],
+    ["dontPlayExplicit", writeDontPlayExplicit(after.dontPlayExplicit)],
+    ["continueQueue", writeContinueQueue(after.continueQueue)],
   ];
   for (const [name, value] of writes) {
     if (after[name] === before[name]) continue;

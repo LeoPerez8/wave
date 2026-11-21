@@ -9,6 +9,7 @@ import {
   NOW_PLAYING_TRANSPORT_SLOTS,
   editNowPlayingButtons,
   nowPlayingButtonsAreDefault,
+  moveNowPlayingButton,
   nowPlayingRelatedChevronShown,
   nowPlayingSlotChoices,
   nowPlayingSlotRoute,
@@ -320,6 +321,46 @@ describe("setting the Now Playing slots", () => {
       ),
       ["lyrics", "addToPlaylist", "download", "shuffle", "repeat", null, null],
     );
+  });
+
+  test("dragging a button onto a filled slot swaps them across the footer and transport", () => {
+    const withTransport = [
+      "lyrics",
+      "sleepTimer",
+      "addToPlaylist",
+      "download",
+      "queue",
+      "shuffle",
+      "repeat",
+    ] as const;
+    assert.deepEqual(moveNowPlayingButton(withTransport, 0, 6), [
+      "repeat",
+      "sleepTimer",
+      "addToPlaylist",
+      "download",
+      "queue",
+      "shuffle",
+      "lyrics",
+    ]);
+  });
+
+  test("dragging a button onto an empty slot moves it and leaves its old slot empty", () => {
+    assert.deepEqual(moveNowPlayingButton(slots, 1, 5), [
+      "lyrics",
+      null,
+      "addToPlaylist",
+      "download",
+      "queue",
+      "sleepTimer",
+      null,
+    ]);
+  });
+
+  test("a drop onto the same slot, from an empty slot, or outside the seven slots changes nothing", () => {
+    assert.deepEqual(moveNowPlayingButton(slots, 1, 1), slots);
+    assert.deepEqual(moveNowPlayingButton(slots, 5, 0), slots);
+    assert.deepEqual(moveNowPlayingButton(slots, 0, 7), slots);
+    assert.deepEqual(moveNowPlayingButton(slots, -1, 0), slots);
   });
 
   test("reset slots store as nothing and are the default, which is what turns Reset to Default off", () => {

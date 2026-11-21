@@ -464,6 +464,7 @@ export const settingsEn = {
   retryLine: (line: string) => `Retry ${line}`,
   removeFailure: (line: string) => `Remove ${line} from failed downloads`,
   slot: (n: number) => `Slot ${n}`,
+  moveButtonToSlot: (slot: string) => `Move button to ${slot}`,
   swapSlot: (label: string, title: string, holder: string) =>
     `${label}, ${title}, swaps with ${holder}`,
   swipeHint: (side: "left" | "right") => `Chooses what swiping ${side} runs`,
@@ -486,6 +487,8 @@ export const settingsEn = {
     `Wave already shows the songs in ${name}, which includes this folder.`,
   folderIgnored: (name: string) => `Wave already ignores ${name}, which includes this folder.`,
   savedColour: (n: number, hex: string) => `Saved colour ${n}, ${hex}`,
+  /** The desktop's button beside a saved colour; [name] is `savedColour`'s. */
+  removeSavedColour: (name: string) => `Remove ${name}`,
   removeFolder: (name: string) => `Remove ${name}?`,
   couldntFixSongsToast: (message: string) => `Couldn't fix songs: ${message}`,
   musicFolderCount: (n: number) =>

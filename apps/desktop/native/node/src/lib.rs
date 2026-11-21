@@ -228,6 +228,23 @@ impl AudioEngine {
         self.engine.set_normalize(on);
     }
 
+    /// The outputs the system has, as of a second ago at most.
+    #[napi]
+    pub fn outputs(&self) -> Vec<OutputDevice> {
+        self.engine
+            .outputs()
+            .into_iter()
+            .map(|output| OutputDevice { id: output.id, name: output.name })
+            .collect()
+    }
+
+    /// Plays on the output with `id` while the system has it; without one, or while it is
+    /// away, on the system's default. The song goes on from where it is.
+    #[napi]
+    pub fn set_output(&self, id: Option<String>) {
+        self.engine.set_output(id);
+    }
+
     /// Queues `path` to be measured for Normalize Volume; the result comes from `measurements`.
     #[napi]
     pub fn measure(&self, path: String, id: String) {
@@ -296,6 +313,13 @@ pub struct PlaybackTransition {
     pub at_ms: f64,
     /// "gapless", "crossfade" or "fadeEnded".
     pub kind: String,
+}
+
+/// An output the system has; `id` stays the same across restarts.
+#[napi(object)]
+pub struct OutputDevice {
+    pub id: String,
+    pub name: String,
 }
 
 #[napi(object)]

@@ -27,7 +27,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   changeButton: "Alterar Botão",
   editButtons: "Editar botões",
   doneEditing: "Concluir",
-  tapASlotToChooseItsAction: "Toque num espaço para escolher a ação",
+  tapASlotToChooseItsAction: "Toque para escolher ou segure e arraste para mover",
   holdAButtonToEditThisScreen: "Segure um botão para editar esta tela",
   checkYourConnectionAndTryAgain: "Verifique sua conexão e tente novamente.",
   clear: "Limpar",
@@ -284,4 +284,5 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   allExplicitNotAdded: "Nada foi adicionado: todas as músicas são explícitas.",
   sleepDuration: (hours: number, minutes: number) =>
     hours === 0 ? `${minutes} min` : minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`,
+  lyricsOnline: "Letras online",
 };

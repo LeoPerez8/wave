@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  desktopBringYourMusic,
   firstRunCardAtLaunch,
   nextFirstRunStep,
   signInInvitationAtLaunch,
@@ -237,5 +238,19 @@ describe("nextFirstRunStep", () => {
 
   it("opens it only once while it shows", () => {
     assert.equal(nextFirstRunStep({ ...ready, showing: true, cardOpen: true }), "wait");
+  });
+});
+
+describe("Bring your music on the desktop", () => {
+  it("is due once the invitation's answer stored it, and stays due across launches", () => {
+    assert.equal(desktopBringYourMusic("due"), "due");
+  });
+
+  it("is done once answered", () => {
+    assert.equal(desktopBringYourMusic("answered"), "done");
+  });
+
+  it("never comes with nothing stored: the invitation is ahead, or was answered before the card existed", () => {
+    assert.equal(desktopBringYourMusic(null), "done");
   });
 });

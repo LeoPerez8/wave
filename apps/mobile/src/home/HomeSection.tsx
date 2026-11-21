@@ -593,18 +593,25 @@ function MostPlayedArtists({ title }: SectionProps) {
   );
 }
 
-/**
- * In your orbit: the artists played most in the last 14 days, as circles in
- * one row. A tap opens the artist's page, the Library's or the online one by
- * name (`PlayedArtistCard`).
- */
+/** Home's nine most played recent songs as a Magic Queue seed grid. */
 function InYourOrbit({ title }: SectionProps) {
-  const artists = useInYourOrbit();
-  if (artists === undefined) return <HomeSectionSkeleton id="in-your-orbit" />;
-  if (artists.length === 0) return null;
+  const songs = useInYourOrbit();
+  const { width } = useWindowDimensions();
+  const [available, setAvailable] = useState(width - grid.margin * 2);
+  if (songs === undefined) return <HomeSectionSkeleton id="in-your-orbit" />;
+  if (songs.length === 0) return null;
+  const size = (available - CELL * 2) / 3;
   return (
     <TitledSection title={title}>
-      <ArtistShelf artists={artists} />
+      <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
+        <MagicQueueGrid width={available}>
+          {seedTiles(songs, size).map(({ key, tile }) => (
+            <Crossfade key={key} swapKey={key}>
+              {tile}
+            </Crossfade>
+          ))}
+        </MagicQueueGrid>
+      </View>
     </TitledSection>
   );
 }

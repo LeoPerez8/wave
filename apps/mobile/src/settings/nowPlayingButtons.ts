@@ -4,6 +4,7 @@ import {
   NOW_PLAYING_PREVIOUS_ROW_KEY,
   NOW_PLAYING_TRANSPORT_SLOTS,
   editNowPlayingButtons,
+  moveNowPlayingButton,
   readNowPlayingButtons,
   storedNowPlayingButtons,
   type NowPlayingAction,
@@ -43,6 +44,10 @@ export const savedNowPlayingButtons = nowPlayingButtons.get;
 /** Applies [edit] (a slot set, swapping a taken action, or Reset to Default) and saves it at once. */
 export const editSavedNowPlayingButtons = (edit: NowPlayingButtonsEdit): void =>
   nowPlayingButtons.set(editNowPlayingButtons(nowPlayingButtons.get(), edit));
+
+/** Moves a button between the seven slots and saves it to the synced preference. */
+export const moveSavedNowPlayingButton = (from: number, to: number): void =>
+  nowPlayingButtons.set(moveNowPlayingButton(nowPlayingButtons.get(), from, to));
 
 /** What each action is called on Settings' rows and pickers. */
 const ACTION_LABELS: Readonly<Record<NowPlayingAction, string>> = {

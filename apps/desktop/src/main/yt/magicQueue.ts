@@ -142,6 +142,46 @@ interface RadioRead {
   readonly continuation: string | null;
 }
 
+/**
+ * [seed]'s radio's first page: by its video, else its recording found by a search, else its
+ * artist. Playlist suggestions read their seeds' radios this way too.
+ */
+export const radioFirstPage = async (
+  pages: Pick<YtPagesShape, "songRadio" | "artistRadio" | "findSong" | "findArtist">,
+  seed: MagicSongRadioSeed,
+): Promise<YtRadioRead> => {
+  const byArtist = async (name: string | undefined): Promise<YtRadioRead> => {
+    if (name === undefined) return { status: "ok", songs: [], continuation: null };
+    const artist = await pages.findArtist(name);
+    return artist.browseId === null
+      ? { status: artist.status, songs: [], continuation: null }
+      : pages.artistRadio(artist.browseId);
+  };
+  const search = (): Promise<string | null> =>
+    pages.findSong({
+      title: seed.title,
+      artists: seed.artists,
+      durationMs: seed.durationMs,
+    });
+  /** A read whose only song is the seed (or none) is no radio: nothing similar to play. */
+  const filled = (read: YtRadioRead): boolean => read.songs.length > 1;
+  if (seed.kind === "artist") return byArtist(seed.artists[0] ?? seed.title);
+  // The seed's own video is the best radio, but an official music video (OMV) id often has
+  // no song radio on YouTube Music: its RDAMVM… queue comes back with just the seed. When
+  // the video's radio is empty, fall back to the catalogue recording a search finds, then to
+  // the artist, so a magic queue still fills from an OMV seed.
+  const direct = seed.videoId === undefined ? null : await pages.songRadio(seed.videoId);
+  if (direct !== null && (direct.status !== "ok" || filled(direct))) return direct;
+  const found = await search();
+  if (found !== null && found !== seed.videoId) {
+    const viaSearch = await pages.songRadio(found);
+    if (viaSearch.status !== "ok" || filled(viaSearch)) return viaSearch;
+  }
+  const artist = await byArtist(seed.artists[0]);
+  if (artist.status !== "ok" || filled(artist)) return artist;
+  return direct ?? artist;
+};
+
 export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
   const random = deps.random ?? Math.random;
   const now = deps.now ?? Date.now;
@@ -177,39 +217,7 @@ export const createMagicQueue = (deps: MagicQueueDeps): MagicQueueShape => {
   /** Streamed songs a batch brought, for the signals a play of them gives. */
   const found = new Map<string, MagicSong>();
 
-  /** [seed]'s radio's first page: by its video, else its recording found by a search, else its artist. */
-  const firstPage = async (seed: MagicSongRadioSeed): Promise<YtRadioRead> => {
-    const byArtist = async (name: string | undefined): Promise<YtRadioRead> => {
-      if (name === undefined) return { status: "ok", songs: [], continuation: null };
-      const artist = await deps.pages.findArtist(name);
-      return artist.browseId === null
-        ? { status: artist.status, songs: [], continuation: null }
-        : deps.pages.artistRadio(artist.browseId);
-    };
-    const search = (): Promise<string | null> =>
-      deps.pages.findSong({
-        title: seed.title,
-        artists: seed.artists,
-        durationMs: seed.durationMs,
-      });
-    /** A read whose only song is the seed (or none) is no radio: nothing similar to play. */
-    const filled = (read: YtRadioRead): boolean => read.songs.length > 1;
-    if (seed.kind === "artist") return byArtist(seed.artists[0] ?? seed.title);
-    // The seed's own video is the best radio, but an official music video (OMV) id often has
-    // no song radio on YouTube Music: its RDAMVM… queue comes back with just the seed. When
-    // the video's radio is empty, fall back to the catalogue recording a search finds, then to
-    // the artist, so a magic queue still fills from an OMV seed.
-    const direct = seed.videoId === undefined ? null : await deps.pages.songRadio(seed.videoId);
-    if (direct !== null && (direct.status !== "ok" || filled(direct))) return direct;
-    const found = await search();
-    if (found !== null && found !== seed.videoId) {
-      const viaSearch = await deps.pages.songRadio(found);
-      if (viaSearch.status !== "ok" || filled(viaSearch)) return viaSearch;
-    }
-    const artist = await byArtist(seed.artists[0]);
-    if (artist.status !== "ok" || filled(artist)) return artist;
-    return direct ?? artist;
-  };
+  const firstPage = (seed: MagicSongRadioSeed) => radioFirstPage(deps.pages, seed);
 
   /**
    * Reads [seeds]' radios: each one's first page once a session, and its next page when the

@@ -1,0 +1,73 @@
+/* The mini player's window: artwork, the song, its controls and a thin progress line.
+ * The whole window drags, except its buttons. */
+.mini-player {
+  position: relative;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  grid-template-rows: auto 1fr;
+  column-gap: 12px;
+  padding: 14px 10px 16px 16px;
+  color: var(--color-foreground);
+  background: var(--color-grouped);
+  font-family: var(--font-sans);
+  user-select: none;
+  app-region: drag;
+}
+.mini-player > .artwork {
+  grid-row: 1 / -1;
+  width: 72px;
+  height: 72px;
+  border-radius: 6px;
+}
+.mini-song {
+  min-width: 0;
+  padding-top: 2px;
+  line-height: 1.35;
+}
+.mini-window-buttons,
+.mini-controls {
+  display: flex;
+  align-items: center;
+  app-region: no-drag;
+}
+.mini-window-buttons {
+  align-self: start;
+}
+.mini-window-buttons .icon-button {
+  width: 24px;
+  height: 24px;
+}
+.mini-window-buttons svg {
+  width: 14px;
+  height: 14px;
+}
+.mini-controls {
+  grid-column: 2 / -1;
+  align-self: end;
+  justify-self: start;
+  gap: 6px;
+  margin-left: -6px;
+}
+.mini-controls .icon-button {
+  color: var(--color-foreground);
+}
+.mini-controls .icon-button:last-child {
+  color: var(--color-highlight);
+}
+.mini-controls .icon-button[aria-pressed="true"] svg {
+  fill: currentColor;
+}
+.mini-progress {
+  position: absolute;
+  inset: auto 0 0;
+  height: 3px;
+  background: var(--color-fill);
+}
+.mini-progress::after {
+  content: "";
+  display: block;
+  width: var(--progress);
+  height: 100%;
+  background: var(--color-accent);
+}

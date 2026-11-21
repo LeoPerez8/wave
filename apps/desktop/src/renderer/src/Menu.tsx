@@ -1,10 +1,43 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { desktopKey } from "@wave/core";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
+import { pressOf } from "./keys.ts";
+
+export interface MenuPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/** A button's context menu opens at the pointer or just below the focused button. */
+export const itemMenuEvents = (open: (at: MenuPoint) => void) => ({
+  onContextMenu: (event: MouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.currentTarget.focus();
+    open({ x: event.clientX, y: event.clientY });
+  },
+  onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+    if (desktopKey(pressOf(event), "list") !== "songMenu") return;
+    event.preventDefault();
+    const { left, bottom } = event.currentTarget.getBoundingClientRect();
+    open({ x: left, y: bottom });
+  },
+});
 
 export interface MenuItem {
   readonly key: string;
   readonly label: string;
   readonly destructive?: boolean;
   readonly disabled?: boolean;
+  /** A line under the label saying what the entry does. */
+  readonly line?: string;
+  /** One of a set of choices: whether it is the chosen one, which shows a mark. */
+  readonly checked?: boolean;
   /** Runs the entry once the menu has closed. */
   readonly run?: () => void;
   /** Opens a submenu in the menu's place, named [submenu]; ← or Esc goes back. */
@@ -168,7 +201,8 @@ export function Menu({
           {level.items.map((item, index) => (
             <button
               key={item.key}
-              role="menuitem"
+              role={item.checked === undefined ? "menuitem" : "menuitemradio"}
+              aria-checked={item.checked}
               data-index={index}
               tabIndex={index === active ? 0 : -1}
               aria-disabled={item.disabled || undefined}
@@ -177,7 +211,15 @@ export function Menu({
               onMouseEnter={() => item.disabled || setActive(index)}
               onClick={() => choose(item)}
             >
-              <span className="truncate">{item.label}</span>
+              {item.line === undefined ? (
+                <span className="truncate">{item.label}</span>
+              ) : (
+                <span className="min-w-0">
+                  <span className="block truncate">{item.label}</span>
+                  <span className="menu-line block truncate">{item.line}</span>
+                </span>
+              )}
+              {item.checked && <span aria-hidden="true">✓</span>}
               {item.open !== undefined && <span aria-hidden="true">›</span>}
             </button>
           ))}
