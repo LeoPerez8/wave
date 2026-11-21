@@ -88,6 +88,7 @@ D2. As a user, I want to add other folders (another disk, a network share) with 
 D3. As a user, I want the Library to notice files I add, change or delete while Wave runs, and to catch up on what changed while it was closed, so that I never press a refresh button for normal use.
 D4. As a user, I want songs on an unplugged drive to stay in the Library, greyed with a folder glyph and their plays, stars and playlist places kept, and to play again when the drive is back, so that unplugging a disk loses nothing.
 D5. As a user, I want the account invitation after the first scan, as on the phone, so that I can bring my playlists and history over if I have an account.
+D5a. As a user, I want the Bring your music card after the invitation, with From Spotify and From YT Music, so that my playlists come over from the app I used before. Continue, Not Now and Escape answer it for good on that computer; the answer is kept there and never synced, and a computer that used Wave before the card existed never gets it, nor does a build that can't sign in, which has no invitation.
 
 #### The window
 

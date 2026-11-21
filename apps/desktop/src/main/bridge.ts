@@ -540,6 +540,14 @@ const createHandlers = (
             });
           })
         : refuse("lyrics.translation", "invalid request"),
+    "lyrics.karaokeOn": () => Effect.map(Lyrics, ({ karaoke }) => karaoke.on()),
+    "lyrics.setKaraokeOn": ([on]) =>
+      typeof on === "boolean"
+        ? Effect.map(Lyrics, ({ karaoke }) => {
+            karaoke.setOn(on);
+            return karaoke.on();
+          })
+        : refuse("lyrics.setKaraokeOn", "invalid switch"),
     "settings.appearance": () =>
       Effect.gen(function* () {
         return appearance(yield* Database);
@@ -679,6 +687,7 @@ const createHandlers = (
     "account.signOutEverywhere": () => accountCall((a) => a.signOutEverywhere()),
     "account.deleteAccount": () => accountCall((a) => a.deleteAccount()),
     "account.answerInvitation": () => accountCall((a) => a.answerInvitation()),
+    "account.answerBringYourMusic": () => accountCall((a) => a.answerBringYourMusic()),
     "ytAccount.view": () => ytAccountCall((a) => a.view()),
     "ytAccount.signIn": () => ytAccountCall((a) => a.signIn()),
     "ytAccount.cancelSignIn": () => ytAccountCall((a) => a.cancelSignIn()),
