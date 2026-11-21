@@ -37,6 +37,11 @@ export interface DjAlbum {
   readonly browseId?: string | null;
   /** Its cover: the Library's cached file, or its address on YouTube Music. */
   readonly cover?: string | null;
+  /**
+   * A Library compilation: the grid never shows it, but a remembered one is
+   * found again among these as DJ reopens (`djReopened`).
+   */
+  readonly compilation?: boolean;
 }
 
 /** An album tile: a square cover with the album's title and artist. */
@@ -123,7 +128,7 @@ export const DJ_GRID_TILES = 24;
  * highest-scored artists, the highest first, each followed by the closest
  * artist graph neighbour of theirs that the Library doesn't have and the
  * grid doesn't show yet. Each artist is followed by the first of [albums]
- * that is theirs, when one is known. Before the profile's first derivation the most
+ * that is theirs and isn't a compilation, when one is known. Before the profile's first derivation the most
  * played artists stand in for it, in their order. An artist the Library
  * doesn't have shows by the name the plays or the graph know. No tile
  * appears twice, and the grid holds `DJ_GRID_TILES` at most; it's empty with
@@ -157,6 +162,7 @@ export const djGrid = ({
         );
   const records = new Map<string, DjAlbumTile>();
   for (const album of albums) {
+    if (album.compilation === true) continue;
     const by = djArtistTile(album.artist)?.key;
     const tile = djAlbumTile(album);
     if (by !== undefined && tile !== null && !records.has(by)) records.set(by, tile);

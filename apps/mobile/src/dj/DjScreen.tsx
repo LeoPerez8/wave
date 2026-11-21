@@ -99,8 +99,9 @@ const gridSources = (library: MixIndexes) => ({
 
 /**
  * The albums DJ's grid may show over [library] (`readDjAlbums`), all read on
- * the phone: the Library's albums that aren't compilations, each under its
- * album artist's name and with its cached cover, then the albums the saved
+ * the phone: the Library's albums, each under its album artist's name and
+ * with its cached cover (a compilation marked, so the grid leaves it out and
+ * only a remembered one is found again among them), then the albums the saved
  * YT Music pages of the grid's artists list (the grid as it is without
  * albums, which holds every artist the one with albums shows).
  */
@@ -111,17 +112,14 @@ const albumsOver = (library: MixIndexes): Promise<DjAlbum[]> => {
       appRuntime.runPromise(
         Effect.gen(function* () {
           const albums = yield* (yield* LibraryStore).listAlbums;
-          return albums.flatMap((album): DjAlbum[] =>
-            album.compilation
-              ? []
-              : [
-                  {
-                    title: album.title,
-                    artist: names.get(album.albumArtistId) ?? album.albumArtist,
-                    libraryId: album.id,
-                    cover: album.artworkPath ?? album.thumbPath,
-                  },
-                ],
+          return albums.map(
+            (album): DjAlbum => ({
+              title: album.title,
+              artist: names.get(album.albumArtistId) ?? album.albumArtist,
+              libraryId: album.id,
+              cover: album.artworkPath ?? album.thumbPath,
+              compilation: album.compilation,
+            }),
           );
         }),
       ),
