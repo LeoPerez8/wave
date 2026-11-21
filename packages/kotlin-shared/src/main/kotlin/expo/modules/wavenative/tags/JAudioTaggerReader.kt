@@ -67,6 +67,7 @@ class JAudioTaggerReader : TagReader {
       genres = fields(FieldKey.GENRE).takeIf { it.size > 1 } ?: listOfNotNull(field(FieldKey.GENRE)),
       advisory = Advisory.read(tag, id3),
       loudness = LoudnessTags.read(tag, id3),
+      isrc = field(FieldKey.ISRC),
     )
   }
 

@@ -1305,6 +1305,33 @@ ALTER TABLE notified_follow_shows ADD COLUMN pushed integer DEFAULT false NOT NU
 
 const m0049 = `CREATE TABLE streamed_genres (video_id text PRIMARY KEY NOT NULL, genre text);`;
 
+// DJ mood features stay on this phone and follow candidate songs by video id.
+const m0065 = `CREATE TABLE dj_mood_features (
+  video_id text PRIMARY KEY NOT NULL REFERENCES candidate_songs(video_id) ON DELETE cascade,
+  isrc text,
+  energy real,
+  valence real,
+  acousticness real,
+  mode integer,
+  checked_at integer NOT NULL
+);`;
+
+// DJ's moods look Library songs up by their file's ISRC tag (\`schema.ts\`'s
+// \`djLibraryMoodFeatures\`). Only a scan can read the tag, so the next one reads every file again.
+const m0066 = `ALTER TABLE tracks ADD COLUMN isrc text;
+--> statement-breakpoint
+CREATE TABLE dj_library_mood_features (
+  track_id integer PRIMARY KEY NOT NULL REFERENCES tracks(id) ON DELETE cascade,
+  isrc text NOT NULL,
+  energy real,
+  valence real,
+  acousticness real,
+  mode integer,
+  checked_at integer NOT NULL
+);
+--> statement-breakpoint
+UPDATE tracks SET modified_at = 0 WHERE path IS NOT NULL;`;
+
 // The YT Music entries' video ids (\`schema.ts\`'s \`videoIdIn\`, which queries
 // must write exactly so), with whether the entry is removed and its playlist:
 // Discover's Magic Queue row reads every playlist's distinct videos in index
@@ -1495,7 +1522,7 @@ CREATE INDEX dislikes_pushed_idx ON dislikes (pushed);`;
 // that makes a table sync does the same.
 const m0064 = `UPDATE sync_state SET cursor = NULL;`;
 
-const m0065 = `ALTER TABLE playlist_items ADD COLUMN restored_at integer;`;
+const m0067 = `ALTER TABLE playlist_items ADD COLUMN restored_at integer;`;
 
 export default {
   journal: {
@@ -1590,10 +1617,12 @@ export default {
       { idx: 62, when: 1_797_163_200_000, tag: "0062_dislikes", breakpoints: true },
       { idx: 63, when: 1_797_249_600_000, tag: "0063_dislike_sync", breakpoints: true },
       { idx: 64, when: 1_797_336_000_000, tag: "0064_pull_dislikes", breakpoints: true },
+      { idx: 65, when: 1_797_422_400_000, tag: "0065_dj_mood_features", breakpoints: true },
+      { idx: 66, when: 1_797_508_800_000, tag: "0066_dj_library_mood_features", breakpoints: true },
       {
-        idx: 65,
-        when: 1_797_422_400_000,
-        tag: "0065_playlist_entry_restores",
+        idx: 67,
+        when: 1_797_595_200_000,
+        tag: "0067_playlist_entry_restores",
         breakpoints: true,
       },
     ],
@@ -1665,5 +1694,7 @@ export default {
     m0063,
     m0064,
     m0065,
+    m0066,
+    m0067,
   },
 };

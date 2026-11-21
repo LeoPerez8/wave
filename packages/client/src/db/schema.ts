@@ -186,6 +186,11 @@ export const tracks = sqliteTable(
     tagAlbumGain: real("tag_album_gain"),
     tagAlbumPeak: real("tag_album_peak"),
     /**
+     * The file's ISRC tag (Core's `isrcFromTag`), read again with the rest of
+     * its tags: DJ's moods look the song up by it. Never written, never synced.
+     */
+    isrc: text("isrc"),
+    /**
      * Normalize Volume: Wave's measurement of a file without tags, its
      * integrated loudness (ITU-R BS.1770, LUFS) and sample peak (0–1), with
      * the size and modified time of the file it was made of. The size and time
@@ -1162,4 +1167,33 @@ export const notifiedFollowShows = sqliteTable("notified_follow_shows", {
 export const streamedGenres = sqliteTable("streamed_genres", {
   videoId: text("video_id").primaryKey(),
   genre: text("genre"),
+});
+
+/**
+ * ReccoBeats features for Library songs, found by the ISRC their file has (`tracks.isrc`), which
+ * the row keeps: features of another ISRC stop counting. Phone-local, never synced.
+ */
+export const djLibraryMoodFeatures = sqliteTable("dj_library_mood_features", {
+  trackId: integer("track_id")
+    .primaryKey()
+    .references(() => tracks.id, { onDelete: "cascade" }),
+  isrc: text("isrc").notNull(),
+  energy: real("energy"),
+  valence: real("valence"),
+  acousticness: real("acousticness"),
+  mode: integer("mode"),
+  checkedAt: integer("checked_at").notNull(),
+});
+
+/** ReccoBeats features for candidate catalog songs. Phone-local, keyed by YT Music video id. */
+export const djMoodFeatures = sqliteTable("dj_mood_features", {
+  videoId: text("video_id")
+    .primaryKey()
+    .references(() => candidateSongs.videoId, { onDelete: "cascade" }),
+  isrc: text("isrc"),
+  energy: real("energy"),
+  valence: real("valence"),
+  acousticness: real("acousticness"),
+  mode: integer("mode"),
+  checkedAt: integer("checked_at").notNull(),
 });
