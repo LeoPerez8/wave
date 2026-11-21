@@ -8,7 +8,6 @@ export const inviteJoinPtBr: typeof inviteJoinEn = {
   join: "Entrar",
   cancel: "Cancelar",
   joiningAs: (account) => `Você entra como ${account}`,
-  joining: "Entrando…",
   signInTitle: "Inicie sessão para entrar",
   signInMessage:
     "Playlists colaborativas usam a conta Wave. Depois de iniciar sessão, o convite abre de novo.",

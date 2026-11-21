@@ -7,7 +7,6 @@ export const inviteJoinEn = {
   join: "Join",
   cancel: "Cancel",
   joiningAs: (account: string) => `You join as ${account}`,
-  joining: "Joining…",
   signInTitle: "Sign in to join",
   signInMessage:
     "Collaborative playlists use the Wave account. After you sign in, the invite opens again.",
