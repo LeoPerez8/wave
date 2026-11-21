@@ -54,6 +54,18 @@ import type {
 } from "../../shared/downloads.ts";
 import type { KotlinDownloadMethod, KotlinMethods, SoulseekSession } from "../kotlin/protocol.ts";
 import type { DownloadClaim } from "./decisions.ts";
+import { appendFileSync } from "node:fs";
+const diag = (line: string) => {
+  const file = process.env["TRACE_LOG"];
+  if (file)
+    try {
+      appendFileSync(
+        file,
+        `${Date.now()} ${line}
+`,
+      );
+    } catch {}
+};
 
 /** A journal call; rejects with an error carrying the JVM's `code`. */
 export type DownloadCall = <M extends KotlinDownloadMethod>(
@@ -221,6 +233,7 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
   let again = false;
   const readJournal = async () => {
     do {
+      diag(`journal read again=${again}`);
       again = false;
       const changes = await deps.call("downloads.changes", { revision });
       followed = applyJournalChanges(followed, {
@@ -399,8 +412,10 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
       const found = deps.list(list);
       return found === null ? null : missingView(missingJobs(found.ids));
     },
-    yt: (videoIds, by) =>
-      queued(async () => {
+    yt: (videoIds, by) => {
+      diag(`yt asked ${videoIds.join(",")}`);
+      return queued(async () => {
+        diag(`yt turn`);
         const current = await session();
         askedBy(by, videoIds);
         const asked = videoIds.flatMap((videoId): JobRequest[] => {
@@ -418,7 +433,9 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
               ];
         });
         await enqueue(asked);
-      }),
+        diag(`yt done`);
+      });
+    },
     missing: (trackIds, by) =>
       queued(async () => {
         const current = await session();

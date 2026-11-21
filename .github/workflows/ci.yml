@@ -1088,7 +1088,11 @@ jobs:
       - name: Smoke test
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
-            scripts/ci/step.sh "Smoke test" xvfb-run -a pnpm --filter @wave/desktop test:e2e
+            mkdir -p apps/desktop/diag
+            pnpm --filter @wave/desktop exec electron-vite build
+            TRACE_LOG="$PWD/apps/desktop/diag/trace-repeat.log" xvfb-run -a pnpm --filter @wave/desktop exec playwright test e2e/streamedSongs.spec.ts --repeat-each=15 --reporter=list > apps/desktop/diag/repeat.txt 2>&1 || true
+            grep -E "diag|passed|failed|✘" apps/desktop/diag/repeat.txt | tail -40
+            TRACE_LOG="$PWD/apps/desktop/diag/trace-full.log" scripts/ci/step.sh "Smoke test" xvfb-run -a pnpm --filter @wave/desktop test:e2e
             # MPRIS needs a session bus, which only this check gets: playerctl drives Wave.
             scripts/ci/step.sh "System media controls" env WAVE_PLAYERCTL=1 dbus-run-session -- xvfb-run -a pnpm --filter @wave/desktop exec playwright test e2e/system.spec.ts
           else
@@ -1115,6 +1119,15 @@ jobs:
           path: apps/desktop/perf-results
           if-no-files-found: error
           retention-days: 90
+
+      - name: Keep the streamed traces
+        if: always() && matrix.platform == 'linux'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-streamed-traces
+          path: apps/desktop/diag
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Keep the smoke test's screenshots
         if: failure()

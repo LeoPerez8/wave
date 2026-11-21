@@ -7,6 +7,18 @@
  * new JVM.
  */
 import type { HostMethods, KotlinEvent, KotlinMethod, KotlinMethods } from "./protocol.ts";
+import { appendFileSync } from "node:fs";
+const diag = (line: string) => {
+  const file = process.env["TRACE_LOG"];
+  if (file)
+    try {
+      appendFileSync(
+        file,
+        `${Date.now()} ${line}
+`,
+      );
+    } catch {}
+};
 
 /** What a spawned JVM reports back. */
 export interface KotlinEvents {
@@ -169,7 +181,20 @@ export const superviseKotlin = (options: KotlinSupervisorOptions): KotlinSupervi
           return;
         }
         const id = nextId++;
-        waiting.set(id, { resolve: resolve as (result: unknown) => void, reject });
+        const t0 = Date.now();
+        diag(
+          `jvm> ${id} ${method} ${current === undefined ? "unsent" : "sent"} waiting=${waiting.size}`,
+        );
+        waiting.set(id, {
+          resolve: ((result: unknown) => {
+            diag(`jvm< ${id} ${method} ok ${Date.now() - t0}ms`);
+            (resolve as (result: unknown) => void)(result);
+          }) as (result: unknown) => void,
+          reject: (error: unknown) => {
+            diag(`jvm< ${id} ${method} err ${Date.now() - t0}ms ${String(error)}`);
+            reject(error);
+          },
+        });
         const line = JSON.stringify({ id, method, params });
         if (current === undefined) unsent.push(line);
         else current.write(line);

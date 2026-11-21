@@ -31,6 +31,18 @@ import type {
   StreamedSongMenu,
 } from "../../shared/streamedSongs.ts";
 import type { DownloadsShape } from "../downloads/downloads.ts";
+import { appendFileSync } from "node:fs";
+const diag = (line: string) => {
+  const file = process.env["TRACE_LOG"];
+  if (file)
+    try {
+      appendFileSync(
+        file,
+        `${Date.now()} ${line}
+`,
+      );
+    } catch {}
+};
 
 export interface StreamedSongPorts {
   readonly db: LibraryDatabase;
@@ -174,10 +186,15 @@ export const runStreamedAction = async (
       if (playlistId === undefined) throw new Error("No playlist to add to");
       const entry: PlaylistSong =
         track === null ? { source: "stream", song } : { source: "library", trackId: track.id };
+      const t0 = Date.now();
+      diag(`add start ${song.videoId} hasFile=${hasFile} status=${JSON.stringify(status)}`);
       const result = addToPlaylist(db, playlistId, [entry], Date.now());
+      diag(`add db ${Date.now() - t0}ms`);
       ports.changed();
+      diag(`add changed ${Date.now() - t0}ms`);
       // The desktop's playlists list the Library's songs: the song comes into the Library.
       if (!hasFile && status === null) await download();
+      diag(`add download ${Date.now() - t0}ms`);
       return {
         kind: "playlist",
         name: result.name,

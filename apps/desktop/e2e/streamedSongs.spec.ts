@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -13,6 +13,15 @@ import type { PlayerView } from "../src/shared/playerView.ts";
  * Playlist and Download. YouTube may ask a machine for a bot check (#1144); the test then stops
  * at the quiet line and says so in its `yt-search` annotation. Screenshots go to `test-results/`.
  */
+const mark = (line: string) => {
+  const file = process.env["TRACE_LOG"];
+  if (file)
+    appendFileSync(
+      file,
+      `${Date.now()} test ${line}
+`,
+    );
+};
 const appFolder = join(import.meta.dirname, "..");
 
 const view = (page: Page) =>
@@ -56,9 +65,17 @@ test("a streamed song's menu from Search, the player bar, the Queue and Now Play
       await expect(menu.getByRole("menuitem", { name: entry, exact: true })).toBeVisible();
     await expect(menu.getByRole("menuitem", { name: "Go to Artist" })).toBeVisible();
     await shot(page, "search-menu");
+    mark(`--- ${test.info().repeatEachIndex} menu shown`);
     await menu.getByRole("menuitem", { name: "Add to Playlist" }).click();
+    mark("submenu click");
     await menu.getByRole("menuitem", { name: "Evening" }).click();
-    await expect(page.getByRole("status").filter({ hasText: "Evening" })).toBeVisible();
+    const t0 = Date.now();
+    mark("evening clicked");
+    await expect(page.getByRole("status").filter({ hasText: "Evening" })).toBeVisible({
+      timeout: 60_000,
+    });
+    mark(`toast after ${Date.now() - t0}ms`);
+    console.log(`[diag] toast after ${Date.now() - t0}ms`);
 
     // The player bar: its menu and star, for the song streaming.
     await first.dblclick();
