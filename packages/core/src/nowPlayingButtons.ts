@@ -1,6 +1,6 @@
 /**
  * Now Playing's seven slots, which the owner fills (on the player in edit mode, and in
- * Settings › Layout › Now Playing): five footer slots under the transport,
+ * Settings › Layout's Now Playing editor): five footer slots under the transport,
  * then one on each side of it, left of Previous and right of Next. Related
  * and Song menu have places of their own (the chevron beside the title, the
  * header's button), so no slot holds them. Dislike, Magic Queue, Go to
@@ -336,22 +336,3 @@ export const nowPlayingRelatedChevronShown = (
   song: NowPlayingSlotSong,
   ytMusic: boolean,
 ): boolean => ytMusic && song !== "nothing";
-
-/** The slot pickers' routes: `1` to `5` for the footer, left to right, then the transport's two. */
-const SLOT_ROUTES = ["1", "2", "3", "4", "5", "left", "right"];
-
-/**
- * The slot (0 to 6) a slot picker's route param names: `1` to `5` for the
- * footer's, `left` and `right` for the transport's; null for anything else,
- * so an old or mistyped link edits no slot.
- */
-export const readNowPlayingSlotRoute = (param: string | string[] | undefined): number | null => {
-  const index = typeof param === "string" ? SLOT_ROUTES.indexOf(param) : -1;
-  return index === -1 ? null : index;
-};
-
-/**
- * The route param of slot [slot]'s picker, which `readNowPlayingSlotRoute`
- * reads back; null for no slot.
- */
-export const nowPlayingSlotRoute = (slot: number): string | null => SLOT_ROUTES[slot] ?? null;

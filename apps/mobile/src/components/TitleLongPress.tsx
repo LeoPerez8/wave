@@ -11,6 +11,8 @@ import { Press } from "@/motion/Press";
 export interface TitleLongPress {
   /** What the long press does, for screen readers, e.g. "Choose how playlists show". */
   readonly label: string;
+  /** Optional id used by Settings to request this same anchored card after navigation. */
+  readonly requestId?: string;
   /**
    * Opens the options. A card it opens with `openTitleChoices`, or with
    * `anchor: pressedRect()`, floats next to the title and keeps it highlighted;
@@ -41,6 +43,8 @@ export function TitlePress({
       onAccessibilityAction={({ nativeEvent: { actionName } }) => {
         if (actionName === "activate") titleLongPress.open();
       }}
+      menuRequestId={titleLongPress.requestId}
+      onMenuRequest={titleLongPress.open}
       onLongPress={() => {
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         titleLongPress.open();

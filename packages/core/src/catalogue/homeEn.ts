@@ -6,6 +6,7 @@ export const homeEn = {
   title: "Wave",
   /** Each section's title, in sentence case as Home heads it (the followed artists' sections and Community playlists have their own). */
   sections: {
+    dj: "DJ",
     discover: "Discover",
     "in-your-orbit": "In your orbit",
     "from-your-library": "From your library",

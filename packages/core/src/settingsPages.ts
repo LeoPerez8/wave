@@ -140,35 +140,23 @@ export const visibleSettingsPages = (
   }));
 
 /**
- * What Settings › Layout opens, by id: the options a long press opens on a
- * screen's title (Home, the Library, Playlists) or on the tab bar, each as a
- * page of its own.
+ * What Settings › Layout opens, by id: a screen and its existing editor.
  */
 export type LayoutPage = "home" | "library" | "playlists" | "tabBar" | "nowPlaying";
 
 export interface LayoutPageEntry {
   readonly page: LayoutPage;
-  /** What its row on the Layout page and its own header say. */
+  /** What its row on the Layout page says. */
   readonly title: string;
-  /** Where its screen is (also `wave://settings/layout/<…>`). */
-  readonly route: `/settings/layout/${string}`;
 }
 
-/** Layout's pages, in the order its page lists them. */
+/** Layout's editor destinations, in the order the page lists them. */
 export const LAYOUT_PAGES = [
-  { page: "home", title: en.settings.layoutPages.home, route: "/settings/layout/home" },
-  { page: "library", title: en.settings.layoutPages.library, route: "/settings/layout/library" },
-  {
-    page: "playlists",
-    title: en.settings.layoutPages.playlists,
-    route: "/settings/layout/playlists",
-  },
-  { page: "tabBar", title: en.settings.layoutPages.tabBar, route: "/settings/layout/tab-bar" },
-  {
-    page: "nowPlaying",
-    title: en.settings.layoutPages.nowPlaying,
-    route: "/settings/layout/now-playing",
-  },
+  { page: "home", title: en.settings.layoutPages.home },
+  { page: "library", title: en.settings.layoutPages.library },
+  { page: "playlists", title: en.settings.layoutPages.playlists },
+  { page: "tabBar", title: en.settings.layoutPages.tabBar },
+  { page: "nowPlaying", title: en.settings.layoutPages.nowPlaying },
 ] as const satisfies readonly LayoutPageEntry[];
 
 /**
