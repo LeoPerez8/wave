@@ -11,11 +11,13 @@ import { useGoToSuggestionsPill } from "./useGoToSuggestionsPill";
 import { IconGripVertical } from "@tabler/icons-react-native";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import {
+  entryAdder,
   goToSuggestionsPillShown,
   goToSuggestionsScroll,
   moveItem,
   playlistSuggestionsPlace,
   type PlaylistPlace,
+  type CollaborationMember,
   type QueueContext,
   type RowMenuAction,
 } from "@wave/core";
@@ -211,7 +213,11 @@ type Props = {
   header: ReactElement;
   /** Shown under the head when the playlist has no songs. */
   empty: ReactElement;
+  /** A collaborative playlist's members: each row ends with the initial of who added it. */
+  members?: readonly CollaborationMember[] | undefined;
 };
+
+const NO_MEMBERS: readonly CollaborationMember[] = [];
 
 const NO_ITEMS: readonly PlaylistEntryRow[] = [];
 
@@ -256,6 +262,7 @@ export function PlaylistItems({
   empty,
   customOrder = true,
   showReleaseYear = false,
+  members = NO_MEMBERS,
 }: Props) {
   const { strings } = useLocalisation();
   const scrollable = useListScrollable();
@@ -489,6 +496,10 @@ export function PlaylistItems({
     (row: ReactElement, item: Item, index: number) => {
       const key = itemKey(item);
       const entry = entryOf(item);
+      const adder = entry === null ? null : entryAdder(entry.addedBy, members);
+      if (adder !== null) {
+        row = cloneElement(row as ReactElement<SongRowActions>, { addedByInitial: adder.initial });
+      }
       if (showReleaseYear && entry) {
         const dated = entryReleaseSong(entry);
         const year = releaseSongDate(dated, dates, typed)?.slice(0, 4);
@@ -507,7 +518,7 @@ export function PlaylistItems({
         />
       );
     },
-    [rowDrag, drag, selecting, reorderable, showReleaseYear, dates, typed],
+    [rowDrag, drag, selecting, reorderable, showReleaseYear, dates, typed, members],
   );
   const renderSlot = ({ item }: { item: Item }) =>
     "kind" in item ? (
@@ -534,7 +545,24 @@ export function PlaylistItems({
   const menu = (item: Item, options: MenuOptions) => {
     const entry = entryOf(item);
     if (entry === null) return;
-    openPlaylistEntryActions(entry, { ...options, playlistItem: placeOf(entry) });
+    // In a collaborative playlist the menu names who added the song.
+    const adder = entryAdder(entry.addedBy, members);
+    openPlaylistEntryActions(entry, {
+      ...options,
+      playlistItem: placeOf(entry),
+      ...(adder === null
+        ? {}
+        : {
+            extraEntries: [
+              ...(options.extraEntries ?? []),
+              {
+                action: "addedBy" as const,
+                label: strings.collaborativePage.addedBy(adder.name),
+                onPress: () => {},
+              },
+            ],
+          }),
+    });
   };
 
   return (

@@ -1253,7 +1253,14 @@ const applyEntry = (
   const { playlists, playlistItems } = schema;
   if (!beatsPending(tx, "playlistEntries", row)) return false;
   const held = tx.select().from(playlistItems).where(eq(playlistItems.syncId, row.id)).get();
-  if (held !== undefined && !entryWins(row, held)) return false;
+  if (held !== undefined && !entryWins(row, held)) {
+    // The device's own entry back from the service, which wrote who added it.
+    const addedBy = "addedBy" in row ? row.addedBy : undefined;
+    if (typeof addedBy === "string" && held.addedBy === null) {
+      tx.update(playlistItems).set({ addedBy }).where(eq(playlistItems.id, held.id)).run();
+    }
+    return false;
+  }
   const elsewhere = (playlistId: number): void => {
     if (place.collaborativeIds.has(playlistId) && row.phoneId !== place.phoneId)
       place.changedElsewhere.add(playlistId);

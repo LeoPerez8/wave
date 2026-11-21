@@ -976,6 +976,18 @@ export {
   readPullMembership,
   refusalEndsMembership,
 } from "./collaborativeSync.ts";
+export {
+  COLLABORATIVE_PAGE_PULL_MS,
+  collaborativePageMembers,
+  collaborativePagePull,
+  entryAdder,
+} from "./collaborativePage.ts";
+export type {
+  CollaborativePageMembers,
+  CollaborativePagePull,
+  CollaborativePagePullInput,
+  EntryAdder,
+} from "./collaborativePage.ts";
 export type {
   CollaborationEndReason,
   EndedCollaboration,

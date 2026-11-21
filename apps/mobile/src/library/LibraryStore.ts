@@ -210,8 +210,18 @@ import * as Layer from "effect/Layer";
 
 import { timeLibraryRead } from "@/log/slowLibraryReads";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import { syncCycle, type SyncCycleInput, type SyncCycleResult } from "@wave/client/sync/syncCycle";
-import { selectCollaborations } from "@wave/client/db/collaborations";
+import {
+  syncCollaborativePlaylist,
+  syncCycle,
+  type SyncCycleInput,
+  type SyncCycleResult,
+} from "@wave/client/sync/syncCycle";
+import {
+  dismissPrivateCopyNotice,
+  markCollaborationSeen,
+  selectCollaborations,
+  selectPrivateCopyNotices,
+} from "@wave/client/db/collaborations";
 
 import { selectAlbumDetail, selectAlbums } from "@wave/client/db/albums";
 import { importedPlays, saveImportedPlays, selectImportTracks } from "@wave/client/db/blackPlayer";
@@ -1244,6 +1254,22 @@ export class LibraryStore extends Context.Service<
      */
     readonly leaveAccount: Effect.Effect<void, LibraryStoreError>;
     /**
+     * Syncs the collaborative playlist [playlistId] alone, for its page in sight
+     * (`syncCollaborativePlaylist`): nothing for an ordinary playlist or with the switch off.
+     */
+    readonly syncCollaborativePlaylist: (
+      input: Omit<SyncCycleInput, "db" | "splits" | "historyChanged">,
+      playlistId: number,
+    ) => Effect.Effect<SyncCycleResult, LibraryStoreError>;
+    /** The playlist [playlistId] was opened: its changed mark goes, on this device. */
+    readonly markCollaborationSeen: (playlistId: number) => Effect.Effect<void, LibraryStoreError>;
+    /** The playlists that became the member's own copy and whose page hasn't said so yet. */
+    readonly privateCopyNotices: Effect.Effect<readonly number[], LibraryStoreError>;
+    /** The page of [playlistId] said once that it is now the member's own copy. */
+    readonly dismissPrivateCopyNotice: (
+      playlistId: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /**
      * The playlist here of the collaborative playlist [syncId] (an invite just joined); null
      * while no pull has brought it.
      */
@@ -2051,6 +2077,25 @@ const make = Effect.gen(function* () {
       }),
 
     leaveAccount: writeAttempt("leave the Wave account", () => signOut(db, splits)),
+
+    syncCollaborativePlaylist: (input, playlistId) =>
+      Effect.tryPromise({
+        try: () => syncCollaborativePlaylist({ ...input, db, splits, historyChanged }, playlistId),
+        catch: (cause) =>
+          new LibraryStoreError({ operation: "sync a collaborative playlist", cause }),
+      }),
+
+    markCollaborationSeen: (playlistId) =>
+      writeAttempt("mark a collaborative playlist seen", () =>
+        markCollaborationSeen(db, playlistId),
+      ),
+
+    privateCopyNotices: attempt("read the private copy notices", () =>
+      selectPrivateCopyNotices(db),
+    ),
+
+    dismissPrivateCopyNotice: (playlistId) =>
+      writeAttempt("dismiss a private copy notice", () => dismissPrivateCopyNotice(db, playlistId)),
 
     joinedPlaylistId: (syncId) =>
       attempt(

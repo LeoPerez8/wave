@@ -31,7 +31,7 @@ import {
 import * as schema from "../db/schema.ts";
 import { addTrack, openTestDatabase, type FixtureTrack } from "../db/testDatabase.ts";
 import { collaborationService } from "./collaborationService.ts";
-import { syncCycle, type SyncPreferences } from "./syncCycle.ts";
+import { syncCollaborativePlaylist, syncCycle, type SyncPreferences } from "./syncCycle.ts";
 import { testCollaborationWorld, type TestAccount } from "./testCollaborationService.ts";
 
 const AIRBAG: FixtureTrack = {
@@ -98,24 +98,26 @@ const phone = async (
       .get()?.syncId;
     return { id: row.id, syncId: syncId ?? "" };
   };
+  const input = () => ({
+    db,
+    splits,
+    transport: account,
+    preferences,
+    account: `${account.id}@example.com`,
+    now,
+    songsChanged: false,
+    wait: async () => {},
+    ...(collaborative ? { collaboration: collaborationService(account) } : {}),
+  });
   return {
     db,
     now,
     track,
     playlist,
     signOut: () => signOut(db, splits),
-    sync: () =>
-      syncCycle({
-        db,
-        splits,
-        transport: account,
-        preferences,
-        account: `${account.id}@example.com`,
-        now,
-        songsChanged: false,
-        wait: async () => {},
-        ...(collaborative ? { collaboration: collaborationService(account) } : {}),
-      }),
+    sync: () => syncCycle(input()),
+    /** The page of the playlist [playlistId] pulls it (`syncCollaborativePlaylist`). */
+    syncPage: (playlistId: number) => syncCollaborativePlaylist(input(), playlistId),
   };
 };
 
@@ -534,5 +536,103 @@ describe("matching entries", () => {
     assert.deepEqual(playlists(ana), [
       { name: "Drive", songs: ["unsearched:Karma Police", "Lucky"] },
     ]);
+  });
+});
+
+describe("the page's own pull", () => {
+  test("a member's page pulls that playlist alone, and pushes what waits in it", async () => {
+    const { world, ana, bea } = await shared();
+    await bea.sync();
+    renamePlaylist(ana.db, ana.playlist("Drive").id, "Night Drive", ana.now());
+    await ana.sync();
+    const drive = bea.playlist("Drive").id;
+    addToPlaylist(
+      bea.db,
+      drive,
+      [{ source: "library", trackId: bea.track("Karma Police") }],
+      bea.now(),
+    );
+    const asked = world.account("bea").requests.length;
+
+    const result = await bea.syncPage(drive);
+    assert.equal(result.pulled.playlists, true);
+    assert.equal(bea.playlist("Night Drive").id, drive);
+    const requests = world.account("bea").requests.slice(asked);
+    assert.ok(requests.length > 0);
+    assert.ok(
+      requests.every((request) => request.includes("/v1/collaboration/")),
+      "nothing of the account's own sync",
+    );
+    await ana.sync();
+    assert.deepEqual(playlists(ana), [
+      { name: "Night Drive", songs: ["Airbag", "Lucky", "unsearched:Karma Police"] },
+    ]);
+  });
+
+  test("the owner's page pulls through the account, and brings the members' changes", async () => {
+    const { ana, bea } = await shared();
+    await bea.sync();
+    renamePlaylist(bea.db, bea.playlist("Drive").id, "Beach", bea.now());
+    await bea.sync();
+
+    const result = await ana.syncPage(ana.playlist("Drive").id);
+    assert.equal(result.pulled.playlists, true);
+    assert.deepEqual(
+      playlists(ana).map((each) => each.name),
+      ["Beach"],
+    );
+  });
+
+  test("a page whose playlist ended becomes the member's copy, which goes up", async () => {
+    const { world, bea, drive } = await shared();
+    await bea.sync();
+    world.remove(drive.syncId, "bea");
+    const local = bea.playlist("Drive").id;
+
+    const result = await bea.syncPage(local);
+    assert.equal(result.pulled.playlists, true);
+    assert.deepEqual(selectCollaborations(bea.db), []);
+    assert.deepEqual(selectPrivateCopyNotices(bea.db), [local]);
+    assert.equal(world.account("bea").service.rows().playlists.length, 1);
+  });
+
+  test("an ordinary playlist, or the switch off, sends nothing", async () => {
+    const world = testCollaborationWorld();
+    const ana = await phone(world.account("ana"), [AIRBAG]);
+    createPlaylist(
+      ana.db,
+      "Mine",
+      [{ source: "library", trackId: ana.track("Airbag") }],
+      ana.now(),
+    );
+    await ana.sync();
+    const asked = world.account("ana").requests.length;
+    await ana.syncPage(ana.playlist("Mine").id);
+    assert.equal(world.account("ana").requests.length, asked);
+
+    const off = await phone(world.account("cid"), [], { collaborative: false });
+    await off.syncPage(1);
+    assert.deepEqual(world.account("cid").requests, []);
+  });
+});
+
+/** Who added each entry of Drive on [device]. */
+const adders = (device: Phone) =>
+  selectPlaylist(device.db, device.playlist("Drive").id)?.items.map((item) => item.addedBy);
+
+describe("who added each entry", () => {
+  test("every device reads the account that added each entry", async () => {
+    const { ana, bea } = await shared();
+    await bea.sync();
+    addToPlaylist(
+      bea.db,
+      bea.playlist("Drive").id,
+      [{ source: "library", trackId: bea.track("Karma Police") }],
+      bea.now(),
+    );
+    await bea.sync();
+    await ana.sync();
+    assert.deepEqual(adders(ana), ["ana", "ana", "bea"]);
+    assert.deepEqual(adders(bea), ["ana", "ana", "bea"]);
   });
 });
