@@ -67,7 +67,6 @@ describe("the release gate", () => {
       "android",
       "changes",
       "checks",
-      "desktop",
       "native-tests",
       "notes",
       "secret-scan",
@@ -234,11 +233,11 @@ describe("a rollback", () => {
 describe("desktop release publication", () => {
   it("signs the admitted app before NSIS, then signs the installer before publication", () => {
     const signer = job("sign-windows");
-    assert.deepEqual(needsOf("sign-windows"), ["release-gate", "checks"]);
-    assert.match(signer, /needs\.release-gate\.result == 'success'/);
-    assert.match(signer, /needs\.release-gate\.outputs\.sign_windows == 'true'/);
+    assert.deepEqual(needsOf("sign-windows"), ["desktop-release-gate", "checks"]);
+    assert.match(signer, /needs\.desktop-release-gate\.result == 'success'/);
+    assert.match(signer, /needs\.desktop-release-gate\.outputs\.sign_windows == 'true'/);
     assert.match(signer, /github\.event_name == 'push'/);
-    assert.match(signer, /ref: \$\{\{ needs\.release-gate\.outputs\.sha \}\}/);
+    assert.match(signer, /ref: \$\{\{ needs\.desktop-release-gate\.outputs\.sha \}\}/);
     const steps = stepsOf("sign-windows");
     const names = steps.map((step) => step.name);
     const ordered = [
@@ -263,7 +262,7 @@ describe("desktop release publication", () => {
       assert.match(text, /wait-for-completion: true/);
     }
     assert.ok(needsOf("release").includes("sign-windows"));
-    assert.match(job("release"), /needs\.sign-windows\.result == 'success'/);
+    assert.match(job("release"), /continue-on-error: true/);
     assert.match(job("release"), /desktop-release\.ts finalize-windows/);
 
     const packager = readFileSync(
@@ -275,19 +274,27 @@ describe("desktop release publication", () => {
 
   it("builds on the release source and keeps stable desktop publication behind its switch", () => {
     const desktop = job("desktop");
-    const gate = job("release-gate");
+    const gate = job("desktop-release-gate");
+    assert.deepEqual(needsOf("desktop-release-gate").toSorted(), [
+      "changes",
+      "checks",
+      "desktop",
+      "notes",
+      "secret-scan",
+      "source",
+    ]);
     assert.ok(desktop.includes(`ref: ${SOURCE}`));
     assert.match(desktop, /ubuntu-22\.04/);
     assert.match(desktop, /windows-latest/);
-    for (const text of [desktop, gate]) {
-      assert.match(
-        text,
-        /endsWith\(needs\.checks\.outputs\.release_tag, '-ti'\) \|\| vars\.RELEASE_DESKTOP_MAIN == 'on'/,
-      );
-      assert.doesNotMatch(text, /environment:|secrets\./);
-    }
+    assert.match(
+      gate,
+      /endsWith\(needs\.checks\.outputs\.release_tag, '-ti'\) \|\| vars\.RELEASE_DESKTOP_MAIN == 'on'/,
+    );
+    for (const text of [desktop, gate]) assert.doesNotMatch(text, /environment:|secrets\./);
     assert.match(gate, /test "\$DESKTOP_RESULT" = success/);
     assert.match(gate, /desktop-release\.ts admit/);
+    assert.doesNotMatch(job("release-gate"), /DESKTOP_RESULT|desktop-release\.ts admit/);
+    assert.match(job("release"), /needs\.desktop-release-gate\.result == 'success'/);
     assert.match(job("release"), /desktop-release\.ts verify/);
   });
 
@@ -306,7 +313,10 @@ describe("desktop release publication", () => {
 
   it("attaches the admitted installers and blockmap to the versioned release", () => {
     const publish = stepsOf("release").find((step) => step.name === "Publish the release")!.text;
-    assert.match(publish, /DESKTOP_ADMITTED: \$\{\{ needs\.release-gate\.outputs\.desktop \}\}/);
+    assert.match(
+      publish,
+      /DESKTOP_ADMITTED: \$\{\{ steps\.desktop_check\.outcome == 'success' && needs\.desktop-release-gate\.outputs\.admitted == 'true' \}\}/,
+    );
     assert.match(publish, /if \[ "\$DESKTOP_ADMITTED" = "true" \]; then/);
     assert.match(publish, /desktop-release\.ts names "\$RELEASE_TAG" "\$RUNNER_TEMP\/desktop"/);
     assert.match(publish, /publish-release\.sh.*"\$\{desktop\[@\]\}"/);

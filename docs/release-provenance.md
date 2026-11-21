@@ -1,9 +1,10 @@
 # Release provenance
 
-The release job holds the APK release key and the update signing key, so it opens only after
-the **release gate** has checked that every prerequisite passed on the commit the job is about
-to sign. This file is the contract the gate writes and that later work reads (#1129; promotion and
-rollback in #1130, source delivery in #1135).
+The phone release job holds the APK release key and the update signing key, so it opens only
+after the **Release gate** has checked the phone prerequisites on the commit it is about to sign.
+The desktop installers use a separate **Desktop release gate**. A desktop failure does not refuse
+the phone release. This file is the contract the gates write and later work reads (#1129;
+promotion and rollback in #1130, source delivery in #1135).
 
 ## The release source
 
@@ -35,7 +36,7 @@ clean scan.
 
 ## The gate
 
-`release-gate` runs on release runs unless the run was cancelled, and calls
+The phone's `release-gate` runs on release runs unless the run was cancelled, and calls
 `node scripts/ci/release-gate.ts admit` on `toJSON(needs)`. It has `contents: read`, no
 Environment and no secret, so a healthy `ti` release stays automatic and a `main` one still waits
 for the owner at the release job's Environment. It refuses (exits 1, so the release job is
@@ -127,17 +128,19 @@ or download GitHub can't answer fails the step too.
 
 ## Desktop installers
 
-A versioned ti release also admits the Windows x64 NSIS installer and the Linux x64
-AppImage, built on Windows and Ubuntu 22.04. The desktop jobs check out the same release
-source as Android and report their actual checkout, tag, update public key fingerprint and file
-digests. The gate checks both jobs and rehashes the Linux installer and the Windows build output.
+The separate `desktop-release-gate` admits the Windows x64 NSIS installer and the Linux x64
+AppImage on versioned releases. The desktop jobs run on Windows and Ubuntu 22.04, check out the
+same release source as Android and report their actual checkout, tag, update public key fingerprint
+and file digests. The gate checks both jobs and rehashes the Linux installer and Windows build
+output. A failed desktop job skips desktop publication while the phone gate can still admit the APK.
 Before SignPath is enabled, that Windows output is the unsigned ti installer and its blockmap.
 With SignPath enabled, the gate admits the unpacked Windows app archive. The Windows signing job
 verifies it against the gate record, signs `Wave.exe` before building NSIS, then signs the installer
 and builds its blockmap. Publication verifies both installers and the blockmap, including the
 Windows signing job's final build evidence, before signing the APK.
 See [Windows code signing](windows-code-signing.md) for owner setup.
-The sealed record carries the evidence under `desktop`. A stable release includes the desktop
+The desktop gate records its admission separately, then the phone release copies that evidence
+into its sealed provenance record when desktop verification succeeds. A stable release includes the desktop
 when the repository variable `RELEASE_DESKTOP_MAIN` is `on`. The usual stable approval still applies.
 
 Android's existing update key is RSA. Desktop uses an Ed25519 PEM public key in the

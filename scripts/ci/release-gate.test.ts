@@ -174,6 +174,11 @@ describe("admitRelease", () => {
     needs["secret-scan"].outputs.range = SOURCE;
     assert.equal(admitRelease(needs).source, SOURCE);
   });
+
+  it("admits the phone independently when desktop checks fail", () => {
+    const needs = { ...healthy(), desktop: { result: "failure", outputs: {} } };
+    assert.equal(admitRelease(needs).source, SOURCE);
+  });
 });
 
 describe("release-gate.ts in the release job", () => {

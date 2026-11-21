@@ -2,9 +2,9 @@
 // native modules' JVM tests.
 // The CI workflow runs it on a PR's changed files and turns jobs off by it:
 //   <paths, one per line> | node scripts/ci/changes.ts   # PRs
-//   node scripts/ci/changes.ts --all                      # everything else
-// It prints `<area>=true|false` lines, then the decisions `allPackages` and
-// `nativeTests`, ready for $GITHUB_OUTPUT. Checks also runs it, through affected-packages.sh.
+//   node scripts/ci/changes.ts --all                      # when the changed paths aren't available
+// It prints area flags, package/test decisions and app release flags, ready for $GITHUB_OUTPUT.
+// Checks also runs it, through affected-packages.sh.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -102,6 +102,12 @@ export const reachesDesktop = (paths: readonly string[]): boolean => {
   return touched.desktop || touched.sync || touched.workspace;
 };
 
+/** Which app a set of changes can reach and therefore needs to release. */
+export const releaseChanges = (paths: readonly string[]) => ({
+  phoneRelease: reachesPhone(paths),
+  desktopRelease: reachesDesktop(paths),
+});
+
 // What only the desktop is made of, by prefix: its app, its JVM's entry point and its own UI text.
 const DESKTOP_PREFIXES = [...DESKTOP_ONLY, "packages/core/src/catalogue/desktop"];
 
@@ -121,8 +127,10 @@ export const reachesPhone = (paths: readonly string[]): boolean => {
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const result = process.argv.includes("--all")
-    ? decide(() => true)
-    : changes(readFileSync(0, "utf8").split(/\r?\n/).filter(Boolean));
-  for (const [name, value] of Object.entries(result)) console.log(`${name}=${value}`);
+  const all = process.argv.includes("--all");
+  const paths = all ? [] : readFileSync(0, "utf8").split(/\r?\n/).filter(Boolean);
+  const result = all ? decide(() => true) : changes(paths);
+  const releases = all ? { phoneRelease: true, desktopRelease: true } : releaseChanges(paths);
+  for (const [name, value] of Object.entries({ ...result, ...releases }))
+    console.log(`${name}=${value}`);
 }

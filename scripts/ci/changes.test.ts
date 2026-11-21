@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { changes, reachesUsers } from "./changes.ts";
+import { changes, reachesUsers, releaseChanges } from "./changes.ts";
 
 const script = fileURLToPath(new URL("./changes.ts", import.meta.url));
 const run = (args: string[], stdin: string) =>
@@ -181,18 +181,42 @@ describe("changes", () => {
   });
 });
 
+describe("releaseChanges", () => {
+  it("selects only the app reached by the changed paths", () => {
+    assert.deepEqual(releaseChanges(["apps/mobile/src/app/_layout.tsx"]), {
+      phoneRelease: true,
+      desktopRelease: false,
+    });
+    assert.deepEqual(releaseChanges(["apps/desktop/src/main/index.ts"]), {
+      phoneRelease: false,
+      desktopRelease: true,
+    });
+    assert.deepEqual(
+      releaseChanges(["apps/mobile/src/app/_layout.tsx", "apps/desktop/src/main/index.ts"]),
+      { phoneRelease: true, desktopRelease: true },
+    );
+  });
+
+  it("does not release either app for changes that only affect CI", () => {
+    assert.deepEqual(releaseChanges(["scripts/ci/changes.ts"]), {
+      phoneRelease: false,
+      desktopRelease: false,
+    });
+  });
+});
+
 describe("changes.ts as a command", () => {
   it("prints one GitHub output line per area for the paths on stdin", () => {
     assert.equal(
       run([], "docs/spec.md\npackages/core/src/queue.ts\n"),
-      "app=false\ncore=true\nsync=false\nupdates=false\nworkspace=false\nci=false\nperf=false\ntsconfig=false\nnative=false\ndesktop=true\nallPackages=false\nnativeTests=false\ndesktopChecks=true\n",
+      "app=false\ncore=true\nsync=false\nupdates=false\nworkspace=false\nci=false\nperf=false\ntsconfig=false\nnative=false\ndesktop=true\nallPackages=false\nnativeTests=false\ndesktopChecks=true\nphoneRelease=true\ndesktopRelease=true\n",
     );
   });
 
   it("counts every area as changed with --all, as on pushes to main", () => {
     assert.equal(
       run(["--all"], ""),
-      "app=true\ncore=true\nsync=true\nupdates=true\nworkspace=true\nci=true\nperf=true\ntsconfig=true\nnative=true\ndesktop=true\nallPackages=true\nnativeTests=true\ndesktopChecks=true\n",
+      "app=true\ncore=true\nsync=true\nupdates=true\nworkspace=true\nci=true\nperf=true\ntsconfig=true\nnative=true\ndesktop=true\nallPackages=true\nnativeTests=true\ndesktopChecks=true\nphoneRelease=true\ndesktopRelease=true\n",
     );
   });
 });
