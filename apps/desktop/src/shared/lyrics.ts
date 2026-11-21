@@ -16,3 +16,14 @@ export type SongGenius =
     };
 
 export type GeniusPhase = "read" | "translate";
+
+/**
+ * What shows under a song's lyrics while Translate is on (`window.wave.lyrics.translation`):
+ * one translation per lyric line, in order (null where none shows); the lyrics are already in
+ * the app's language (Google's code for it); the request `failed` (Try Again asks once more);
+ * or `off`: Translate is off or the song has no words, and nothing was sent.
+ */
+export type SongTranslation =
+  | { readonly kind: "off" | "failed" }
+  | { readonly kind: "translated"; readonly lines: readonly (string | null)[] }
+  | { readonly kind: "sameLanguage"; readonly language: string };
