@@ -9,7 +9,8 @@ import { catalogSeedKey } from "./candidateCatalog.ts";
 import { DEFAULT_DJ_SETTINGS, djNewMusicShare, type DjSettings } from "./djSettings.ts";
 import type { MagicSeedSong, MagicSession } from "./magicQueue.ts";
 import type { TasteProfile } from "./tasteProfile.ts";
-import { YT_ARTIST_FRESH_MS } from "./ytArtist.ts";
+import { normalizeSearchText } from "./search.ts";
+import { releaseTitle, YT_ARTIST_FRESH_MS } from "./ytArtist.ts";
 
 /** A tile as the grid tells tiles apart: its kind and what that kind compares by. */
 export type DjTileKey = string & { readonly djTile: true };
@@ -24,8 +25,41 @@ export interface DjArtistTile {
   readonly libraryId: number | null;
 }
 
+/** An album as DJ is told of it: one the Library has, one a saved artist page lists, or both. */
+export interface DjAlbum {
+  readonly title: string;
+  /** Its album artist, by name. */
+  readonly artist: string;
+  /** The Library's album, or none. */
+  readonly libraryId?: number | null;
+  /** Its YT Music page (`MPREb_…`), or none. */
+  readonly browseId?: string | null;
+  /** Its cover on YouTube Music, for an album the Library doesn't have. */
+  readonly artworkUrl?: string | null;
+}
+
+/** An album tile: a square cover with the album's title and artist. */
+export interface DjAlbumTile {
+  readonly kind: "album";
+  /** The album by its title and album artist (`djAlbumTile`). */
+  readonly key: DjTileKey;
+  /** The album's title. */
+  readonly name: string;
+  /** Its album artist, whose tile and similar artists it opens. */
+  readonly artist: string;
+  /** The Library's album, whose cover the tile shows and whose songs it seeds; null without. */
+  readonly libraryId: number | null;
+  /** Its YT Music page, where the songs of an album the Library doesn't have are read; null without. */
+  readonly browseId: string | null;
+  readonly artworkUrl: string | null;
+}
+
 /** One selectable item of DJ's grid. */
-export type DjTile = DjArtistTile;
+export type DjTile = DjArtistTile | DjAlbumTile;
+
+/** The artist [tile] stands for: an artist tile's own, an album tile's album artist. */
+export const djTileArtist = (tile: DjTile): string =>
+  tile.kind === "album" ? tile.artist : tile.name;
 
 /**
  * The artist tile of [name], the Library's artist [libraryId] when it has
@@ -41,6 +75,27 @@ export const djArtistTile = (
     : { kind: "artist", key: `artist:${key}` as DjTileKey, name, libraryId };
 };
 
+/**
+ * The album tile of [album]; null for one with no title. Two albums are the
+ * same tile when their titles match as releases do (`releaseTitle`: case,
+ * accents, punctuation and edition notes don't count) and their album
+ * artists as the catalog compares seed artists.
+ */
+export const djAlbumTile = (album: DjAlbum): DjAlbumTile | null => {
+  const title = releaseTitle(album.title);
+  if (title === "") return null;
+  const artist = catalogSeedKey(album.artist) ?? normalizeSearchText(album.artist);
+  return {
+    kind: "album",
+    key: `album:${artist}:${title}` as DjTileKey,
+    name: album.title,
+    artist: album.artist,
+    libraryId: album.libraryId ?? null,
+    browseId: album.browseId ?? null,
+    artworkUrl: album.artworkUrl ?? null,
+  };
+};
+
 /** What DJ's grid is built from, all of it already on the phone. */
 export interface DjGridSources {
   /** The Library's artists. */
@@ -51,6 +106,11 @@ export interface DjGridSources {
   readonly played?: readonly PlayedSeedArtist[];
   /** The artist graph of the last recommendation snapshot, or null while it's cold. */
   readonly graph: ArtistGraph | null;
+  /**
+   * The albums the Library and the saved artist pages know, each artist's
+   * in the order the grid prefers them; none without.
+   */
+  readonly albums?: readonly DjAlbum[];
 }
 
 /** How many tiles DJ's grid opens with. */
@@ -60,13 +120,20 @@ export const DJ_GRID_TILES = 24;
  * DJ's grid, built without the network or a derivation: the taste profile's
  * highest-scored artists, the highest first, each followed by the closest
  * artist graph neighbour of theirs that the Library doesn't have and the
- * grid doesn't show yet. Before the profile's first derivation the most
+ * grid doesn't show yet. Each artist is followed by the first of [albums]
+ * that is theirs, when one is known. Before the profile's first derivation the most
  * played artists stand in for it, in their order. An artist the Library
  * doesn't have shows by the name the plays or the graph know. No tile
  * appears twice, and the grid holds `DJ_GRID_TILES` at most; it's empty with
  * no taste signal and no plays.
  */
-export const djGrid = ({ artists, taste, played = [], graph }: DjGridSources): DjTile[] => {
+export const djGrid = ({
+  artists,
+  taste,
+  played = [],
+  graph,
+  albums = [],
+}: DjGridSources): DjTile[] => {
   const library = new Map<string, DjArtistTile>();
   for (const artist of artists) {
     const tile = djArtistTile(artist.name, artist.id);
@@ -86,16 +153,28 @@ export const djGrid = ({ artists, taste, played = [], graph }: DjGridSources): D
       : scored.map(
           ([key]) => library.get(`artist:${key}`) ?? known(names.get(key) ?? graph?.names.get(key)),
         );
+  const records = new Map<string, DjAlbumTile>();
+  for (const album of albums) {
+    const by = djArtistTile(album.artist)?.key;
+    const tile = djAlbumTile(album);
+    if (by !== undefined && tile !== null && !records.has(by)) records.set(by, tile);
+  }
   const grid = new Map<string, DjTile>();
+  /** Shows [artist], then the album of theirs while the grid has room for it. */
+  const show = (artist: DjArtistTile): void => {
+    grid.set(artist.key, artist);
+    const record = records.get(artist.key);
+    if (record !== undefined && grid.size < DJ_GRID_TILES) grid.set(record.key, record);
+  };
   for (const favourite of favourites) {
     if (grid.size >= DJ_GRID_TILES) break;
     if (favourite === null || grid.has(favourite.key)) continue;
-    grid.set(favourite.key, favourite);
+    show(favourite);
     if (graph === null || grid.size >= DJ_GRID_TILES) continue;
     for (const neighbour of artistNeighbours(graph, favourite.name)) {
       const tile = djArtistTile(neighbour.name);
       if (tile === null || library.has(tile.key) || grid.has(tile.key)) continue;
-      grid.set(tile.key, tile);
+      show(tile);
       break;
     }
   }
