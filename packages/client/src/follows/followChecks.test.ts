@@ -129,7 +129,8 @@ const releasesCheck = (
   });
   return { asked, check };
 };
-const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+const daysAgo = (days: number) =>
+  new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
 /** YT Music answering Albums searches with [albums]; [searches] collects the queries. */
 const albumsYt = (albums: Record<string, string>) => {
   const searches: string[] = [];
@@ -142,7 +143,14 @@ const albumsYt = (albums: Record<string, string>) => {
         return Effect.succeed(
           title === undefined
             ? []
-            : [{ title, releaseType: "album" as const, browseId: albums[title]!, artists: ["ABBA"] }],
+            : [
+                {
+                  title,
+                  releaseType: "album" as const,
+                  browseId: albums[title]!,
+                  artists: ["ABBA"],
+                },
+              ],
         );
       },
       album: (browseId: string) => Effect.succeed({ tracks: [{ videoId: `${browseId}-1` }] }),

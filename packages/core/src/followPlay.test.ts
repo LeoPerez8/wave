@@ -53,13 +53,19 @@ test("the first release read starts the queue, the rest join it in order, and a 
     followPlayStep({ started: true, context: { kind: "album", id: "4" }, id }, 2),
     "stop",
   );
-  assert.equal(followPlayStep({ started: true, context: { kind: "newReleases", id: "x" }, id }, 2), "stop");
+  assert.equal(
+    followPlayStep({ started: true, context: { kind: "newReleases", id: "x" }, id }, 2),
+    "stop",
+  );
 });
 
 test("Up Next says the queue came from the section", () => {
   const context = { kind: "newReleases", id: "play-1" };
   assert.equal(followQueueLabel(context, en), "Up next · from New from Artists You Follow");
-  assert.equal(followQueueLabel(context, ptBR), "A seguir · de Novidades dos Artistas que Você Segue");
+  assert.equal(
+    followQueueLabel(context, ptBR),
+    "A seguir · de Novidades dos Artistas que Você Segue",
+  );
   assert.equal(followQueueLabel({ kind: "album", id: "1" }, en), null);
   assert.equal(followQueueLabel(null, en), null);
 });

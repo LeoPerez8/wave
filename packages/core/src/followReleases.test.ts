@@ -180,6 +180,12 @@ test("a release whose album is gone loses its match and songs, and hides until a
     ],
   );
   const input = { follows: [follow], releases, hidden: [], countedPlays: [], now };
-  assert.deepEqual(followFeed(input).releaseCards.map((r) => r.key), ["Other"]);
-  assert.deepEqual(followReleasesToSearch(input).map((r) => r.key), ["Voyage"]);
+  assert.deepEqual(
+    followFeed(input).releaseCards.map((r) => r.key),
+    ["Other"],
+  );
+  assert.deepEqual(
+    followReleasesToSearch(input).map((r) => r.key),
+    ["Voyage"],
+  );
 });

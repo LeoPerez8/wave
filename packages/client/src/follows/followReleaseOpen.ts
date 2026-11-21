@@ -85,7 +85,9 @@ export const openFollowRelease = <E>(
     if (typeof songs !== "object" || songs.videoIds.length === 0 || !ports.keep()) return found;
     yield* saveRelease(store, release, (releases) =>
       releases.map((r) =>
-        r.key === release.key ? { ...r, browseId: found.browseId, videoIds: [...songs.videoIds] } : r,
+        r.key === release.key
+          ? { ...r, browseId: found.browseId, videoIds: [...songs.videoIds] }
+          : r,
       ),
     );
     return found;
