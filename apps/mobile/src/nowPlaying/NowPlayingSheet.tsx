@@ -52,6 +52,7 @@ import { LyricsView } from "./LyricsView";
 import { PlayerView } from "./PlayerView";
 import { QueueHeader, UpNextList } from "./QueueView";
 import { usePlayingVideoId } from "./relatedSongs";
+import { RelatedPanel } from "./RelatedPanel";
 import { RelatedView } from "./RelatedView";
 import { QueueEdgeMark, ScreenPage, useScreenPages } from "./ScreenPages";
 import { Scrubber } from "./Scrubber";
@@ -75,8 +76,8 @@ import {
   usePreparePlayingSong,
 } from "./playingSong";
 
-/** What fills the player's space above the controls. The Queue is a screen of its own. */
-export type NowPlayingView = "player" | "lyrics" | "related";
+/** What fills the player's space above the controls. The Queue and Related are screens of their own. */
+export type NowPlayingView = "player" | "lyrics";
 
 const close = (): void => closeNowPlaying(undefined, "chevron");
 
@@ -119,8 +120,8 @@ const QueuePane = memo(function QueuePane({
 const PLAYER_AREA = { flex: 1, paddingTop: CELL } as const;
 
 /**
- * The player view. It stays mounted, hidden (`Activity`) while the Queue,
- * Lyrics or Related shows, so coming back to it draws the artwork straight away; hidden,
+ * The player view. It stays mounted, hidden (`Activity`) while the Queue or
+ * Lyrics shows or Related covers it, so coming back to it draws the artwork straight away; hidden,
  * it follows nothing (links, the route, the star). While Now Playing is
  * closed it shows (out of sight) and follows the playing track, so an open's
  * first frame is right.
@@ -167,10 +168,11 @@ export function UnderNowPlaying({ children }: { children: ReactNode }) {
 
 /**
  * Now Playing: a sheet over the app, tinted by the artwork. The player view
- * (artwork, title, artist and album), the Lyrics view or the Related view
- * sits above the scrubber and transport; the Queue is a screen of its own, a
- * swipe to the right of them (`ScreenPages`). Drag it down or tap the chevron
- * to dismiss it; Back leaves the Queue first.
+ * (artwork, title, artist and album) or the Lyrics view sits above the
+ * scrubber and transport; the Queue is a screen of its own, a swipe to the
+ * right of them (`ScreenPages`), and Related a panel that rises over all of
+ * it (`RelatedPanel`). Drag it down or tap the chevron to dismiss it; Back
+ * leaves the Queue or Related first.
  *
  * It stays mounted out of sight below the screen, following the playing track
  * (its colours, artwork and links) while closed, so opening it only starts the
@@ -199,15 +201,18 @@ export function NowPlayingSheet() {
   const palette = useNowPlayingPalette(trackId, details);
   const gradient = useNowPlayingGradient(palette);
   const ground = useBackgroundColors(gradient, shown);
-  const [chosenView, setView] = useState<NowPlayingView>("player");
+  const [view, setView] = useState<NowPlayingView>("player");
   const ytMusic = useYtMusicEnabled();
-  // Related needs YouTube Music: turned off, the player shows in its place.
-  const view = chosenView === "related" && !ytMusic ? "player" : chosenView;
-  const { videoId, findAgain } = usePlayingVideoId(view === "related" ? trackId : null, ytSong);
   const showPlayer = useCallback(() => setView("player"), []);
   // The player and the Queue, side by side; the Queue stays mounted once shown (`QueuePane`).
+  // Related rises over them.
   const pages = useScreenPages();
-  const { screen, turning, send } = pages;
+  const { screen, page, turning, send } = pages;
+  // Settled, Related covers the pages: what is under it rests until it moves.
+  const covered = screen === "related" && !pages.relatedMoving;
+  // Related stays drawn, with its songs, while its panel leaves.
+  const relatedMounted = screen === "related" || pages.relatedMoving;
+  const { videoId, findAgain } = usePlayingVideoId(relatedMounted ? trackId : null, ytSong);
   const leaveQueue = useCallback(() => void send({ type: "headerTap" }), [send]);
   // Where the pages sit on the sheet, for the Queue's sticky bar.
   const [pagesTop, setPagesTop] = useState(0);
@@ -237,22 +242,19 @@ export function NowPlayingSheet() {
       }),
     [send],
   );
-  // Related shows in the player, so asked for from the Queue it leaves the Queue.
-  useEffect(
-    () =>
-      onRelatedOpened(() => {
-        setView("related");
-        send({ type: "show", screen: "player" });
-      }),
-    [send],
-  );
+  // The chevron, the playing song's card and the mini player's card ask for Related.
+  useEffect(() => onRelatedOpened(() => void send({ type: "show", screen: "related" })), [send]);
+  // Related needs YouTube Music: turned off, the player comes back.
+  useEffect(() => {
+    if (!ytMusic && screen === "related") send({ type: "ytMusicOff" });
+  }, [ytMusic, screen, send]);
   // The Queue is the playing song's: with nothing playing, the player shows.
   const nothingPlaying = item === null;
   useEffect(() => {
     if (nothingPlaying) send({ type: "show", screen: "player" });
   }, [nothingPlaying, send]);
 
-  // Back leaves the Queue; on the player it slides the sheet away instead of
+  // Back leaves the Queue or Related; on the player it slides the sheet away instead of
   // leaving the screen under it (Core's `stepNowPlayingScreens`).
   useEffect(() => {
     if (!shown) return undefined;
@@ -329,7 +331,10 @@ export function NowPlayingSheet() {
       />
       <View
         className="flex-1"
-        importantForAccessibility={lyricSharing ? "no-hide-descendants" : "auto"}
+        importantForAccessibility={
+          lyricSharing || screen === "related" ? "no-hide-descendants" : "auto"
+        }
+        accessibilityElementsHidden={screen === "related"}
         style={{
           paddingTop: insets.top,
           paddingBottom: insets.bottom + CELL * 2,
@@ -362,7 +367,7 @@ export function NowPlayingSheet() {
           {item !== null && pages.queueMounted && (
             <ScreenPage screen="queue" pages={pages}>
               <Activity
-                mode={screen === "queue" || turning ? "visible" : "hidden"}
+                mode={(page === "queue" || turning) && !covered ? "visible" : "hidden"}
                 name={strings.playbackText.queue}
               >
                 <QueuePane item={item} ground={ground} top={pagesTop} onShowPlayer={leaveQueue} />
@@ -391,17 +396,11 @@ export function NowPlayingSheet() {
                     onShowPlayer={showPlayer}
                   />
                 )}
-                {view === "related" && (
-                  <RelatedView
-                    item={item}
-                    videoId={videoId}
-                    findAgain={findAgain}
-                    onShowPlayer={showPlayer}
-                  />
-                )}
                 <Activity
                   mode={
-                    view === "player" && (screen === "player" || turning) ? "visible" : "hidden"
+                    view === "player" && (page === "player" || turning) && !covered
+                      ? "visible"
+                      : "hidden"
                   }
                   name="Player"
                 >
@@ -435,6 +434,12 @@ export function NowPlayingSheet() {
           </ScreenPage>
         </View>
       </View>
+      {/* Related, over the header, the pages and the controls; mounted while it shows or moves. */}
+      {item !== null && relatedMounted && (
+        <RelatedPanel pages={pages} ground={ground}>
+          <RelatedView item={item} videoId={videoId} findAgain={findAgain} pages={pages} />
+        </RelatedPanel>
+      )}
       {/* The lyrics card's preview, over the whole sheet (Share in the Lyrics view). */}
       <LyricCardLayer />
     </Animated.View>

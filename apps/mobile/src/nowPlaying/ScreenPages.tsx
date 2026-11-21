@@ -2,7 +2,9 @@ import { useLocalisation } from "@/localisation/localisation";
 import {
   NOW_PLAYING_OPENS_ON,
   settleScreenSwipe,
+  settleSheet,
   stepNowPlayingScreens,
+  type NowPlayingPage,
   type NowPlayingScreen,
   type NowPlayingScreensEvent,
 } from "@wave/core";
@@ -24,11 +26,14 @@ import { useListScrollable } from "@/motion/heldTouch";
 import { Press } from "@/motion/Press";
 import { useThemeColor } from "@/theme/useThemeColor";
 
+import { isNowPlayingShown } from "./sheet";
+
 /**
- * Now Playing's screens side by side: the player, and the Queue one swipe to
- * its right. Core decides which screen shows after each event
- * (`stepNowPlayingScreens`) and where a released swipe settles
- * (`settleScreenSwipe`); this moves the pages there.
+ * Now Playing's screens: the player and the Queue side by side, one swipe
+ * apart, and Related, a panel that rises over them (`RelatedPanel`). Core
+ * decides which screen shows after each event (`stepNowPlayingScreens`) and
+ * where a released swipe settles (`settleScreenSwipe`); this moves the pages
+ * and the panel there.
  */
 
 /** Sideways travel before a swipe takes over from a tap, in dp. */
@@ -43,35 +48,49 @@ const SPRING = { damping: 30, stiffness: 300, mass: 1 } as const;
 export type ScreenPages = {
   /** The screen that shows, or the one a turn is heading to. */
   readonly screen: NowPlayingScreen;
+  /** The page in the pages' place: the one Related covers while it shows. */
+  readonly page: NowPlayingPage;
   /** A swipe or its settle is under way: both pages are in sight. */
   readonly turning: boolean;
   /** The Queue was shown once, so it stays mounted. */
   readonly queueMounted: boolean;
   /** Where the pages are: 0 on the player, 1 on the Queue. */
   readonly position: SharedValue<number>;
+  /** Where Related's panel is: 0 below the screen, 1 risen over the pages. */
+  readonly related: SharedValue<number>;
+  /** The panel is rising, leaving or under a finger: the page under it is in sight. */
+  readonly relatedMoving: boolean;
   /** Takes the screens through [event]; true when Now Playing itself should close. */
   readonly send: (event: NowPlayingScreensEvent) => boolean;
   /** A swipe from the page of [from] started, and ended (dp, dp/s; negative is left). */
   readonly swipeBegan: () => void;
-  readonly swipeEnded: (from: NowPlayingScreen, translationX: number, velocityX: number) => void;
+  readonly swipeEnded: (from: NowPlayingPage, translationX: number, velocityX: number) => void;
+  /** A drag down on Related's header started, and ended (dp down, dp/s). */
+  readonly relatedDragBegan: () => void;
+  readonly relatedDragEnded: (translationY: number, velocityY: number) => void;
 };
 
 /**
- * Now Playing's screens and the pages' position. With reduce motion (Remove
- * animations) on, a page shows or leaves at once, with no slide.
+ * Now Playing's screens, the pages' position and the Related panel's. With
+ * reduce motion (Remove animations) on, a page or the panel shows or leaves at
+ * once, with no slide.
  */
 export const useScreenPages = (): ScreenPages => {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const still = useReducedMotion();
   const [screens, setScreens] = useState(NOW_PLAYING_OPENS_ON);
   const [turning, setTurning] = useState(false);
   const [queueMounted, setQueueMounted] = useState(false);
+  const [page, setPage] = useState<NowPlayingPage>("player");
+  const [relatedMoving, setRelatedMoving] = useState(false);
   const position = useSharedValue(0);
+  const related = useSharedValue(0);
   // What the handlers step from: the screens as of the last event, ahead of the render.
   const latest = useRef(screens);
 
   const turnTo = useCallback(
-    (screen: NowPlayingScreen, velocity: number, slide: boolean) => {
+    (screen: NowPlayingPage, velocity: number, slide: boolean) => {
+      setPage(screen);
       const to = screen === "queue" ? 1 : 0;
       if (!slide) {
         position.set(to);
@@ -88,21 +107,58 @@ export const useScreenPages = (): ScreenPages => {
     [position],
   );
 
+  // The panel came to rest. Risen, it covers the pages, so they turn to the
+  // player out of sight: Related always returns there.
+  const relatedRested = useCallback(
+    (risen: boolean) => {
+      setRelatedMoving(false);
+      if (risen) turnTo("player", 0, false);
+    },
+    [turnTo],
+  );
+
+  const movePanel = useCallback(
+    (risen: boolean, velocity: number, slide: boolean) => {
+      const to = risen ? 1 : 0;
+      if (!slide) {
+        related.set(to);
+        relatedRested(risen);
+        return;
+      }
+      setRelatedMoving(true);
+      related.set(
+        withSpring(to, { ...SPRING, velocity }, (finished) => {
+          if (finished === true) scheduleOnRN(relatedRested, risen);
+        }),
+      );
+    },
+    [related, relatedRested],
+  );
+
   const send = useCallback(
     (event: NowPlayingScreensEvent, velocity = 0): boolean => {
       const before = latest.current;
       const step = stepNowPlayingScreens(before, event);
       latest.current = step.screens;
       setScreens(step.screens);
-      if (step.screens.screen === "queue") setQueueMounted(true);
+      const { screen } = step.screens;
+      if (screen === "queue") setQueueMounted(true);
+      if (screen === "related") {
+        // Asked for with Now Playing closed, the sheet rises already on it.
+        if (before.screen !== "related") movePanel(true, 0, !still && isNowPlayingShown());
+      } else if (before.screen === "related") {
+        // The pages are covered until the panel moves, so they turn at once.
+        turnTo(screen, 0, false);
+        movePanel(false, velocity, !still && event.type !== "closed");
+      }
       // A released swipe settles from wherever the finger left the pages.
-      if (event.type === "swipe") turnTo(step.screens.screen, velocity, !still);
+      else if (event.type === "swipe") turnTo(screen, velocity, !still);
       // Out of sight, there is nothing to slide, and a swipe left half way ends there.
-      else if (event.type === "closed") turnTo(step.screens.screen, 0, false);
-      else if (step.screens.screen !== before.screen) turnTo(step.screens.screen, 0, !still);
+      else if (event.type === "closed") turnTo(screen, 0, false);
+      else if (screen !== before.screen) turnTo(screen, 0, !still);
       return step.close;
     },
-    [turnTo, still],
+    [turnTo, movePanel, still],
   );
 
   const swipeBegan = useCallback(() => {
@@ -111,7 +167,7 @@ export const useScreenPages = (): ScreenPages => {
   }, []);
 
   const swipeEnded = useCallback(
-    (from: NowPlayingScreen, translationX: number, velocityX: number) => {
+    (from: NowPlayingPage, translationX: number, velocityX: number) => {
       const to = settleScreenSwipe({ from, translationX, velocityX, width });
       // The pages move against the finger: a drag left raises the position.
       send({ type: "swipe", to }, width > 0 ? -velocityX / width : 0);
@@ -119,17 +175,50 @@ export const useScreenPages = (): ScreenPages => {
     [send, width],
   );
 
+  const relatedDragBegan = useCallback(() => setRelatedMoving(true), []);
+
+  const relatedDragEnded = useCallback(
+    (translationY: number, velocityY: number) => {
+      if (latest.current.screen !== "related") return;
+      // The panel leaves by the travel and speed that dismiss the sheet.
+      const drag = { from: "open", offset: translationY, velocity: velocityY, height } as const;
+      // The panel's position falls as the finger goes down.
+      if (settleSheet(drag) === "closed")
+        send({ type: "dragDown" }, height > 0 ? -velocityY / height : 0);
+      else movePanel(true, 0, !still);
+    },
+    [send, movePanel, height, still],
+  );
+
   return useMemo(
     () => ({
       screen: screens.screen,
+      page,
       turning,
       queueMounted,
       position,
+      related,
+      relatedMoving,
       send,
       swipeBegan,
       swipeEnded,
+      relatedDragBegan,
+      relatedDragEnded,
     }),
-    [screens.screen, turning, queueMounted, position, send, swipeBegan, swipeEnded],
+    [
+      screens.screen,
+      page,
+      turning,
+      queueMounted,
+      position,
+      related,
+      relatedMoving,
+      send,
+      swipeBegan,
+      swipeEnded,
+      relatedDragBegan,
+      relatedDragEnded,
+    ],
   );
 };
 
@@ -149,8 +238,8 @@ const QUEUE_PAGE = {
  * toward the other page turns to it, following the finger: left on the
  * player, right on the Queue. The scrubber claims its touch first and keeps
  * it; the Queue's swipe can't begin on Up Next's handles; and a drag up or down
- * belongs to the page's lists and the sheet. Away from the screen it takes no
- * touches and screen readers skip it.
+ * belongs to the page's lists and the sheet. Away from the screen, or under
+ * Related, it takes no touches and screen readers skip it.
  */
 export function ScreenPage({
   screen,
@@ -158,7 +247,7 @@ export function ScreenPage({
   swipes = true,
   children,
 }: {
-  screen: NowPlayingScreen;
+  screen: NowPlayingPage;
   pages: ScreenPages;
   /** Whether a drag here turns the page (not with nothing playing). */
   swipes?: boolean;
