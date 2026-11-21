@@ -77,11 +77,11 @@ class RecognizeModule : Module() {
       RecognizeNotifications.saved(context, line, match, favoriteLabel, favoriteOn ?: true)
     }
     Function("takeTileFavorite") {
-      favorites.take()?.let { mapOf<String, Any>("match" to it.match, "on" to it.on) }
+      favorites.take()?.let { mapOf<String, Any>("tap" to it.id, "match" to it.match, "on" to it.on) }
     }
-    Function("tileFavoriteDone") { match: String, label: String?, on: Boolean ->
+    Function("tileFavoriteDone") { tap: Int, match: String, label: String?, on: Boolean ->
       RecognizeNotifications.favorited(context, match, label, on)
-      RecognizeFavoriteService.done(context)
+      RecognizeFavoriteService.done(tap)
     }
     Function("notifyTileFailure") { title: String, text: String, actionLabel: String, microphone: Boolean ->
       RecognizeNotifications.postFailure(context, title, text, actionLabel, microphone)

@@ -14,6 +14,7 @@ class RecognizeFavoriteInboxTest {
     val second = inbox.take()!!
     assertEquals("second", second.match)
     assertFalse(second.on)
+    assertNotEquals(first.id, second.id)
     assertNull(inbox.take())
   }
 
@@ -30,26 +31,31 @@ class RecognizeFavoriteInboxTest {
     val inbox = RecognizeFavoriteInbox()
     inbox.add("first", on = true)
     inbox.add("second", on = true)
-    inbox.take()
-    assertFalse(inbox.done())
-    inbox.take()
-    assertTrue(inbox.done())
+    val first = inbox.take()!!
+    val second = inbox.take()!!
+    assertFalse(inbox.done(first.id))
+    assertFalse(inbox.idle())
+    assertTrue(inbox.done(second.id))
+    assertTrue(inbox.idle())
   }
 
   @Test fun `a tap that comes while another is answered keeps the service`() {
     val inbox = RecognizeFavoriteInbox()
     inbox.add("first", on = true)
-    inbox.take()
+    val first = inbox.take()!!
     inbox.add("second", on = true)
-    assertFalse(inbox.done())
+    assertFalse(inbox.done(first.id))
   }
 
-  @Test fun `an answer with nothing waiting leaves nothing to keep`() {
+  @Test fun `a late answer for a tap already gone can't close a newer one`() {
     val inbox = RecognizeFavoriteInbox()
-    assertTrue(inbox.done())
-    inbox.add("kept", on = true)
-    assertFalse(inbox.done())
-    assertTrue(inbox.done())
+    inbox.add("old", on = true)
+    val old = inbox.take()!!
+    inbox.clear()
+    inbox.add("new", on = true)
+    assertFalse(inbox.done(old.id))
+    assertFalse(inbox.done(old.id))
+    assertTrue(inbox.done(inbox.take()!!.id))
   }
 
   @Test fun `clearing forgets the taps JS never took`() {
@@ -57,6 +63,6 @@ class RecognizeFavoriteInboxTest {
     inbox.add("kept", on = true)
     inbox.clear()
     assertNull(inbox.take())
-    assertTrue(inbox.done())
+    assertTrue(inbox.idle())
   }
 }

@@ -17,16 +17,22 @@ import expo.modules.wavenative.player.JsRuntime
  * has answered every tap (`RecognizeModule`'s `tileFavoriteDone`), or a minute has gone by.
  */
 class RecognizeFavoriteService : Service() {
-  private val main = Handler(Looper.getMainLooper())
   private val giveUp = Runnable { stopSelf() }
+  private var lastStartId = 0
+
+  override fun onCreate() {
+    super.onCreate()
+    running = this
+  }
 
   override fun onBind(intent: Intent): IBinder? = null
 
   /** A tap never outlives Wave's process, so Android shouldn't restart the service. */
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    lastStartId = startId
     val match = intent?.getStringExtra(EXTRA_MATCH)
     if (match == null) {
-      if (RecognizeFavoriteInbox.shared.done()) stopSelf()
+      if (RecognizeFavoriteInbox.shared.idle()) stopSelf(startId)
       return START_NOT_STICKY
     }
     JsRuntime.ensureStarted(this, RUNTIME_OWNER)
@@ -37,6 +43,7 @@ class RecognizeFavoriteService : Service() {
   }
 
   override fun onDestroy() {
+    if (running === this) running = null
     main.removeCallbacks(giveUp)
     RecognizeFavoriteInbox.shared.clear()
     JsRuntime.release(RUNTIME_OWNER)
@@ -48,6 +55,9 @@ class RecognizeFavoriteService : Service() {
     private const val EXTRA_ON = "expo.modules.wavenative.recognize.FAVORITE_ON"
     private const val RUNTIME_OWNER = "recognizeFavorite"
     private const val TIMEOUT_MS = 60_000L
+    private val main = Handler(Looper.getMainLooper())
+    /** Read and written on the main thread only, as the service's callbacks run there. */
+    private var running: RecognizeFavoriteService? = null
 
     /** The star button's tap: [on] stars the kept match's song, else unstars it. */
     fun tap(context: Context, kept: String, on: Boolean, generation: Int): PendingIntent =
@@ -61,10 +71,14 @@ class RecognizeFavoriteService : Service() {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
       )
 
-    /** JS answered a tap; the service goes once none is left. */
-    fun done(context: Context) {
-      if (RecognizeFavoriteInbox.shared.done()) {
-        context.stopService(Intent(context, RecognizeFavoriteService::class.java))
+    /**
+     * JS answered tap [tap]; the service goes once none is left. Stopping by the last start id
+     * keeps it for a tap Android is already delivering.
+     */
+    fun done(tap: Int) {
+      main.post {
+        if (!RecognizeFavoriteInbox.shared.done(tap)) return@post
+        running?.let { it.stopSelf(it.lastStartId) }
       }
     }
   }

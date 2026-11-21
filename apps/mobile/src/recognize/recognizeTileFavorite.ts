@@ -9,15 +9,19 @@ import {
 
 /** The match notification's star button, native's half (`recognize/RecognizeFavoriteService.kt`). */
 export interface RecognizeTileFavoriteNative {
-  /** Takes the tap waiting for JS, if one is: the kept match, and the star it asks for. */
-  readonly take: () => { readonly match: string; readonly on: boolean } | null;
+  /** Takes the tap waiting for JS, if one is: its id, the kept match, and the star it asks for. */
+  readonly take: () => { readonly tap: number; readonly match: string; readonly on: boolean } | null;
   /** A tap is waiting; returns the unsubscribe. */
   readonly onRequested: (listener: () => void) => () => void;
   /**
-   * The tap on [match] is done: [favorite] is the button as the song's star reads now, or
+   * Tap [tap] on [match] is done: [favorite] is the button as the song's star reads now, or
    * null to leave the button as it is.
    */
-  readonly favoriteDone: (match: string, favorite: RecognizeTileFavorite | null) => void;
+  readonly favoriteDone: (
+    tap: number,
+    match: string,
+    favorite: RecognizeTileFavorite | null,
+  ) => void;
 }
 
 export interface RecognizeTileFavoriteDeps<L extends RecognizeTrack, S extends YtSong> {
@@ -53,12 +57,12 @@ export const followRecognizeTileFavorites = <L extends RecognizeTrack, S extends
   };
 
   const receive = (): void => {
-    for (let tap = native.take(); tap !== null; tap = native.take()) {
-      const { match, on } = tap;
+    for (let request = native.take(); request !== null; request = native.take()) {
+      const { tap, match, on } = request;
       turn = turn
         .then(() => answer(match, on))
         .catch(() => null)
-        .then((favorite) => native.favoriteDone(match, favorite));
+        .then((favorite) => native.favoriteDone(tap, match, favorite));
     }
   };
 

@@ -67,9 +67,11 @@ const startRecognizeTileFavorites = (): void => {
   followingFavorites = true;
   followRecognizeTileFavorites<SongRow, NativeYtSong>(recognizeTileFavorites, {
     result: recognizeTileResult,
+    // Only while the card would offer the star: a streamed song needs YT Music on.
     star: async (result, on) => {
       const song = recognizedSong(result);
-      if (song !== null) await starRecognized(song, on, "notification");
+      const offered = recognizeTileFavorite(result, { ytMusic: ytMusicEnabled(), starred: false });
+      if (song !== null && offered !== null) await starRecognized(song, on, "notification");
     },
     favorite: tileFavorite,
     log: (level, line) => appLog(level, "WaveRecognize", line),

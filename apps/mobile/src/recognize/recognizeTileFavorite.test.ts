@@ -32,24 +32,29 @@ const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 /** Android's half: taps on the notification's star waiting in native, and what JS answers. */
 const fakeNative = () => {
-  const taps: { match: string; on: boolean }[] = [];
+  const taps: { tap: number; match: string; on: boolean }[] = [];
+  let next = 0;
   let requested: (() => void) | null = null;
   const native = {
     done: [] as { match: string; favorite: RecognizeTileFavorite | null }[],
+    /** The taps answered, by native's id. */
+    answered: [] as number[],
     take: () => taps.shift() ?? null,
     onRequested: (listener: () => void) => {
       requested = listener;
       return () => void (requested = null);
     },
-    favoriteDone: (match: string, favorite: RecognizeTileFavorite | null) =>
-      void native.done.push({ match, favorite }),
+    favoriteDone: (tap: number, match: string, favorite: RecognizeTileFavorite | null) => {
+      native.answered.push(tap);
+      native.done.push({ match, favorite });
+    },
     /** A tap reaches JS, which is already running. */
     tap: (match: string, on: boolean) => {
-      taps.push({ match, on });
+      taps.push({ tap: ++next, match, on });
       requested?.();
     },
     /** A tap made before JS was running. */
-    waiting: (match: string, on: boolean) => void taps.push({ match, on }),
+    waiting: (match: string, on: boolean) => void taps.push({ tap: ++next, match, on }),
   } satisfies RecognizeTileFavoriteNative & Record<string, unknown>;
   return native;
 };
@@ -166,4 +171,14 @@ test("every waiting tap is answered", async () => {
     [true, false],
   );
   assert.equal(native.done.length, 2);
+});
+
+test("each answer names its own tap, so native lets go of that tap alone", async () => {
+  const world = setup();
+  const native = fakeNative();
+  followRecognizeTileFavorites(native, world.deps);
+  native.tap(KEPT, true);
+  native.tap(KEPT, false);
+  await settle();
+  assert.deepEqual(native.answered, [1, 2]);
 });

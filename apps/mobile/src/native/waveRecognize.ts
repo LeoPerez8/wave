@@ -46,9 +46,9 @@ declare class WaveRecognizeModule extends NativeModule<WaveRecognizeEvents> {
     favoriteLabel?: string | null,
     favoriteOn?: boolean,
   ): void;
-  takeTileFavorite(): { match: string; on: boolean } | null;
-  /** [label] null leaves the button as it is. */
-  tileFavoriteDone(match: string, label: string | null, on: boolean): void;
+  takeTileFavorite(): { tap: number; match: string; on: boolean } | null;
+  /** Tap [tap] is answered; [label] null leaves the button as it is. */
+  tileFavoriteDone(tap: number, match: string, label: string | null, on: boolean): void;
   /** [microphone]: the action is Use Microphone rather than Try Again. */
   notifyTileFailure(title: string, text: string, actionLabel: string, microphone: boolean): void;
 }
@@ -102,8 +102,8 @@ export const recognizeTileFavorites: RecognizeTileFavoriteNative | null =
           const subscription = WaveRecognize.addListener("onRecognizeTileFavorite", listener);
           return () => subscription.remove();
         },
-        favoriteDone: (match, favorite) =>
-          WaveRecognize.tileFavoriteDone(match, favorite?.label ?? null, favorite?.on ?? true),
+        favoriteDone: (tap, match, favorite) =>
+          WaveRecognize.tileFavoriteDone(tap, match, favorite?.label ?? null, favorite?.on ?? true),
       };
 
 /** Null in an older APK, whose tile opens the card. */
