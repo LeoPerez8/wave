@@ -70,8 +70,8 @@ export type {
 } from "./listActions.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
-export { resolveSkipSwipe } from "./swipe.ts";
-export type { SkipDirection, SkipSwipe } from "./swipe.ts";
+export { resolveSkipSwipe, settleScreenSwipe } from "./swipe.ts";
+export type { ScreenSwipe, SkipDirection, SkipSwipe } from "./swipe.ts";
 export { toastDuration, toastSwipeDismisses } from "./toast.ts";
 export type { ToastSwipe } from "./toast.ts";
 export {
@@ -166,6 +166,7 @@ export {
   findLyricMatch,
   normalizeSearchText,
   rememberSearch,
+  searchKindOrder,
 } from "./search.ts";
 export type {
   LyricSearchMatch,
@@ -652,6 +653,7 @@ export {
   glassTintAlpha,
   isDefaultGlassSettings,
   readGlassSettings,
+  writeGlassSettings,
 } from "./glassSettings.ts";
 export type { GlassLevelSetting, GlassSettings } from "./glassSettings.ts";
 export {
@@ -747,6 +749,21 @@ export { concentricRadius } from "./corners.ts";
 export type { InsetSquare } from "./corners.ts";
 export { LOGO_WAVES, logoIconPaths, logoWaveY } from "./logo.ts";
 export type { LogoIconBox, LogoIconPaths, LogoWave } from "./logo.ts";
+export {
+  TITLE_MARK_TOKENS,
+  titleMarkColours,
+  titleMarkFontScale,
+  titleMarkLayout,
+  titleMarkPlacement,
+} from "./titleMark.ts";
+export type {
+  TitleLine,
+  TitleMarkColours,
+  TitleMarkDrawn,
+  TitleMarkLayout,
+  TitleMarkRoom,
+  TitleMarkType,
+} from "./titleMark.ts";
 export { LISTENING_WAVE, UNDERLINE_WAVE, underlineMotion, wavePath } from "./wavyUnderline.ts";
 export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
 export {
@@ -843,6 +860,19 @@ export type {
 export { pendingWriteDelay } from "./writePacing.ts";
 export type { WritePacing } from "./writePacing.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
+export { NOW_PLAYING_OPENS_ON, stepNowPlayingScreens } from "./nowPlayingScreens.ts";
+export {
+  nowPlayingEditHintDue,
+  readNowPlayingEditHintShown,
+  storedNowPlayingEditHintShown,
+} from "./nowPlayingEditHint.ts";
+export type {
+  NowPlayingPage,
+  NowPlayingScreen,
+  NowPlayingScreens,
+  NowPlayingScreensEvent,
+  NowPlayingScreensStep,
+} from "./nowPlayingScreens.ts";
 export {
   QUEUE_COVER_FLUSH_MS,
   createQueueCoverBatcher,
@@ -915,7 +945,32 @@ export { artistSongOrder } from "./artistSongOrder.ts";
 export type { RankedArtistSong } from "./artistSongOrder.ts";
 export { ytArtistOpening, ytArtistOpeningState } from "./ytArtistOpening.ts";
 export { artistPageItems } from "./artistPage.ts";
-export type { ArtistPageItem, ArtistPageShelf } from "./artistPage.ts";
+export type {
+  ArtistPageAbout,
+  ArtistPageAfter,
+  ArtistPageItem,
+  ArtistPageShelf,
+} from "./artistPage.ts";
+export {
+  ARTIST_PAGE_KEPT_MS,
+  NO_ARTIST_PAGE_LOOKUP_FAILURES,
+  artistPageKept,
+  artistPageLookupDue,
+  artistPageLookupFailedAt,
+  artistPageLookupLine,
+  artistPageLookupReads,
+  parseArtistPageLookupFailures,
+  storedArtistPageLookupFailures,
+  withArtistPageLookupEnded,
+} from "./artistPageLookup.ts";
+export type {
+  ArtistPageKept,
+  ArtistPageLookupContext,
+  ArtistPageLookupEnd,
+  ArtistPageLookupFailures,
+} from "./artistPageLookup.ts";
+export { similarArtistLinks } from "./similarArtistLinks.ts";
+export type { SimilarArtistLink } from "./similarArtistLinks.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
 export {
   artistSeparator,
@@ -1318,7 +1373,9 @@ export {
   ytArtistPageAsks,
   ytArtistSavedStands,
   ytArtistPageView,
+  ytArtistPageWaiting,
   ytArtistQuery,
+  ytArtistAbout,
   ytArtistRelease,
   ytArtistIntegrated,
   ytArtistSectionAsks,
@@ -1338,6 +1395,7 @@ export type {
   YtArtistShelvesContext,
   YtArtistAlbum,
   YtArtistCandidate,
+  YtArtistAbout,
   YtArtistFullPage,
   YtArtistLookup,
   YtArtistPageContext,
@@ -2423,6 +2481,8 @@ export { DOUBLE_TAP_MS, coverDoubleTap, createCoverTaps } from "./coverGestures.
 export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
 export { createStarPop } from "./starPop.ts";
 export type { StarPop } from "./starPop.ts";
+export { playingStarSubject } from "./playingStar.ts";
+export type { PlayingStarAnswer, PlayingStarSubject } from "./playingStar.ts";
 export { discoverLevelLabel } from "./discoverMixLevels.ts";
 export {
   DISCOVER_ROWS,
@@ -2715,6 +2775,7 @@ export type {
 export {
   resolveRecognizedSong,
   recognizeResultActions,
+  recognizeTileFavorite,
   geniusLyricsResultActions,
   geniusLyricsResultActionLabels,
   recognizePlaylistSong,
@@ -2726,6 +2787,7 @@ export type {
   RecognizeResult,
   RecognizeResultAction,
   RecognizeResultOptions,
+  RecognizeTileFavorite,
   RecognizeTrack,
   GeniusLyricsResultAction,
 } from "./recognition.ts";
@@ -2742,6 +2804,8 @@ export {
   type SampleTouchEvent,
 } from "./touchSample.ts";
 export type { LongPressFill, SampleMenuEntry } from "./touchSample.ts";
+export { RELATED_PAGE_ROWS, relatedPages, relatedRowsThatFit } from "./relatedPages.ts";
+export type { RelatedPages } from "./relatedPages.ts";
 export {
   createRelatedSearches,
   createRelatedSongsSession,
@@ -2759,9 +2823,16 @@ export type {
 export {
   NOW_PLAYING_ACTIONS,
   NOW_PLAYING_BUTTONS_KEY,
+  NOW_PLAYING_FOOTER_SLOTS,
+  NOW_PLAYING_PREVIOUS_ROW_KEY,
+  NOW_PLAYING_TRANSPORT_SLOTS,
   editNowPlayingButtons,
+  nowPlayingButtonsAreDefault,
+  nowPlayingRelatedChevronShown,
+  nowPlayingSlotRoute,
   nowPlayingSlotChoices,
   nowPlayingSlotShow,
+  nowPlayingSongMenuShow,
   readNowPlayingButtons,
   readNowPlayingSlotRoute,
   storedNowPlayingButtons,

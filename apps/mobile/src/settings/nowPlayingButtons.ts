@@ -1,6 +1,8 @@
 import { currentLocalisation } from "@/localisation/localisation";
 import {
   NOW_PLAYING_BUTTONS_KEY,
+  NOW_PLAYING_PREVIOUS_ROW_KEY,
+  NOW_PLAYING_TRANSPORT_SLOTS,
   editNowPlayingButtons,
   readNowPlayingButtons,
   storedNowPlayingButtons,
@@ -9,25 +11,34 @@ import {
   type NowPlayingButtonsEdit,
   type NowPlayingSlot,
 } from "@wave/core";
+import { Storage } from "expo-sqlite/kv-store";
 
 import { persistedSetting, sameFields } from "@/lib/persistedSetting";
 
 /**
- * Now Playing's four button slots, left of Queue (Settings › Layout › Now
- * Playing). Synced with the Wave account, as the tab bar is. Core's key
- * replaced the one rows were kept under before the default changed, which
- * stays stored but is never read.
+ * The row of four slots as stored before there were seven, which Core reads
+ * to keep an edited row. This phone never writes it.
+ */
+const previousRow = (): string | null => Storage.getItemSync(NOW_PLAYING_PREVIOUS_ROW_KEY);
+
+/**
+ * Now Playing's seven slots: five in the footer and one on each side of the
+ * transport (Settings › Layout › Now Playing). Synced with the Wave account,
+ * as the tab bar is, under Core's key.
  */
 const nowPlayingButtons = persistedSetting<NowPlayingButtons>({
   key: NOW_PLAYING_BUTTONS_KEY,
   synced: true,
-  read: readNowPlayingButtons,
-  write: storedNowPlayingButtons,
+  read: (stored) => readNowPlayingButtons(stored, previousRow()),
+  write: (buttons) => storedNowPlayingButtons(buttons, previousRow()),
   equals: sameFields,
 });
 
-/** The four slots; re-renders when one changes. */
+/** The seven slots; re-renders when one changes. */
 export const useNowPlayingButtons = nowPlayingButtons.useValue;
+
+/** The seven slots, as saved. */
+export const savedNowPlayingButtons = nowPlayingButtons.get;
 
 /** Applies [edit] (a slot set, swapping a taken action, or Reset to Default) and saves it at once. */
 export const editSavedNowPlayingButtons = (edit: NowPlayingButtonsEdit): void =>
@@ -38,8 +49,8 @@ const ACTION_LABELS: Readonly<Record<NowPlayingAction, string>> = {
   get lyrics() {
     return currentLocalisation().strings.playbackText.lyrics;
   },
-  get related() {
-    return currentLocalisation().strings.playbackText.related;
+  get queue() {
+    return currentLocalisation().strings.playbackText.queue;
   },
   get sleepTimer() {
     return currentLocalisation().strings.playbackText.sleepTimer;
@@ -59,11 +70,20 @@ const ACTION_LABELS: Readonly<Record<NowPlayingAction, string>> = {
   get share() {
     return currentLocalisation().strings.playbackText.share;
   },
-  get songMenu() {
-    return currentLocalisation().strings.playbackText.songMenu;
-  },
 };
 
 /** A slot's name for what it holds: its action's, or None. */
 export const nowPlayingSlotLabel = (slot: NowPlayingSlot): string =>
   slot === null ? currentLocalisation().strings.playbackText.none : ACTION_LABELS[slot];
+
+/**
+ * A slot's name on its Settings row, its picker's header and, in edit mode,
+ * to screen readers: "Slot 1" to "Slot 5" for the footer's, left to right,
+ * and the transport's two by their side.
+ */
+export const nowPlayingSlotTitle = (slot: number): string => {
+  const { settings } = currentLocalisation().strings;
+  if (slot === NOW_PLAYING_TRANSPORT_SLOTS.left) return settings.slotLeftOfPrevious;
+  if (slot === NOW_PLAYING_TRANSPORT_SLOTS.right) return settings.slotRightOfNext;
+  return settings.slot(slot + 1);
+};

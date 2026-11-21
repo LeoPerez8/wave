@@ -4,6 +4,8 @@
  * like turning a page.
  */
 
+import type { NowPlayingPage } from "./nowPlayingScreens.ts";
+
 export type SkipDirection = "next" | "previous";
 
 export interface SkipSwipe {
@@ -41,4 +43,22 @@ export const resolveSkipSwipe = ({
   const flick = fast && distance >= FLICK_MIN_DISTANCE;
   if (!far && !flick) return null;
   return translationX < 0 ? "next" : "previous";
+};
+
+/** A swipe between Now Playing's screens, let go. */
+export interface ScreenSwipe extends SkipSwipe {
+  /** The screen the drag started on. */
+  readonly from: NowPlayingPage;
+}
+
+/**
+ * Returns the screen a finished swipe settles on. The Queue sits to the
+ * player's right, so a drag left turns to it and a drag right returns, by the
+ * travel and speed that skip a song on the mini player; anything else settles
+ * back where it started.
+ */
+export const settleScreenSwipe = ({ from, ...swipe }: ScreenSwipe): NowPlayingPage => {
+  const turn = resolveSkipSwipe(swipe);
+  if (from === "player") return turn === "next" ? "queue" : "player";
+  return turn === "previous" ? "player" : "queue";
 };

@@ -2,6 +2,8 @@ import type { HomeSectionId } from "../homeSections.ts";
 
 /** Home: its title's button, section titles, empty states and edit mode. */
 export const homeEn = {
+  /** Home's large title, after the two waves: Wave's name, the same in every language. */
+  title: "Wave",
   /** Each section's title, in sentence case as Home heads it (the followed artists' sections and Community playlists have their own). */
   sections: {
     discover: "Discover",

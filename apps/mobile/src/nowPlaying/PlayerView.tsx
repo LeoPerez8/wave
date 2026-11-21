@@ -1,8 +1,8 @@
-import { playerNotice } from "@wave/core";
+import { nowPlayingRelatedChevronShown, playerNotice } from "@wave/core";
 import { useLocalisation } from "@/localisation/localisation";
 import { beginTiming, activeTiming, noteTimingLinkFailure } from "@/lib/timing";
-import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
-import { artistLink, createStarPop, parseTrackId } from "@wave/core";
+import { IconChevronRight, IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
+import { artistLink, createStarPop, parseTrackId, playingStarSubject } from "@wave/core";
 import { Image } from "expo-image";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
@@ -32,6 +32,7 @@ import { playbackState, type PlaybackState } from "@/playback/Player";
 import { playerTrouble } from "@/playback/playbackStores";
 import { queueState } from "@/playback/Queue";
 import { queueTracks, type QueueTrack } from "@/playback/queueTracks";
+import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { useStreamedArtistLink } from "@/ytmusic/streamedArtist";
 
@@ -39,10 +40,11 @@ import { nowPlayingLibraryArtistLink } from "./artistLink";
 import { CoverPress, STAR_POP } from "./CoverPress";
 import { usePlayingYtSong } from "./hooks";
 import { MarqueeText, useMarqueeGroup, type MarqueeGroup } from "./Marquee";
+import { openRelated } from "./openRelated";
 import {
   nowPlayingSongActions,
   songActionFailed,
-  usePlayingSongAnswer,
+  usePlayingStarAnswer,
   usePlayingSongTarget,
 } from "./playingSong";
 import {
@@ -216,8 +218,9 @@ function MetaLink({
 const starPop = createStarPop();
 
 /**
- * The star observes the shared answer; an early toggle acquires the actual
- * saved state. A star that fills here (a tap on the empty star, or the
+ * The star shows the song's stars as this phone holds them, on its first frame
+ * too (Core's `playingStarSubject`); an early toggle acquires the actual saved
+ * state. A star that fills here (a tap on the empty star, or the
  * cover's double-tap adding the song) asks for the star's pop.
  */
 function useNowPlayingStar(): {
@@ -229,12 +232,8 @@ function useNowPlayingStar(): {
   const trackId = useCurrentTrackId();
   const ytSong = usePlayingYtSong(trackId);
   const target = usePlayingSongTarget(trackId, ytSong);
-  const answer = usePlayingSongAnswer(target);
-  const favorite = useScopedSongStarred(
-    answer?.track?.id ?? null,
-    ytSong?.videoId ?? null,
-    answer ?? { favorite: false, pendingFavorite: false },
-  );
+  const subject = playingStarSubject(trackId, usePlayingStarAnswer(target));
+  const favorite = useScopedSongStarred(subject.track, subject.video, subject.saved);
   const star = (addOnly = false): void => {
     if (target === null) return;
     if (addOnly || !favorite) starPop.ask(target.trackId);
@@ -327,9 +326,17 @@ type Props = {
   playing: boolean;
 };
 
+/** The Related chevron's box: the title's line height, so the line is no taller for it. */
+const CHEVRON = 26;
+/** What its touch target gains on each side, to reach 48. */
+const CHEVRON_SLOP = (48 - CHEVRON) / 2;
+
 /**
- * The player: the artwork as large as it fits, then the title with the
- * favorite star beside it, the artist and the album. Artist and album open
+ * The player: the artwork as large as it fits, then the title, with the
+ * chevron that opens Related right after it and the favorite star at the
+ * line's end, the artist and the album. The chevron shows with YouTube Music
+ * on (Core's `nowPlayingRelatedChevronShown`); a long title scrolls in the
+ * space before it. Artist and album open
  * their screens; a streamed song's artist opens integrated (their Library
  * page, else the YouTube Music artist page) while YT Music is on.
  */
@@ -371,6 +378,7 @@ export function PlayerView({ item, details, playing }: Props) {
   );
   const streamedTo = useStreamedArtistLink(streamedArtists, shown);
   const streamedCover = useStreamedCover(item.id);
+  const relatedChevron = nowPlayingRelatedChevronShown("song", useYtMusicEnabled());
   const openLocalArtist =
     parsedTrack?.kind !== "library"
       ? null
@@ -402,15 +410,30 @@ export function PlayerView({ item, details, playing }: Props) {
       <NowPlayingArtwork uri={item.artworkUri} playing={playing} streamed={streamedCover} />
       <View className="flex-row items-center" style={{ gap: CELL }}>
         <View className="flex-1">
-          <MarqueeText
-            text={title}
-            group={marquee}
-            index={0}
-            standalone
-            role="header"
-            fill
-            className="font-sans text-title3 font-medium text-foreground"
-          />
+          <View className="flex-row items-center">
+            {/* Shrinks to the space the chevron leaves: the title scrolls inside it. */}
+            <View style={{ flexShrink: 1, minWidth: 0 }}>
+              <MarqueeText
+                text={title}
+                group={marquee}
+                index={0}
+                standalone
+                role="header"
+                className="font-sans text-title3 font-medium text-foreground"
+              />
+            </View>
+            {relatedChevron && (
+              <IconButton
+                icon={IconChevronRight}
+                label={strings.playbackText.related}
+                tone="primary"
+                size={CHEVRON}
+                iconSize={20}
+                hitSlop={CHEVRON_SLOP}
+                onPress={openRelated}
+              />
+            )}
+          </View>
           <MetaLink
             label={artist}
             open={

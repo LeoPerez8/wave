@@ -131,10 +131,17 @@ test("actual fetch/save workflow uses the saved match and keeps a full answer sa
         search: () => Effect.die("the saved match skips searching"),
         page: () => Effect.succeed(partial.page),
         saved: store.ytArtist("justice").pipe(Effect.orElseSucceed(() => null)),
-        save: () => Effect.die("a partial answer must not overwrite the full list"),
+        save: (saved) => store.saveYtArtist("justice", saved).pipe(Effect.ignore),
       }),
     );
-    assert.deepEqual(kept, answer);
+    // A page-only answer may add its About to the saved page, but never replaces the full list.
+    assert.equal(kept.outcome, "found");
+    assert.equal(answer.outcome, "found");
+    if (kept.outcome === "found" && answer.outcome === "found") {
+      assert.deepEqual(kept.page.songs, answer.page.songs);
+      assert.deepEqual(kept.page.albums, answer.page.albums);
+    }
+    assert.deepEqual(Effect.runSync(store.ytArtist("justice")), kept);
   } finally {
     fixture.close();
   }

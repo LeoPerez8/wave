@@ -48,6 +48,12 @@ data class YtArtistPage(
   val songsPlaylistId: String? = null,
   /** The artists the page lists as similar ("Fans might also like"), in its order. */
   val similar: List<YtArtistCandidate> = emptyList(),
+  /** The artist's description, if YouTube Music has one. */
+  val description: String? = null,
+  /** The subscriber count as YouTube Music presents it. */
+  val subscribers: String? = null,
+  /** The view count as YouTube Music presents it. */
+  val views: String? = null,
 ) {
   fun toMap(): Map<String, Any?> =
     mapOf(
@@ -58,6 +64,9 @@ data class YtArtistPage(
       "singles" to singles.map(YtShelfItem.Album::toMap),
       "songsPlaylistId" to songsPlaylistId,
       "similar" to similar.map(YtArtistCandidate::toMap),
+      "description" to description,
+      "subscribers" to subscribers,
+      "views" to views,
     )
 }
 
@@ -159,6 +168,25 @@ object YtArtistParser {
       header.path(key, "musicThumbnailRenderer", "thumbnail", "thumbnails").arr
         ?.lastOrNull().path("url").string?.takeIf(String::isNotEmpty)
     }?.let(::square)
+    val aboutShelf = sections.firstNotNullOfOrNull { it.path("musicDescriptionShelfRenderer").obj }
+    fun text(runs: JsonElement?): String? = runs.arr
+      ?.joinToString("") { it.path("text").string.orEmpty() }
+      ?.trim()?.takeIf(String::isNotEmpty)
+    val description = text(header.path("description", "runs"))
+      ?: text(aboutShelf.path("description", "runs"))
+    val subscriberText =
+      text(
+        header.path(
+          "subscriptionButton", "subscribeButtonRenderer", "longSubscriberCountText", "runs",
+        ),
+      ) ?: text(
+        header.path(
+          "subscriptionButton", "subscribeButtonRenderer", "subscriberCountText", "runs",
+        ),
+      )
+    val viewsText = text(aboutShelf.path("subheader", "runs"))
+    val subscribers = subscriberText?.substringBefore(' ')?.takeIf(String::isNotEmpty)
+    val views = viewsText?.substringBefore(' ')?.takeIf(String::isNotEmpty)
     return YtArtistPage(
       name = name,
       artworkUrl = artworkUrl,
@@ -170,6 +198,9 @@ object YtArtistParser {
         ?.get("contents").arr.orEmpty()
         .mapNotNull { it.path("musicTwoRowItemRenderer").obj?.let(::artistTile) }
         .distinctBy { it.browseId },
+      description = description,
+      subscribers = subscribers,
+      views = views,
     )
   }
 

@@ -182,7 +182,7 @@ export const openQueuedSongActions = (trackId: string, options: MenuOptions = {}
 
 /**
  * Opens the long-press menu for the song playing (the mini player's long
- * press, Now Playing's Song menu): its own menu as a song's row offers it,
+ * press, the ⋯ in Now Playing's header): its own menu as a song's row offers it,
  * with Sleep Timer instead of Play Next and Add to Queue (Core's
  * `itemActions`, `ytSongActions`). Nothing opens with no song on,
  * nor for an unsearched song while its search runs.

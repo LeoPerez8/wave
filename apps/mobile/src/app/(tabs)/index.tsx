@@ -64,7 +64,8 @@ export default function HomeScreen() {
   return (
     <HomeFollowProvider reading={painted}>
       <LargeTitleScreen
-        title={strings.tabs.index}
+        title={strings.home.title}
+        waves
         titleLongPress={homeTitleLongPress(strings)}
         action={
           <IconButton

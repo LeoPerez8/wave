@@ -43,6 +43,7 @@ const recorder = () => {
       play: record("play"),
       playNext: record("playNext"),
       addToPlaylist: record("addToPlaylist"),
+      favorite: record("favorite"),
       goToAlbum: record("goToAlbum"),
       download: record("download"),
       cancelDownload: record("cancelDownload"),
@@ -74,13 +75,14 @@ test("a long-pressed Library song offers its Recognize actions and Open in Geniu
   assert.deepEqual(searched, []);
   assert.deepEqual(
     menu.map((entry) => entry.label),
-    ["Play", "Play Next", "Add to Playlist", "Go to Album", "Open in Genius"],
+    ["Play", "Play Next", "Add to Playlist", "Favorite", "Go to Album", "Open in Genius"],
   );
   for (const entry of menu) entry.run();
   assert.deepEqual(done, [
     ["play", { source: "library", track }],
     ["playNext", { source: "library", track }],
     ["addToPlaylist", result],
+    ["favorite", { source: "library", track }, true],
     ["goToAlbum", track],
     ["openUrl", hit.url],
   ]);
@@ -90,18 +92,26 @@ test("a long-pressed song found online plays and downloads its stream", async ()
   const { ports, searched } = lookup([], [online]);
   const result = await resolveGeniusHit(ports, hit, new AbortController().signal);
   const { done, effects } = recorder();
-  const menu = geniusHitMenu(hit, result, { ytMusic: true }, catalogueOf("pt-BR"), effects);
+  const menu = geniusHitMenu(
+    hit,
+    result,
+    { ytMusic: true, starred: true },
+    catalogueOf("pt-BR"),
+    effects,
+  );
   assert.deepEqual(searched, ["Teardrop Massive Attack"]);
   assert.deepEqual(
     menu.map((entry) => entry.action),
-    ["play", "playNext", "addToPlaylist", "download", "openInGenius"],
+    ["play", "playNext", "addToPlaylist", "unfavorite", "download", "openInGenius"],
   );
+  assert.equal(menu[3]?.label, "Remover das Favoritas");
   assert.equal(menu.at(-1)?.label, "Abrir no Genius");
   for (const entry of menu) entry.run();
   assert.deepEqual(done, [
     ["play", { source: "stream", song: online }],
     ["playNext", { source: "stream", song: online }],
     ["addToPlaylist", result],
+    ["favorite", { source: "stream", song: online }, false],
     ["download", online],
     ["openUrl", hit.url],
   ]);
