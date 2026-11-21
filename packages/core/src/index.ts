@@ -1011,6 +1011,7 @@ export type {
   YtSearchArtistsEvent,
   YtKeptAnswer,
   YtAskedBy,
+  YtCommunityPlaylist,
   YtQuietReason,
   YtSearchAnswer,
   YtSearchLibrary,

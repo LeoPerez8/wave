@@ -27,6 +27,8 @@ export const playbackTextEn = {
   checkYourConnectionAndTryAgain: "Check your connection and try again.",
   clear: "Clear",
   clearSearch: "Clear search",
+  /** Search's shelf of community playlists (docs/spec.md, Language). */
+  communityPlaylists: "Community playlists",
   closeNowPlaying: "Close Now Playing",
   /** Shared by manual saves and the tile notification's silent save update. */
   couldntAddToShazam: "Couldn't add to Shazam",

@@ -2,12 +2,18 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import type { GeniusLyricsHit, SearchResults, YtArtistCandidate, YtSectionView } from "@wave/core";
+import type {
+  GeniusLyricsHit,
+  SearchResults,
+  YtArtistCandidate,
+  YtCommunityPlaylist,
+  YtSectionView,
+} from "@wave/core";
 import type { SongRow } from "@wave/client";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import type { LocalLyricsHit } from "./lyricsSearch.ts";
 import type { SearchHit } from "./searchIndex.ts";
-import { resultRows, type PlacedYtSongs } from "./rows.ts";
+import { resultRows, ytFooterRows, type PlacedYtSongs } from "./rows.ts";
 
 const noPlaced: PlacedYtSongs = { songs: [], rowOf: new Map() };
 const empty: SearchResults<SearchHit> = { top: null, groups: [] };
@@ -482,6 +488,7 @@ describe("Search groups", () => {
     songs,
     artists,
     albums: [],
+    playlists: [],
     top: songs[0] === undefined ? null : { kind: "song", song: songs[0] },
     note: null,
     loading: false,
@@ -535,5 +542,111 @@ describe("Search groups", () => {
       "zeca pagodinho",
     );
     assert.deepEqual(headings(rows), ["heading:top", "heading:artist", "heading:song"]);
+  });
+});
+
+describe("Search's Community playlists shelf", () => {
+  const playlist = (playlistId: string): YtCommunityPlaylist => ({
+    playlistId,
+    title: `Playlist ${playlistId}`,
+    author: "Someone",
+    artworkUrl: null,
+  });
+  const song: NativeYtSong = {
+    videoId: "v",
+    title: "Song",
+    artists: ["Artist"],
+    album: null,
+    albumId: null,
+    durationMs: null,
+    artworkUrl: null,
+    explicit: false,
+  };
+  const view = (playlists: YtCommunityPlaylist[]): YtSectionView<NativeYtSong> => ({
+    songs: [song],
+    artists: [],
+    albums: [],
+    playlists,
+    top: { kind: "song", song },
+    note: null,
+    loading: false,
+    integrated: true,
+  });
+  const placed: PlacedYtSongs = {
+    songs: [{ source: "stream", song }],
+    rowOf: new Map([[song.videoId, 0]]),
+  };
+  const shown = (playlists: YtCommunityPlaylist[], language: "en" | "pt-BR" = "en") =>
+    resultRows(empty, new Set(), view(playlists), placed, null, language);
+
+  test("the playlists found show under its head, after every other group", () => {
+    const rows = shown([playlist("b"), playlist("a")]);
+    assert.deepEqual(rows.slice(-3), [
+      { type: "heading", key: "heading:community-playlists", label: "Community playlists · 2" },
+      { type: "ytPlaylist", key: "yt-playlist:b", playlist: playlist("b") },
+      { type: "ytPlaylist", key: "yt-playlist:a", playlist: playlist("a") },
+    ]);
+    assert.ok(rows.findIndex((row) => row.key === "heading:song") < rows.length - 3);
+  });
+
+  test("a search that found none shows no shelf", () => {
+    const rows = shown([]);
+    assert.equal(
+      rows.some((row) => row.type === "ytPlaylist" || row.key === "heading:community-playlists"),
+      false,
+    );
+  });
+
+  test("the shelf is headed in Portuguese", () => {
+    assert.deepEqual(shown([playlist("a")], "pt-BR").at(-2), {
+      type: "heading",
+      key: "heading:community-playlists",
+      label: "Playlists da comunidade · 1",
+    });
+  });
+
+  test("the line about results the Library already has shows once, above the shelf", () => {
+    const allInLibrary: YtSectionView<NativeYtSong> = {
+      ...view([playlist("a")]),
+      songs: [],
+      top: null,
+      note: "allInLibrary",
+    };
+    const rows = [
+      ...resultRows(empty, new Set(), allInLibrary, noPlaced, null, "en"),
+      ...ytFooterRows(allInLibrary, "en"),
+    ];
+    assert.deepEqual(rows, [
+      {
+        type: "note",
+        key: "note:yt",
+        text: "Everything found online is already in your library.",
+      },
+      { type: "heading", key: "heading:community-playlists", label: "Community playlists · 1" },
+      { type: "ytPlaylist", key: "yt-playlist:a", playlist: playlist("a") },
+    ]);
+  });
+
+  test("with no shelf, that line stays under the results", () => {
+    const allInLibrary: YtSectionView<NativeYtSong> = {
+      ...view([]),
+      songs: [],
+      top: null,
+      note: "allInLibrary",
+    };
+    assert.deepEqual(resultRows(empty, new Set(), allInLibrary, noPlaced, null, "en"), []);
+    assert.deepEqual(
+      ytFooterRows(allInLibrary, "en").map((row) => row.key),
+      ["note:yt"],
+    );
+  });
+
+  test("with nothing else found, the shelf still shows", () => {
+    const only: YtSectionView<NativeYtSong> = { ...view([playlist("a")]), songs: [], top: null };
+    const rows = resultRows(empty, new Set(), only, noPlaced, null, "en");
+    assert.deepEqual(
+      rows.map((row) => row.key),
+      ["heading:community-playlists", "yt-playlist:a"],
+    );
   });
 });
