@@ -9,6 +9,7 @@ import { catalogSeedKey } from "./candidateCatalog.ts";
 import { DEFAULT_DJ_SETTINGS, djNewMusicShare, type DjSettings } from "./djSettings.ts";
 import type { MagicSeedSong, MagicSession } from "./magicQueue.ts";
 import type { TasteProfile } from "./tasteProfile.ts";
+import { YT_ARTIST_FRESH_MS } from "./ytArtist.ts";
 
 /** A tile as the grid tells tiles apart: its kind and what that kind compares by. */
 export type DjTileKey = string & { readonly djTile: true };
@@ -101,17 +102,55 @@ export const djGrid = ({ artists, taste, played = [], graph }: DjGridSources): D
   return [...grid.values()];
 };
 
+/** How many similar artists a selected tile opens at most. */
+export const DJ_OPENED_TILES = 3;
+
+/** The row of similar artists a tile opened when it was selected; a tile opens one row per opening of DJ. */
+export interface DjRow {
+  /** The tile that opened it. */
+  readonly of: DjTileKey;
+  /** The tile its placeholders stand right after: the last one it opened, or its own. */
+  readonly after: DjTileKey;
+  /** How many places it still holds for the artist's YT Music page; 0 once the row is settled. */
+  readonly waiting: number;
+}
+
 /** DJ as it stands on screen: the grid's tiles in order and the selected ones. */
 export interface DjState {
   readonly tiles: readonly DjTile[];
   /** The selected tiles' keys, in the order they were selected. */
   readonly selected: readonly DjTileKey[];
+  /** The rows the selected tiles opened, in the order they opened. */
+  readonly rows: readonly DjRow[];
 }
 
-/** What the owner does in DJ. */
+/** The Library's artists, for the tiles a selection opens to show theirs. */
+type DjLibraryArtists = readonly { readonly id: number; readonly name: string }[];
+
+/** What the owner does in DJ, and what DJ reads for it. */
 export type DjAction =
-  /** A tap on a tile: selects it, or unselects it when it's selected. */
-  { readonly type: "toggle"; readonly key: DjTileKey };
+  | {
+      /**
+       * A tap on a tile: selects it, or unselects it when it's selected. The
+       * first time it's selected it opens its row of similar artists from
+       * [graph] (`DJ_OPENED_TILES`); none known when it's cold or left out.
+       */
+      readonly type: "toggle";
+      readonly key: DjTileKey;
+      readonly graph?: ArtistGraph | null;
+      readonly library?: DjLibraryArtists;
+    }
+  | {
+      /**
+       * The YT Music page of the tile [key] was read (`djPagesNeeded`):
+       * [artists] is its "Fans might also like" list in the page's order, or
+       * null when it couldn't be read (offline, a failed request, no such page).
+       */
+      readonly type: "similar";
+      readonly key: DjTileKey;
+      readonly artists: readonly { readonly name: string }[] | null;
+      readonly library?: DjLibraryArtists;
+    };
 
 /** How many tiles a DJ seed holds at most, so every pick still weighs in the queue. */
 export const DJ_MAX_SELECTED = 30;
@@ -120,7 +159,7 @@ export const DJ_MAX_SELECTED = 30;
 export const djOpened = (tiles: readonly DjTile[]): DjState => {
   const once = new Map<DjTileKey, DjTile>();
   for (const tile of tiles) if (!once.has(tile.key)) once.set(tile.key, tile);
-  return { tiles: [...once.values()], selected: [] };
+  return { tiles: [...once.values()], selected: [], rows: [] };
 };
 
 /** Whether the tile [key] is selected in [state]. */
@@ -142,16 +181,149 @@ export const djSeedTiles = (state: DjState): DjTile[] =>
   state.selected.flatMap((key) => state.tiles.find((tile) => tile.key === key) ?? []);
 
 /**
+ * The tiles of up to [room] of [names]' artists, in their order, that [state]'s
+ * grid doesn't show yet, each one once: the Library's artist where [library] has them.
+ */
+const tilesToOpen = (
+  state: DjState,
+  names: readonly string[],
+  room: number,
+  library: DjLibraryArtists,
+): DjArtistTile[] => {
+  const shown = new Set<string>(state.tiles.map((tile) => tile.key));
+  const opened: DjArtistTile[] = [];
+  for (const name of names) {
+    if (opened.length >= room) break;
+    const tile = djArtistTile(name);
+    if (tile === null || shown.has(tile.key)) continue;
+    shown.add(tile.key);
+    const owned = library.find((artist) => djArtistTile(artist.name)?.key === tile.key);
+    opened.push(owned === undefined ? tile : { ...tile, name: owned.name, libraryId: owned.id });
+  }
+  return opened;
+};
+
+/** [tiles] with [opened] right after the tile [after]. */
+const placedAfter = (
+  tiles: readonly DjTile[],
+  after: DjTileKey,
+  opened: readonly DjTile[],
+): readonly DjTile[] => {
+  const at = tiles.findIndex((tile) => tile.key === after) + 1;
+  return opened.length === 0 ? tiles : [...tiles.slice(0, at), ...opened, ...tiles.slice(at)];
+};
+
+/**
+ * [state] once [tile], just selected, opened its row: the closest artist
+ * graph neighbours the grid doesn't show yet, up to `DJ_OPENED_TILES`, right
+ * after it. With fewer, the row holds the places left for the artist's page
+ * (`djPagesNeeded`). A tile that opened a row before opens nothing more.
+ */
+const withRowOpened = (
+  state: DjState,
+  tile: DjTile,
+  graph: ArtistGraph | null,
+  library: DjLibraryArtists,
+): DjState => {
+  if (state.rows.some((row) => row.of === tile.key)) return state;
+  const close = graph === null ? [] : artistNeighbours(graph, tile.name);
+  const opened = tilesToOpen(
+    state,
+    close.map((neighbour) => neighbour.name),
+    DJ_OPENED_TILES,
+    library,
+  );
+  const row: DjRow = {
+    of: tile.key,
+    after: opened[opened.length - 1]?.key ?? tile.key,
+    waiting: DJ_OPENED_TILES - opened.length,
+  };
+  return {
+    ...state,
+    tiles: placedAfter(state.tiles, tile.key, opened),
+    rows: [...state.rows, row],
+  };
+};
+
+/**
+ * [state] once the page the row of [key] waits for was read: [artists] fill
+ * the places it held, in the page's order, skipping tiles the grid shows by
+ * now; with null (the page couldn't be read) what the graph gave stands. The
+ * places not filled are let go. Rows that wait at the same tile keep their order.
+ */
+const withRowFilled = (
+  state: DjState,
+  key: DjTileKey,
+  artists: readonly { readonly name: string }[] | null,
+  library: DjLibraryArtists,
+): DjState => {
+  const at = state.rows.findIndex((row) => row.of === key && row.waiting > 0);
+  const filled = state.rows[at];
+  if (filled === undefined) return state;
+  const opened = tilesToOpen(
+    state,
+    (artists ?? []).map((artist) => artist.name),
+    filled.waiting,
+    library,
+  );
+  const last = opened[opened.length - 1]?.key ?? filled.after;
+  return {
+    ...state,
+    tiles: placedAfter(state.tiles, filled.after, opened),
+    rows: state.rows.map((row, index) => {
+      if (index === at) return { ...row, after: last, waiting: 0 };
+      return index > at && row.after === filled.after ? { ...row, after: last } : row;
+    }),
+  };
+};
+
+/**
  * [state] after [action]. A tap on a tile the grid doesn't hold, or on a
- * further tile once `DJ_MAX_SELECTED` are selected, leaves it as it is.
+ * further tile once `DJ_MAX_SELECTED` are selected, leaves it as it is, and
+ * so does a page no row waits for. Unselecting a tile keeps the tiles it opened.
  */
 export const djReduce = (state: DjState, action: DjAction): DjState => {
+  if (action.type === "similar")
+    return withRowFilled(state, action.key, action.artists, action.library ?? []);
   if (djSelected(state, action.key))
     return { ...state, selected: state.selected.filter((key) => key !== action.key) };
-  if (!djSelectable(state, action.key) || !state.tiles.some((tile) => tile.key === action.key))
-    return state;
-  return { ...state, selected: [...state.selected, action.key] };
+  const tile = state.tiles.find((each) => each.key === action.key);
+  if (!djSelectable(state, action.key) || tile === undefined) return state;
+  return withRowOpened(
+    { ...state, selected: [...state.selected, action.key] },
+    tile,
+    action.graph ?? null,
+    action.library ?? [],
+  );
 };
+
+/** The tiles whose YT Music page DJ reads now: those whose row still holds places for it. */
+export const djPagesNeeded = (state: DjState): DjTile[] =>
+  state.rows.flatMap((row) =>
+    row.waiting > 0 ? (state.tiles.find((tile) => tile.key === row.of) ?? []) : [],
+  );
+
+/** One place of DJ's grid as it's drawn: a tile, or a still placeholder holding a place. */
+export type DjCell =
+  | { readonly kind: "tile"; readonly key: string; readonly tile: DjTile }
+  | { readonly kind: "placeholder"; readonly key: string };
+
+/**
+ * [state]'s grid as it's drawn, in order: its tiles, and after a row that
+ * waits for its artist's page a placeholder for each place it holds.
+ */
+export const djCells = (state: DjState): DjCell[] =>
+  state.tiles.flatMap((tile): DjCell[] => [
+    { kind: "tile", key: tile.key, tile },
+    ...state.rows.flatMap((row) =>
+      row.after === tile.key
+        ? Array.from({ length: row.waiting }, (_, at): DjCell => ({
+            kind: "placeholder",
+            key: `placeholder:${row.of}:${at}`,
+          }))
+        : [],
+    ),
+  ]);
 
 /** What a DJ seed is called; Up Next's label comes from the catalogue (`magicQueueLabel`). */
 const DJ_SEED_TITLE = "DJ";
@@ -207,3 +379,34 @@ export const startDjQueue = (
     seedVideoIds: [],
   };
 };
+
+/** What's saved for an artist's YT Music page, as DJ reads it (a `YtArtistSaved`). */
+export type DjSavedPage =
+  | {
+      readonly outcome: "found";
+      readonly checkedAt: number;
+      readonly page: { readonly similar?: readonly { readonly name: string }[] };
+    }
+  | { readonly outcome: "unmatched"; readonly checkedAt: number };
+
+/** How DJ gets a tile's "Fans might also like" list, given what's saved for its page. */
+export interface DjPageRead {
+  /** Whether YouTube Music is asked for the page: nothing is saved, or it's a week old. */
+  readonly ask: boolean;
+  /**
+   * The list the saved page gives, for the `similar` action: what fills the
+   * row with no request, and what stands when the request fails. Null with
+   * nothing saved or no such artist.
+   */
+  readonly artists: readonly { readonly name: string }[] | null;
+}
+
+/**
+ * How DJ reads the page a row waits for (`djPagesNeeded`) at [now], given
+ * what's [saved] for it: an answer saved within the week (`YT_ARTIST_FRESH_MS`)
+ * is used as it is, with no request; otherwise the page is asked for.
+ */
+export const djPageRead = (saved: DjSavedPage | null, now: number): DjPageRead => ({
+  ask: saved === null || now - saved.checkedAt >= YT_ARTIST_FRESH_MS,
+  artists: saved?.outcome === "found" ? (saved.page.similar ?? []) : null,
+});
