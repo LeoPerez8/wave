@@ -48,7 +48,8 @@ export const keptTotalsPlan = (window: StatsWindow): KeptTotalsPlan => {
   if ((lastDay + 1) * DAY_MS <= to) plays.push({ from: (lastDay + 1) * DAY_MS, to });
   const firstBlock = Math.ceil(firstDay / KEPT_BLOCK_DAYS);
   const lastBlock = Math.floor((lastDay + 1) / KEPT_BLOCK_DAYS) - 1;
-  if (firstBlock > lastBlock) return { blocks: null, days: [{ from: firstDay, to: lastDay }], plays };
+  if (firstBlock > lastBlock)
+    return { blocks: null, days: [{ from: firstDay, to: lastDay }], plays };
   const days: KeptRange[] = [];
   if (firstDay < firstBlock * KEPT_BLOCK_DAYS)
     days.push({ from: firstDay, to: firstBlock * KEPT_BLOCK_DAYS - 1 });

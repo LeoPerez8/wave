@@ -119,7 +119,9 @@ const fromPlaylist = (row: string) =>
 const addPlaylistPlay = (row: string) => `
   INSERT INTO playlist_play_buckets (context_id, span, bucket, counted_plays, latest_play_at)
     SELECT * FROM (${spans(row)
-      .map(({ span, bucket }) => `SELECT ${row}.context_id, ${span}, ${bucket}, 1, ${row}.started_at`)
+      .map(
+        ({ span, bucket }) => `SELECT ${row}.context_id, ${span}, ${bucket}, 1, ${row}.started_at`,
+      )
       .join(" UNION ALL ")}) WHERE ${fromPlaylist(row)}
     ON CONFLICT (context_id, span, bucket) DO UPDATE SET counted_plays = counted_plays + 1,
       latest_play_at = max(latest_play_at, excluded.latest_play_at);`;

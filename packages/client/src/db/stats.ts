@@ -179,7 +179,8 @@ const playsUpTo = (to: number): SQL => sql`
 export const creditedPlayTotals = (
   db: LibraryDatabase,
   window: StatsWindow,
-): CreditedPlayTotals[] => keptCreditedPlayTotals(db, window) ?? summedCreditedPlayTotals(db, window);
+): CreditedPlayTotals[] =>
+  keptCreditedPlayTotals(db, window) ?? summedCreditedPlayTotals(db, window);
 
 /** `creditedPlayTotals` summed from the plays: what the kept totals are checked against and read while they settle. */
 export const summedCreditedPlayTotals = (

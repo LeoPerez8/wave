@@ -59,20 +59,20 @@ times: before (today's sum, or the reader with the totals unsettled) → after (
 desktop numbers, Node with sql.js (SQLite in WebAssembly), on a machine shared with other builds
 at commit fcaa3eae0. They are not phone numbers.
 
-| Read | 1,000 songs, 16,000 plays | 12,000 songs, 60,000 plays |
-| --- | --- | --- |
-| sum up played albums and artists, Stats week | 18.1 → 5.2 ms | 88.3 → 40.0 ms |
-| … Stats month | 22.9 → 7.8 ms | 112.3 → 52.8 ms |
-| … Stats year | 31.7 → 7.1 ms | 142.7 → 50.9 ms |
-| … Stats all time | 16.0 → 7.2 ms | 94.6 → 48.6 ms |
-| … In your orbit (14 days) | 18.9 → 5.9 ms | 107.3 → 48.3 ms |
-| … Follow suggestions (90 days) | 32.4 → 7.4 ms | 142.7 → 53.0 ms |
-| sum up played artists, In your orbit | 16.7 → 2.5 ms | 80.4 → 19.4 ms |
-| sum up song plays, most listened recently (14 days) | 8.5 → 6.7 ms | 40.9 → 47.4 ms |
-| sum up album and artist plays, all time | 3.3 → 2.5 ms | 51.0 → 21.3 ms |
-| read Home's plays | 8.1 → 4.2 ms | 46.6 → 9.4 ms |
-| count the playlists' plays (From your library) | 0.9 → 0.3 ms | 0.9 → 0.4 ms |
-| read release listening | 2.4 → 0.3 ms | 8.6 → 0.7 ms |
+| Read                                                | 1,000 songs, 16,000 plays | 12,000 songs, 60,000 plays |
+| --------------------------------------------------- | ------------------------- | -------------------------- |
+| sum up played albums and artists, Stats week        | 18.1 → 5.2 ms             | 88.3 → 40.0 ms             |
+| … Stats month                                       | 22.9 → 7.8 ms             | 112.3 → 52.8 ms            |
+| … Stats year                                        | 31.7 → 7.1 ms             | 142.7 → 50.9 ms            |
+| … Stats all time                                    | 16.0 → 7.2 ms             | 94.6 → 48.6 ms             |
+| … In your orbit (14 days)                           | 18.9 → 5.9 ms             | 107.3 → 48.3 ms            |
+| … Follow suggestions (90 days)                      | 32.4 → 7.4 ms             | 142.7 → 53.0 ms            |
+| sum up played artists, In your orbit                | 16.7 → 2.5 ms             | 80.4 → 19.4 ms             |
+| sum up song plays, most listened recently (14 days) | 8.5 → 6.7 ms              | 40.9 → 47.4 ms             |
+| sum up album and artist plays, all time             | 3.3 → 2.5 ms              | 51.0 → 21.3 ms             |
+| read Home's plays                                   | 8.1 → 4.2 ms              | 46.6 → 9.4 ms              |
+| count the playlists' plays (From your library)      | 0.9 → 0.3 ms              | 0.9 → 0.4 ms               |
+| read release listening                              | 2.4 → 0.3 ms              | 8.6 → 0.7 ms               |
 
 The kept sums are a small part of what's left. On the 1,000-song fixture the week's artist and
 album sums take 0.5 and 0.8 ms; the rest is the Library rows a ranking shows (`selectArtists` and

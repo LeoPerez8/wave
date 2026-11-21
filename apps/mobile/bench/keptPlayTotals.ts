@@ -81,7 +81,10 @@ const sameRows = <A>(a: readonly A[], b: readonly A[]) =>
     b.map((row) => JSON.stringify(row)).toSorted(),
   );
 
-const ids = (totals: { readonly albums: readonly { id: unknown; countedPlays: number }[]; readonly artists: readonly { id: unknown; countedPlays: number }[] }) => ({
+const ids = (totals: {
+  readonly albums: readonly { id: unknown; countedPlays: number }[];
+  readonly artists: readonly { id: unknown; countedPlays: number }[];
+}) => ({
   albums: totals.albums.map((entry) => [entry.id, entry.countedPlays]),
   artists: totals.artists.map((entry) => [entry.id, entry.countedPlays]),
 });
@@ -124,10 +127,15 @@ for (const size of quick ? ([1000] as const) : ([1000, 12000] as const)) {
   const row = (label: string, before: () => unknown, after: () => unknown) => {
     const summed = timeRuns(before, RUNS);
     const kept = timeRuns(after, RUNS);
-    console.log(`${label.padEnd(56)} ${String(summed.ms).padStart(8)} ms → ${String(kept.ms).padStart(6)} ms`);
+    console.log(
+      `${label.padEnd(56)} ${String(summed.ms).padStart(8)} ms → ${String(kept.ms).padStart(6)} ms`,
+    );
   };
   for (const [name, window] of windows) {
-    assert.deepEqual(ids(keptPlayedTotals(db, window, true)!), ids(summedPlayedTotals(db, window, true)));
+    assert.deepEqual(
+      ids(keptPlayedTotals(db, window, true)!),
+      ids(summedPlayedTotals(db, window, true)),
+    );
     row(
       `sum up played albums and artists, ${name}`,
       () => summedPlayedTotals(db, window, true),
@@ -139,25 +147,37 @@ for (const size of quick ? ([1000] as const) : ([1000, 12000] as const)) {
     () => summedPlayedTotals(db, inYourOrbitWindow(now), false),
     () => keptPlayedTotals(db, inYourOrbitWindow(now), false),
   );
-  sameRows(keptSongPlayTotals(db, recentPlaysWindow(now))!, summedSongPlayTotals(db, recentPlaysWindow(now)));
+  sameRows(
+    keptSongPlayTotals(db, recentPlaysWindow(now))!,
+    summedSongPlayTotals(db, recentPlaysWindow(now)),
+  );
   row(
     "sum up song plays, most listened recently (14 days)",
     () => summedSongPlayTotals(db, recentPlaysWindow(now)),
     () => keptSongPlayTotals(db, recentPlaysWindow(now)),
   );
-  sameRows(keptCreditedPlayTotals(db, statsWindow("all", now))!, summedCreditedPlayTotals(db, statsWindow("all", now)));
+  sameRows(
+    keptCreditedPlayTotals(db, statsWindow("all", now))!,
+    summedCreditedPlayTotals(db, statsWindow("all", now)),
+  );
   row(
     "sum up album and artist plays, all time",
     () => summedCreditedPlayTotals(db, statsWindow("all", now)),
     () => keptCreditedPlayTotals(db, statsWindow("all", now)),
   );
-  assert.deepEqual(homePlays(db), unsettled(db, () => homePlays(db)));
+  assert.deepEqual(
+    homePlays(db),
+    unsettled(db, () => homePlays(db)),
+  );
   row(
     "read Home's plays",
     () => unsettled(db, () => homePlays(db)),
     () => homePlays(db),
   );
-  assert.deepEqual(selectPlaylistPlays(db, now), unsettled(db, () => selectPlaylistPlays(db, now)));
+  assert.deepEqual(
+    selectPlaylistPlays(db, now),
+    unsettled(db, () => selectPlaylistPlays(db, now)),
+  );
   row(
     "count the playlists' plays (From your library)",
     () => unsettled(db, () => selectPlaylistPlays(db, now)),
@@ -188,11 +208,13 @@ for (const size of quick ? ([1000] as const) : ([1000, 12000] as const)) {
   let at = now + 1_000;
   const write = timeRuns(() => {
     at += 200_000;
-    const track = String(fixture.songIds[(at / 200_000) % fixture.songIds.length | 0]);
+    const track = String(fixture.songIds[((at / 200_000) % fixture.songIds.length) | 0]);
     const id = recordPlay(db, play(track, at, 0));
     updatePlay(db, id, play(track, at, 30_000));
     endPlay(db, id, play(track, at, 180_000));
   }, RUNS);
-  console.log(`${"a Library play written (start, progress, end)".padEnd(56)} ${String(write.ms).padStart(8)} ms`);
+  console.log(
+    `${"a Library play written (start, progress, end)".padEnd(56)} ${String(write.ms).padStart(8)} ms`,
+  );
   fixture.close();
 }

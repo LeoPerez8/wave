@@ -220,7 +220,11 @@ test("a deleted song keeps counting for its album and artists, as today's sum co
 test("a streamed song downloaded later counts as the Library song", async () => {
   const { db } = await library();
   settle(db);
-  const downloaded = addTrack(db, { title: "Song online-1", artist: "D, E", album: "Online album" });
+  const downloaded = addTrack(db, {
+    title: "Song online-1",
+    artist: "D, E",
+    album: "Online album",
+  });
   db.run(sql`UPDATE tracks SET video_id = 'online-1' WHERE id = ${downloaded}`);
   relinkCredits(db, creditSplits());
   settle(db);
@@ -273,7 +277,11 @@ test("an upgrade sums its history after startup in bounded steps, reading today'
   let steps = 0;
   for (; steps < 1_000; steps++) {
     const step = traceQueries(db, () => settleKeptTotals(db, { songs: 2, plays: 500 }));
-    assert.deepEqual(step.queries.filter(scansHistory), [], `step ${steps} reads part of the history`);
+    assert.deepEqual(
+      step.queries.filter(scansHistory),
+      [],
+      `step ${steps} reads part of the history`,
+    );
     if (step.result) break;
   }
   // 1,850 plays seeded 500 at a time, six songs summed and credited two at a time.
@@ -295,14 +303,21 @@ const unsettle = (db: TestDatabase) => db.run(sql`UPDATE played_songs SET state 
 
 test("Home's plays read the kept credits: the same shelves, without reading every artist", async () => {
   const { db } = await library();
-  recordPlay(db, play("yt:skipped-only", NOW - DAY, false), false, streamed("skipped-only", ["H"], "Skipped album", null));
+  recordPlay(
+    db,
+    play("yt:skipped-only", NOW - DAY, false),
+    false,
+    streamed("skipped-only", ["H"], "Skipped album", null),
+  );
   unsettle(db);
   const summed = homePlays(db);
   settle(db);
   const kept = traceQueries(db, () => homePlays(db));
   assert.deepEqual(kept.result, summed);
   assert.deepEqual(
-    kept.queries.filter((query) => query.plan.some((step) => /^SCAN (artists|albums)\b/u.test(step))),
+    kept.queries.filter((query) =>
+      query.plan.some((step) => /^SCAN (artists|albums)\b/u.test(step)),
+    ),
     [],
   );
 });
@@ -333,7 +348,9 @@ test("release listening finds counted recordings in the kept totals, not by scan
   assert.deepEqual(after.queries.filter(scansHistory), []);
   const expected = new Set(before.countedPlays);
   for (const key of db
-    .all<{ key: string }>(sql`SELECT recording_key AS key FROM play_events WHERE track_id = ${solo}`)
+    .all<{ key: string }>(
+      sql`SELECT recording_key AS key FROM play_events WHERE track_id = ${solo}`,
+    )
     .map((row) => row.key))
     expected.delete(key);
   assert.deepEqual([...after.result.countedPlays].sort(), [...expected].sort());
@@ -341,12 +358,25 @@ test("release listening finds counted recordings in the kept totals, not by scan
 
 test("the playlists' plays come from kept counts, also over an upgrade's history", async () => {
   const { db, solo, duet } = await library({ through: "0064_pull_dislikes" });
-  const fromPlaylist = (trackId: number, playlist: string, at: number, counted = true): PlayEvent => ({
+  const fromPlaylist = (
+    trackId: number,
+    playlist: string,
+    at: number,
+    counted = true,
+  ): PlayEvent => ({
     ...play(String(trackId), at, counted),
     context: { kind: "playlist", id: playlist },
   });
   for (let index = 0; index < 120; index++)
-    recordPlay(db, fromPlaylist(index % 2 ? solo : duet, index % 3 ? "7" : "12", NOW - index * 9_000_000, index % 5 !== 0));
+    recordPlay(
+      db,
+      fromPlaylist(
+        index % 2 ? solo : duet,
+        index % 3 ? "7" : "12",
+        NOW - index * 9_000_000,
+        index % 5 !== 0,
+      ),
+    );
   migrateDatabase(db, migrations);
   recordPlay(db, fromPlaylist(solo, "07", NOW - 1_000));
   db.run(sql`DELETE FROM play_events WHERE context_id = '12' AND started_at > ${NOW - 2 * DAY}`);
@@ -356,7 +386,9 @@ test("the playlists' plays come from kept counts, also over an upgrade's history
   assert.deepEqual(kept.result, expected);
   assert.ok(expected.length === 2 && expected.every((playlist) => playlist.recentPlays > 0));
   assert.deepEqual(
-    kept.queries.filter((query) => query.plan.some((step) => /play_events_context_idx/u.test(step))),
+    kept.queries.filter((query) =>
+      query.plan.some((step) => /play_events_context_idx/u.test(step)),
+    ),
     [],
   );
 });

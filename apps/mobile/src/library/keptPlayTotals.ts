@@ -24,5 +24,6 @@ export const startKeptPlayTotals = (): (() => void) =>
         ),
       ),
     onChange: onLibraryChange,
-    failed: (cause) => appLog("warn", "WaveLibrary", `Kept play totals didn't settle: ${String(cause)}`),
+    failed: (cause) =>
+      appLog("warn", "WaveLibrary", `Kept play totals didn't settle: ${String(cause)}`),
   });

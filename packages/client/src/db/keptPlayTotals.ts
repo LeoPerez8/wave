@@ -153,7 +153,9 @@ const connectionOf = (db: LibraryDatabase): object =>
   (db as unknown as { readonly session?: object }).session ?? db;
 
 const releaseOf = (song: YtAlbumSong): string | null =>
-  song.album === null || song.albumId == null ? null : `${releaseTitle(song.album)}|${song.albumId}`;
+  song.album === null || song.albumId == null
+    ? null
+    : `${releaseTitle(song.album)}|${song.albumId}`;
 
 /** The resolver of [generation]: kept between settles, built again (a whole-Library read) when it moved. */
 const resolverOf = (db: LibraryDatabase, generation: number): Resolver => {
@@ -181,7 +183,8 @@ const resolverOf = (db: LibraryDatabase, generation: number): Resolver => {
 
 /** Whether crediting [songs] would build Core's resolver: a whole-Library read. */
 const needsResolver = (db: LibraryDatabase, songs: readonly string[], generation: number) =>
-  songs.some((song) => song.startsWith("v:")) && resolvers.get(connectionOf(db))?.generation !== generation;
+  songs.some((song) => song.startsWith("v:")) &&
+  resolvers.get(connectionOf(db))?.generation !== generation;
 
 /** An online album, artist or song as the latest played song crediting it names it. */
 interface OnlineEntity {
@@ -312,9 +315,11 @@ const creditSongs = (db: LibraryDatabase, songs: readonly string[], generation: 
       links.artistIds.push(link.artistId);
       mappedLinks.set(link.trackId, links);
     }
-  const unmapped = others.filter(
-    (entry) => entry.videoId !== null && !mapped.has(entry.song),
-  ) as { song: string; videoId: string; key: string }[];
+  const unmapped = others.filter((entry) => entry.videoId !== null && !mapped.has(entry.song)) as {
+    song: string;
+    videoId: string;
+    key: string;
+  }[];
   const metadata = streamedSongsOf(
     db,
     unmapped.map((entry) => entry.videoId),
@@ -380,7 +385,13 @@ const creditSongs = (db: LibraryDatabase, songs: readonly string[], generation: 
     const songEntity = `yt:${entry.videoId}`;
     const at = playedAt.get(entry.videoId) ?? 0;
     count(credits, { kind: "song", entity: songEntity, albumId: null, artistId: null });
-    online.push({ kind: "song", entity: songEntity, sortKey: sortKey(song?.title ?? ""), item: {}, playedAt: at });
+    online.push({
+      kind: "song",
+      entity: songEntity,
+      sortKey: sortKey(song?.title ?? ""),
+      item: {},
+      playedAt: at,
+    });
     if (song !== undefined) {
       const resolved = resolver!.resolve(song);
       for (const artist of resolved.artists) {
@@ -401,7 +412,13 @@ const creditSongs = (db: LibraryDatabase, songs: readonly string[], generation: 
           thumbPath: null,
           artworkPath: null,
         };
-        online.push({ kind: "artist", entity: artist.id, sortKey: sortKey(artist.name), item, playedAt: at });
+        online.push({
+          kind: "artist",
+          entity: artist.id,
+          sortKey: sortKey(artist.name),
+          item,
+          playedAt: at,
+        });
       }
       const album = resolved.album;
       if (album !== null) {
@@ -420,7 +437,13 @@ const creditSongs = (db: LibraryDatabase, songs: readonly string[], generation: 
             online: true,
             albumArtist: album.artists.join(", "),
           };
-          online.push({ kind: "album", entity: album.id, sortKey: sortKey(album.title), item, playedAt: at });
+          online.push({
+            kind: "album",
+            entity: album.id,
+            sortKey: sortKey(album.title),
+            item,
+            playedAt: at,
+          });
         }
       }
     }
@@ -457,7 +480,9 @@ const writeCredits = (
           )
           .map((credit) => [`${credit.kind}\u0000${credit.entity}`, credit]),
       );
-      const wanted = new Map(credits.map((credit) => [`${credit.kind}\u0000${credit.entity}`, credit]));
+      const wanted = new Map(
+        credits.map((credit) => [`${credit.kind}\u0000${credit.entity}`, credit]),
+      );
       for (const [key, credit] of kept) {
         const next = wanted.get(key);
         if (next !== undefined && sameCredit(next, credit)) continue;
@@ -557,7 +582,10 @@ export const creditPlayedSongs = (db: LibraryDatabase): void => {
  * Which of [keys] have a counted play, from the kept counts per recording:
  * null until an upgrade's history is seeded.
  */
-export const countedRecordings = (db: LibraryDatabase, keys: readonly string[]): string[] | null => {
+export const countedRecordings = (
+  db: LibraryDatabase,
+  keys: readonly string[],
+): string[] | null => {
   if (!keepsTotals(db)) return null;
   const kept = keptState(db);
   if (kept.seededThrough < kept.seedUntil) return null;
