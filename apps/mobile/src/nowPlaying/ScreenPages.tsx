@@ -1,6 +1,7 @@
 import { useLocalisation } from "@/localisation/localisation";
 import {
   NOW_PLAYING_OPENS_ON,
+  settleRelatedRise,
   settleScreenSwipe,
   settleSheet,
   stepNowPlayingScreens,
@@ -8,8 +9,16 @@ import {
   type NowPlayingScreen,
   type NowPlayingScreensEvent,
 } from "@wave/core";
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
-import { View, useWindowDimensions } from "react-native";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { View, useWindowDimensions, type StyleProp, type ViewStyle } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
@@ -77,8 +86,9 @@ export type ScreenPages = {
   /** A drag down on Related's header started, and ended (dp down, dp/s). */
   readonly relatedDragBegan: () => void;
   readonly relatedDragEnded: (translationY: number, velocityY: number) => void;
-  readonly relatedOpenDragBegan: () => void;
-  readonly relatedOpenDragEnded: (translationY: number, velocityY: number) => void;
+  /** A drag up on the player, which raises Related, started, and ended (dp, dp/s; negative is up). */
+  readonly relatedRiseBegan: () => void;
+  readonly relatedRiseEnded: (translationY: number, velocityY: number) => void;
 };
 
 /**
@@ -213,19 +223,22 @@ export const useScreenPages = (): ScreenPages => {
     [send, movePanel, height, still],
   );
 
-  const relatedOpenDragBegan = useCallback(() => setRelatedMoving(true), []);
-  const relatedOpenDragEnded = useCallback(
+  // Related's panel is drawn and under the finger from the drag's start.
+  const relatedRiseBegan = useCallback(() => setRelatedMoving(true), []);
+
+  const relatedRiseEnded = useCallback(
     (translationY: number, velocityY: number) => {
-      const settled = settleSheet({
-        from: "closed",
-        offset: height - Math.max(0, -translationY),
-        velocity: -velocityY,
-        height,
-      });
-      if (settled === "open") send({ type: "show", screen: "related" });
-      else movePanel(false, 0, !still);
+      // The panel rises by the travel and speed that open the sheet (Core's
+      // `settleRelatedRise`), unless the player left under the finger (Now Playing closed).
+      const rise =
+        latest.current.screen === "player" && isNowPlayingShown()
+          ? settleRelatedRise({ translationY, velocityY, height })
+          : "closed";
+      if (rise === "open") send({ type: "show", screen: "related" });
+      // The panel's position falls as the finger goes down.
+      else movePanel(false, height > 0 ? -velocityY / height : 0, !still && isNowPlayingShown());
     },
-    [height, send, movePanel, still],
+    [send, movePanel, height, still],
   );
 
   return useMemo(
@@ -244,8 +257,8 @@ export const useScreenPages = (): ScreenPages => {
       swipeEnded,
       relatedDragBegan,
       relatedDragEnded,
-      relatedOpenDragBegan,
-      relatedOpenDragEnded,
+      relatedRiseBegan,
+      relatedRiseEnded,
     }),
     [
       screens.screen,
@@ -262,8 +275,8 @@ export const useScreenPages = (): ScreenPages => {
       swipeEnded,
       relatedDragBegan,
       relatedDragEnded,
-      relatedOpenDragBegan,
-      relatedOpenDragEnded,
+      relatedRiseBegan,
+      relatedRiseEnded,
     ],
   );
 };
@@ -284,31 +297,31 @@ const QUEUE_PAGE = {
  * toward the other page turns to it, following the finger: left on the
  * player, right on the Queue. The scrubber claims its touch first and keeps
  * it; the Queue's swipe can't begin on Up Next's handles; and a drag up or down
- * belongs to the page's lists and the sheet. Away from the screen, or under
- * Related, it takes no touches and screen readers skip it.
+ * belongs to the page's lists and the sheet, or on the player a drag up to
+ * Related ([rise], which its `RelatedRiseArea`s take). Away from the screen, or
+ * under Related, it takes no touches and screen readers skip it.
  */
 export function ScreenPage({
   screen,
   pages,
   swipes = true,
-  relatedSwipe = false,
+  rise,
   children,
 }: {
   screen: NowPlayingPage;
   pages: ScreenPages;
   /** Whether a drag here turns the page (not with nothing playing). */
   swipes?: boolean;
-  relatedSwipe?: boolean;
+  /** The player's drag up, which its `RelatedRiseArea`s take. */
+  rise?: RelatedRise;
   children: ReactNode;
 }) {
-  const { width, height } = useWindowDimensions();
+  const { width } = useWindowDimensions();
   const still = useReducedMotion();
   // A long-pressed finger slides onto its menu's entries; it doesn't turn the page.
   const draggable = useListScrollable();
-  const { position, swipeBegan, swipeEnded, related, relatedOpenDragBegan, relatedOpenDragEnded } =
-    pages;
+  const { position, swipeBegan, swipeEnded } = pages;
   const start = useSharedValue(0);
-  const dragKind = useSharedValue(0);
   const player = screen === "player";
   const pan = usePanGesture({
     enabled: swipes && draggable,
@@ -316,47 +329,27 @@ export function ScreenPage({
     hitSlop: handleSwipeSlop(player ? 0 : HANDLES),
     // Only a drag toward the other page claims the touch.
     activeOffsetX: player ? [-SWIPE_SLOP, 1_000_000] : [-1_000_000, SWIPE_SLOP],
-    activeOffsetY: relatedSwipe ? [-SWIPE_SLOP, 1_000_000] : undefined,
-    failOffsetY: relatedSwipe ? undefined : [-SWIPE_SLOP * 2, SWIPE_SLOP * 2],
-    onActivate: (event) => {
+    failOffsetY: [-SWIPE_SLOP * 2, SWIPE_SLOP * 2],
+    onActivate: () => {
       "worklet";
-      dragKind.set(
-        relatedSwipe &&
-          Math.abs(event.translationY) > Math.abs(event.translationX) &&
-          event.translationY < 0
-          ? 1
-          : 0,
-      );
       start.set(position.get());
-      if (dragKind.get() === 1) scheduleOnRN(relatedOpenDragBegan);
-      else scheduleOnRN(swipeBegan);
+      scheduleOnRN(swipeBegan);
     },
     onUpdate: (event) => {
       "worklet";
-      if (dragKind.get() === 1) {
-        if (!still && height > 0)
-          related.set(Math.min(1, Math.max(0, -event.translationY / height)));
-      } else if (!still && width > 0)
-        position.set(Math.min(1, Math.max(0, start.get() - event.translationX / width)));
+      if (still || width <= 0) return;
+      position.set(Math.min(1, Math.max(0, start.get() - event.translationX / width)));
     },
     onDeactivate: (event) => {
       "worklet";
       // A touch taken away settles back where it started.
       const released = !event.canceled;
-      if (dragKind.get() === 1) {
-        scheduleOnRN(
-          relatedOpenDragEnded,
-          released ? event.translationY : 0,
-          released ? event.velocityY : 0,
-        );
-      } else {
-        scheduleOnRN(
-          swipeEnded,
-          screen,
-          released ? event.translationX : 0,
-          released ? event.velocityX : 0,
-        );
-      }
+      scheduleOnRN(
+        swipeEnded,
+        screen,
+        released ? event.translationX : 0,
+        released ? event.velocityX : 0,
+      );
     },
   });
   const style = useAnimatedStyle(() => ({
@@ -371,8 +364,94 @@ export function ScreenPage({
         importantForAccessibility={here ? "auto" : "no-hide-descendants"}
         accessibilityElementsHidden={!here}
       >
-        {children}
+        {rise === undefined ? (
+          children
+        ) : (
+          <RelatedRiseContext.Provider value={rise}>{children}</RelatedRiseContext.Provider>
+        )}
       </Animated.View>
+    </GestureDetector>
+  );
+}
+
+/** What the player's drag up needs: whether it is on, and the panel it raises. */
+export type RelatedRise = Pick<ScreenPages, "related" | "relatedRiseBegan" | "relatedRiseEnded"> & {
+  /** On the player, out of edit mode, with YouTube Music on (Core's `nowPlayingRelatedSwipeEnabled`). */
+  readonly enabled: boolean;
+};
+
+/** The player's drag up, for its parts (`RelatedRiseArea`); the player's `ScreenPage` gives it. */
+const RelatedRiseContext = createContext<RelatedRise | null>(null);
+
+/**
+ * Part of the player that raises Related on a drag up: the cover, the title,
+ * the controls, Lyrics' header, the Queue's mark. Related's panel follows the
+ * finger, and on release Core decides whether it opens (`relatedRiseEnded`).
+ * The Lyrics body is left out, so a drag up there scrolls the lyrics. A
+ * control that claims its touch first (the scrubber) keeps it; a button's tap
+ * still presses it. Each direction has one owner: up raises Related, down
+ * drags the sheet (`DismissArea`) and sideways turns the page (`ScreenPage`).
+ * Outside the player's page it is a plain view.
+ */
+export function RelatedRiseArea({
+  children,
+  style,
+}: {
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const rise = useContext(RelatedRiseContext);
+  if (rise === null) return <View style={style}>{children}</View>;
+  return (
+    <RelatedRisePan rise={rise} style={style}>
+      {children}
+    </RelatedRisePan>
+  );
+}
+
+function RelatedRisePan({
+  rise,
+  children,
+  style,
+}: {
+  rise: RelatedRise;
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { height } = useWindowDimensions();
+  const still = useReducedMotion();
+  // A long-pressed finger slides onto its menu's entries; it doesn't raise Related.
+  const draggable = useListScrollable();
+  const { enabled, related, relatedRiseBegan, relatedRiseEnded } = rise;
+  const pan = usePanGesture({
+    enabled: enabled && draggable,
+    // Only a drag up claims the touch; down or sideways belongs to the sheet and the pages.
+    activeOffsetY: [-SWIPE_SLOP, 1_000_000],
+    failOffsetY: [-1_000_000, SWIPE_SLOP],
+    failOffsetX: [-SWIPE_SLOP * 2, SWIPE_SLOP * 2],
+    onActivate: () => {
+      "worklet";
+      scheduleOnRN(relatedRiseBegan);
+    },
+    onUpdate: (event) => {
+      "worklet";
+      if (still || height <= 0) return;
+      related.set(Math.min(1, Math.max(0, -event.translationY / height)));
+    },
+    onDeactivate: (event) => {
+      "worklet";
+      // A touch taken away settles back where it started.
+      const released = !event.canceled;
+      scheduleOnRN(
+        relatedRiseEnded,
+        released ? event.translationY : 0,
+        released ? event.velocityY : 0,
+      );
+    },
+  });
+  return (
+    <GestureDetector gesture={pan}>
+      <View style={style}>{children}</View>
     </GestureDetector>
   );
 }
@@ -380,34 +459,39 @@ export function ScreenPage({
 /** The mark's bar, and the touch target around it. */
 const MARK = { width: CELL / 2, height: CELL * 7 } as const;
 const MARK_TARGET = { width: grid.margin + CELL, height: CELL * 9 } as const;
+/** On the player's right edge, a little above the middle. */
+const MARK_PLACE = { position: "absolute", right: 0, top: "44%" } as const;
 
 /**
  * A small bar on the player's right edge: the Queue is one swipe away. Screen
- * readers hear it as a button named Queue, which opens it.
+ * readers hear it as a button named Queue, which opens it. A drag up from it
+ * raises Related, as from the rest of the player.
  */
 export function QueueEdgeMark({ onPress }: { onPress: () => void }) {
   const { strings } = useLocalisation();
   const tertiary = useThemeColor("tertiary");
   return (
-    <Press
-      accessibilityRole="button"
-      accessibilityLabel={strings.playbackText.queue}
-      onPress={onPress}
-      haptic="selection"
-      depth={0}
-      className="absolute right-0 items-end justify-center"
-      style={[MARK_TARGET, { top: "44%" }]}
-    >
-      <View
-        style={[
-          MARK,
-          {
-            backgroundColor: tertiary,
-            borderTopLeftRadius: MARK.width / 2,
-            borderBottomLeftRadius: MARK.width / 2,
-          },
-        ]}
-      />
-    </Press>
+    <RelatedRiseArea style={[MARK_TARGET, MARK_PLACE]}>
+      <Press
+        accessibilityRole="button"
+        accessibilityLabel={strings.playbackText.queue}
+        onPress={onPress}
+        haptic="selection"
+        depth={0}
+        className="items-end justify-center"
+        style={MARK_TARGET}
+      >
+        <View
+          style={[
+            MARK,
+            {
+              backgroundColor: tertiary,
+              borderTopLeftRadius: MARK.width / 2,
+              borderBottomLeftRadius: MARK.width / 2,
+            },
+          ]}
+        />
+      </Press>
+    </RelatedRiseArea>
   );
 }

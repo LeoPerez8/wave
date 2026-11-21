@@ -18,6 +18,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -60,7 +61,13 @@ import { QueueHeader, UpNextList } from "./QueueView";
 import { usePlayingVideoId } from "./relatedSongs";
 import { RelatedPanel } from "./RelatedPanel";
 import { RelatedView } from "./RelatedView";
-import { QueueEdgeMark, ScreenPage, useScreenPages } from "./ScreenPages";
+import {
+  QueueEdgeMark,
+  RelatedRiseArea,
+  ScreenPage,
+  useScreenPages,
+  type RelatedRise,
+} from "./ScreenPages";
 import { Scrubber } from "./Scrubber";
 import { usePlayheadSource } from "./playhead";
 import {
@@ -143,9 +150,11 @@ const PlayerPane = memo(function PlayerPane({
   playing: boolean;
 }) {
   return (
-    <DismissArea style={PLAYER_AREA}>
-      <PlayerView item={item} details={details} playing={playing} />
-    </DismissArea>
+    <RelatedRiseArea style={{ flex: 1 }}>
+      <DismissArea style={PLAYER_AREA}>
+        <PlayerView item={item} details={details} playing={playing} />
+      </DismissArea>
+    </RelatedRiseArea>
   );
 });
 
@@ -243,6 +252,18 @@ export function NowPlayingSheet() {
   const relatedMounted = ytMusic && (screen === "related" || pages.relatedMoving);
   // The page gestures sit under Related's carousel, so they must stand down while it shows.
   const pageSwipesEnabled = nowPlayingPageSwipesEnabled({ screen, editing }) && !relatedMounted;
+  // A drag up on the player raises Related. It doesn't wait on `relatedMounted`: the drag
+  // itself draws the panel, which turns the page swipes off under the finger.
+  const { related, relatedRiseBegan, relatedRiseEnded } = pages;
+  const riseEnabled = nowPlayingRelatedSwipeEnabled({
+    screens: { screen, editing },
+    ytMusic,
+    playing: item !== null,
+  });
+  const rise = useMemo<RelatedRise>(
+    () => ({ enabled: riseEnabled, related, relatedRiseBegan, relatedRiseEnded }),
+    [riseEnabled, related, relatedRiseBegan, relatedRiseEnded],
+  );
   const { videoId, findAgain } = usePlayingVideoId(relatedMounted ? trackId : null, ytSong);
   const playerPageInSight = (page === "player" || turning) && !covered;
   const leaveQueue = useCallback(() => void send({ type: "headerTap" }), [send]);
@@ -445,20 +466,15 @@ export function NowPlayingSheet() {
               </Activity>
             </ScreenPage>
           )}
-          {/* The player's page: a swipe to the left anywhere but the scrubber brings the Queue. */}
+          {/*
+           * The player's page: a swipe to the left anywhere but the scrubber brings the Queue,
+           * and a drag up anywhere but the lyrics themselves raises Related (`RelatedRiseArea`).
+           */}
           <ScreenPage
             screen="player"
             pages={pages}
             swipes={pageSwipesEnabled && item !== null}
-            relatedSwipe={
-              item !== null &&
-              nowPlayingRelatedSwipeEnabled({
-                screen,
-                editing,
-                ytMusic,
-                lyrics: view === "lyrics",
-              })
-            }
+            rise={rise}
           >
             <View className="flex-1" {...dimmed}>
               {item === null ? (
@@ -500,39 +516,41 @@ export function NowPlayingSheet() {
               )}
             </View>
 
-            <DismissArea style={{ paddingTop: CELL * 3, gap: CELL * 2 }}>
-              <View {...dimmed}>
-                <Scrubber />
-              </View>
-              <Transport
-                left={slotButton(NOW_PLAYING_TRANSPORT_SLOTS.left)}
-                right={slotButton(NOW_PLAYING_TRANSPORT_SLOTS.right)}
-                editing={editing}
-              />
-              {/*
-               * The five footer slots (Settings › Layout › Now Playing). Empty, the row keeps
-               * its height, so the transport stays put. The song controls share one lookup
-               * after settlement or their own early tap.
-               */}
-              <View>
-                <View
-                  className={`flex-row items-center ${footer.length === 1 ? "justify-center" : "justify-between"}`}
-                  style={{ minHeight: CELL * 6 }}
-                >
-                  {footer}
+            <RelatedRiseArea>
+              <DismissArea style={{ paddingTop: CELL * 3, gap: CELL * 2 }}>
+                <View {...dimmed}>
+                  <Scrubber />
                 </View>
-                {/* Under the slots, in the sheet's bottom margin, so nothing above it moves. */}
-                {editing && (
-                  <Text
-                    className="font-sans text-caption text-secondary"
-                    style={EDIT_NOTE}
-                    numberOfLines={1}
+                <Transport
+                  left={slotButton(NOW_PLAYING_TRANSPORT_SLOTS.left)}
+                  right={slotButton(NOW_PLAYING_TRANSPORT_SLOTS.right)}
+                  editing={editing}
+                />
+                {/*
+                 * The five footer slots (Settings › Layout › Now Playing). Empty, the row keeps
+                 * its height, so the transport stays put. The song controls share one lookup
+                 * after settlement or their own early tap.
+                 */}
+                <View>
+                  <View
+                    className={`flex-row items-center ${footer.length === 1 ? "justify-center" : "justify-between"}`}
+                    style={{ minHeight: CELL * 6 }}
                   >
-                    {strings.playbackText.tapASlotToChooseItsAction}
-                  </Text>
-                )}
-              </View>
-            </DismissArea>
+                    {footer}
+                  </View>
+                  {/* Under the slots, in the sheet's bottom margin, so nothing above it moves. */}
+                  {editing && (
+                    <Text
+                      className="font-sans text-caption text-secondary"
+                      style={EDIT_NOTE}
+                      numberOfLines={1}
+                    >
+                      {strings.playbackText.tapASlotToChooseItsAction}
+                    </Text>
+                  )}
+                </View>
+              </DismissArea>
+            </RelatedRiseArea>
             {item !== null && !editing && <QueueEdgeMark onPress={openQueue} />}
           </ScreenPage>
         </View>
