@@ -36,6 +36,8 @@ const paths: Record<string, string> = {
   playlist: "M3 4h12M3 9h12M3 14h6M15 20V9l6-1M15 20c0 2.7-4 2.7-4 0s4-2.7 4 0",
   close: "M6 6l12 12M6 18 18 6",
   stats: "M4 20h16M6 16v-4m6 4V5m6 11V9",
+  /** Tabler's language glyph, as the phone's Translate button has. */
+  translate: "M4 5h7M9 3v2c0 4.4-2.2 8-5 8M5 9c0 2.1 3 3.9 6.7 4M12 20l4-9 4 9M19.1 18h-6.2",
 };
 export function Icon({ name, size = 20 }: { readonly name: string; readonly size?: number }) {
   return (
