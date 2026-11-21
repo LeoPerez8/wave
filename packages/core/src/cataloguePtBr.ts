@@ -198,6 +198,7 @@ export const ptBR: Catalogue = {
   },
   newReleases: {
     title: "Novidades dos Artistas que Você Segue",
+    playSection: (title: string) => `Reproduzir ${title}`,
     single: "Single",
     ep: "EP",
     album: "Álbum",
