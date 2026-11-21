@@ -8,6 +8,7 @@ import type { BridgeContract, Invoke, Page } from "./bridge.ts";
 import type { BrowseRow } from "./browse.ts";
 import type { SongTarget } from "./songActions.ts";
 import type { CollectionTarget } from "./collectionActions.ts";
+import type { PlayStart } from "./playerView.ts";
 
 export type PlaylistCreateTarget = SongTarget | CollectionTarget;
 
@@ -95,6 +96,11 @@ export interface PlaylistContract {
     readonly args: readonly [playlistId: number, itemId: number];
     readonly result: void;
   };
+  /** Plays the Graveyard's songs from [itemId]'s; none of them is restored. */
+  readonly "playlists.playGraveyard": {
+    readonly args: readonly [playlistId: number, itemId: number];
+    readonly result: PlayStart;
+  };
   /** Remove from Graveyard for one song, or Empty Graveyard without [itemId]. */
   readonly "playlists.forget": {
     readonly args: readonly [playlistId: number, itemId?: number];
@@ -135,6 +141,14 @@ export interface PlaylistContract {
     readonly args: readonly [playlistId: number, large: boolean];
     readonly result: string | null;
   };
+  /**
+   * A drag on a playlist's page in its own order: [target]'s songs, together, go before row
+   * [before] (a row's ID), or to the end when it is null.
+   */
+  readonly "playlists.place": {
+    readonly args: readonly [playlistId: number, target: SongTarget, before: number | null];
+    readonly result: void;
+  };
 }
 
 export const PLAYLIST_CALLS = [
@@ -157,6 +171,8 @@ export const PLAYLIST_CALLS = [
   "playlists.cancelImage",
   "playlists.removeImage",
   "playlists.image",
+  "playlists.place",
+  "playlists.playGraveyard",
 ] as const satisfies readonly (keyof PlaylistContract)[];
 
 type Call<C extends keyof PlaylistContract> = (
@@ -184,6 +200,8 @@ export interface PlaylistBridge {
   readonly cancelImage: Call<"playlists.cancelImage">;
   readonly removeImage: Call<"playlists.removeImage">;
   readonly image: Call<"playlists.image">;
+  readonly place: Call<"playlists.place">;
+  readonly playGraveyard: Call<"playlists.playGraveyard">;
 }
 
 export const playlistBridge = (invoke: Invoke): PlaylistBridge => ({
@@ -208,4 +226,6 @@ export const playlistBridge = (invoke: Invoke): PlaylistBridge => ({
   cancelImage: () => invoke("playlists.cancelImage"),
   removeImage: (playlistId) => invoke("playlists.removeImage", playlistId),
   image: (playlistId, large) => invoke("playlists.image", playlistId, large),
+  place: (playlistId, target, before) => invoke("playlists.place", playlistId, target, before),
+  playGraveyard: (playlistId, itemId) => invoke("playlists.playGraveyard", playlistId, itemId),
 });

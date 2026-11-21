@@ -135,4 +135,15 @@ export const playlistHandlers = (
     id(playlistId) && typeof large === "boolean"
       ? playlistsCall((p) => p.image(playlistId, large))
       : refuse("playlists.image", "invalid playlist"),
+  "playlists.place": ([playlistId, target, before]) =>
+    id(playlistId) &&
+    validTarget(target) &&
+    (before === null ||
+      (typeof before === "number" && Number.isSafeInteger(before) && before !== 0))
+      ? playlistsCall((p) => p.place(playlistId, target, before))
+      : refuse("playlists.place", "invalid playlist, songs or place"),
+  "playlists.playGraveyard": ([playlistId, itemId]) =>
+    id(playlistId) && id(itemId)
+      ? playlistsCall((p) => p.playGraveyard(playlistId, itemId))
+      : refuse("playlists.playGraveyard", "invalid playlist or song"),
 });

@@ -15,6 +15,7 @@ import {
   deletePlaylist,
   forgetGraveyardItems,
   movePlaylistItem,
+  movePlaylistItems,
   removePlaylistItems,
   renamePlaylist,
   replacePlaylistSongs,
@@ -54,12 +55,15 @@ import {
   type M3uImport,
   type M3uImportOutcome,
   type PlaylistNameCheck,
+  type QueueState,
+  type YtAlbumSong,
 } from "@wave/core";
 import { sql } from "drizzle-orm";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { Page } from "../../shared/bridge.ts";
+import type { SongTarget } from "../../shared/songActions.ts";
 import type {
   GraveyardRow,
   ImageEdit,
@@ -70,9 +74,12 @@ import type {
   PlaylistInfo,
   PlaylistCreateTarget,
 } from "../../shared/playlists.ts";
+import type { PlayStart } from "../../shared/playerView.ts";
+import { ytRow } from "../../shared/yt.ts";
 import { Playback } from "../playback/playback.ts";
-import { browseSongs } from "./browse.ts";
-import { targetPlaylistEntries } from "./songActions.ts";
+import { YtMusic } from "../yt/ytMusic.ts";
+import { browseSongs, type PlaylistSong } from "./browse.ts";
+import { targetEntries, targetPlaylistEntries } from "./songActions.ts";
 import { collectionSongs } from "./collectionActions.ts";
 
 /** Reads and cuts photos for a playlist's image (Electron's `nativeImage` in the app). */
@@ -103,6 +110,14 @@ export interface PlaylistOptions {
   /** Tells the window, and sync, that playlists changed. */
   readonly changed: () => void;
   readonly now?: () => number;
+  /** Remembers the streamed songs a Graveyard page shows, so their menus and plays find them. */
+  readonly keepStreams?: (songs: readonly YtAlbumSong[]) => void;
+  /** Plays [songs] as a new queue from [index] (`Playback.playEntries`). */
+  readonly play?: (
+    songs: readonly PlaylistSong[],
+    index: number,
+    context: NonNullable<QueueState["context"]>,
+  ) => Promise<PlayStart>;
 }
 
 /** The image sizes saved: the playlist's page, and lists. */
@@ -160,11 +175,15 @@ export const createPlaylists = (options: PlaylistOptions) => {
     selectPlaylistEntries(db, playlistId).flatMap((entry) =>
       entry.source === "library" ? [{ itemId: entry.itemId, trackId: entry.track.id }] : [],
     );
+  /** The Graveyard's Library and streamed songs, newest removal first. */
   const libraryGraveyard = (playlistId: number) =>
-    selectPlaylistGraveyard(db, playlistId).flatMap((entry) =>
-      entry.source === "library"
-        ? [{ itemId: entry.itemId, trackId: entry.track.id, removedAt: entry.removedAt }]
-        : [],
+    selectPlaylistGraveyard(db, playlistId).flatMap(
+      (entry): (PlaylistSong & { readonly itemId: number; readonly removedAt: number })[] =>
+        entry.source === "library"
+          ? [{ itemId: entry.itemId, trackId: entry.track.id, removedAt: entry.removedAt }]
+          : entry.source === "stream"
+            ? [{ itemId: entry.itemId, song: entry.song, removedAt: entry.removedAt }]
+            : [],
     );
   const songsOf = (trackIds: readonly number[]) =>
     trackIds.map((trackId) => ({ source: "library" as const, trackId }));
@@ -261,18 +280,55 @@ export const createPlaylists = (options: PlaylistOptions) => {
       movePlaylistItem(db, playlistId, moved, direction === "up" ? index : index + 1, now());
       changed();
     },
+    /**
+     * A drag on the playlist's page: [target]'s songs, together and in the playlist's order,
+     * go before row [before] (a Library song ID or a negated streamed entry ID), or after the
+     * last entry when it is null. A drop on one of the dragged rows lands before the next row.
+     */
+    place: (playlistId: number, target: SongTarget, before: number | null): void => {
+      if (!playlistReorders(playlistSongSort(db, playlistId))) return;
+      if (target.scope.kind !== "playlist" || target.scope.id !== playlistId) return;
+      const named = new Set(
+        targetEntries(db, target).map((song) => ("trackId" in song ? song.trackId : -song.itemId)),
+      );
+      const entries = selectPlaylistEntries(db, playlistId);
+      const keyOf = (entry: (typeof entries)[number]) =>
+        entry.source === "library"
+          ? entry.track.id
+          : entry.source === "unavailable"
+            ? undefined
+            : -entry.itemId;
+      const moved = entries.flatMap((entry) => {
+        const key = keyOf(entry);
+        return key !== undefined && named.has(key) ? [entry.itemId] : [];
+      });
+      if (moved.length === 0) return;
+      const taken = new Set(moved);
+      const anchor = entries.findIndex((entry) => keyOf(entry) === before);
+      const next =
+        before === null || anchor === -1
+          ? undefined
+          : entries.slice(anchor).find((entry) => !taken.has(entry.itemId));
+      movePlaylistItems(db, playlistId, moved, next?.itemId ?? null, now());
+      changed();
+    },
     graveyard: (playlistId: number, offset: number, limit: number): Page<GraveyardRow> => {
       const all = libraryGraveyard(playlistId);
       const entries = all.slice(offset, offset + limit);
       const rows = new Map(
         browseSongs(
           db,
-          entries.map((entry) => entry.trackId),
+          entries.flatMap((entry) => ("trackId" in entry ? [entry.trackId] : [])),
         ).map((row) => [row.id, row]),
       );
+      options.keepStreams?.(entries.flatMap((entry) => ("song" in entry ? [entry.song] : [])));
       return {
         items: entries.flatMap((entry) => {
-          const row = rows.get(entry.trackId);
+          // A streamed song's row goes by its entry, negated, as on the playlist's page.
+          const row =
+            "trackId" in entry
+              ? rows.get(entry.trackId)
+              : { ...ytRow(entry.song), id: -entry.itemId };
           return row === undefined
             ? []
             : [{ ...row, itemId: entry.itemId, removedAt: entry.removedAt }];
@@ -280,6 +336,19 @@ export const createPlaylists = (options: PlaylistOptions) => {
         offset,
         total: all.length,
       };
+    },
+    /** Plays the Graveyard's songs from [itemId]'s, leaving them all in the Graveyard. */
+    playGraveyard: async (playlistId: number, itemId: number): Promise<PlayStart> => {
+      const all = libraryGraveyard(playlistId);
+      const index = all.findIndex((entry) => entry.itemId === itemId);
+      if (index === -1) throw new Error("That song isn't in the Graveyard");
+      if (options.play === undefined) throw new Error("Nothing plays here");
+      const songs = all.map((entry): PlaylistSong =>
+        "trackId" in entry
+          ? { trackId: entry.trackId }
+          : { itemId: entry.itemId, song: entry.song },
+      );
+      return options.play(songs, index, { kind: "playlist", id: String(playlistId) });
     },
     restore: (playlistId: number, itemId: number): void => {
       restoreGraveyardItem(db, playlistId, itemId, now());
@@ -450,6 +519,13 @@ export const desktopPlaylistsLayer = (options: Omit<PlaylistOptions, "db" | "cha
     Effect.gen(function* () {
       const db = yield* Database;
       const playback = yield* Playback;
-      return createPlaylists({ ...options, db, changed: () => playback.refresh() });
+      const yt = yield* YtMusic;
+      return createPlaylists({
+        ...options,
+        db,
+        changed: () => playback.refresh(),
+        keepStreams: yt.keep,
+        play: playback.playEntries,
+      });
     }),
   );

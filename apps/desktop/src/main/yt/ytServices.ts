@@ -69,6 +69,7 @@ import {
 import { createYtPages, type YtPagesShape, type YtRelatedRead } from "./ytPages.ts";
 import { createArtistSection, type ArtistSectionShape } from "./artistSection.ts";
 import { createPlaylistSuggestions, type PlaylistSuggestionsShape } from "./playlistSuggestions.ts";
+import { createAlbumSection, type AlbumSectionShape } from "./albumSection.ts";
 import { YtMusic } from "./ytMusic.ts";
 
 /** Where the Magic Queue's session is kept across launches. */
@@ -84,6 +85,8 @@ export interface YtFeaturesShape {
   readonly artistSection: ArtistSectionShape;
   /** A playlist page's Recommended songs. */
   readonly playlistSuggestions: PlaylistSuggestionsShape;
+  /** A Library album page's YouTube Music section. */
+  readonly albumSection: AlbumSectionShape;
   /**
    * Search's YouTube Music answer for [query]: its songs, artists and albums, and which of them
    * the Library already has. One search that fails fails them all, as on the phone.
@@ -448,6 +451,18 @@ export const ytFeaturesLayer = (options: {
         search: pages.searchArtists,
         page: pages.artistWhole,
       });
+      const albumSection = createAlbumSection({
+        db,
+        enabled: yt.enabled,
+        online: options.online,
+        always: () =>
+          searchOnlineAlways(readSearchOnline(preference(db, SEARCH_ONLINE) ?? null), {
+            onMobileData: false,
+          }),
+        now: Date.now,
+        artist: artistSection,
+        release: pages.album,
+      });
 
       const playlistSuggestions = createPlaylistSuggestions({
         db,
@@ -455,9 +470,7 @@ export const ytFeaturesLayer = (options: {
         ytMusic: yt.enabled,
         online: options.online,
         changed: playback.refresh,
-        log: (line) =>
-          process.stderr.write(`[WaveTiming] ${line}
-`),
+        log: (line) => process.stderr.write(`[WaveTiming] ${line}\n`),
       });
 
       let related: { readonly videoId: string; readonly read: Promise<YtRelatedRead> } | undefined;
@@ -468,6 +481,7 @@ export const ytFeaturesLayer = (options: {
         magicQueue,
         artistSection,
         playlistSuggestions,
+        albumSection,
         search: async (query) => {
           const [found, catalog] = await Promise.all([yt.search(query), pages.catalog(query)]);
           const status = found.status !== "ok" ? found.status : catalog.status;

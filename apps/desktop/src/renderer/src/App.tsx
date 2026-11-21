@@ -93,6 +93,8 @@ import type { HistoryRoute } from "../../shared/history.ts";
 import { isYtRoute, YtPage, type YtRoute } from "./YtPages.tsx";
 import { Recognize } from "./Recognize.tsx";
 import { AlbumArtistLink, ArtistPage, ArtistToggle, useArtistSection } from "./ArtistPage.tsx";
+import { AlbumPage, useAlbumSection } from "./AlbumSection.tsx";
+import { YtListDownloadButton } from "./YtListDownloadButton.tsx";
 import {
   NowPlayingSongActions,
   playlistItems,
@@ -171,7 +173,10 @@ export function App() {
   const [account, setAccount] = useState<AccountView>();
   const [ytAccount, setYtAccount] = useState<YtAccountPanel>();
   const theme = account?.theme;
-  const [count, setCount] = useState(0);
+  const [counts, setCounts] = useState<{ songs: number; favorites: number }>({
+    songs: 0,
+    favorites: 0,
+  });
   const [error, setError] = useState<string>();
   const [query, setQuery] = useState("");
   const [setting, setSetting] = useState<(typeof settings)[number]>("library");
@@ -317,7 +322,12 @@ export function App() {
             JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
           );
           const counts = await window.wave.library.counts();
-          if (current) setCount(counts.songs);
+          if (current)
+            setCounts((previous) =>
+              previous.songs === counts.songs && previous.favorites === counts.favorites
+                ? previous
+                : { songs: counts.songs, favorites: counts.favorites },
+            );
           // A sync may have pulled the account's language.
           const spoken = await window.wave.settings.language();
           if (current) applyLanguage(spoken);
@@ -620,11 +630,13 @@ export function App() {
       } else if (start.kind === "playing" && start.leftOut > 0)
         notify(text.desktopLibrary.leftOut(start.leftOut), undefined, offer);
     };
-    // An artist's page with Online takes YouTube Music's songs too.
+    // An artist's page with Online takes YouTube Music's songs too, and an album's its release's.
     const started =
       target === scope && scope.kind === "artist" && scope.id !== undefined
         ? window.wave.artistPage.play(scope.id, artistSection.pick, null, shuffle)
-        : window.wave.playback.start(target, undefined, shuffle);
+        : target === scope && scope.kind === "album" && scope.id !== undefined && albumTracklist
+          ? window.wave.artistPage.albumPlay(scope.id, albumSection.pick, null, shuffle)
+          : window.wave.playback.start(target, undefined, shuffle);
     playback.run(started.then(said));
   };
   const here = `/library/${scope.kind}/${scope.id ?? ""}`;
@@ -732,9 +744,29 @@ export function App() {
     ) : (
       artistPage(table)
     );
+  const albumSection = useAlbumSection(
+    route.kind === "album" ? route.id : undefined,
+    ytMusic,
+    revision,
+    failed,
+  );
+  /** With Online, the album's whole tracklist, its release's other songs among the Library's. */
+  const albumTracklist = albumSection.view?.toggle === "online" ? albumSection.view.tracks : null;
+  /** The album's release, once read with Online: its Download in the hero. */
+  const albumRelease = albumTracklist === null ? null : (albumSection.view?.release ?? null);
   /** An artist's songs table, inside their page's shelves and YouTube Music section. */
   const artistPage = (table: ReactNode) =>
-    route.kind === "artist" && route.id !== undefined ? (
+    route.kind === "album" && route.id !== undefined && albumSection.view !== null ? (
+      <AlbumPage
+        section={albumSection}
+        onPlay={(index) =>
+          playback.run(window.wave.artistPage.albumPlay(route.id!, albumSection.pick, index, false))
+        }
+        onSongMenu={ytSongMenu}
+      >
+        {table}
+      </AlbumPage>
+    ) : route.kind === "artist" && route.id !== undefined ? (
       <ArtistPage
         artistId={route.id}
         revision={revision}
@@ -986,7 +1018,7 @@ export function App() {
                   labels[route.kind as "album" | "artist" | "playlist" | "genre"],
                   hero.genre,
                   hero.year,
-                  labels.songCount(hero.count),
+                  labels.songCount(albumTracklist?.length ?? hero.count),
                   listDuration(hero.durationMs, text.library),
                 ]
                   .filter(Boolean)
@@ -1002,6 +1034,7 @@ export function App() {
                   {labels.shuffle}
                 </button>
                 {route.kind === "artist" && <ArtistToggle section={artistSection} />}
+                {route.kind === "album" && <ArtistToggle section={albumSection} />}
                 {route.kind === "artist" && (
                   <FollowButton
                     artist={{ name: hero.title }}
@@ -1009,7 +1042,13 @@ export function App() {
                     onError={setError}
                   />
                 )}
-                {missingList !== undefined && (
+                {albumRelease !== null && (
+                  <YtListDownloadButton
+                    list={{ kind: "album", id: albumRelease }}
+                    onError={failed}
+                  />
+                )}
+                {missingList !== undefined && albumRelease === null && (
                   <ListDownloadButton
                     list={missingList}
                     revision={`${scan?.revision}:${account?.revision}:${downloads?.progress}:${downloads?.failed}`}
@@ -1046,10 +1085,23 @@ export function App() {
           route.kind === "discoverMix" ? null : (
           <div className="page-heading">
             <h1>{title}</h1>
-            {(route.kind === "home" || route.kind === "songs") && (
+            {(route.kind === "home" || route.kind === "songs" || route.kind === "favorites") && (
               <p className="secondary" data-testid="song-count">
-                {labels.songCount(count)}
+                {labels.songCount(route.kind === "favorites" ? counts.favorites : counts.songs)}
               </p>
+            )}
+            {/* Main plays the list as its table is sorted (browseTrackIds). */}
+            {(route.kind === "songs" || route.kind === "favorites") && counts[route.kind] > 0 && (
+              <div className="hero-actions">
+                <button onClick={() => playList(false)}>
+                  <Icon name="play" size={16} />
+                  {labels.play}
+                </button>
+                <button onClick={() => playList(true)} {...shuffleMenu}>
+                  <Icon name="shuffle" size={16} />
+                  {labels.shuffle}
+                </button>
+              </div>
             )}
             {route.kind === "playlists" && (
               <div className="hero-actions">
@@ -1272,6 +1324,29 @@ export function App() {
             revision={revision}
             changed={playback.refresh}
             failed={(message) => setError(message ?? text.desktopLibrary.actionFailed)}
+            onPlay={(row) =>
+              row.unavailable
+                ? setError(text.desktopLibrary.driveDisconnected)
+                : playback.run(window.wave.playlists.playGraveyard(route.id, row.itemId))
+            }
+            onMenu={(row, at, extra) =>
+              row.videoId !== undefined
+                ? actions.openItems(
+                    text.desktopLibrary.songMenu(row.title),
+                    streamed.items(row.videoId).then((items) => [...items, ...extra]),
+                    at,
+                  )
+                : // Its own menu, without Select: the Graveyard selects nothing.
+                  actions.openMenu(
+                    { scope: { kind: "songs" }, ids: [row.id] },
+                    row.title,
+                    at,
+                    extra,
+                    {
+                      done: () => {},
+                    },
+                  )
+            }
           />
         ) : route.kind === "search" ? (
           <SearchPage
@@ -1425,6 +1500,15 @@ export function App() {
                 revision={revision}
                 onHero={setHero}
                 onSort={setShownSort}
+                // A playlist's rows drag to a new place only where it shows its own order.
+                onPlace={
+                  !picks &&
+                  scope.kind === "playlist" &&
+                  scope.id !== undefined &&
+                  shownSort?.key === "custom"
+                    ? (target, before) => playlistEdits.place(scope.id!, target, before)
+                    : undefined
+                }
                 onOpen={open}
                 onError={failed}
                 selection={collectionKind ? picks?.[collectionKind] : table.selection}
@@ -1493,6 +1577,7 @@ export function App() {
           geniusAccess={geniusAccess(account)}
           onGeniusSignIn={openGeniusSignIn}
           onSongDrop={(songs, at) => dropSongs(songs, { queue: at })}
+          shuffleMenu={shuffleMenu}
           notify={notify}
           onClose={() => {
             // Focus goes back to the bar's button for this tab; Related opens from Queue's.

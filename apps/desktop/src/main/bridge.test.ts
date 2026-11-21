@@ -3207,6 +3207,7 @@ test("main refuses playlist calls with a bad playlist, name, page, answer or fra
       await assert.rejects(call("playlists.move", 1, 1, "left"), /refused/i);
       await assert.rejects(call("playlists.graveyard", 1, 0, 201), /refused/i);
       await assert.rejects(call("playlists.forget", 1, "all"), /refused/i);
+      await assert.rejects(call("playlists.playGraveyard", 1, -3), /refused/i);
       await assert.rejects(call("playlists.runImport", ["delete"]), /refused/i);
       await assert.rejects(
         call("playlists.saveImage", 1, { zoom: Number.NaN, centerX: 0.5, centerY: 0.5 }),
