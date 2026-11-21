@@ -6,6 +6,7 @@
  * removes the same entry.
  */
 
+import type { LibraryEntryFields } from "./collaborativeEntry.ts";
 import { readPlaylistEntrySong } from "./playlistEntries.ts";
 import { joinArtists, recordingMatchTitle, recordingMatches } from "./ytMusic.ts";
 
@@ -31,14 +32,26 @@ const NO_SONG: EntrySong = {
 
 /**
  * What a synced entry says of its song: a Library song's recording key
- * ([songId]), or the stored song ([ytSong], `writePlaylistEntrySong`) with its
- * video id, title, artists and length.
+ * ([songId]) with the fields a collaborative playlist's entry carries
+ * (`LibraryEntryFields`, absent on an entry from before them), or the stored
+ * song ([ytSong], `writePlaylistEntrySong`) with its video id, title, artists
+ * and length.
  */
-export const playlistEntrySong = (fields: {
-  readonly songId: string | null;
-  readonly ytSong: string | null;
-}): EntrySong => {
-  if (fields.songId !== null) return { ...NO_SONG, recordingKey: fields.songId };
+export const playlistEntrySong = (
+  fields: {
+    readonly songId: string | null;
+    readonly ytSong: string | null;
+  } & Partial<LibraryEntryFields>,
+): EntrySong => {
+  if (fields.songId !== null) {
+    return {
+      recordingKey: fields.songId,
+      videoId: fields.videoId ?? null,
+      title: fields.title ?? null,
+      artists: fields.credit === null || fields.credit === undefined ? [] : [fields.credit],
+      durationMs: fields.durationMs ?? null,
+    };
+  }
   const stored = fields.ytSong === null ? null : readPlaylistEntrySong(fields.ytSong);
   if (stored === null) return NO_SONG;
   const { title, artists, durationMs } = stored.song;
