@@ -65,19 +65,26 @@ and settle stay empty; frames, deadline misses and frame parts are what they mea
 
 ### Navigation (tap to first frame)
 
-From `TIMING_BUDGETS` (`packages/core/src/timing.ts`), as medians. The p90s are set from the first
-run.
+From `TIMING_BUDGETS` (`packages/core/src/timing.ts`), timed from the touch's native timestamp
+(#1347). Each first-frame budget is a p90: the app log's "Speed since" line gives every tap kind's
+first frame and response as median and p90, and a "Slow …" line names each tap over budget.
 
 | Scenario step                                                                                        | Response | First frame |
 | ---------------------------------------------------------------------------------------------------- | -------: | ----------: |
-| `tab-switch/*/tab`, `tab-first/*/first`                                                              |   100 ms |      150 ms |
-| `push-settings`, `push-library`, `push-playlist`, `push-empty` (`*/push`, `*/pop`)                   |   100 ms |      150 ms |
-| `push-tracklist/*/push`, `push-artist/*/push` (their content marks, `songs.rows` and `artist.stats`) |   400 ms |      150 ms |
-| `push-tracklist/*/pop`, `push-artist/*/pop`                                                          |   100 ms |      150 ms |
-| `queue/*/open`, `queue-first/*/open`                                                                 |   100 ms |      100 ms |
+| `tab-switch/*/tab`, `tab-first/*/first`                                                              |   100 ms |       50 ms |
+| `push-settings`, `push-library`, `push-playlist`, `push-empty` (`*/push`, `*/pop`)                   |   100 ms |       50 ms |
+| `push-tracklist/*/push`, `push-artist/*/push` (their content marks, `songs.rows` and `artist.stats`) |   400 ms |       50 ms |
+| `push-tracklist/*/pop`, `push-artist/*/pop`                                                          |   100 ms |       50 ms |
+| `queue/*/open`, `queue-first/*/open`                                                                 |   100 ms |       50 ms |
+| `now-playing/*/open`, `now-playing/*/close`                                                          |    50 ms |       50 ms |
+| `reference-taps/*/*-push`, `*-pop`, `tab`, `search`                                                  |   100 ms |       50 ms |
+| `reference-taps/*/queue-open`, `queue-swipe`, `queue-close`                                          |   100 ms |       50 ms |
+| `reference-taps/*/related-open`, `related-close` (`relatedOpen`, `relatedClose`)                     |        - |       50 ms |
 
-`rapid-tabs/*/burst` (settle on the last tab) is set from the first run. The 400 ms is
-`TIMING_BUDGETS.screen.contentMs`, the app's budget for a screen's first content.
+`reference-taps` is the baseline the #1346 tickets compare against; its first run is in
+`1347-native-touch-budget.md`. A screen's content keeps its 400 ms budget
+(`TIMING_BUDGETS.screen.contentMs`), and a Library read its 16 ms (`readMs`). Links from Now
+Playing (`artistLink`, `albumLink`, Go to Artist) keep 200 ms to first frame.
 
 ### Launch and Now Playing
 
@@ -89,7 +96,8 @@ run.
 |                            | response (`nowPlaying.shown`), deadline-miss rate      | set from the first run        |
 | `now-playing/*/close`      | `nowPlaying.spring` phase, median                      | 50 ms (`nowPlayingClose`)     |
 |                            | response (`nowPlaying.hidden`)                         | set from the first run        |
-| `now-playing-first/*/open` | response, first frame                                  | set from the first run        |
+| `now-playing-first/*/open` | response                                               | set from the first run        |
+|                            | first frame                                            | 50 ms                         |
 | `scrub/*/forward`, `back`  | deadline-miss rate                                     | set from the first run        |
 |                            | `Scrubber` renders per drag                            | no time-driven renders (#718) |
 

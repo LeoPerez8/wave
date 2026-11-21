@@ -1,6 +1,7 @@
 import { useLocalisation } from "@/localisation/localisation";
 import {
   NOW_PLAYING_OPENS_ON,
+  relatedTimingKind,
   settleScreenSwipe,
   settleSheet,
   stepNowPlayingScreens,
@@ -149,6 +150,9 @@ export const useScreenPages = (): ScreenPages => {
     (event: NowPlayingScreensEvent, velocity = 0): boolean => {
       const before = latest.current;
       const step = stepNowPlayingScreens(before, event);
+      // Asked for with Now Playing closed, Related rises with the sheet: Now Playing open's tap.
+      const timed = isNowPlayingShown() ? relatedTimingKind(before, event) : null;
+      if (timed !== null) beginTiming(timed, timed === "relatedOpen" ? "Related" : "player");
       latest.current = step.screens;
       setScreens(step.screens);
       const { screen } = step.screens;

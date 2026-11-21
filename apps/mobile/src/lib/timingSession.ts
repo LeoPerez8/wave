@@ -48,7 +48,7 @@ interface Pending {
   missedFrames: number;
 }
 
-/** A touch older than this made nothing that's beginning now. */
+/** A touch JS heard this long ago, still held, made nothing that's beginning now. */
 const TOUCH_LIFE_MS = 60_000;
 /** A press's handler runs as JS hears its touch end; what begins later than this has another cause. */
 const TOUCH_GRACE_MS = 300;
@@ -59,6 +59,8 @@ export const createTimingSession = (ports: Ports) => {
   let pending: Pending | null = null;
   let touchAt: number | undefined;
   let touchEndedAt: number | undefined;
+  /** When JS heard the touch: its age is judged from here, so blocked JS never expires it. */
+  let touchHeardAt: number | undefined;
   let settled = false;
   let since = ports.wallNow();
   let lastSummary: number | null = null;
@@ -172,13 +174,15 @@ export const createTimingSession = (ports: Ports) => {
   };
   const liveTouch = (): number | undefined => {
     const now = ports.now();
-    if (touchAt === undefined || now - touchAt >= TOUCH_LIFE_MS) return undefined;
+    if (touchAt === undefined || touchHeardAt === undefined) return undefined;
+    if (now - touchHeardAt >= TOUCH_LIFE_MS) return undefined;
     if (touchEndedAt !== undefined && now - touchEndedAt >= TOUCH_GRACE_MS) return undefined;
     return touchAt;
   };
   const forgetTouch = (): void => {
     touchAt = undefined;
     touchEndedAt = undefined;
+    touchHeardAt = undefined;
   };
   const takeTouch = (): number => {
     const at = liveTouch() ?? ports.now();
@@ -196,9 +200,11 @@ export const createTimingSession = (ports: Ports) => {
     /** A touch began, at its native timestamp; the press it turns into counts from there. */
     touch: (timestamp: number): void => {
       const now = ports.now();
-      // Older RN's epoch timestamp must not produce a negative duration.
-      touchAt = timestamp <= now && now - timestamp < TOUCH_LIFE_MS ? timestamp : now;
+      // On Android the stamp shares performance.now()'s clock (see timing.ts), so it is never
+      // ahead of now; one that is (another clock, an older RN's epoch) counts from JS hearing it.
+      touchAt = Number.isFinite(timestamp) && timestamp <= now ? timestamp : now;
       touchEndedAt = undefined;
+      touchHeardAt = now;
     },
     /**
      * The finger lifted, or a native scroll or gesture took the touch over. Timed by when JS

@@ -253,6 +253,15 @@ export function NowPlayingSheet() {
     const active = activeTiming();
     if (active?.kind === "queue") timingSurfaceCommitted(active.id);
   }, [screen]);
+  useLayoutEffect(() => {
+    const active = activeTiming();
+    if (
+      active !== null &&
+      ((screen === "related" && active.kind === "relatedOpen") ||
+        (screen !== "related" && active.kind === "relatedClose"))
+    )
+      timingSurfaceCommitted(active.id);
+  }, [screen]);
   // A streamed song downloaded since it was queued: Lyrics reads its file, as for a Library song.
   const downloaded = useDownloadedFile(ytSong);
   const lyricsFile: LibraryFile | null =

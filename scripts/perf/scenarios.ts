@@ -85,6 +85,13 @@ export interface ScenarioConfig {
   readonly artist: string | null;
   /** The playlist push-playlist opens, visible on Library › Playlists without scrolling. */
   readonly playlist: string | null;
+  /** An album reference-taps opens, on Library › Albums' first screen; unset skips it. */
+  readonly album?: string | null;
+  /**
+   * An artist outside the Library on [artist]'s Similar artists row, whose YT Music page
+   * reference-taps opens; unset skips it.
+   */
+  readonly ytArtist?: string | null;
 }
 
 export interface Scenario {
@@ -227,6 +234,16 @@ const tabStep = (measure: string, target: Target): Step => ({
   phases: TAB_PHASES,
 });
 
+/** Prefixes a step's measure with the place it's on, so one scenario keeps its pages apart. */
+function named(place: string, step: Step): Step;
+function named(place: string, steps: readonly Step[]): Step[];
+function named(place: string, step: Step | readonly Step[]): Step | Step[] {
+  if ("measure" in step) return { ...step, measure: `${place}-${step.measure}` };
+  return step.map((one) => named(place, one));
+}
+
+const QUEUE_VISIBLE: Expect = { mark: "visible", detail: "queue" };
+
 export const SCENARIOS: readonly Scenario[] = [
   {
     name: "startup",
@@ -367,6 +384,110 @@ export const SCENARIOS: readonly Scenario[] = [
     steps: () => pushPop({ text: "Developer" }),
     iterations: 10,
     warmup: 1,
+  },
+  {
+    name: "reference-taps",
+    summary:
+      "#1347's reference taps: every tab, Settings › Disliked songs and Version History, DJ, a Magic Queue tile, Library's pages, an album, a Library and a YT Music artist, a playlist, Now Playing with the Queue (tapped and swiped) and Related, and Search.",
+    steps: ({ tabs, artist, playlist, album, ytArtist }) => [
+      ...[...tabs.slice(1), "Home"].map((label) => tabStep("tab", tab(label))),
+      named("settings", {
+        measure: "push",
+        action: { kind: "tap", target: { desc: "Settings" } },
+        expect: route,
+      }),
+      ...named("disliked", pushPop({ text: "Disliked songs" })),
+      // Version History sits low on Settings: a fling brings it on screen.
+      named("settings", flings[0]!),
+      ...named("versions", pushPop({ text: "Version History" })),
+      named("settings", {
+        measure: "pop",
+        action: { kind: "tap", target: { desc: "Back" } },
+        expect: route,
+      }),
+      ...named("dj", pushPop({ descPrefix: "DJ, " })),
+      // Starts a Magic Queue: Now Playing below has a song to show, Related included.
+      {
+        measure: "magic-queue",
+        action: { kind: "tap", target: { descSuffix: ", start Magic Queue" } },
+      },
+      tabStep("tab", tab("Library")),
+      ...(album
+        ? [
+            named("albums", {
+              measure: "push",
+              action: { kind: "tap", target: { text: "Albums" } },
+              expect: route,
+            }),
+            ...named("album", pushPop({ text: album })),
+            named("albums", {
+              measure: "pop",
+              action: { kind: "tap", target: { desc: "Back" } },
+              expect: route,
+            }),
+          ]
+        : named("albums", pushPop({ text: "Albums" }))),
+      ...named("songs", pushPop({ text: "Songs" })),
+      named("artists", {
+        measure: "push",
+        action: { kind: "tap", target: { text: "Artists" } },
+        expect: route,
+      }),
+      named("artist", {
+        measure: "push",
+        action: { kind: "tap", target: { text: artist ?? "" } },
+        expect: { mark: "artist.stats" },
+      }),
+      // A Similar artists card for an artist outside the Library opens its YT Music page.
+      ...(ytArtist ? named("yt-artist", pushPop({ text: ytArtist })) : []),
+      named("artist", {
+        measure: "pop",
+        action: { kind: "tap", target: { desc: "Back" } },
+        expect: route,
+      }),
+      named("artists", {
+        measure: "pop",
+        action: { kind: "tap", target: { desc: "Back" } },
+        expect: route,
+      }),
+      named("playlists", {
+        measure: "push",
+        action: { kind: "tap", target: { text: "Playlists" } },
+        expect: route,
+      }),
+      ...named("playlist", pushPop({ text: playlist ?? "" })),
+      named("playlists", {
+        measure: "pop",
+        action: { kind: "tap", target: { desc: "Back" } },
+        expect: route,
+      }),
+      tabStep("tab", tab("Home")),
+      named("now-playing", OPEN_NOW_PLAYING),
+      {
+        measure: "queue-open",
+        action: { kind: "tap", target: { desc: "Queue" } },
+        expect: QUEUE_VISIBLE,
+      },
+      { measure: "queue-close", action: { kind: "tap", target: { desc: "Queue" } } },
+      // The Queue is one swipe to the player's right: a finger moving left over the artwork.
+      {
+        measure: "queue-swipe",
+        action: drag({ desc: "Close Now Playing" }, { x: 120, y: 320 }, { x: -200, y: 320 }, 150),
+        expect: QUEUE_VISIBLE,
+      },
+      { measure: "queue-close", action: { kind: "tap", target: { desc: "Queue" } } },
+      { measure: "related-open", action: { kind: "tap", target: { desc: "Related" } } },
+      { measure: "related-close", action: { kind: "tap", target: { desc: "Show player" } } },
+      named("now-playing", CLOSE_NOW_PLAYING),
+      // Last: Search's keyboard covers the tab bar until the teardown's Back.
+      tabStep("search", tab("Search")),
+    ],
+    teardown: [{ kind: "back" }, { kind: "tap", target: tab("Home") }],
+    iterations: 5,
+    warmup: 1,
+    byName: true,
+    needsArtist: true,
+    needsPlaylist: true,
   },
   {
     name: "now-playing",

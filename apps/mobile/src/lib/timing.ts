@@ -50,7 +50,12 @@ export const registerTimingBackground = (name: string, read: () => string | null
 /** A work item starting/ending in the timing window is retained even when it ends before settlement. */
 export const timingBackgroundChanged = (): void => session.backgroundChanged();
 
-/** RN's native timestamps and performance.now share the monotonic clock on Android. */
+/**
+ * On Android the touch's timestamp is MotionEvent.getEventTime() (SystemClock.uptimeMillis,
+ * CLOCK_MONOTONIC in ms: TouchEvent.kt, TouchesHelper.kt), and performance.now() is
+ * NativePerformance::now, std::chrono::steady_clock since boot (also CLOCK_MONOTONIC). Same
+ * clock, so a touch JS hears late behind a blocked thread still counts its wait (#1347).
+ */
 export const timingTouch = (event: GestureResponderEvent): void =>
   session.touch(event.nativeEvent.timestamp);
 export const timingTouchEnded = (event: GestureResponderEvent): void => {

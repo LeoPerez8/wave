@@ -1,16 +1,18 @@
 /** Every build's navigation timing rules and app-log text. No platform work lives here. */
 export const TIMING_BUDGETS = {
-  tab: { responseMs: 100, firstFrameMs: 150 },
-  push: { responseMs: 100, firstFrameMs: 150 },
-  pop: { responseMs: 100, firstFrameMs: 150 },
-  nowPlayingOpen: { responseMs: 50 },
-  nowPlayingClose: { responseMs: 50 },
-  queue: { responseMs: 100, firstFrameMs: 100 },
+  tab: { responseMs: 100, firstFrameMs: 50 },
+  push: { responseMs: 100, firstFrameMs: 50 },
+  pop: { responseMs: 100, firstFrameMs: 50 },
+  nowPlayingOpen: { responseMs: 50, firstFrameMs: 50 },
+  nowPlayingClose: { responseMs: 50, firstFrameMs: 50 },
+  queue: { responseMs: 100, firstFrameMs: 50 },
+  relatedOpen: { firstFrameMs: 50 },
+  relatedClose: { firstFrameMs: 50 },
   artistLink: { firstFrameMs: 200 },
   albumLink: { firstFrameMs: 200 },
   goToArtist: { firstFrameMs: 200 },
   choiceCard: { responseMs: 100 },
-  screen: { firstFrameMs: 150, contentMs: 400 },
+  screen: { firstFrameMs: 50, contentMs: 400 },
   readMs: 16,
   lateFrameFactor: 1.5,
   hitchMs: 500,
@@ -25,6 +27,8 @@ export type TimingKind =
   | "nowPlayingOpen"
   | "nowPlayingClose"
   | "queue"
+  | "relatedOpen"
+  | "relatedClose"
   | "artistLink"
   | "albumLink"
   | "goToArtist"
@@ -84,6 +88,8 @@ const KIND_NAMES: Readonly<Record<TimingKind, string>> = {
   nowPlayingOpen: "Now Playing open",
   nowPlayingClose: "Now Playing close",
   queue: "Queue",
+  relatedOpen: "Related open",
+  relatedClose: "Related close",
   artistLink: "artist link",
   albumLink: "album link",
   goToArtist: "Go to Artist",
@@ -150,16 +156,20 @@ export const speedSummaryLine = (window: TimingWindow): string | null => {
   const parts = [`Speed since ${since} (Wave ${window.version} @ ${window.commit}): ${total} taps`];
   for (const kind of Object.keys(KIND_NAMES) as TimingKind[]) {
     const taps = measurements.filter((tap) => tap.kind === kind);
-    const responses = taps.flatMap((tap) => (tap.responseMs === undefined ? [] : [tap.responseMs]));
-    if (taps.length > 0) {
-      const measured =
-        responses.length === taps.length ? "" : ` (${responses.length} responses measured)`;
-      parts.push(
-        responses.length === 0
-          ? `${KIND_NAMES[kind]} ${taps.length} response not observed`
-          : `${KIND_NAMES[kind]} ${taps.length}${measured} ${distribution(responses)}`,
-      );
-    }
+    if (taps.length === 0) continue;
+    // First frame leads: it's the budget every tap kind is judged by (#1347).
+    const milestones = [
+      ["first frame", taps.flatMap((tap) => tap.firstFrameMs ?? [])],
+      ["response", taps.flatMap((tap) => tap.responseMs ?? [])],
+    ] as const;
+    const summary = milestones
+      .filter(([, values]) => values.length > 0)
+      .map(([name, values]) => {
+        const measured = values.length === taps.length ? "" : ` (${values.length} measured)`;
+        return `${name}${measured} ${distribution(values)}`;
+      })
+      .join(", ");
+    parts.push(`${KIND_NAMES[kind]} ${taps.length} ${summary || "response not observed"}`);
   }
   const screens = new Map<string, TimingScreen[]>();
   for (const screen of window.screens) {
