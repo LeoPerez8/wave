@@ -37,16 +37,16 @@ test("an absent or unreadable kept grid means it has not been built yet", () => 
   assert.equal(readDjGridMemory('{"version":1,"tiles":[]}'), null);
 });
 
-test("kept DJ grids render while the Library and full candidate list are read", () => {
+test("kept DJ grids skip all grid reads, builds, and startup preparation", () => {
   assert.deepEqual(djOpeningWork({ keptGrid: true, libraryReady: false }), {
-    readLibrary: true,
+    readLibrary: false,
     buildGrid: false,
-    prepareStartup: true,
+    prepareStartup: false,
   });
   assert.deepEqual(djOpeningWork({ keptGrid: true, libraryReady: true }), {
     readLibrary: false,
-    buildGrid: true,
-    prepareStartup: true,
+    buildGrid: false,
+    prepareStartup: false,
   });
 });
 

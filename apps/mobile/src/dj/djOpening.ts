@@ -6,15 +6,17 @@
  */
 import {
   djGridCandidates,
+  djGrid,
   djTileArtist,
   genreMixDjCandidates,
   type DjAlbum,
   type GenreMixDjCandidate,
+  type DjTile,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import { magicProfileOf } from "@/home/artistGenres";
-import { inSlice } from "@/lib/backgroundWork";
+import { freeTurn, inSlice } from "@/lib/backgroundWork";
 import type { MixIndexes } from "@/home/mixKnown";
 import { recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { savedYtArtist } from "@/home/ytArtistPage";
@@ -63,13 +65,19 @@ export const gridSources = (library: MixIndexes, families: readonly GenreMixDjCa
 const albumsOver = (
   library: MixIndexes,
   families: readonly GenreMixDjCandidate[],
+  complete = false,
 ): Promise<DjAlbum[]> => {
   const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
-  const artists = new Set(
-    djGridCandidates(gridSources(library, families)).flatMap((tile) =>
-      tile.kind === "genre" ? tile.opens.map(djTileArtist) : [djTileArtist(tile)],
-    ),
-  );
+  const artists = inSlice("DJ grid candidates", () => {
+    const tiles = complete
+      ? djGridCandidates(gridSources(library, families))
+      : djGrid(gridSources(library, families));
+    return new Set(
+      tiles.flatMap((tile) =>
+        tile.kind === "genre" ? tile.opens.map(djTileArtist) : [djTileArtist(tile)],
+      ),
+    );
+  });
   return readDjAlbums([...artists], {
     library: () =>
       // The Albums list in memory when Search's index holds it (#1352), else read.
@@ -128,6 +136,19 @@ export const readDjOpening = (library: MixIndexes): Promise<DjOpeningRead> => {
   });
   preparing = { library, read };
   return read;
+};
+
+/** Reads the full grid only when paging or refreshing first needs its candidates. */
+export const readDjGridCandidates = async (opening: DjOpeningRead): Promise<DjTile[]> => {
+  await freeTurn("DJ grid candidates");
+  const albums = await albumsOver(opening.library, opening.families, true);
+  await freeTurn("DJ grid candidates");
+  return inSlice("DJ grid candidates", () =>
+    djGridCandidates({
+      ...gridSources(opening.library, opening.families),
+      albums,
+    }),
+  );
 };
 
 /** Prepares DJ's opening from the snapshot Home's mixes read (shared with them). */

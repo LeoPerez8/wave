@@ -23,6 +23,7 @@ export type DjOpeningGrid =
 
 /** Work a DJ opening needs; a stored grid renders while its full candidates are read. */
 export const djOpeningWork = ({
+  keptGrid,
   libraryReady,
 }: {
   readonly keptGrid: boolean;
@@ -32,9 +33,9 @@ export const djOpeningWork = ({
   readonly buildGrid: boolean;
   readonly prepareStartup: boolean;
 } => ({
-  readLibrary: !libraryReady,
-  buildGrid: libraryReady,
-  prepareStartup: true,
+  readLibrary: !keptGrid && !libraryReady,
+  buildGrid: !keptGrid && libraryReady,
+  prepareStartup: !keptGrid,
 });
 
 /**

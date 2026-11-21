@@ -482,6 +482,19 @@ export const djGridPage = (
   return candidates.filter((tile) => !shown.has(tile.key)).slice(0, Math.max(0, limit));
 };
 
+/** Append one page without changing [tiles]' existing positions. */
+export const djGridLoadMore = (
+  candidates: readonly DjTile[],
+  tiles: readonly DjTile[],
+  seen: readonly DjTileKey[],
+  limit = DJ_GRID_TILES,
+): { readonly tiles: DjTile[]; readonly page: DjTile[]; readonly seen: DjTileKey[] } => {
+  const shown = new Set([...seen, ...tiles.map((tile) => tile.key)]);
+  const page = djGridPage(candidates, [...shown], limit);
+  for (const tile of page) shown.add(tile.key);
+  return { tiles: [...tiles, ...page], page, seen: [...shown] };
+};
+
 /** Refresh [tiles] in place around selected indices using candidates not yet shown this visit. */
 export const djGridRefresh = (
   candidates: readonly DjTile[],

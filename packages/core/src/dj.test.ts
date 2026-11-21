@@ -18,6 +18,7 @@ import {
   djGrid,
   djGridCandidates,
   djGridPage,
+  djGridLoadMore,
   djGridRefresh,
   djOpened,
   djReduce,
@@ -169,6 +170,20 @@ describe("DJ's grid", () => {
       new Set([...first, ...second, ...third].map((tile) => tile.key)).size,
       candidates.length,
     );
+  });
+
+  test("loading more appends a page without changing any tile already shown", () => {
+    const candidates = Array.from({ length: 8 }, (_, i) => djArtistTile(`Artist ${i}`)!);
+    const current = candidates.slice(0, 3);
+    const result = djGridLoadMore(
+      candidates,
+      current,
+      current.map((tile) => tile.key),
+      2,
+    );
+
+    assert.deepEqual(result.tiles, [...current, ...candidates.slice(3, 5)]);
+    assert.deepEqual(result.tiles.slice(0, current.length), current);
   });
 
   test("refresh fills unselected positions with unseen candidates and keeps selected tiles in place", () => {

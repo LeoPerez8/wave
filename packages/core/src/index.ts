@@ -3319,6 +3319,7 @@ export {
   djCanStart,
   djGrid,
   djGridCandidates,
+  djGridLoadMore,
   djGridPage,
   djGridRefresh,
   djFirstLibrarySong,
