@@ -92,9 +92,9 @@ export function DjTilePicture({
 }
 
 /** An artist's mark: their image in a circle, the Library's one when it has them. */
-function ArtistMark({ name, artist }: { name: string; artist: ArtistRow | undefined }) {
+function ArtistMark({ tile, artist }: { tile: DjTile; artist: ArtistRow | undefined }) {
   const { image } = usePlayedArtist(
-    artist ?? { id: 0, online: true, name, thumbPath: null, artworkPath: null },
+    artist ?? { id: tile.key, online: true, name: tile.name, thumbPath: null, artworkPath: null },
   );
   return <ArtistImage artist={image} size={MARK} />;
 }
@@ -123,7 +123,7 @@ function SelectionMark({
       style={{ width: MARK, height: MARK }}
     >
       {tile.kind === "artist" ? (
-        <ArtistMark name={tile.name} artist={artist} />
+        <ArtistMark tile={tile} artist={artist} />
       ) : tile.kind === "album" ? (
         <Artwork uri={tile.cover ?? undefined} size={MARK} radius={DJ_TILE_RADIUS} />
       ) : (
