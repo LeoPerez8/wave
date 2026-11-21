@@ -14,6 +14,9 @@ export const desktopEn = {
   playbackText: {
     thisPhone: "This computer",
   },
+  shows: {
+    phoneRegion: "This computer's region",
+  },
   settings: {
     openingLyricsOnASongWithLyrics:
       "Opening Lyrics on a song with lyrics shows Genius's description and highlights the fragments it annotates. Turn this off to stop all Genius requests.",
