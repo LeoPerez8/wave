@@ -7,8 +7,10 @@ import {
   IconCrop,
   IconDeviceFloppy,
   IconDisc,
+  IconDoorExit,
   IconDownload,
   IconExternalLink,
+  IconLink,
   IconListCheck,
   IconMicrophone2,
   IconMusicSearch,
@@ -29,7 +31,11 @@ import {
   IconTrash,
   IconTrashX,
   IconX,
+  IconUser,
   IconUserPlus,
+  IconUsers,
+  IconUsersGroup,
+  IconUsersMinus,
   IconZzz,
 } from "@tabler/icons-react-native";
 import type {
@@ -70,7 +76,8 @@ export type MenuAction =
   | "emptyGraveyard"
   | "graveyard"
   | "downloaded"
-  | "openInGenius";
+  | "openInGenius"
+  | "addedBy";
 
 /**
  * Each action's one icon, the same in every menu that offers it and on the
@@ -78,6 +85,7 @@ export type MenuAction =
  * album's, a playlist's or a mix's, a cancel the X, a retry the circling arrows.
  */
 export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
+  addedBy: IconUser,
   restoreGraveyard: IconArrowForwardUp,
   forgetGraveyard: IconTrashX,
   emptyGraveyard: IconTrash,
@@ -104,6 +112,11 @@ export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
   share: IconShare3,
   deletePlaylist: IconTrash,
   deletePlaylists: IconTrash,
+  makeCollaborative: IconUsersGroup,
+  invite: IconLink,
+  members: IconUsers,
+  endCollaboration: IconUsersMinus,
+  leavePlaylist: IconDoorExit,
   fixSong: IconMusicSearch,
   fixSongs: IconMusicSearch,
   select: IconListCheck,

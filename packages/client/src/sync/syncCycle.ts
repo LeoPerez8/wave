@@ -19,7 +19,12 @@ import {
   type SyncTables,
 } from "@wave/core";
 
-import { applyMembership, makePrivateCopy, selectMemberPlaylists } from "../db/collaborations.ts";
+import {
+  applyMembership,
+  makePrivateCopy,
+  selectCollaborations,
+  selectMemberPlaylists,
+} from "../db/collaborations.ts";
 import type { CreditSplits } from "../db/credits.ts";
 import type { LibraryDatabase } from "../db/database.ts";
 import { syncMissingSongs } from "../db/missingSongs.ts";
@@ -176,6 +181,17 @@ interface Seen {
   preferences: { key: string; value: string | null }[];
 }
 
+const nothingSeen = (): Seen => ({
+  songs: false,
+  library: false,
+  playlists: false,
+  favorites: false,
+  plays: false,
+  follows: false,
+  dismissedSuggestions: false,
+  preferences: [],
+});
+
 const take = (seen: Seen, changes: PulledChanges): void => {
   seen.songs ||= changes.songs;
   seen.playlists ||= changes.playlists;
@@ -298,16 +314,7 @@ export const syncCycle = async (input: SyncCycleInput): Promise<SyncCycleResult>
   // Not joined yet: no account to check after this turn.
   await input.turn?.();
   const joined = joinAccount(input.db, input.account);
-  const seen: Seen = {
-    songs: false,
-    library: false,
-    playlists: false,
-    favorites: false,
-    plays: false,
-    follows: false,
-    dismissedSuggestions: false,
-    preferences: [],
-  };
+  const seen = nothingSeen();
   const pulled = await pullAll(input, seen);
   await freeTurn(input);
   settle(input, seen, { pulled, songs: joined || input.songsChanged || seen.songs, plan: true });
@@ -330,6 +337,35 @@ export const syncCycle = async (input: SyncCycleInput): Promise<SyncCycleResult>
     if (copied) pushed += await pushAll(input);
   }
   return { pulled: seen, pushed };
+};
+
+/**
+ * Syncs the collaborative playlist [playlistId] alone, while its page is in sight (docs/spec.md,
+ * "Collaborative playlists", Refreshing): a member's device pulls it with its own requests,
+ * pushes what waits in it and pulls again after a push, keeping a private copy when the
+ * membership ended (pushed at once, as a cycle does); the owner's device pulls the account,
+ * which holds the playlist's rows. Nothing is sent for an ordinary playlist, with the
+ * switch off ([collaboration] absent), or before the Library joined the account.
+ */
+export const syncCollaborativePlaylist = async (
+  input: SyncCycleInput,
+  playlistId: number,
+): Promise<SyncCycleResult> => {
+  const seen = nothingSeen();
+  const service = input.collaboration;
+  if (service === undefined) return { pulled: seen, pushed: 0 };
+  await input.turn?.();
+  if (selectJoinedAccount(input.db) !== input.account) return { pulled: seen, pushed: 0 };
+  const held = selectCollaborations(input.db).find((each) => each.playlistId === playlistId);
+  if (held === undefined) return { pulled: seen, pushed: 0 };
+  if (held.owned) {
+    const pulled = await pullAll(input, seen);
+    await freeTurn(input);
+    settle(input, seen, { pulled, songs: seen.songs, plan: false });
+    return { pulled: seen, pushed: 0 };
+  }
+  const step = await syncMemberPlaylist(input, service, seen, held.syncId);
+  return { pulled: seen, pushed: step === "ended" ? await pushAll(input) : 0 };
 };
 
 /** How a member's requests of one playlist went: on, stopped until the next cycle, or ended. */

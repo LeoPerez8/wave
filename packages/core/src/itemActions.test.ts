@@ -110,17 +110,31 @@ describe("itemActions", () => {
     assert.ok(!names(itemActions({ kind: "album", items: [{}], here: "/" })).includes("delete"));
   });
 
-  test("Delete Playlist and Delete Playlists are red like Delete and Remove from Library, and no other entry is", () => {
+  test("Delete Playlist, Delete Playlists, End Collaboration and Leave Playlist are red like Delete and Remove from Library, and no other entry is", () => {
     assert.deepEqual(
       Object.keys(ITEM_ACTION_LABELS).filter((action) => isDestructiveAction(action as ItemAction)),
-      ["deletePlaylist", "deletePlaylists", "delete", "removeFromLibrary"],
+      [
+        "deletePlaylist",
+        "deletePlaylists",
+        "endCollaboration",
+        "leavePlaylist",
+        "delete",
+        "removeFromLibrary",
+      ],
     );
   });
 
-  test("Delete and Remove from Library ask first, so the selection only ends once it's confirmed", () => {
+  test("Delete, Remove from Library and the playlist removals ask first, so the selection only ends once it's confirmed", () => {
     assert.deepEqual(
       Object.keys(ITEM_ACTION_LABELS).filter((action) => confirmsFirst(action as ItemAction)),
-      ["deletePlaylist", "deletePlaylists", "delete", "removeFromLibrary"],
+      [
+        "deletePlaylist",
+        "deletePlaylists",
+        "endCollaboration",
+        "leavePlaylist",
+        "delete",
+        "removeFromLibrary",
+      ],
     );
   });
 

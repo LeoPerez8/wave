@@ -976,6 +976,18 @@ export {
   readPullMembership,
   refusalEndsMembership,
 } from "./collaborativeSync.ts";
+export {
+  COLLABORATIVE_PAGE_PULL_MS,
+  collaborativePageMembers,
+  collaborativePagePull,
+  entryAdder,
+} from "./collaborativePage.ts";
+export type {
+  CollaborativePageMembers,
+  CollaborativePagePull,
+  CollaborativePagePullInput,
+  EntryAdder,
+} from "./collaborativePage.ts";
 export type {
   CollaborationEndReason,
   EndedCollaboration,
@@ -2951,3 +2963,19 @@ export type {
   EntryTrack,
   LibraryEntryFields,
 } from "./collaborativeEntry.ts";
+export {
+  collaborationFailure,
+  collaborativeMemberRows,
+  collaborativeSignInAlert,
+  confirmEndCollaboration,
+  confirmLeavePlaylist,
+  confirmMakeCollaborative,
+  confirmRemoveMember,
+  inviteView,
+} from "./collaborativeMenu.ts";
+export type {
+  CollaborativeAction,
+  CollaborativeConfirmation,
+  CollaborativeMemberRow,
+  InviteView,
+} from "./collaborativeMenu.ts";

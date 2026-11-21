@@ -304,3 +304,27 @@ export const selectInviteLink = (db: LibraryDatabase, syncId: string): CreatedIn
     ? null
     : { url: row.url, expiresAt: row.expiresAt };
 };
+
+/**
+ * The members the service just listed for a playlist this device holds a record of
+ * ([collaboration], Members' answer or a removal's re-read): the menu counts them in its
+ * questions until the next account pull.
+ */
+export const keepCollaborationMembers = (
+  db: LibraryDatabase,
+  collaboration: Collaboration,
+): void => {
+  db.update(schema.collaborations)
+    .set({ members: JSON.stringify(collaboration.members) })
+    .where(eq(schema.collaborations.playlistSyncId, collaboration.playlistId))
+    .run();
+};
+
+/**
+ * The owner ended the collaboration of the playlist [syncId] (the service took it): its record
+ * and invite link go now, and the playlist stays the owner's as it is. The next account pull
+ * says the same (`forget`).
+ */
+export const forgetCollaboration = (db: LibraryDatabase, syncId: string): void => {
+  db.delete(schema.collaborations).where(eq(schema.collaborations.playlistSyncId, syncId)).run();
+};

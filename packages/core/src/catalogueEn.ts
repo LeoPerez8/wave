@@ -9,6 +9,7 @@ import { discoverEn } from "./catalogue/discoverEn.ts";
 import { statsEn } from "./catalogue/statsEn.ts";
 import { recapEn } from "./catalogue/recapEn.ts";
 import { listeningHistoryEn } from "./catalogue/listeningHistoryEn.ts";
+import { collaborativePageEn } from "./catalogue/collaborativePageEn.ts";
 import { shareEn } from "./catalogue/shareEn.ts";
 import { downloadNoticeEn } from "./catalogue/downloadNoticeEn.ts";
 import { nativeEn } from "./catalogue/nativeEn.ts";
@@ -23,6 +24,7 @@ import { alertEn } from "./catalogue/alertEn.ts";
 import { fixSongsEn } from "./catalogue/fixSongsEn.ts";
 import { downloadsEn } from "./catalogue/downloadsEn.ts";
 import { itemActionsEn } from "./catalogue/itemActionsEn.ts";
+import { collaborativeMenuEn } from "./catalogue/collaborativeMenuEn.ts";
 import { songDeletionEn } from "./catalogue/songDeletionEn.ts";
 import { appUpdatesEn } from "./catalogue/appUpdatesEn.ts";
 import { inviteJoinEn } from "./catalogue/inviteJoinEn.ts";
@@ -193,6 +195,7 @@ export const en = {
     heading: "This is a Wave invite",
     body: "Open this link on your phone with an up-to-date Wave.",
   },
+  collaborativePage: collaborativePageEn,
   /** Opening an invite link in Wave: the join screen and why it can't join. */
   inviteJoin: inviteJoinEn,
   settings: settingsEn,
@@ -201,6 +204,7 @@ export const en = {
   fixSongs: fixSongsEn,
   downloads: downloadsEn,
   itemActions: itemActionsEn,
+  collaborativeMenu: collaborativeMenuEn,
   songDeletion: songDeletionEn,
   whatsNew: whatsNewEn,
   versionHistory: versionHistoryEn,
