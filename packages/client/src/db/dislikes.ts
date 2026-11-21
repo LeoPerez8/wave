@@ -6,8 +6,8 @@
  * dislike stays as a tombstone until the account has it (`syncRows.ts`).
  * Kept free of Expo for the store tests.
  */
-import type { DislikedSong } from "@wave/core";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { ytTrackId, type DislikedSong } from "@wave/core";
+import { and, desc, eq, inArray, like, notLike, sql } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
@@ -105,3 +105,43 @@ export const selectDislikes = (db: LibraryDatabase): DislikedSong[] =>
       durationMs,
       dislikedAt,
     }));
+
+/** A Library song a dislike is about: its Track id and the video it was downloaded from. */
+export interface DislikedTrack {
+  readonly id: number;
+  readonly videoId: string;
+}
+
+/** How a YT Music song's dislike key starts (Core's `ytTrackId`). */
+const YT_KEY = ytTrackId("");
+
+/**
+ * The Library's songs the dislikes kept are about, each with its video: one
+ * disliked by its video (while streamed, or as Core's `dislikeKey` keeps a
+ * downloaded song) and one disliked by its Track id that has a video. Core's
+ * `dislikedSongs` reads them, so a dislike answers under both keys. A song
+ * with no video is told by its Track id alone and isn't listed.
+ */
+export const selectDislikedTracks = (db: LibraryDatabase): DislikedTrack[] => {
+  const { dislikes, tracks } = schema;
+  const columns = { id: tracks.id, videoId: sql<string>`${tracks.videoId}` };
+  const byVideo = db
+    .select(columns)
+    .from(dislikes)
+    .innerJoin(tracks, sql`${tracks.videoId} = substr(${dislikes.songKey}, ${YT_KEY.length + 1})`)
+    .where(and(eq(dislikes.deleted, false), like(dislikes.songKey, `${YT_KEY}%`)))
+    .all();
+  const byTrack = db
+    .select(columns)
+    .from(dislikes)
+    .innerJoin(tracks, sql`${tracks.id} = CAST(${dislikes.songKey} AS INTEGER)`)
+    .where(
+      and(
+        eq(dislikes.deleted, false),
+        notLike(dislikes.songKey, `${YT_KEY}%`),
+        sql`${tracks.videoId} IS NOT NULL`,
+      ),
+    )
+    .all();
+  return [...new Map([...byVideo, ...byTrack].map((track) => [track.id, track])).values()];
+};

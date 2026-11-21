@@ -7,8 +7,9 @@ import type { RandomSource } from "./weightedPick.ts";
  * file, by id, and the YT Music entries of the owner's playlists, by video
  * id, each video once and none the Library already has as a file (that
  * song counts once, as the Library's). Unsearched and unavailable entries
- * have no video id and stay out. Disliked songs ([disliked], `dislikes.ts`)
- * are never drawn, and one the row showed leaves it.
+ * have no video id and stay out. Disliked songs ([disliked], `dislikes.ts`,
+ * which holds a Library song's Track id and its video alike) are never
+ * drawn, and one the row showed leaves it.
  */
 export interface MagicQueuePool {
   readonly trackIds: readonly number[];

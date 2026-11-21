@@ -28,7 +28,7 @@ import { CELL } from "@/catalog/grid";
 import { followStreamedArtistLink } from "@/library/ArtistChoice";
 import { useYtSongStarred, ytSongStarredNow } from "@/library/favorites";
 import { useDislikedSongs } from "@/library/dislikes";
-import { dislikeSongs, ytSongDislikedNow } from "@/library/dislikeSongs";
+import { dislikeFailed, dislikeSongs, ytSongDislikedNow } from "@/library/dislikeSongs";
 import { starSongs } from "@/library/starSongs";
 import { openReleaseDate, releaseDateMenuLabel } from "@/library/ReleaseDateSheet";
 import { streamedReleaseSong } from "@/library/releaseSong";
@@ -198,7 +198,9 @@ const run = (
   if (entry.kind === "dislike") {
     // Kept by its video, or as the Library's song it is by now; the toast offers Undo.
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    void dislikeSongs({ tracks: [], ytSongs: [song] }, entry.action === "dislike", find);
+    void dislikeSongs({ tracks: [], ytSongs: [song] }, entry.action === "dislike", find).catch(
+      dislikeFailed,
+    );
     return;
   }
   switch (entry.action) {

@@ -1,86 +1,88 @@
-import { NO_DISLIKES, type DislikedSong, type DislikedSongs } from "@wave/core";
+import type { DislikedSongs } from "@wave/core";
+import { Effect } from "effect";
 import { useEffect, useSyncExternalStore } from "react";
 
-import { makeExternalStore } from "@wave/client/externalStore";
+import type { DislikedTrack } from "@wave/client/db/dislikes";
 
-import { publishDisliked, publishUndisliked } from "./libraryChanges";
+import { createDislikeSet, type DislikeToKeep } from "./dislikeSet";
+import {
+  onLibraryChange,
+  onSavedStars,
+  onUndisliked,
+  publishDisliked,
+  publishUndisliked,
+} from "./libraryChanges";
 import { LibraryStore } from "./LibraryStore";
 import { appRuntime } from "./runtime";
 
 /**
- * The disliked songs (docs/spec.md, Dislike), by Core's `dislikeKey`, held in
- * memory so every menu shows a dislike the moment it's set and every picker
- * (the Magic Queue, the mixes, Discover's row) filters by the same set. The
+ * The disliked songs (docs/spec.md, Dislike), held in memory so every menu
+ * shows a dislike the moment it's set and every picker (the Magic Queue, the
+ * mixes, Discover's row) filters by the same set. The set holds every key of
+ * each disliked song, its video and its Track id (Core's `dislikedSongs`), so
+ * a song disliked while streamed is disliked as the Library's song too. The
  * store keeps them (`dislikes`), so they survive a restart, and they sync
- * with the Wave account (`startSync`). Core's
- * `dislikes.ts` decides what a dislike changes; `dislikeSongs.ts` runs it.
+ * with the Wave account (`startSync`). Core's `dislikes.ts` decides what a
+ * dislike changes; `dislikeSongs.ts` runs it; `dislikeSet.ts` is the set.
  */
-interface DislikesState {
-  readonly keys: DislikedSongs;
-  readonly loaded: boolean;
-  /** Bumped when dislikes are set, so a read that raced them reads again. */
-  readonly edits: number;
-}
+const run = <A>(use: (store: LibraryStore["Service"]) => Effect.Effect<A, unknown>): Promise<A> =>
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+  appRuntime.runPromise(LibraryStore.use(use));
 
-const dislikes = makeExternalStore<DislikesState>({ keys: NO_DISLIKES, loaded: false, edits: 0 });
+/** While the set itself says dislikes are gone (`publishUndisliked` runs its listeners at once). */
+let announcing = false;
 
-let reading: Promise<void> | null = null;
+const dislikes = createDislikeSet({
+  read: () =>
+    run((store) =>
+      Effect.all({
+        keys: Effect.map(store.listDislikes, (songs) => songs.map((song) => song.key)),
+        tracks: store.dislikedTracks,
+      }),
+    ),
+  keep: (songs) => run((store) => store.setDislikes(songs)),
+  forget: (keys) => run((store) => store.removeDislikes(keys)),
+  disliked: publishDisliked,
+  undisliked: (keys) => {
+    announcing = true;
+    try {
+      publishUndisliked(keys);
+    } finally {
+      announcing = false;
+    }
+  },
+});
 
-/** Reads the dislikes from the store: at first use, and after a write failed. */
-const readDislikes = (): Promise<void> => {
-  if (reading !== null) return reading;
-  const edits = dislikes.get().edits;
-  const read: Promise<void> = appRuntime
-    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-    .runPromise(LibraryStore.use((store) => store.listDislikes))
-    .then((songs) => {
-      reading = null;
-      // A dislike set while reading may not be in the result; read again.
-      if (dislikes.get().edits !== edits) return readDislikes();
-      dislikes.update((state) => ({
-        ...state,
-        keys: new Set(songs.map((song) => song.key)),
-        loaded: true,
-      }));
-    })
-    .catch(() => {
-      reading = null;
-    });
-  reading = read;
-  return read;
-};
+// A file that arrives for a disliked video is the disliked song from then on.
+onLibraryChange((change) => {
+  if (change.kind === "tracks") void dislikes.tracksChanged();
+});
+
+// A star removes its song's dislike, whoever sets it: a removal announced from outside this
+// file leaves the set here. One the set announces itself is out of it by then, and the song
+// may have been disliked again since.
+onUndisliked((keys) => {
+  if (!announcing) dislikes.dropped(keys);
+});
+
+// A download or scan that stars a pending favorite as it saves the song changes the marks in
+// the store: the set is read again.
+onSavedStars(() => void dislikes.reload());
 
 /** Reads the dislikes once; resolves when they're read, or the read failed. */
-export const loadDislikes = (): Promise<void> =>
-  dislikes.get().loaded ? Promise.resolve() : readDislikes();
+export const loadDislikes = dislikes.load;
 
 /**
  * Reads the dislikes again after the Wave account changed them (a pull).
  * Nothing to do before the first read, which reads them as they are by then.
  */
-export const reloadDislikes = (): Promise<void> => {
-  if (!dislikes.get().loaded) return Promise.resolve();
-  // A read on its way may have read before the pull: it reads again.
-  dislikes.update((state) => ({ ...state, edits: state.edits + 1 }));
-  return readDislikes();
-};
-
-const savedListeners = new Set<() => void>();
+export const reloadDislikes = dislikes.reload;
 
 /** Calls [listener] whenever a dislike set or removed here has been saved (sync follows it); returns how to stop. */
-export const onDislikesSaved = (listener: () => void): (() => void) => {
-  savedListeners.add(listener);
-  return () => {
-    savedListeners.delete(listener);
-  };
-};
-
-const saved = (): void => {
-  for (const listener of savedListeners) listener();
-};
+export const onDislikesSaved = dislikes.onSaved;
 
 /** The disliked songs as this phone knows them now, unfollowed; none before they're read. */
-export const dislikedSongsNow = (): DislikedSongs => dislikes.get().keys;
+export const dislikedSongsNow = dislikes.now;
 
 /**
  * The disliked songs, read first if they haven't been: what a picker filters
@@ -98,58 +100,31 @@ export const useDislikedSongs = (active = true): DislikedSongs => {
   return useSyncExternalStore(dislikes.subscribe, dislikedSongsNow);
 };
 
+/** How many songs are disliked, followed: each once, whatever keys it is found by. */
+export const useDislikeCount = (): number => {
+  useEffect(() => {
+    void loadDislikes();
+  }, []);
+  return useSyncExternalStore(dislikes.subscribe, dislikes.count);
+};
+
 /** Calls [listener] with the disliked songs whenever they change; returns how to stop. */
-export const onDislikesChanged = (listener: (disliked: DislikedSongs) => void): (() => void) => {
-  let keys = dislikes.get().keys;
-  return dislikes.subscribe(() => {
-    if (dislikes.get().keys === keys) return;
-    keys = dislikes.get().keys;
-    listener(keys);
-  });
-};
+export const onDislikesChanged = dislikes.onChanged;
 
 /**
- * Changes the set at once ([keys] in or out of it), then runs [write]; should
- * it fail, the set goes back to what the store holds.
+ * Keeps [songs] as disliked: the set has them at once, with the Library songs
+ * they are ([tracks]), and the store keeps them. Only the dislikes: what else
+ * a dislike changes (the favorite, the toast) is `dislikeSongs`'s, which is
+ * what menus and buttons call. Rejects when the save failed.
  */
-const write = (
-  keys: readonly string[],
-  on: boolean,
-  run: (store: LibraryStore["Service"]) => ReturnType<LibraryStore["Service"]["removeDislikes"]>,
-): Promise<void> => {
-  if (keys.length === 0) return Promise.resolve();
-  dislikes.update((state) => {
-    const next = new Set(state.keys);
-    for (const key of keys) {
-      if (on) next.add(key);
-      else next.delete(key);
-    }
-    return { ...state, keys: next, edits: state.edits + 1 };
-  });
-  return (
-    appRuntime
-      // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-      .runPromise(LibraryStore.use(run))
-      .then(saved, readDislikes)
-  );
-};
+export const keepDislikes = (
+  songs: readonly DislikeToKeep[],
+  tracks: readonly DislikedTrack[] = [],
+): Promise<void> => dislikes.keep(songs, tracks);
 
 /**
- * Keeps [songs] as disliked: the set has them at once, and the store keeps
- * them. Only the dislikes: what else a dislike changes (the favorite, the
- * toast) is `dislikeSongs`'s, which is what menus and buttons call.
+ * Removes the dislikes of the songs under [keys], whichever key each is kept
+ * under: the set loses them at once, then the store. Rejects when the save
+ * failed.
  */
-export const keepDislikes = (songs: readonly Omit<DislikedSong, "dislikedAt">[]): Promise<void> => {
-  // Before the write, as a star is: the taste profile learns it at once.
-  publishDisliked(songs);
-  return write(
-    songs.map((song) => song.key),
-    true,
-    (store) => store.setDislikes(songs),
-  );
-};
-
-/** Forgets the dislikes kept under [keys]: the set loses them at once, then the store. */
-export const forgetDislikes = (keys: readonly string[]): Promise<void> =>
-  // After the write: the taste profile derived again must not read them back.
-  write(keys, false, (store) => store.removeDislikes(keys)).then(() => publishUndisliked(keys));
+export const forgetDislikes = (keys: readonly string[]): Promise<void> => dislikes.forget(keys);

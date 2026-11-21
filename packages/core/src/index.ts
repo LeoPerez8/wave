@@ -2422,6 +2422,8 @@ export {
   NO_DISLIKES,
   dislikeKey,
   dislikeKeys,
+  dislikedSongs,
+  dislikesToForget,
   dislikeSongs,
   dislikeToast,
   favoriteSongs,

@@ -22,21 +22,26 @@ export interface SongIdentity {
 }
 
 /**
- * The keys a dislike of [song] can be kept under, the Library's first: its
- * queue track ids (the Track id as text, `ytTrackId` of its video).
+ * Every key [song] can be disliked under, the one a new dislike takes first:
+ * its queue track ids (`ytTrackId` of its video, the Track id as text).
  */
 export const dislikeKeys = ({ id, videoId }: SongIdentity): string[] => [
-  ...(id === undefined || id === null || id === "" ? [] : [String(id)]),
   ...(videoId === undefined || videoId === null || videoId === "" ? [] : [ytTrackId(videoId)]),
+  ...(id === undefined || id === null || id === "" ? [] : [String(id)]),
 ];
 
 /**
- * The key [song]'s dislike is kept under: the Library's song when it is one,
- * else the YT Music video. Null for a song with neither (an unsearched entry).
+ * The key a new dislike of [song] is kept under: its video when it has one,
+ * so the dislike is the same whether the song is streamed, downloaded or
+ * deleted from the Library again, here or on another device; else its Track
+ * id. Null for a song with neither (an unsearched entry).
  */
 export const dislikeKey = (song: SongIdentity): string | null => dislikeKeys(song)[0] ?? null;
 
-/** The disliked songs, by `dislikeKey`. */
+/**
+ * The disliked songs: every key of each (`dislikedSongs`), so a song is found
+ * by whichever key a site has, its Track id or its video.
+ */
 export type DislikedSongs = ReadonlySet<string>;
 
 /** No dislikes: before they're read, or where there are none. */
@@ -53,6 +58,45 @@ export interface DislikedSong {
   /** When it was disliked, in ms. */
   readonly dislikedAt: number;
 }
+
+/** [keys], and every other key of the [tracks] they name, until none is added. */
+const songKeys = (keys: Iterable<string>, tracks: readonly SongIdentity[]): Set<string> => {
+  const all = new Set(keys);
+  if (all.size === 0) return all;
+  const named = tracks.map(dislikeKeys).filter((own) => own.length > 1);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const own of named) {
+      if (!own.some((key) => all.has(key)) || own.every((key) => all.has(key))) continue;
+      for (const key of own) all.add(key);
+      grew = true;
+    }
+  }
+  return all;
+};
+
+/**
+ * The disliked songs, from the keys their dislikes are kept under ([kept])
+ * and the Library's songs those may be about ([tracks], each with the video
+ * it was downloaded from). A song moves between a Track id and its video (it
+ * is downloaded, deleted, or disliked on a device that has it otherwise), so
+ * the set holds both keys of each disliked Library song: every site reads it
+ * with the one key it knows.
+ */
+export const dislikedSongs = (
+  kept: Iterable<string>,
+  tracks: readonly SongIdentity[],
+): DislikedSongs => songKeys(kept, tracks);
+
+/**
+ * The keys to forget so the songs under [keys] are no longer disliked: those,
+ * and every other key the same songs have among [tracks]. Forgetting one a
+ * dislike isn't kept under does nothing.
+ */
+export const dislikesToForget = (
+  keys: Iterable<string>,
+  tracks: readonly SongIdentity[],
+): string[] => [...songKeys(keys, tracks)];
 
 /** Whether [song] is disliked, under any key it has. */
 export const isDisliked = (disliked: DislikedSongs, song: SongIdentity): boolean =>

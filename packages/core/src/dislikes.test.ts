@@ -3,6 +3,9 @@ import { describe, test } from "node:test";
 
 import {
   dislikeKey,
+  dislikeKeys,
+  dislikedSongs,
+  dislikesToForget,
   dislikeSongs,
   dislikeToast,
   favoriteSongs,
@@ -71,11 +74,12 @@ describe("favoriting songs", () => {
 describe("the songs Wave picks on its own", () => {
   const disliked = new Set(["7", "yt:abc"]);
 
-  test("a Library song is kept by its Track id, a YT Music song by its video", () => {
+  test("a song is kept by its video, and by its Track id only when it has none", () => {
     assert.equal(dislikeKey({ id: 7 }), "7");
     assert.equal(dislikeKey({ videoId: "abc" }), "yt:abc");
-    assert.equal(dislikeKey({ id: 7, videoId: "abc" }), "7");
+    assert.equal(dislikeKey({ id: 7, videoId: "abc" }), "yt:abc");
     assert.equal(dislikeKey({ id: null, videoId: null }), null);
+    assert.deepEqual(dislikeKeys({ id: 7, videoId: "abc" }), ["yt:abc", "7"]);
   });
 
   test("a song is disliked under either identity it has", () => {
@@ -102,6 +106,56 @@ describe("the songs Wave picks on its own", () => {
       withoutDisliked(pool, NO_DISLIKES, (entry) => entry),
       pool,
     );
+  });
+});
+
+describe("a song that moves between the Library and YT Music", () => {
+  const lucky = { id: 42, videoId: "abc" };
+
+  test("disliked while streamed, it is disliked as the Library's song once downloaded", () => {
+    const disliked = dislikedSongs(["yt:abc"], [lucky]);
+    assert.equal(isDisliked(disliked, { id: 42 }), true);
+    assert.equal(disliked.has("42"), true);
+    assert.equal(isDisliked(disliked, { videoId: "abc" }), true);
+    assert.equal(isDisliked(disliked, { id: 43 }), false);
+  });
+
+  test("disliked as the Library's song, it stays disliked once deleted from the Library", () => {
+    // Kept by its video, so the dislike doesn't go with the Track.
+    const kept = [dislikeKey(lucky)!];
+    assert.equal(isDisliked(dislikedSongs(kept, []), { videoId: "abc" }), true);
+  });
+
+  test("a dislike another device kept by the Track reaches the song's video too", () => {
+    const disliked = dislikedSongs(["42"], [lucky]);
+    assert.equal(isDisliked(disliked, { videoId: "abc" }), true);
+  });
+
+  test("two Library songs of one video are one disliked song", () => {
+    const disliked = dislikedSongs(["42"], [lucky, { id: 43, videoId: "abc" }]);
+    assert.deepEqual([...disliked].sort(), ["42", "43", "yt:abc"]);
+  });
+
+  test("songs no dislike is about stay out, and a song without a video adds nothing", () => {
+    const disliked = dislikedSongs(["yt:abc", "7"], [{ id: 8, videoId: "xyz" }, { id: 7 }]);
+    assert.deepEqual([...disliked].sort(), ["7", "yt:abc"]);
+    assert.equal(dislikedSongs([], [lucky]).size, 0);
+  });
+
+  test("removing a dislike forgets every key the song has", () => {
+    assert.deepEqual(dislikesToForget(["42"], [lucky]).sort(), ["42", "yt:abc"]);
+    assert.deepEqual(dislikesToForget(["yt:abc"], [lucky]).sort(), ["42", "yt:abc"]);
+    assert.deepEqual(dislikesToForget(["yt:def", "9"], [lucky]).sort(), ["9", "yt:def"]);
+    assert.deepEqual(dislikesToForget([], [lucky]), []);
+  });
+
+  test("a second dislike of it is no second song: the first key answers for both", () => {
+    const disliked = dislikedSongs(["yt:abc"], [lucky]);
+    const { changes } = dislikeSongs(
+      [{ song: lucky, favorite: false, disliked: isDisliked(disliked, lucky) }],
+      true,
+    );
+    assert.equal(noMarkChanges(changes), true);
   });
 });
 

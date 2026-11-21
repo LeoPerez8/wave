@@ -2,8 +2,11 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
-import { removeDislikes, selectDislikes, setDislikes } from "./dislikes.ts";
-import { openTestDatabase, type TestDatabase } from "./testDatabase.ts";
+import { eq } from "drizzle-orm";
+
+import { removeDislikes, selectDislikedTracks, selectDislikes, setDislikes } from "./dislikes.ts";
+import * as schema from "./schema.ts";
+import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
 
 let db: TestDatabase;
 
@@ -50,5 +53,45 @@ describe("dislikes", () => {
     removeDislikes(db, ["7"], 2_000);
     setDislikes(db, [song("7", "Get Lucky")], 3_000);
     assert.deepEqual(selectDislikes(db), [{ ...song("7", "Get Lucky"), dislikedAt: 3_000 }]);
+  });
+});
+
+describe("the Library's songs the dislikes are about", () => {
+  const downloaded = (title: string, videoId: string): number => {
+    const id = addTrack(db, { title });
+    db.update(schema.tracks).set({ videoId }).where(eq(schema.tracks.id, id)).run();
+    return id;
+  };
+  const byId = (a: { id: number }, b: { id: number }) => a.id - b.id;
+
+  test("a song disliked by its video is told with the Track downloaded from it", () => {
+    const lucky = downloaded("Get Lucky", "abc");
+    downloaded("Contact", "def");
+    setDislikes(db, [song("yt:abc", "Get Lucky")], 1_000);
+    assert.deepEqual(selectDislikedTracks(db), [{ id: lucky, videoId: "abc" }]);
+  });
+
+  test("a song disliked by its Track id is told with its video, one without a video isn't", () => {
+    const lucky = downloaded("Get Lucky", "abc");
+    const ripped = addTrack(db, { title: "Ripped" });
+    setDislikes(db, [song(String(lucky), "Get Lucky"), song(String(ripped), "Ripped")], 1_000);
+    assert.deepEqual(selectDislikedTracks(db), [{ id: lucky, videoId: "abc" }]);
+  });
+
+  test("a song disliked under both keys is told once, and both Tracks of one video are told", () => {
+    const lucky = downloaded("Get Lucky", "abc");
+    const again = downloaded("Get Lucky (copy)", "abc");
+    setDislikes(db, [song("yt:abc", "Get Lucky"), song(String(lucky), "Get Lucky")], 1_000);
+    assert.deepEqual(selectDislikedTracks(db).sort(byId), [
+      { id: lucky, videoId: "abc" },
+      { id: again, videoId: "abc" },
+    ]);
+  });
+
+  test("a removed dislike tells no song", () => {
+    downloaded("Get Lucky", "abc");
+    setDislikes(db, [song("yt:abc", "Get Lucky")], 1_000);
+    removeDislikes(db, ["yt:abc"], 2_000);
+    assert.deepEqual(selectDislikedTracks(db), []);
   });
 });

@@ -9,7 +9,8 @@ import { dislikeKeys, type SongIdentity } from "./dislikes.ts";
 /**
  * Whether the song playing, queue track [playingTrackId], is one of the songs
  * just disliked ([disliked]): by its Library Track id or by its video, since a
- * streamed song the Library has is disliked as the Library's song.
+ * song the Library has plays under either (a streamed entry queued before its
+ * file arrived, or from a radio).
  */
 export const dislikeSkipsPlaying = (
   playingTrackId: string | null,
