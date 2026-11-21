@@ -237,6 +237,18 @@ draw kept its place in the stored arrangement. Screenshots are `home-editor-<pla
 `settings.homeArrangement` with `editStoredHomeArrangement` (`src/main/homeArrangement.ts`) and
 stamps for sync. `bridge.test.ts` syncs it with a phone both ways.
 
+## Theme editor
+
+`e2e/themeEditor.spec.ts` edits the theme in Settings › Appearance: a background in each mode, a
+custom colour typed and saved by keyboard alone, a saved colour applied and removed, the colour
+well, and Reset. It reads the window's `--color-*` tokens after each pick; screenshots are
+`theme-editor-light.png`, `theme-editor-dark.png` and `theme-editor-picker.png`.
+
+`settings.editTheme(edit)` takes one of Core's `ThemeEdit` values, which main checks with
+`readThemeEdit`, applies to the synced `settings.theme` with Core's theme choice rules
+(`src/main/theme.ts`) and stamps for sync. It returns the stored theme, the value
+`account.view().theme` then holds. `bridge.test.ts` syncs it with a phone both ways.
+
 ## Links
 
 `e2e/links.spec.ts` pastes and drops each kind of link the phone opens (a YT Music song and

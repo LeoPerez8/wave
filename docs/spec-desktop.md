@@ -336,7 +336,10 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
 - Scrollbars are Wave's own everywhere: an 8 px rounded thumb with no track and no arrow buttons.
 - Theme: the phone's tokens, light and dark following the system or the Appearance setting. The
   accent follows the synced theme, so the default theme gives a white accent in dark and the ink
-  colour in light, as on the phone.
+  colour in light, as on the phone. Settings › Appearance edits that theme as the phone does: a
+  background for each mode, Primary and Secondary from Default, the saved colours or a custom
+  one, and Reset to defaults. Each row of swatches is one tab stop the arrows move through; a
+  saved colour has a Remove button where the phone has a long press. The app icon isn't offered.
 - Tables: 40 px rows. Songs show title (with a thumbnail with 4 px corners), artist, album, the
   star and time; album pages show the track number instead of the thumbnail; on an artist's page
   the artist column shows only featured artists. A selected row has its own tint, separate from
