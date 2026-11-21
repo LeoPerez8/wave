@@ -239,6 +239,43 @@ describe("patchNotes", () => {
   });
 });
 
+describe("the desktop's patch notes", () => {
+  it("list the desktop's PRs and leave out the phone's", () => {
+    const input = {
+      commits: [60, 61, 62].map((n) => `commit-${n}`),
+      bugIssues: [],
+      pullRequests: [
+        pr(60, { files: ["apps/desktop/src/main/index.ts"], branch: "feat/60-desktop" }),
+        pr(61, { files: ["apps/mobile/src/app/_layout.tsx"] }),
+        pr(62, { files: ["packages/core/src/catalogue/desktopEn.ts"], branch: "fix/62-tray" }),
+      ],
+    };
+    assert.equal(
+      patchNotes(input, "desktop"),
+      "## New\n\n- [PR 60](https://github.com/LeoPerez8/wave/pull/60)\n\n## Fixes\n\n- [PR 62](https://github.com/LeoPerez8/wave/pull/62)\n",
+    );
+    assert.equal(
+      patchNotes(input),
+      "## New\n\n- [PR 61](https://github.com/LeoPerez8/wave/pull/61)\n",
+    );
+  });
+
+  it("are printed with the desktop target", () => {
+    const script = fileURLToPath(new URL("./patch-notes.ts", import.meta.url));
+    const dir = mkdtempSync(join(tmpdir(), "patch-notes-"));
+    writeFileSync(join(dir, "commits.txt"), "commit-63\n");
+    writeFileSync(join(dir, "bugs.txt"), "");
+    const desktop = pr(63, { files: ["apps/desktop/src/main/index.ts"] });
+    const args = [script, join(dir, "commits.txt"), join(dir, "bugs.txt")];
+    const input = `${JSON.stringify(desktop)}\n`;
+    assert.equal(
+      execFileSync(process.execPath, [...args, "desktop"], { input, encoding: "utf8" }),
+      "## New\n\n- [PR 63](https://github.com/LeoPerez8/wave/pull/63)\n",
+    );
+    assert.equal(execFileSync(process.execPath, args, { input, encoding: "utf8" }), "");
+  });
+});
+
 describe("patch-notes.ts as a command", () => {
   it("rejects malformed merged PR data with its input line and expected shape", () => {
     const script = fileURLToPath(new URL("./patch-notes.ts", import.meta.url));

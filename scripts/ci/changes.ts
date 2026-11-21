@@ -2,6 +2,7 @@
 // native modules' JVM tests.
 // The CI workflow runs it (changes.sh) and turns jobs off by it:
 //   <paths, one per line> | node scripts/ci/changes.ts   # a PR's files, or one app's since its release
+//     [--app-package <before> <after>]                   # the phone's package.json then and now
 //   node scripts/ci/changes.ts --all                      # every area changed
 //   <releases, one JSON line each> | node scripts/ci/changes.ts --previous-release <phone|desktop> <ti|main> [<run's tag>]
 // It prints `<area>=true|false` lines, the decisions `allPackages`, `nativeTests` and
@@ -10,6 +11,7 @@
 // Checks also runs it, through affected-packages.sh.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 // Areas of the repo that CI decisions depend on. A path ending in "/" covers
 // everything under it; any other path is one file. Markdown is never in an area.
@@ -123,14 +125,36 @@ export const reachesPhone = (paths: readonly string[]): boolean => {
   return touched.app || touched.core || touched.sync;
 };
 
+/** The phone's package.json, whose `version` every release's bump commit changes. */
+export const APP_PACKAGE = "apps/mobile/package.json";
+
+/** apps/mobile/package.json's text before a change (empty when it had none) and after. */
+export type AppPackage = { previous: string; current: string };
+
+/** Whether package.json's text changed only its `version`, as a release's bump commit does. */
+export const versionOnly = ({ previous, current }: AppPackage): boolean => {
+  try {
+    const [before, after] = [previous, current].map((text) => {
+      const { version: _version, ...rest } = JSON.parse(text) as Record<string, unknown>;
+      return rest;
+    });
+    return isDeepStrictEqual(before, after);
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Which app a set of changes releases. On main and tags each app's workflow runs only when its
- * own changes since its previous release (previousAppRelease) reach its users.
+ * own changes since its previous release (previousAppRelease) reach its users. Given the app's
+ * package.json before and after, a change of its version alone doesn't count: a version the
+ * desktop released alone bumped it, and the phone has nothing new.
  */
-export const releaseChanges = (paths: readonly string[]) => ({
-  phoneRelease: reachesPhone(paths),
-  desktopRelease: reachesDesktop(paths),
-});
+export const releaseChanges = (paths: readonly string[], appPackage?: AppPackage) => {
+  const counted =
+    appPackage && versionOnly(appPackage) ? paths.filter((path) => path !== APP_PACKAGE) : paths;
+  return { phoneRelease: reachesPhone(counted), desktopRelease: reachesDesktop(counted) };
+};
 
 /** A GitHub Release, by its tag and the names of the files it holds. */
 export type PublishedRelease = { tagName: string; assets: readonly string[] };
@@ -139,8 +163,8 @@ export type App = "phone" | "desktop";
 
 const VERSION_TAG = /^v(\d+)\.(\d+)\.(\d+)(-ti)?$/;
 
-/** The files that show an app published in a release: the APK, or either desktop installer. */
-const publishedIn = (app: App, { tagName, assets }: PublishedRelease) => {
+/** Whether an app published in a release: its APK, or either desktop installer, is there. */
+export const publishedIn = (app: App, { tagName, assets }: PublishedRelease) => {
   const version = tagName.slice(1);
   const own =
     app === "phone"
@@ -191,9 +215,17 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   } else {
     const all = args.includes("--all");
     const paths = all ? [] : readFileSync(0, "utf8").split(/\r?\n/).filter(Boolean);
+    const packageAt = args.indexOf("--app-package");
+    const [previous, current] = packageAt === -1 ? [] : args.slice(packageAt + 1, packageAt + 3);
+    if (packageAt !== -1 && current === undefined)
+      throw new Error("Expected --app-package <file before> <file after>");
+    const appPackage =
+      previous === undefined || current === undefined
+        ? undefined
+        : { previous: readFileSync(previous, "utf8"), current: readFileSync(current, "utf8") };
     const result = all
       ? { ...decide(() => true), phoneRelease: true, desktopRelease: true }
-      : { ...changes(paths), ...releaseChanges(paths) };
+      : { ...changes(paths), ...releaseChanges(paths, appPackage) };
     for (const [name, value] of Object.entries(result)) console.log(`${name}=${value}`);
   }
 }

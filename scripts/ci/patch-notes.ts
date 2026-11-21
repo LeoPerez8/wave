@@ -2,7 +2,8 @@
 // "New" and "Fixes", one line per PR, its title linked to it. patch-notes.sh gathers the
 // release's commits (one per line), the issues labelled bug (one per line) and the
 // merged PRs (one MergedPr JSON per line, on stdin):
-//   <prs> | node scripts/ci/patch-notes.ts <commits file> <bug issues file>
+//   <prs> | node scripts/ci/patch-notes.ts <commits file> <bug issues file> [desktop]
+// With desktop, they're the desktop's notes (the PRs that reach what it's built from).
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -130,19 +131,28 @@ export const notesSections = (
   return { new: listed.filter((pr) => !isFix(pr)), fixes: listed.filter(isFix) };
 };
 
-export const patchNotes = (input: PatchNotesInput): string => {
-  const sections = notesSections(input);
+/** The notes in Markdown: the phone's, or with "desktop" the desktop's. */
+export const patchNotes = (
+  input: PatchNotesInput,
+  target: "android" | "desktop" = "android",
+): string => {
+  const sections = notesSections(input, target);
   return [...section("New", sections.new), ...section("Fixes", sections.fixes)].join("\n");
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const [commitsFile = "", bugIssuesFile = ""] = process.argv.slice(2);
+  const [commitsFile = "", bugIssuesFile = "", target] = process.argv.slice(2);
+  if (target !== undefined && target !== "desktop")
+    throw new Error(`The notes' target is the phone's (none) or desktop, not "${target}".`);
   const lines = (text: string) => text.split(/\r?\n/).filter(Boolean);
   process.stdout.write(
-    patchNotes({
-      commits: lines(readFileSync(commitsFile, "utf8")),
-      bugIssues: lines(readFileSync(bugIssuesFile, "utf8")).map(Number),
-      pullRequests: lines(readFileSync(0, "utf8")).map(parseMergedPr),
-    }),
+    patchNotes(
+      {
+        commits: lines(readFileSync(commitsFile, "utf8")),
+        bugIssues: lines(readFileSync(bugIssuesFile, "utf8")).map(Number),
+        pullRequests: lines(readFileSync(0, "utf8")).map(parseMergedPr),
+      },
+      target,
+    ),
   );
 }
