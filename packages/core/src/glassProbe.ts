@@ -1,4 +1,5 @@
 import type { GlassSettings } from "./glassSettings.ts";
+import type { PhoneEffects } from "./phoneEffects.ts";
 
 /**
  * The glass probe: a perf build's controlled comparison of what the glass costs
@@ -49,10 +50,20 @@ export interface GlassLayers {
   readonly coalesce: boolean;
 }
 
-/** The layers a glass view draws for [settings] under [probe]. */
-export const glassLayers = (settings: GlassSettings, probe: GlassProbe = "live"): GlassLayers => {
+/**
+ * The layers a glass view draws for [settings] under [probe], on a phone
+ * drawing [effects] (`phoneEffects.ts`): the simple effects blur at half the
+ * radius, rounded up, and drop the refraction shader.
+ */
+export const glassLayers = (
+  settings: GlassSettings,
+  probe: GlassProbe = "live",
+  effects: PhoneEffects = "full",
+): GlassLayers => {
+  const simple = effects === "simple";
   const backdrop = probe !== "off";
-  const blur = probe === "record" || probe === "off" ? 0 : settings.blur;
-  const refraction = probe === "live" || probe === "coalesced" ? settings.refraction : 0;
+  const radius = simple ? Math.ceil(settings.blur / 2) : settings.blur;
+  const blur = probe === "record" || probe === "off" ? 0 : radius;
+  const refraction = !simple && (probe === "live" || probe === "coalesced") ? settings.refraction : 0;
   return { backdrop, blur, refraction, coalesce: probe === "coalesced" };
 };
