@@ -408,6 +408,12 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   quiet line saying they come back online, and downloads pause. A missing song is dimmed, with
   no × (a download on its way shows its progress on the row); the × marks only a file that failed
   to play.
+- A YT Music album page has Play, Shuffle and Download, and a YT Music artist page Play and
+  Shuffle, as on the phone. Download follows Core's album rule (Download, Cancel, Retry Failed,
+  Downloaded) and the head counts the songs saved while they're on their way; the songs land
+  as one album, tagged from its page. A page YT Music didn't answer has Try Again on its quiet
+  line. On an artist page's Albums and Singles & EPs, a release the Library has opens the
+  Library's album page.
 - No chips, no filled Play button, no card around the top result (Quiet Catalog, as on the
   phone).
 

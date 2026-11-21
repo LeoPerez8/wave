@@ -1224,6 +1224,7 @@ export function App() {
             run={playback.run}
             revision={playback.view?.revision ?? 0}
             go={go}
+            onLibraryAlbum={(id) => go({ kind: "album", id })}
             onSongMenu={ytSongMenu}
             onError={setError}
           />

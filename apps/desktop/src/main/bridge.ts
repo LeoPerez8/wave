@@ -65,10 +65,13 @@ import {
   type FailedReasonAction,
   MISSING_SONGS_LISTS,
   type MissingSongsList,
+  YT_SONGS_DOWNLOAD_ACTIONS,
+  type YtSongsList,
 } from "../shared/downloads.ts";
-import type { MissingSongsDownloadAction, UpNextPlace } from "@wave/core";
+import type { MissingSongsDownloadAction, UpNextPlace, YtSongsDownloadAction } from "@wave/core";
 import { createYtFeatureHandlers, playSearchSong } from "./yt/ytBridge.ts";
-import type { YtFeatures } from "./yt/ytServices.ts";
+import { YtFeatures } from "./yt/ytServices.ts";
+import type { YtListSongs } from "./downloads/downloads.ts";
 import { Lyrics } from "./lyrics/lyrics.ts";
 import { GeniusLyricsSearch } from "./lyrics/geniusLyricsSearchLayer.ts";
 import { DesktopLinks } from "./links/layer.ts";
@@ -258,6 +261,33 @@ const downloadsCall = <A>(run: (downloads: Downloads["Service"]) => A | Promise<
     return yield* Effect.tryPromise({ try: async () => run(downloads), catch: (error) => error });
   });
 
+/** A YT Music list as a page names it: an album's page by its browse id. */
+const ytSongsList = (value: unknown): YtSongsList | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { kind, id } = value as YtSongsList;
+  return kind === "album" && typeof id === "string" && /^[A-Za-z0-9_-]{2,128}$/.test(id)
+    ? { kind, id }
+    : undefined;
+};
+
+/** [run] on [list]'s songs as its page last read them; [unread] when it wasn't read. */
+const ytListCall = <A, B>(
+  list: YtSongsList,
+  unread: B,
+  run: (downloads: Downloads["Service"], found: YtListSongs) => A | Promise<A>,
+) =>
+  Effect.gen(function* () {
+    const features = yield* YtFeatures;
+    const downloads = yield* Downloads;
+    return yield* Effect.tryPromise({
+      try: async () => {
+        const found = features.ytList(list);
+        return found === null ? unread : await run(downloads, found);
+      },
+      catch: (error) => error,
+    });
+  });
+
 /** A journal job's id: a video id, or a missing song's `missing:<trackId>`. */
 const DOWNLOAD_ID = /^(?:[A-Za-z0-9_-]{11}|missing:[1-9]\d{0,15})$/;
 
@@ -410,14 +440,15 @@ const createHandlers = (
               p.start(scope, index as number | undefined, shuffle as boolean | undefined),
             )
         : refuse("playback.start", "invalid play context"),
-    "playback.startYt": ([ids, index]) => {
+    "playback.startYt": ([ids, index, shuffle]) => {
       const songs = videoIds(ids);
       return songs !== undefined &&
         typeof index === "number" &&
         Number.isSafeInteger(index) &&
         index >= 0 &&
-        index < songs.length
-        ? playbackCall((p) => p.startYt(songs, index))
+        index < songs.length &&
+        (shuffle === undefined || typeof shuffle === "boolean")
+        ? playbackCall((p) => p.startYt(songs, index, shuffle as boolean | undefined))
         : refuse("playback.startYt", "invalid songs");
     },
     "playback.command": ([command]) =>
@@ -590,6 +621,21 @@ const createHandlers = (
       FAILED_REASON_ACTIONS.includes(action as FailedReasonAction)
         ? downloadsCall((d) => d.failedReason(reason, action as FailedReasonAction))
         : refuse("downloads.failedReason", "invalid reason or action"),
+    "downloads.ytList": ([value]) => {
+      const list = ytSongsList(value);
+      return list === undefined
+        ? refuse("downloads.ytList", "invalid list")
+        : ytListCall(list, null, (d, found) => d.ytListView(found));
+    },
+    "downloads.ytListAction": ([action, value]) => {
+      const list = ytSongsList(value);
+      return list === undefined ||
+        !YT_SONGS_DOWNLOAD_ACTIONS.includes(action as YtSongsDownloadAction)
+        ? refuse("downloads.ytListAction", "invalid action or list")
+        : ytListCall(list, undefined, (d, found) =>
+            d.ytListAction(action as YtSongsDownloadAction, found),
+          );
+    },
     "downloads.list": ([value]) => {
       const list = missingSongsList(value);
       return list === undefined

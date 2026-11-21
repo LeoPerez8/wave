@@ -2461,6 +2461,7 @@ test("main refuses YT Music calls with bad songs, settings, queries or covers", 
       await assert.rejects(call("playback.startYt", ["../etc/passwd"], 0), /Refused/);
       await assert.rejects(call("playback.startYt", ["abcdefghijk"], 1), /Refused/);
       await assert.rejects(call("playback.startYt", [], 0), /Refused/);
+      await assert.rejects(call("playback.startYt", ["abcdefghijk"], 0, "yes"), /Refused/);
       await assert.rejects(call("settings.setYtMusic", "off"), /Refused/);
       await assert.rejects(call("yt.search", { query: "a" }), /Refused/);
       await assert.rejects(call("yt.artwork", 7), /Refused/);
@@ -3144,6 +3145,15 @@ test("main refuses download calls with bad songs, actions, ids or pages", async 
         /Refused/,
       );
       await assert.rejects(call("downloads.failedReason", "Not found online", "delete"), /Refused/);
+      await assert.rejects(call("downloads.ytList", { kind: "album", id: "../x" }), /Refused/);
+      await assert.rejects(call("downloads.ytList", { kind: "artist", id: "MPREb_x" }), /Refused/);
+      await assert.rejects(
+        call("downloads.ytListAction", "downloadAll", { kind: "album", id: "MPREb_x" }),
+        /Refused/,
+      );
+      // An album page main hasn't read has no download to show or start.
+      assert.equal(await call("downloads.ytList", { kind: "album", id: "MPREb_unread" }), null);
+      await call("downloads.ytListAction", "download", { kind: "album", id: "MPREb_unread" });
       // A move that names nothing waiting is taken and does nothing.
       await call("downloads.move", { kind: "group", from: "songs", step: 1 });
       await call("downloads.failedReason", "Not found online", "retry");

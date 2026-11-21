@@ -14,6 +14,7 @@ import { selectVideoIds, trackQuery } from "@wave/client/db/tracks";
 import {
   libraryArtistFinder,
   libraryFinder,
+  libraryAlbumFinder,
   libraryReleaseFinder,
   localDay,
   parseTrackId,
@@ -46,6 +47,8 @@ import type { BrowseKind, BrowseScope } from "../../shared/browse.ts";
 import type { PlayStart } from "../../shared/playerView.ts";
 import { ytRow, type YtSearchPage } from "../../shared/yt.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
+import type { YtSongsList } from "../../shared/downloads.ts";
+import type { YtListSongs } from "../downloads/downloads.ts";
 import { Kotlin } from "../kotlin/kotlin.ts";
 import { browseLibrary, browseSongs, browseTrackIds, playlistSongs } from "../library/browse.ts";
 import { DesktopLibrary } from "../library/library.ts";
@@ -80,6 +83,19 @@ export interface YtFeaturesShape {
    * the Library already has. One search that fails fails them all, as on the phone.
    */
   readonly search: (query: string) => Promise<YtSearchPage>;
+  /**
+   * The Library album each of the YT Music artist [name]'s [releases] is, by browse id; a
+   * release the Library doesn't have is left out.
+   */
+  readonly libraryReleases: (
+    name: string,
+    releases: readonly YtArtistAlbum[],
+  ) => ReadonlyMap<string, number>;
+  /**
+   * A YT Music list's songs as its page last read them, what the Library has of them and the
+   * source their downloads group under; null when its page wasn't read this session.
+   */
+  readonly ytList: (list: YtSongsList) => YtListSongs | null;
   /** The Related tab of the song playing; nothing when no song plays. */
   readonly related: () => Promise<YtRelatedRead>;
   /** Plays a Magic Queue of [target]'s songs; false when none of them can play. */
@@ -110,6 +126,11 @@ interface LibraryRead {
   readonly hasArtist: (name: string) => boolean;
   /** Whether the Library has [release] (Core's `libraryReleaseFinder`). */
   readonly hasAlbum: (release: YtArtistAlbum) => boolean;
+  /**
+   * The Library album the YT Music artist [name]'s [release] is, by its id: an album of the
+   * Library artist that name is (Core's `libraryArtistFinder`, `libraryAlbumFinder`); else null.
+   */
+  readonly artistAlbum: (name: string, release: { readonly title: string }) => number | null;
 }
 
 /** Built on first use: most reads never ask about artists or albums. */
@@ -144,7 +165,12 @@ const readLibrary = (db: LibraryDatabase): LibraryRead => {
     songs: artist.trackCount,
   }));
   const artistNamed = lazily(() => libraryArtistFinder(artists));
-  const releaseOf = lazily(() => libraryReleaseFinder(artistNamed(), selectAlbums(db, undefined)));
+  const albums = lazily(() => selectAlbums(db, undefined));
+  const releaseOf = lazily(() => libraryReleaseFinder(artistNamed(), albums()));
+  const albumFinders = new Map<
+    number,
+    (release: { readonly title: string }) => { id: number } | null
+  >();
   return {
     songs,
     byId: new Map(songs.map((song) => [song.id, song])),
@@ -152,6 +178,16 @@ const readLibrary = (db: LibraryDatabase): LibraryRead => {
     known: (song) => find(song) !== null,
     hasArtist: (name) => artistNamed()(name) !== null,
     hasAlbum: (release) => releaseOf()(release) !== null,
+    artistAlbum: (name, release) => {
+      const artist = artistNamed()(name);
+      if (artist === null) return null;
+      let find = albumFinders.get(artist.id);
+      if (find === undefined) {
+        find = libraryAlbumFinder(artist.id, albums());
+        albumFinders.set(artist.id, find);
+      }
+      return find(release)?.id ?? null;
+    },
   };
 };
 
@@ -424,6 +460,25 @@ export const ytFeaturesLayer = (options: { readonly online: () => boolean }) =>
               albums: catalog.albums.filter(library.hasAlbum).map((album) => album.browseId),
             },
           };
+        },
+        libraryReleases: (name, releases) => {
+          const library = current();
+          return new Map(
+            releases.flatMap((release) => {
+              const id = library.artistAlbum(name, release);
+              return id === null ? [] : [[release.browseId, id] as const];
+            }),
+          );
+        },
+        ytList: (list) => {
+          const album = pages.albumSongs(list.id);
+          return album === null
+            ? null
+            : {
+                songs: album.songs,
+                inLibrary: current().known,
+                origin: { kind: "album", id: list.id, name: album.title },
+              };
         },
         related: async () => {
           const song = playback.view().current;
