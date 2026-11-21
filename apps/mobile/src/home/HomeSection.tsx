@@ -27,7 +27,7 @@ import { AccessibilityInfo, Text, View, useWindowDimensions } from "react-native
 import { IconRefresh } from "@tabler/icons-react-native";
 
 import { artworkUri } from "@wave/client/artworkUri";
-import { COVER_ROW_TILE } from "@/catalog/CoverRow";
+import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { PlaylistCard } from "@/catalog/cards/PlaylistCard";
 import { SongCard } from "@/catalog/cards/SongCard";
 import { CELL, grid } from "@/catalog/grid";
@@ -36,10 +36,11 @@ import { SkeletonGroup, SongCardSkeleton } from "@/catalog/Skeletons";
 import { TitledSection } from "@/catalog/TitledSection";
 import { IconButton } from "@/components/IconButton";
 import { RecommendationsFailed } from "@/components/RecommendationsFailed";
-import { openStatsSeeAll } from "@/library/routes";
+import { openPlaylist, openStatsSeeAll } from "@/library/routes";
+import { songCount } from "@/library/TrackList";
 import type { PlayableSongRow } from "@wave/client";
 import { Crossfade } from "@/motion/Crossfade";
-import { openTrackActions } from "@/playback/ActionsMenu";
+import { openPlaylistActions, openTrackActions } from "@/playback/ActionsMenu";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import type { Ranked } from "@/stats/Stats";
 import { openDiscoverMix } from "@/ytmusic/routes";
@@ -62,6 +63,7 @@ import {
   type MagicQueueSection,
   type MagicQueueShown,
 } from "./magicQueueSection";
+import { useFromYourLibrary } from "./fromYourLibrary";
 import { CarouselPageDots, MagicQueueCarousel } from "./MagicQueueCarousel";
 import { useDiscoveries } from "./discoveries";
 import { useMostListenedRecently } from "./mostListenedRecently";
@@ -567,6 +569,35 @@ function InYourOrbit({ title }: SectionProps) {
 }
 
 /**
+ * From your library: the owner's most played playlists as cards in one row,
+ * those played in the last 14 days first (Core's `fromYourLibrary`). A tap
+ * opens the playlist, a long press its menu.
+ */
+function FromYourLibrary({ title }: SectionProps) {
+  const { strings } = useLocalisation();
+  const playlists = useFromYourLibrary();
+  if (playlists === undefined) return <HomeSectionSkeleton id="from-your-library" />;
+  if (playlists.length === 0) return null;
+  return (
+    <TitledSection title={title}>
+      <CoverRow>
+        {playlists.map((playlist) => (
+          <PlaylistCard
+            key={playlist.id}
+            name={playlist.name}
+            detail={songCount(playlist.trackCount, strings)}
+            paths={playlist.thumbPaths}
+            size={COVER_ROW_TILE}
+            onPress={() => openPlaylist(playlist.id, playlist)}
+            onLongPress={() => openPlaylistActions(playlist)}
+          />
+        ))}
+      </CoverRow>
+    </TitledSection>
+  );
+}
+
+/**
  * How each section of Core's catalogue (`HOME_SECTIONS`) is drawn: nothing
  * when it has nothing to show. A section added to the catalogue needs its
  * entry here (the type insists).
@@ -574,6 +605,7 @@ function InYourOrbit({ title }: SectionProps) {
 const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
   discover: Discover,
   "in-your-orbit": InYourOrbit,
+  "from-your-library": FromYourLibrary,
   "new-releases": NewReleases,
   "upcoming-shows": UpcomingShows,
   "recently-added": ({ home, title }) =>

@@ -4,6 +4,7 @@ export const homePtBr: typeof homeEn = {
   sections: {
     discover: "Descobrir",
     "in-your-orbit": "Na sua órbita",
+    "from-your-library": "Da sua biblioteca",
     "recently-added": "Adicionadas recentemente",
     "recently-played": "Tocadas recentemente",
     "most-played": "Mais tocadas",
@@ -22,6 +23,7 @@ export const homePtBr: typeof homeEn = {
   loadingStats: "Carregando Estatísticas",
   loadingArtists: "Carregando artistas",
   loadingAlbums: "Carregando álbuns",
+  loadingPlaylists: "Carregando playlists",
   edit: "Editar Início",
   notOnHome: "Fora do Início",
 };

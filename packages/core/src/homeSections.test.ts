@@ -35,6 +35,7 @@ const TODAYS_HOME = [
   "upcoming-shows",
   "discover",
   "in-your-orbit",
+  "from-your-library",
   "recently-added",
   "recently-played",
   "most-played",
@@ -55,6 +56,7 @@ describe("Home's section catalogue", () => {
         ["upcoming-shows", "Upcoming Shows"],
         ["discover", "Discover"],
         ["in-your-orbit", "In your orbit"],
+        ["from-your-library", "From your library"],
         ["recently-added", "Recently added"],
         ["recently-played", "Recently played"],
         ["most-played", "Most played"],
@@ -69,6 +71,8 @@ describe("Home's section catalogue", () => {
   test("a section's title is found by its id", () => {
     assert.equal(homeSectionTitle("in-your-orbit"), "In your orbit");
     assert.equal(homeSectionTitle("in-your-orbit", catalogueOf("pt-BR")), "Na sua órbita");
+    assert.equal(homeSectionTitle("from-your-library"), "From your library");
+    assert.equal(homeSectionTitle("from-your-library", catalogueOf("pt-BR")), "Da sua biblioteca");
     assert.equal(homeSectionTitle("most-played-albums"), "Most played albums");
   });
 
@@ -130,6 +134,7 @@ describe("Home's arrangement", () => {
         "most-played-albums",
         "discover",
         "in-your-orbit",
+        "from-your-library",
         "stats",
       ],
     });
@@ -163,17 +168,19 @@ describe("Home's arrangement", () => {
       parseHomeArrangement(
         arranged(["favorites", "artist-mixes", "recently-added", "magic-queue"]),
       ),
-      ["discover", "in-your-orbit", "favorites", "recently-added"],
+      ["discover", "in-your-orbit", "from-your-library", "favorites", "recently-added"],
     );
     assert.deepEqual(parseHomeArrangement(arranged(["stats", "favorites"])), [
       "discover",
       "in-your-orbit",
+      "from-your-library",
       "stats",
       "favorites",
     ]);
     assert.deepEqual(parseHomeArrangement(arranged(["recently-added", "genre-mixes"])), [
       "discover",
       "in-your-orbit",
+      "from-your-library",
       "recently-added",
     ]);
   });
@@ -194,6 +201,7 @@ describe("Home's arrangement", () => {
     assert.deepEqual(parseHomeArrangement(stored), [
       "discover",
       "in-your-orbit",
+      "from-your-library",
       "favorites",
       "recently-added",
     ]);
@@ -266,6 +274,80 @@ describe("Home's arrangement", () => {
     });
   });
 
+  describe("From your library joining a Home arranged before it", () => {
+    // Saved by a Wave whose catalogue had In your orbit and no From your library.
+    const before = TODAYS_HOME.filter((id) => id !== "from-your-library");
+    const arranged = (shown: string[], known: string[] = before) =>
+      JSON.stringify({ shown, hidden: known.filter((id) => !shown.includes(id)) });
+
+    test("it shows right after In your orbit, wherever the owner put In your orbit", () => {
+      assert.deepEqual(
+        parseHomeArrangement(arranged(["favorites", "in-your-orbit", "discover", "stats"])),
+        ["favorites", "in-your-orbit", "from-your-library", "discover", "stats"],
+      );
+    });
+
+    test("with In your orbit removed, it follows Discover, or the nearest section before it", () => {
+      assert.deepEqual(parseHomeArrangement(arranged(["favorites", "discover", "stats"])), [
+        "favorites",
+        "discover",
+        "from-your-library",
+        "stats",
+      ]);
+      assert.deepEqual(parseHomeArrangement(arranged(["stats", "upcoming-shows"])), [
+        "stats",
+        "upcoming-shows",
+        "from-your-library",
+      ]);
+      assert.deepEqual(parseHomeArrangement(arranged(["stats"])), ["from-your-library", "stats"]);
+    });
+
+    test("a Home arranged before both sections gets them after Discover, In your orbit first", () => {
+      const older = before.filter((id) => id !== "in-your-orbit");
+      assert.deepEqual(parseHomeArrangement(arranged(["favorites", "discover", "stats"], older)), [
+        "favorites",
+        "discover",
+        "in-your-orbit",
+        "from-your-library",
+        "stats",
+      ]);
+    });
+
+    test("it joins once: moved, it stays where it was dropped, and removed, it stays off", () => {
+      const joined = parseArrangement(arranged(["favorites", "in-your-orbit", "stats"]));
+      assert.deepEqual(joined.sections, [
+        "favorites",
+        "in-your-orbit",
+        "from-your-library",
+        "stats",
+      ]);
+      const moved = editArrangement(joined, { move: { from: 2, to: 0 } });
+      assert.deepEqual(parseArrangement(storeArrangement(moved)).sections, [
+        "from-your-library",
+        "favorites",
+        "in-your-orbit",
+        "stats",
+      ]);
+      const removed = editArrangement(joined, { remove: "from-your-library" });
+      assert.deepEqual(hiddenSections(removed).includes("from-your-library"), true);
+      const stored = storeArrangement(removed);
+      assert.deepEqual(parseArrangement(stored).sections, ["favorites", "in-your-orbit", "stats"]);
+      // Read and stored again, as on every later launch, it is still not added back.
+      assert.deepEqual(parseArrangement(storeArrangement(parseArrangement(stored))).sections, [
+        "favorites",
+        "in-your-orbit",
+        "stats",
+      ]);
+      // Added back in Home's editor, it joins at the bottom like any other section.
+      assert.deepEqual(editArrangement(removed, { add: "from-your-library" }).sections, [
+        "favorites",
+        "in-your-orbit",
+        "stats",
+        "from-your-library",
+      ]);
+    });
+  });
+
   test("anything unreadable stored reads as today's Home", () => {
     for (const stored of ["", "not json", "[]", '"stats"', "{}", '{"shown":"stats"}']) {
       assert.deepEqual(parseHomeArrangement(stored), TODAYS_HOME, stored);
@@ -291,6 +373,7 @@ describe("what Home lists", () => {
       "play-hint",
       ...sections(
         "in-your-orbit",
+        "from-your-library",
         "recently-added",
         "recently-played",
         "most-played",
@@ -349,6 +432,7 @@ describe("Home's editor", () => {
       "upcoming-shows",
       "discover",
       "in-your-orbit",
+      "from-your-library",
       "recently-played",
       "most-played-albums",
       "most-played-artists",
@@ -402,6 +486,7 @@ describe("merging Home's Stats and Listening overview", () => {
       "upcoming-shows",
       "discover",
       "in-your-orbit",
+      "from-your-library",
       "recently-played",
       "most-played",
       "most-played-albums",

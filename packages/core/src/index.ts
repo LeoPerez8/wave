@@ -766,6 +766,14 @@ export { artistArtwork, artistInitial } from "./artistImage.ts";
 export type { ArtistAlbumLink } from "./artistImage.ts";
 export { isRecent, RECENT_WINDOW_DAYS, recentWindowStart } from "./recentWindow.ts";
 export { IN_YOUR_ORBIT_ARTISTS, inYourOrbit, inYourOrbitWindow } from "./inYourOrbit.ts";
+export {
+  FROM_YOUR_LIBRARY_PLAYLISTS,
+  fromYourLibrary,
+  playlistOfContextId,
+  playlistPlays,
+  type PlaylistPlayEvent,
+  type PlaylistPlays,
+} from "./fromYourLibrary.ts";
 export { rowWindow, windowRows } from "./rowWindow.ts";
 export type { RowView, RowWindow } from "./rowWindow.ts";
 export {
