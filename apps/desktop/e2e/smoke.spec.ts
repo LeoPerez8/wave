@@ -86,6 +86,9 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.lyrics.song",
       "wave.lyrics.genius",
       "wave.lyrics.cancelGenius",
+      "wave.lyrics.translateOn",
+      "wave.lyrics.setTranslateOn",
+      "wave.lyrics.translation",
       "wave.library.artwork",
       "wave.library.cover",
       "wave.library.browse",
@@ -241,6 +244,8 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.stats.ranking",
       "wave.stats.play",
       "wave.stats.open",
+      "wave.history.page",
+      "wave.history.play",
     ],
   });
 });

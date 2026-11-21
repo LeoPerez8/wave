@@ -27,7 +27,8 @@
     "./sync/syncCycle": "./src/sync/syncCycle.ts",
     "./testing/syncService": "./src/sync/testSyncService.ts",
     "./geniusSource": "./src/geniusSource.ts",
-    "./geniusStorage": "./src/geniusStorage.ts"
+    "./geniusStorage": "./src/geniusStorage.ts",
+    "./lyricsTranslationSource": "./src/lyricsTranslationSource.ts"
   },
   "scripts": {
     "test": "node --test \"src/**/*.test.ts\"",

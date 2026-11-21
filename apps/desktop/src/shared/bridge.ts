@@ -41,7 +41,7 @@ import type {
   MissingSongsList,
   MissingSongsView,
 } from "./downloads.ts";
-import type { GeniusPhase, SongGenius, SongLyrics } from "./lyrics.ts";
+import type { GeniusPhase, SongGenius, SongLyrics, SongTranslation } from "./lyrics.ts";
 import {
   PLAYLIST_CALLS,
   playlistBridge,
@@ -83,6 +83,7 @@ import { LINK_CALLS, linkBridge, type LinkContract } from "./links.ts";
 import { MINI_PLAYER_CALLS, miniPlayerBridge, type MiniPlayerContract } from "./miniPlayer.ts";
 import { ARTIST_PAGE_CALLS, artistPageBridge, type ArtistPageContract } from "./artistPage.ts";
 import { STREAMED_CALLS, streamedBridge, type StreamedContract } from "./streamedSongs.ts";
+import { HISTORY_CALLS, historyBridge, type HistoryContract } from "./history.ts";
 import { YT_ACCOUNT_CALLS, ytAccountBridge, type YtAccountContract } from "./ytAccount.ts";
 import {
   SPOTIFY_ACCOUNT_CALLS,
@@ -129,6 +130,7 @@ export interface BridgeContract
     FollowsContract,
     YtAccountContract,
     SpotifyAccountContract,
+    HistoryContract,
     SpotifyImportContract,
     MiniPlayerContract,
     SpotifyShareContract {
@@ -185,6 +187,17 @@ export interface BridgeContract
   readonly "lyrics.cancelGenius": {
     readonly args: readonly [requestId: string];
     readonly result: void;
+  };
+  /** Whether the Lyrics view's Translate button is on; kept on this computer. */
+  readonly "lyrics.translateOn": { readonly args: readonly []; readonly result: boolean };
+  readonly "lyrics.setTranslateOn": {
+    readonly args: readonly [on: boolean];
+    readonly result: boolean;
+  };
+  /** A queue track's lyrics translated into the app's `language`; `off` while Translate is off. */
+  readonly "lyrics.translation": {
+    readonly args: readonly [trackId: string, language: LanguageView["language"]];
+    readonly result: SongTranslation;
   };
   readonly "playback.setSleepTimer": {
     readonly args: readonly [choice: SleepTimerChoice | null];
@@ -497,6 +510,9 @@ export const BRIDGE_CALLS = [
   "lyrics.song",
   "lyrics.genius",
   "lyrics.cancelGenius",
+  "lyrics.translateOn",
+  "lyrics.setTranslateOn",
+  "lyrics.translation",
 
   "library.artwork",
   "library.cover",
@@ -606,6 +622,7 @@ export const BRIDGE_CALLS = [
   "stats.ranking",
   "stats.play",
   "stats.open",
+  ...HISTORY_CALLS,
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -622,6 +639,7 @@ export interface WaveBridge {
   readonly artistPage: ReturnType<typeof artistPageBridge>;
   /** A streamed YouTube Music song's menu. */
   readonly streamed: ReturnType<typeof streamedBridge>;
+  readonly history: ReturnType<typeof historyBridge>;
   /** The YouTube account: its session never reaches the window. */
   readonly ytAccount: ReturnType<typeof ytAccountBridge>;
   readonly spotifyAccount: ReturnType<typeof spotifyAccountBridge>;
@@ -673,6 +691,12 @@ export interface WaveBridge {
       phase: GeniusPhase,
     ) => Promise<SongGenius>;
     readonly cancelGenius: (requestId: string) => Promise<void>;
+    readonly translateOn: () => Promise<boolean>;
+    readonly setTranslateOn: (on: boolean) => Promise<boolean>;
+    readonly translation: (
+      trackId: string,
+      language: LanguageView["language"],
+    ) => Promise<SongTranslation>;
   };
   readonly library: {
     readonly artwork: (hash: string, large: boolean) => Promise<string | null>;
@@ -849,6 +873,9 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     song: (trackId) => invoke("lyrics.song", trackId),
     genius: (trackId, requestId, phase) => invoke("lyrics.genius", trackId, requestId, phase),
     cancelGenius: (requestId) => invoke("lyrics.cancelGenius", requestId),
+    translateOn: () => invoke("lyrics.translateOn"),
+    setTranslateOn: (on) => invoke("lyrics.setTranslateOn", on),
+    translation: (trackId, language) => invoke("lyrics.translation", trackId, language),
   },
   library: {
     artwork: (hash, large) => invoke("library.artwork", hash, large),
@@ -986,4 +1013,5 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     play: (period, key, full) => invoke("stats.play", period, key, full),
     open: (ranking, period, key, full) => invoke("stats.open", ranking, period, key, full),
   },
+  history: historyBridge(invoke),
 });

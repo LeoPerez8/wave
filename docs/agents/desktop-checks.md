@@ -236,6 +236,20 @@ to Playlist and Remove from Library. A target is `{scope, ids}` or `{scope, all:
 until Settings includes it again; the file stays on disk. The renderer's keys go through Core's
 `desktopKey`, with focus read by `keys.ts`.
 
+## Listening History
+
+`e2e/listeningHistory.spec.ts` seeds 3,000 counted plays, a streamed play with YT Music off, a
+play of a song removed since and one that never counted. It checks the day headers, the dimmed
+rows, that scrolling reads more pages while few rows are drawn, the search, Go to This Moment
+with its 3-second tint, Back to the results, a double click that plays, and the Settings entry.
+Screenshots are `listening-history-<platform>.png` and `listening-history-moment-<platform>.png`.
+
+`history.page(from, query)` returns 50 plays: the newest (`{ before: undefined }`), older than a
+cursor, newer than one (`{ after }`) or around a play (`{ around }`). `history.play(playId)`
+replays that play's song alone; main reads the play again and does nothing for a dimmed one.
+The rows come from `src/main/library/history.ts`, over Client's `db/listeningHistory`; the
+paging is Core's `listeningHistoryReads`, which the phone uses too.
+
 ## Downloads and Fix Songs
 
 `Downloads` (`src/main/downloads/downloadsLayer.ts`) follows the shared JVM's durable download
@@ -275,6 +289,17 @@ and by Move Up, and the failed section. Its screenshots are `downloads-<step>-<p
 `e2e/downloads.spec.ts` checks a missing Search song waiting offline and resuming through the real
 JVM, and a live YouTube download with its tags read back and its Library entry visible. The live
 check stops after search on CI; inspect its annotations if YouTube refuses the machine.
+
+## Lyrics translation
+
+`e2e/lyricsTranslation.spec.ts` turns Translate on in the Lyrics tab and Now Playing against a
+stand-in for Google Translate (it replaces `globalThis.fetch` in main, which the translation
+reads at call time). It checks the skeleton, each line's translation, the sung line, the
+"already in" line, a failed request with Try Again, that nothing is sent while Translate is off,
+and that a restart keeps the switch and shows the saved translation with Google out of reach.
+The real endpoint is an owner check. `wave.lyrics.translateOn`, `setTranslateOn` and
+`translation(trackId, language)` are the calls; main reads the lyrics itself
+(`src/main/lyrics/translation.ts`).
 
 ## Theme editor
 

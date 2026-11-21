@@ -83,6 +83,7 @@ import {
   type MiniPlayerCalls,
 } from "./system/miniPlayerHandlers.ts";
 import { statsHandlers } from "./statsHandlers.ts";
+import { historyHandlers } from "./historyHandlers.ts";
 import { lyricsAndTagsHandlers } from "./lyricsAndTagsHandlers.ts";
 import { HomeFollow } from "./follows/homeFollow.ts";
 import { homeFollowHandlers } from "./follows/homeFollowHandlers.ts";
@@ -467,6 +468,24 @@ const createHandlers = (
       geniusRequestId(requestId)
         ? Effect.map(Account, (account) => account.genius.cancel(requestId))
         : refuse("lyrics.cancelGenius", "invalid request id"),
+    "lyrics.translateOn": () => Effect.map(Lyrics, ({ translation }) => translation.on()),
+    "lyrics.setTranslateOn": ([on]) =>
+      typeof on === "boolean"
+        ? Effect.map(Lyrics, ({ translation }) => {
+            translation.setOn(on);
+            return translation.on();
+          })
+        : refuse("lyrics.setTranslateOn", "invalid switch"),
+    "lyrics.translation": ([trackId, language]) =>
+      lyricTrackId(trackId) && (language === "en" || language === "pt-BR")
+        ? Effect.gen(function* () {
+            const { translation } = yield* Lyrics;
+            return yield* Effect.tryPromise({
+              try: () => translation.song(trackId, language),
+              catch: (error) => error,
+            });
+          })
+        : refuse("lyrics.translation", "invalid request"),
     "settings.appearance": () =>
       Effect.gen(function* () {
         return appearance(yield* Database);
@@ -796,6 +815,7 @@ const createHandlers = (
     ...playlistHandlers(validTarget),
     ...homeHandlers,
     ...statsHandlers,
+    ...historyHandlers,
     ...lyricsAndTagsHandlers,
     ...homeFollowHandlers,
     ...followsHandlers,
