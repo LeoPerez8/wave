@@ -105,6 +105,16 @@ test("each hook a screen draws keeps its data in memory as its entry says", () =
         assert.ok(text.includes("keepRecentlyOpened"), `${source} isn't kept once opened`);
         assert.ok(text.includes(how.name), `${source}: ${how.name} isn't its query`);
         break;
+      case "snapshot":
+        assert.ok(text.includes("useSnapshotted("), `${source} doesn't draw Home's snapshot`);
+        assert.ok(
+          new RegExp(`\\b${how.name}\\b`).test(keptAtStartup) ||
+            new RegExp(`\\b${how.name}\\b`).test(ready) ||
+            new RegExp(`\\b${how.name}\\b`).test(textOf("home/homeReady.ts")) ||
+            new RegExp(`let ${how.name}\\b`).test(text),
+          `${source}: ${how.name} isn't kept at startup (readyScreens.ts, homeReady.ts) or for the session`,
+        );
+        break;
       case "store":
         assert.ok(
           /useSyncExternalStore|useSightedStore|useValue\(/.test(text),
@@ -128,4 +138,21 @@ test("a covered route reads the Library only from a reviewed press", () => {
     assert.ok(reading.includes(path), `${path} no longer reads: drop its entry`);
     assert.ok(reason.trim().length > 30, `${path} needs a reviewable reason`);
   }
+});
+
+test("Home's first frame draws memory or its snapshot, never a local section's skeleton", () => {
+  const home = Object.keys(sources).filter(
+    (path) => path === "app/(tabs)/index.tsx" || path.startsWith("home/"),
+  );
+  assert.ok(!home.includes("home/HomeSectionSkeleton.tsx"), "Home's local skeletons are gone");
+  assert.deepEqual(
+    home.filter((path) => /HomeSectionSkeleton|HomePlaceholders/.test(textOf(path))),
+    [],
+  );
+  // The cold-start snapshot is read before Home's first render and saved when the app leaves.
+  const snapshot = textOf("home/homeSnapshot.ts");
+  assert.match(snapshot, /parseHomeSnapshot\(/);
+  assert.match(snapshot, /storedHomeSnapshot(<\w+>)?\(/);
+  assert.match(snapshot, /AppState/);
+  assert.match(textOf("library/readyScreens.ts"), /keepHomeReady\(/);
 });

@@ -8,8 +8,8 @@
  * next open shows the new data.
  *
  * Albums and artists need nothing here: their pages are drawn from the
- * Library's rows Search's index already holds (`libraryMemory.ts`). Home
- * (#1353) adds its own queries with `keepReady`.
+ * Library's rows Search's index already holds (`libraryMemory.ts`). Home's
+ * own are kept first (`keepHomeReady`, #1353).
  *
  * Bounds (Performance rule 12):
  * - `readyLibraryQueries`: one list or count each (Albums, Artists, Genres,
@@ -30,6 +30,7 @@ import { identityKey, librarySongSort } from "@wave/core";
 
 import { listCollaborations } from "@/collaboration/collaborativePlaylists";
 import { prepareDjOpening } from "@/dj/djOpening";
+import { homeReadyQueries } from "@/home/homeReady";
 import { freeTurn, whenFree } from "@/lib/backgroundWork";
 import { currentLocalisation } from "@/localisation/localisation";
 import { readStatsOpening, statsOpeningArtists } from "@/stats/hooks";
@@ -78,6 +79,9 @@ export const keepReady = (name: string, queries: readonly LibraryQuery<unknown>[
   whenFree(next, name);
 };
 
+/** Keeps Home's reads ready (`homeReady.ts`), one per free turn. */
+const keepHomeReady = (): void => keepReady("Home", homeReadyQueries());
+
 /** The playlists kept ahead: collaborative ones first, then the list's first, none too long. */
 const playlistsAhead = async (): Promise<readonly number[]> => {
   const [playlists, collaborations] = await Promise.all([
@@ -110,6 +114,7 @@ export const startReadyScreens = (): (() => void) => {
   if (started) return () => {};
   started = true;
   stopped = false;
+  keepHomeReady();
   keepReady("Library pages", [
     ...readyLibraryQueries,
     songOrderQuery(librarySongSort(settingSongSortNow("songs"))) as LibraryQuery<unknown>,
