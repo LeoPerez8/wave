@@ -137,12 +137,14 @@ class WaveAccountClient(
    * A request JS sends with the session it can't see: only a push (`POST /v1/push`), a pull
    * (`GET /v1/pull`), one of the Genius requests the Lyrics view makes (`GET /v1/genius/…`,
    * Core's `geniusProxy.ts`), or one of a show check's Ticketmaster requests
-   * (`GET /v1/ticketmaster/…`, Core's `ticketmasterProxy.ts`). The Soulseek account and sessions
-   * go between native code and the service.
+   * (`GET /v1/ticketmaster/…`, Core's `ticketmasterProxy.ts`), or one of the collaborative
+   * playlists' requests (Core's `isCollaborationRequest`, the same patterns as [COLLABORATION]).
+   * The Soulseek account and sessions go between native code and the service.
    */
   fun request(method: String, path: String, body: String?): WaveResponse {
     val allowed = (method == "POST" && path == "/v1/push") ||
-      (method == "GET" && (PULL.matches(path) || (GENIUS + TICKETMASTER).any { it.matches(path) }))
+      (method == "GET" && (PULL.matches(path) || (GENIUS + TICKETMASTER).any { it.matches(path) })) ||
+      COLLABORATION.any { (allowedMethod, pattern) -> allowedMethod == method && pattern.matches(path) }
     if (!allowed) throw WaveAccountException(WaveAccountFailure.FORBIDDEN_REQUEST)
     return send(method, path, body)
   }
@@ -231,6 +233,24 @@ class WaveAccountClient(
     val TICKETMASTER = listOf(
       Regex("""^/v1/ticketmaster/attractions\?keyword=[A-Za-z0-9%._~!*'()-]{1,4500}$"""),
       Regex("""^/v1/ticketmaster/events\?attractionId=[A-Za-z0-9_-]{1,64}&countryCode=[A-Z]{2}$"""),
+    )
+    /** An id or cursor as the collaboration routes take it in a query (Core's `ID`). */
+    const val ID = "[0-9A-Za-z_-]{1,128}"
+    /** Core's `isCollaborationRequest`: the account's name, collaborations, invites, a member's push and pull. */
+    val COLLABORATION = listOf(
+      "PUT" to Regex("""^/v1/account/name$"""),
+      "POST" to Regex("""^/v1/collaboration$"""),
+      "DELETE" to Regex("""^/v1/collaboration\?playlist=$ID$"""),
+      "GET" to Regex("""^/v1/collaboration/members\?playlist=$ID$"""),
+      "DELETE" to Regex("""^/v1/collaboration/members\?playlist=$ID&account=$ID$"""),
+      "DELETE" to Regex("""^/v1/collaboration/membership\?playlist=$ID$"""),
+      "POST" to Regex("""^/v1/collaboration/invite$"""),
+      "GET" to Regex("""^/v1/collaboration/invite\?playlist=$ID$"""),
+      "DELETE" to Regex("""^/v1/collaboration/invite\?playlist=$ID$"""),
+      "POST" to Regex("""^/v1/invite$"""),
+      "POST" to Regex("""^/v1/invite/join$"""),
+      "POST" to Regex("""^/v1/collaboration/push\?playlist=$ID$"""),
+      "GET" to Regex("""^/v1/collaboration/pull\?playlist=$ID(&since=$ID)?$"""),
     )
   }
 }

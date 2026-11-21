@@ -6,6 +6,7 @@
  * The phone's native module does the same (`WaveAccountClient.kt`).
  */
 import {
+  isCollaborationRequest,
   stepWaveAccount,
   ticketmasterUpstreamUrl,
   waveAccountView,
@@ -88,9 +89,12 @@ export interface WaveAccountService {
    * keeps the account and the session. Resolves when it ended, however it did.
    */
   readonly deleteAccount: () => Promise<void>;
-  /** A push, a pull or a show check's Ticketmaster request with the session; a 401 ends it. */
+  /**
+   * A push, a pull, a show check's Ticketmaster request or a collaborative playlist's (Core's
+   * `isCollaborationRequest`) with the session; a 401 ends it.
+   */
   readonly request: (
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "PUT" | "DELETE",
     path: string,
     body: string | null,
   ) => Promise<{ readonly status: number; readonly body: string }>;
@@ -371,7 +375,8 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
     request: async (method, path, body) => {
       const allowed =
         (method === "POST" && path === "/v1/push") ||
-        (method === "GET" && (PULL.test(path) || ticketmaster(path)));
+        (method === "GET" && (PULL.test(path) || ticketmaster(path))) ||
+        isCollaborationRequest(method, path);
       if (!allowed) throw new WaveAccountError("ERR_WAVE_FORBIDDEN_REQUEST");
       const response = await send(method, path, body);
       return { status: response.status, body: await response.text() };
