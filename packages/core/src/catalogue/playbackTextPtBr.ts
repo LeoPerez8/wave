@@ -28,6 +28,8 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   checkYourConnectionAndTryAgain: "Verifique sua conexão e tente novamente.",
   clear: "Limpar",
   clearSearch: "Limpar busca",
+  /** Search's shelf of community playlists (docs/spec.md, Language). */
+  communityPlaylists: "Playlists da comunidade",
   closeNowPlaying: "Fechar Tocando Agora",
   /** Shared by manual saves and the tile notification's silent save update. */
   couldntAddToShazam: "Não foi possível adicionar ao Shazam",
@@ -253,6 +255,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   ofTime: "de",
   couldntLoadRecommendations: "Não foi possível carregar as recomendações.",
   magicQueueFrom: (title: string) => `Fila Mágica · a partir de ${title}`,
+  relatedFrom: (title: string) => `Relacionadas · de ${title}`,
   newQueuePlaying: "Nova fila em reprodução",
   undo: "Desfazer",
   actions: "Ações",

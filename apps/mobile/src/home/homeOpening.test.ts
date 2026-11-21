@@ -257,6 +257,15 @@ test("Home reserves matching shelf, list and adaptive Magic Queue dimensions at 
       homePlaceholderHeight("recently-added", scale),
     );
     assert.equal(homePlaceholderHeight("most-played-artists", scale), scale === 1 ? 182 : 188.6);
+    assert.equal(
+      homePlaceholderHeight("in-your-orbit", scale),
+      homePlaceholderHeight("most-played-artists", scale),
+    );
+    // A playlist card is an album card with its sleeves' room above the cover.
+    assert.equal(
+      homePlaceholderHeight("from-your-library", scale),
+      homePlaceholderHeight("recently-added", scale) + 10,
+    );
     assert.equal(Math.round(homePlaceholderHeight("stats", scale)!), scale === 1 ? 288 : 439);
   }
   assert.equal(magicQueueGrid(312, 1).columns, 3);

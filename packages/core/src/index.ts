@@ -166,6 +166,7 @@ export {
   findLyricMatch,
   normalizeSearchText,
   rememberSearch,
+  searchKindOrder,
 } from "./search.ts";
 export type {
   LyricSearchMatch,
@@ -652,6 +653,7 @@ export {
   glassTintAlpha,
   isDefaultGlassSettings,
   readGlassSettings,
+  writeGlassSettings,
 } from "./glassSettings.ts";
 export type { GlassLevelSetting, GlassSettings } from "./glassSettings.ts";
 export {
@@ -747,6 +749,21 @@ export { concentricRadius } from "./corners.ts";
 export type { InsetSquare } from "./corners.ts";
 export { LOGO_WAVES, logoIconPaths, logoWaveY } from "./logo.ts";
 export type { LogoIconBox, LogoIconPaths, LogoWave } from "./logo.ts";
+export {
+  TITLE_MARK_TOKENS,
+  titleMarkColours,
+  titleMarkFontScale,
+  titleMarkLayout,
+  titleMarkPlacement,
+} from "./titleMark.ts";
+export type {
+  TitleLine,
+  TitleMarkColours,
+  TitleMarkDrawn,
+  TitleMarkLayout,
+  TitleMarkRoom,
+  TitleMarkType,
+} from "./titleMark.ts";
 export { LISTENING_WAVE, UNDERLINE_WAVE, underlineMotion, wavePath } from "./wavyUnderline.ts";
 export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
 export {
@@ -764,6 +781,16 @@ export { leavingSongEntry, songsLeaving } from "./songsLeaving.ts";
 export type { LeavingSong, LeavingTrack, SongsLeaving } from "./songsLeaving.ts";
 export { artistArtwork, artistInitial } from "./artistImage.ts";
 export type { ArtistAlbumLink } from "./artistImage.ts";
+export { isRecent, RECENT_WINDOW_DAYS, recentWindowStart } from "./recentWindow.ts";
+export { IN_YOUR_ORBIT_ARTISTS, inYourOrbit, inYourOrbitWindow } from "./inYourOrbit.ts";
+export {
+  FROM_YOUR_LIBRARY_PLAYLISTS,
+  fromYourLibrary,
+  playlistOfContextId,
+  playlistPlays,
+  type PlaylistPlayEvent,
+  type PlaylistPlays,
+} from "./fromYourLibrary.ts";
 export { rowWindow, windowRows } from "./rowWindow.ts";
 export type { RowView, RowWindow } from "./rowWindow.ts";
 export {
@@ -1019,6 +1046,7 @@ export type {
   YtSearchArtistsEvent,
   YtKeptAnswer,
   YtAskedBy,
+  YtCommunityPlaylist,
   YtQuietReason,
   YtSearchAnswer,
   YtSearchLibrary,
@@ -2334,6 +2362,26 @@ export type {
   MagicQueueSeed,
   MagicQueueShown,
 } from "./magicQueueRow.ts";
+export {
+  CAROUSEL_PAGE_MIN_SONGS,
+  carouselPageSongs,
+  MAGIC_QUEUE_CAROUSEL_PAGES,
+  magicQueueCarouselKeptPage,
+  magicQueueCarouselPage,
+  magicQueueCarouselPageLabel,
+  magicQueueCarouselPageTitle,
+  magicQueueCarouselPages,
+  magicQueueCarouselRestarts,
+  mostListenedRecently,
+  recentPlaysWindow,
+} from "./magicQueueCarousel.ts";
+export type { MagicQueueCarouselPageId, MagicQueueCarouselRow } from "./magicQueueCarousel.ts";
+export { discoveries } from "./discoveries.ts";
+export type {
+  DiscoveriesInput,
+  DiscoveryCatalogSong,
+  DiscoveryLibrarySong,
+} from "./discoveries.ts";
 export { magicQueueShare } from "./magicQueue.ts";
 export { discoverMixesOfRadios, discoverMixesOfRadiosSteps } from "./discoverMixRadios.ts";
 export type { DiscoverMixRead } from "./discoverMixRadios.ts";
@@ -2405,6 +2453,8 @@ export { DOUBLE_TAP_MS, coverDoubleTap, createCoverTaps } from "./coverGestures.
 export type { CoverDoubleTap, CoverTaps } from "./coverGestures.ts";
 export { createStarPop } from "./starPop.ts";
 export type { StarPop } from "./starPop.ts";
+export { playingStarSubject } from "./playingStar.ts";
+export type { PlayingStarAnswer, PlayingStarSubject } from "./playingStar.ts";
 export { discoverLevelLabel } from "./discoverMixLevels.ts";
 export {
   DISCOVER_ROWS,

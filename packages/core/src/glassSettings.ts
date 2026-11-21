@@ -9,24 +9,25 @@ export interface GlassSettings {
   readonly refraction: number;
   /** How much of the surface colour lies over the blur, in percent. */
   readonly tint: number;
-  /** The specular edge highlight. */
-  readonly rim: boolean;
+  /** How strong the specular edge highlight is, in percent of the shipped one; 0 is no rim. */
+  readonly rim: number;
 }
 
-/** The settings that are a level on a slider (Rim is a switch). */
-export type GlassLevelSetting = "blur" | "refraction" | "tint";
+/** The glass settings, each a level on a slider. */
+export type GlassLevelSetting = keyof GlassSettings;
 
 /**
- * Blur, Refraction and Tint each snap to five levels; level 3 is the glass as
- * it was before it could be tuned. The levels keep it readable: blur never
+ * Blur, Refraction, Tint and Rim each snap to five levels; level 3 is the glass
+ * as it was before it could be tuned. The levels keep it readable: blur never
  * drops to a sharp backdrop and the tint never goes below half, even over busy
- * artwork. Refraction's level 1 is off (blur, tint and rim only).
+ * artwork. Refraction's level 1 is off (blur, tint and rim only), and so is
+ * Rim's (no edge highlight).
  */
 export const GLASS_SETTINGS = {
   blur: { levels: [8, 16, 24, 36, 48], default: 24 },
   refraction: { levels: [0, 6, 12, 18, 24], default: 12 },
   tint: { levels: [50, 61, 72, 86, 100], default: 72 },
-  rim: { default: true },
+  rim: { levels: [0, 50, 100, 150, 200], default: 100 },
 } as const;
 
 /** The Settings slider of a level setting: levels 1 to 5, one step each. */
@@ -82,9 +83,27 @@ const readLevel = (value: unknown, setting: GlassLevelSetting): number =>
     : GLASS_SETTINGS[setting].default;
 
 /**
- * The glass settings from their stored JSON: a value off the levels (stored or
- * synced before them) is the nearest level; anything missing or unreadable is
- * its default.
+ * The rim's level from its two stored fields. `rimLevel` holds the level; `rim` is the switch
+ * the rim was before it had levels, which builds from then still read and write, so it is
+ * kept beside the level (off only at level 1). The level wins while the switch agrees with
+ * it. A switch that contradicts it was written later by such a build, so the switch wins: on
+ * is the shipped rim, off is level 1. Without a level the switch reads the same way.
+ */
+const readRim = (level: unknown, enabled: unknown): number => {
+  const off = GLASS_SETTINGS.rim.levels[0];
+  const fromSwitch =
+    typeof enabled === "boolean" ? (enabled ? GLASS_SETTINGS.rim.default : off) : undefined;
+  if (typeof level !== "number" || !Number.isFinite(level)) {
+    return fromSwitch ?? GLASS_SETTINGS.rim.default;
+  }
+  const rim = readLevel(level, "rim");
+  return fromSwitch === undefined || enabled === rim > off ? rim : fromSwitch;
+};
+
+/**
+ * The glass settings from their stored JSON (`writeGlassSettings`): a value off the levels
+ * (stored or synced before them) is the nearest level, the rim is read from its level and
+ * its switch, and anything missing or unreadable is its default.
  */
 export const readGlassSettings = (stored: string | null): GlassSettings => {
   const record = readStoredRecord(stored);
@@ -92,8 +111,25 @@ export const readGlassSettings = (stored: string | null): GlassSettings => {
     blur: readLevel(record.blur, "blur"),
     refraction: readLevel(record.refraction, "refraction"),
     tint: readLevel(record.tint, "tint"),
-    rim: typeof record.rim === "boolean" ? record.rim : GLASS_SETTINGS.rim.default,
+    rim: readRim(record.rimLevel, record.rim),
   };
+};
+
+/**
+ * The glass settings as stored and synced, each on its nearest level. The rim's level goes
+ * in `rimLevel`, and `rim` stays the switch it was before the levels (false only when the rim
+ * is off): a phone on a build from before them reads a `rim` that isn't a boolean as on, and
+ * writes that back over the level.
+ */
+export const writeGlassSettings = (glass: GlassSettings): string => {
+  const rimLevel = readLevel(glass.rim, "rim");
+  return JSON.stringify({
+    blur: readLevel(glass.blur, "blur"),
+    refraction: readLevel(glass.refraction, "refraction"),
+    tint: readLevel(glass.tint, "tint"),
+    rim: rimLevel > GLASS_SETTINGS.rim.levels[0],
+    rimLevel,
+  });
 };
 
 /** A tint percentage as the two-digit hex alpha appended to the surface colour. */

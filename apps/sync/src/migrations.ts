@@ -267,6 +267,12 @@ const MIGRATIONS: readonly Migration[] = [
       )`,
     ],
   },
+  {
+    // A playlist play's playlist by its sync id: `context_id` holds the number the playlist
+    // has on the device that recorded the play, which is another playlist's elsewhere.
+    id: "0014_play_context_playlist",
+    statements: ["ALTER TABLE plays ADD COLUMN context_playlist_id TEXT"],
+  },
 ];
 
 /**

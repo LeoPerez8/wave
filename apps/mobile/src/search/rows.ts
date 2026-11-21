@@ -4,12 +4,14 @@ import {
   GENIUS_LYRICS_SEARCH_PREVIEW,
   joinArtists,
   normalizeSearchText,
+  searchKindOrder,
   uniqueGeniusLyricsHits,
   type AppLanguage,
 } from "@wave/core";
 import type {
   DiscoverSong,
   MixedSong,
+  SearchEntry,
   SearchGroup,
   SearchKind,
   SearchResults,
@@ -17,6 +19,7 @@ import type {
   GeniusLyricsHit,
   YtArtistAlbum,
   YtArtistCandidate,
+  YtCommunityPlaylist,
   YtSearchTop,
   YtSectionNote,
   YtSectionView,
@@ -96,6 +99,8 @@ export type ResultRow =
       readonly album: YtArtistAlbum;
       readonly top: boolean;
     }
+  /** A community playlist YT Music found: opens its YT Music playlist page. */
+  | { readonly type: "ytPlaylist"; readonly key: string; readonly playlist: YtCommunityPlaylist }
   /** A quiet line in place of results: nothing in the library, YT Music offline… */
   | { readonly type: "note"; readonly key: string; readonly text: string }
   /** Skeleton rows where online results will go, while they load. */
@@ -216,17 +221,45 @@ const ytAlbumRow = (album: YtArtistAlbum, top: boolean): ResultRow => ({
 });
 
 /**
- * Lays out results: the top result, then each group (in Core's order) with a
- * preview of its best matches and "Show all". A group the owner expanded, or
+ * The Community playlists shelf: its head with their count, then every one YT
+ * Music found, in its order. Nothing when it found none.
+ */
+const communityPlaylistRows = (
+  playlists: readonly YtCommunityPlaylist[],
+  language: AppLanguage,
+): ResultRow[] =>
+  playlists.length === 0
+    ? []
+    : [
+        {
+          type: "heading",
+          key: "heading:community-playlists",
+          label: `${catalogueOf(language).playbackText.communityPlaylists} · ${formatNumber(language, playlists.length)}`,
+        },
+        ...playlists.map((playlist) => ({
+          type: "ytPlaylist" as const,
+          key: `yt-playlist:${playlist.playlistId}`,
+          playlist,
+        })),
+      ];
+
+/**
+ * Lays out results: the top result, then each group with a preview of its best
+ * matches and "Show all", the groups ordered by their best match for [query],
+ * the Library's or YT Music's (Core's `searchKindOrder`). A group the owner expanded, or
  * the only group, shows everything search returned. The songs, artists and
  * albums YT Music found that the Library lacks ([yt], Core's `ytSectionView`)
  * follow the Library's in the Songs, Artists and Albums groups, making the
- * group when the Library has nothing of its kind; groups count them too. The
+ * group when the Library has nothing of its kind; groups count them too. A
+ * group nothing in which matches the query (YT Music's artists for a song
+ * title) comes after those that match. The
  * top result is the Library's best match, else YT Music's best. [placed] are
  * YT Music's songs kept in place for the visit: one whose download finished
  * shows as the Library's song in its row (and [results] leave it out), and
  * one shown as an earlier row's Library file plays from that row.
  * [topArtist] is the top-hit Library artist's merged song count, for their rows.
+ * The community playlists YT Music found come last, as a shelf of their own,
+ * under Online's quiet line when it has one (`ytFooterRows` then leaves it out).
  */
 export const resultRows = (
   results: SearchResults<SearchHit>,
@@ -344,10 +377,33 @@ export const resultRows = (
     );
   }
   const afterTopResult = rows.length;
-  const groups: SearchGroup<SearchHit>[] = [...results.groups];
+  const found: SearchGroup<SearchHit>[] = [...results.groups];
   for (const kind of YT_KINDS)
-    if (ytRows(kind).length > 0 && !groups.some((group) => group.kind === kind))
-      groups.push({ kind, items: [], total: 0 });
+    if (ytRows(kind).length > 0 && !found.some((group) => group.kind === kind))
+      found.push({ kind, items: [], total: 0 });
+  // Groups go by their best match, the Library's or YT Music's (Core's `searchKindOrder`).
+  const candidates: SearchEntry[] = [
+    ...results.groups.flatMap((group) => group.items.slice(0, 1)),
+    ...ytArtists.map((artist) => ({ kind: "artist" as const, name: artist.name })),
+    ...ytAlbums.map((album) => ({
+      kind: "album" as const,
+      name: album.title,
+      also: album.artists,
+    })),
+    ...placed.map((row) =>
+      row.source === "library"
+        ? songHit(row.track)
+        : {
+            kind: "song" as const,
+            name: row.song.title,
+            also:
+              row.song.album === null ? row.song.artists : [...row.song.artists, row.song.album],
+          },
+    ),
+  ];
+  const groups = searchKindOrder(query, candidates).flatMap((kind) =>
+    found.filter((group) => group.kind === kind),
+  );
   for (const group of groups) {
     const extra = ytRows(group.kind);
     const total = group.total + extra.length;
@@ -368,6 +424,8 @@ export const resultRows = (
   }
   if (!lyricsFirst && !groups.some((group) => group.kind === "song"))
     rows.splice(afterTopResult, 0, ...lyricSection());
+  if (yt !== null && yt.playlists.length > 0)
+    rows.push(...ytNoteRows(yt, language), ...communityPlaylistRows(yt.playlists, language));
   return rows;
 };
 
@@ -386,9 +444,14 @@ const ytNotes = (language: AppLanguage): Readonly<Record<YtSectionNote, string>>
   failed: catalogueOf(language).playbackText.couldntSearchOnlineTapOnlineToTryAgain,
 });
 
+/** Online's quiet line, if it has one. */
+const ytNoteRows = (view: YtSectionView<NativeYtSong>, language: AppLanguage): ResultRow[] =>
+  view.note === null ? [] : [{ type: "note", key: "note:yt", text: ytNotes(language)[view.note] }];
+
 /**
  * What follows the Library's results for Online: skeleton rows while the
- * query loads (where its results will go), else its quiet line, if any.
+ * query loads (where its results will go), else its quiet line, if any. With
+ * a Community playlists shelf the line is already above it (`resultRows`).
  */
 export const ytFooterRows = (
   view: YtSectionView<NativeYtSong> | null,
@@ -396,7 +459,5 @@ export const ytFooterRows = (
 ): ResultRow[] => {
   if (view === null) return [];
   if (view.loading) return [{ type: "skeleton", key: "skeleton:yt" }];
-  return view.note === null
-    ? []
-    : [{ type: "note", key: "note:yt", text: ytNotes(language)[view.note] }];
+  return view.playlists.length > 0 ? [] : ytNoteRows(view, language);
 };

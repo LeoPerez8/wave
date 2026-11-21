@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   createSearchIndex,
   rememberSearch,
+  searchKindOrder,
   type SearchEntry,
   type SearchKind,
   type SearchResults,
@@ -299,6 +300,81 @@ describe("search results", () => {
   test("nothing found: no groups and no top result", () => {
     const results = createSearchIndex([artist("Björk")]).search("zz");
     assert.deepEqual(results, { top: null, groups: [] });
+  });
+});
+
+describe("searchKindOrder", () => {
+  const zeca = "Zeca Pagodinho";
+
+  test('"faixa amarela": the songs with that title come before artists who only have them', () => {
+    assert.deepEqual(
+      searchKindOrder("faixa amarela", [
+        entry("artist", zeca),
+        entry("artist", "Grupo Revelação"),
+        entry("song", "Faixa Amarela", [zeca, "Deixa a Vida Me Levar"]),
+        entry("song", "Faixa Amarela (Ao Vivo)", [zeca, "Acústico MTV"]),
+      ]),
+      ["song", "artist"],
+    );
+  });
+
+  test("an artist whose name is the query comes before songs that only contain it", () => {
+    assert.deepEqual(
+      searchKindOrder("halo", [
+        entry("song", "Halo Effect", ["Rush", "Clockwork Angels"]),
+        entry("song", "Under the Halo", ["Low Roar", "0"]),
+        entry("artist", "Halo"),
+      ]),
+      ["artist", "song"],
+    );
+  });
+
+  test("equally good matches keep the order search gives them: artists, albums, songs, playlists, genres", () => {
+    assert.deepEqual(
+      searchKindOrder("halo", [
+        entry("genre", "Halo"),
+        entry("song", "Halo", ["Beyoncé", "I Am... Sasha Fierce"]),
+        entry("playlist", "Halo"),
+        entry("album", "Halo", ["Beyoncé"]),
+        entry("artist", "Halo"),
+      ]),
+      ["artist", "album", "song", "playlist", "genre"],
+    );
+  });
+
+  test("kinds with no match follow the others, in the order given", () => {
+    assert.deepEqual(
+      searchKindOrder("faixa amarela", [
+        entry("artist", zeca),
+        entry("album", "Samba pras Moças", [zeca]),
+        entry("playlist", "Faixa Amarela e outras"),
+        entry("song", "Faixa Amarela", [zeca, "Deixa a Vida Me Levar"]),
+      ]),
+      ["song", "playlist", "artist", "album"],
+    );
+    assert.deepEqual(searchKindOrder("", [entry("song", "Halo"), entry("artist", "Halo")]), [
+      "song",
+      "artist",
+    ]);
+  });
+
+  test("accents and case don't change the order", () => {
+    const candidates = [
+      entry("artist", "Beyoncé Tribute Band"),
+      entry("album", "BEYONCÉ", ["Beyoncé"]),
+      entry("song", "Halo", ["Beyoncé", "I Am... Sasha Fierce"]),
+    ];
+    const order = ["album", "artist", "song"];
+    assert.deepEqual(searchKindOrder("beyonce", candidates), order);
+    assert.deepEqual(searchKindOrder("BEYONCÉ", candidates), order);
+    assert.deepEqual(
+      searchKindOrder("Beyoncé", [
+        entry("artist", "beyonce tribute band"),
+        entry("album", "beyonce", ["BEYONCE"]),
+        entry("song", "HALO", ["beyonce", "i am sasha fierce"]),
+      ]),
+      order,
+    );
   });
 });
 
