@@ -54,6 +54,37 @@ export interface BackgroundWorkOptions {
 /** What one slice of stepped work came to. */
 export type SliceResult<A> = { readonly done: false } | { readonly done: true; readonly value: A };
 
+/** What a caller asks of one slice, within the scheduler's own `sliceMs`. */
+export interface SliceLimits {
+  readonly sliceMs?: number;
+  readonly maxSteps?: number;
+}
+
+/**
+ * Runs [steps] for one slice: at least one step, then more while the
+ * longest step so far still fits in [sliceMs], and at most [maxSteps].
+ * A single step longer than the slice can't be split; it runs alone.
+ */
+export const runStepSlice = <A>(
+  steps: Iterator<void, A>,
+  {
+    now,
+    sliceMs,
+    maxSteps,
+  }: { readonly now: () => number; readonly sliceMs: number; readonly maxSteps: number },
+): SliceResult<A> => {
+  const startedAt = now();
+  let longestStep = 0;
+  for (let taken = 0; taken < maxSteps; taken++) {
+    const before = now();
+    if (taken > 0 && before - startedAt + longestStep > sliceMs) break;
+    const next = steps.next();
+    longestStep = Math.max(longestStep, now() - before);
+    if (next.done === true) return { done: true, value: next.value };
+  }
+  return { done: false };
+};
+
 /** What a perf build reports of background work since launch. */
 export interface BackgroundWorkStats {
   /** When startup work was let go (the clock's time), or null while it waits. */
@@ -92,6 +123,14 @@ export interface BackgroundWork {
   readonly transitionStarted: () => void;
   /** The tap's transition settled or was cancelled. */
   readonly transitionEnded: () => void;
+  /** Whether a tap's transition holds work now. */
+  readonly transitionInFlight: () => boolean;
+  /**
+   * Runs [run] on its own turn once no tap's transition is in flight, the
+   * quiet after a touch or not: for work that paces itself by frames.
+   * Returns the cancel.
+   */
+  readonly afterTransition: (run: () => void) => () => void;
   /**
    * Startup work: [start] runs on a free turn once a screen showed its
    * content (`contentShown`), or `contentCapMs` after startup work was first
@@ -101,11 +140,15 @@ export interface BackgroundWork {
   /** A screen in sight shows its first content: startup work may begin. */
   readonly contentShown: () => void;
   /**
-   * Runs [steps] for one slice, on the caller's turn: at least one step, then
-   * more while the longest step so far still fits in `sliceMs`, and at most
-   * [maxSteps]. [name] names the work for the perf stats and the app log.
+   * Runs [steps] for one slice, on the caller's turn (`runStepSlice`), within
+   * `sliceMs` and what [limits] ask. [name] names the work for the perf stats
+   * and the app log.
    */
-  readonly runSlice: <A>(name: string, steps: Iterator<void, A>, maxSteps?: number) => SliceResult<A>;
+  readonly runSlice: <A>(
+    name: string,
+    steps: Iterator<void, A>,
+    limits?: SliceLimits,
+  ) => SliceResult<A>;
   readonly stats: () => BackgroundWorkStats;
 }
 
@@ -131,6 +174,24 @@ export const createBackgroundWork = ({
   let forcedSlices = 0;
   /** When the transition in flight stops holding work (its cap), or null with none. */
   let transitionUntil: number | null = null;
+  const transitionWaiters: (() => void)[] = [];
+  let cancelTransitionTimer: (() => void) | null = null;
+  const inFlight = (): boolean => transitionUntil !== null && now() < transitionUntil;
+  /** Lets the frame-paced waiters go once no transition holds them, each on the same next turn. */
+  const armTransition = (): void => {
+    cancelTransitionTimer?.();
+    cancelTransitionTimer = null;
+    if (transitionWaiters.length === 0) return;
+    const wait = inFlight() ? transitionUntil! - now() : 0;
+    cancelTransitionTimer = schedule(wait, () => {
+      cancelTransitionTimer = null;
+      if (inFlight()) {
+        armTransition();
+        return;
+      }
+      for (const run of transitionWaiters.splice(0)) run();
+    });
+  };
 
   /** When the owner leaves the JavaScript thread free: no touch held, quiet since the last. */
   const quietAt = (): number => (held ? Infinity : interactedAt + limits.quietMs);
@@ -196,29 +257,21 @@ export const createBackgroundWork = ({
   const runSlice = <A>(
     name: string,
     steps: Iterator<void, A>,
-    maxSteps = Infinity,
+    asked: SliceLimits = {},
   ): SliceResult<A> => {
     const startedAt = now();
-    let longestStep = 0;
-    let result: SliceResult<A> = { done: false };
     try {
-      for (let taken = 0; taken < maxSteps; taken++) {
-        const before = now();
-        if (taken > 0 && before - startedAt + longestStep > limits.sliceMs) break;
-        const next = steps.next();
-        longestStep = Math.max(longestStep, now() - before);
-        if (next.done === true) {
-          result = { done: true, value: next.value };
-          break;
-        }
-      }
+      return runStepSlice(steps, {
+        now,
+        sliceMs: Math.min(limits.sliceMs, asked.sliceMs ?? Infinity),
+        maxSteps: asked.maxSteps ?? Infinity,
+      });
     } finally {
       const durationMs = now() - startedAt;
       longestSliceMs = Math.max(longestSliceMs, durationMs);
       if (durationMs > limits.sliceMs) overBudget[name] = (overBudget[name] ?? 0) + 1;
       sliceRan?.(name, startedAt, durationMs);
     }
-    return result;
   };
 
   const startup: (() => void)[] = [];
@@ -276,10 +329,29 @@ export const createBackgroundWork = ({
     transitionStarted: () => {
       transitionUntil = now() + limits.transitionCapMs;
       arm();
+      armTransition();
     },
     transitionEnded: () => {
       transitionUntil = null;
       arm();
+      armTransition();
+    },
+    transitionInFlight: inFlight,
+    afterTransition: (run) => {
+      let waiting = true;
+      const waiter = (): void => {
+        waiting = false;
+        run();
+      };
+      transitionWaiters.push(waiter);
+      if (transitionWaiters.length === 1) armTransition();
+      return () => {
+        if (!waiting) return;
+        waiting = false;
+        const index = transitionWaiters.indexOf(waiter);
+        if (index !== -1) transitionWaiters.splice(index, 1);
+        if (transitionWaiters.length === 0) armTransition();
+      };
     },
     afterContent,
     contentShown: () => letGo(false),

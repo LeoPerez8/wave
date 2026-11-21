@@ -98,6 +98,10 @@ export const timingTransitionEnd = session.end;
 /** A tap that opened nothing (an error instead): ends unmeasured, and the screen settles again. */
 export const dismissTiming = session.dismiss;
 export const onScreenSettled = session.onSettled;
+/** A tap's transition starting, settling or cancelled: background work waits it out (#1350). */
+export const onTimingTransition = session.onTransition;
+/** The route on screen, for the app log's lines. */
+export const timingRoute = session.route;
 export const isScreenSettled = session.isSettled;
 const noteTimingRead = session.read;
 // Only slow reads call the subscriber; #581's two-timestamp fast path stays unchanged.

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { createBackgroundWork, type BackgroundWorkLimits } from "./index.ts";
+import { createBackgroundWork, runStepSlice, type BackgroundWorkLimits } from "./index.ts";
 
 const LIMITS: BackgroundWorkLimits = {
   quietMs: 400,
@@ -197,6 +197,33 @@ describe("background work waits out a tap's transition", () => {
     assert.deepEqual(ran, ["batch@5000"]);
   });
 
+  test("work that paces itself by frames waits out a transition only, not the quiet after a touch", () => {
+    const { work, advance, ran, note } = setup();
+    work.touchStarted();
+    work.touchEnded();
+    assert.equal(work.transitionInFlight(), false);
+    work.afterTransition(note("Home mixes"));
+    advance(0);
+    assert.deepEqual(ran, ["Home mixes@0"]);
+    work.transitionStarted();
+    assert.equal(work.transitionInFlight(), true);
+    const cancel = work.afterTransition(note("dropped"));
+    work.afterTransition(note("taste"));
+    cancel();
+    advance(300);
+    assert.deepEqual(ran, ["Home mixes@0"]);
+    work.transitionEnded();
+    advance(0);
+    assert.deepEqual(ran, ["Home mixes@0", "taste@300"]);
+  });
+
+  test("a transition past transitionCapMs no longer counts as in flight", () => {
+    const { work, advance } = setup();
+    work.transitionStarted();
+    advance(5000);
+    assert.equal(work.transitionInFlight(), false);
+  });
+
   test("a new transition starting as one ends keeps work waiting", () => {
     const { work, advance, ran, note } = setup();
     work.whenFree(note("scan"));
@@ -242,6 +269,26 @@ describe("stepped work runs in slices of at most sliceMs", () => {
     const done: string[] = [];
     const steps = costly(advance, [12, 1], done);
     work.runSlice("scan", steps);
+    assert.deepEqual(done, ["0"]);
+  });
+
+  test("a slice asked to be shorter than sliceMs, or capped in steps, stops sooner", () => {
+    const { work, advance } = setup();
+    const done: string[] = [];
+    const steps = costly(advance, [1, 1, 1, 1, 1, 1], done);
+    work.runSlice("Home mixes", steps, { sliceMs: 2 });
+    assert.deepEqual(done, ["0", "1"]);
+    work.runSlice("Home mixes", steps, { maxSteps: 1 });
+    assert.deepEqual(done, ["0", "1", "2"]);
+  });
+
+  test("runStepSlice slices on any clock, with no scheduler", () => {
+    let time = 0;
+    const done: string[] = [];
+    const steps = costly((ms) => (time += ms), [5, 5, 5], done);
+    assert.deepEqual(runStepSlice(steps, { now: () => time, sliceMs: 8, maxSteps: 10 }), {
+      done: false,
+    });
     assert.deepEqual(done, ["0"]);
   });
 

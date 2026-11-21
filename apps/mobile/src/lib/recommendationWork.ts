@@ -1,9 +1,13 @@
-/** Recommendation reads run together until a frame is due, independent of touch quietness. */
+/**
+ * Recommendation reads run together until a frame is due, independent of touch quietness; a tap's
+ * transition holds them, as it holds all background work.
+ */
 import * as Effect from "effect/Effect";
 import { AppState } from "react-native";
 import { WaveAppLog } from "../native/waveAppLog";
 import { createRecommendationWork } from "./recommendationTurn.ts";
 import { checkRadioDeadlines } from "./radioDeadline.ts";
+import { backgroundTransition } from "./backgroundWork";
 
 AppState.addEventListener("change", (state) => {
   if (state === "active") checkRadioDeadlines();
@@ -11,6 +15,8 @@ AppState.addEventListener("change", (state) => {
 
 const work = createRecommendationWork({
   now: () => performance.now(),
+  // Frame-paced, not touch-paced, but it still waits out a tap's transition.
+  transition: backgroundTransition,
   intervalMs: () => {
     try {
       return WaveAppLog?.timingFrameIntervalMs?.() ?? 0;

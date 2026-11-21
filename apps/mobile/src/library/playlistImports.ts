@@ -94,7 +94,7 @@ const give = async (job: Job, resumed: boolean): Promise<void> => {
     done = await appRuntime.runPromise(giving);
     // Replaced or deleted meanwhile, its progress already went (`cancelPlaylistImport`).
     if (done !== null) endImportProgress(job.playlistId);
-    await startupTurn();
+    await startupTurn("playlist imports");
     playlistsChanged([job.playlistId]);
     if (done === null) return;
   } catch (error) {
@@ -160,7 +160,7 @@ export const resumePlaylistImports = (): void => {
 const resume = async (): Promise<void> => {
   // Keep registration/source order; a failed job reports its failure and the next still resumes.
   for (const job of imports.get()) {
-    await startupTurn();
+    await startupTurn("playlist imports");
     if (job.state.kind === "importing" && imports.get().includes(job)) await finish(job, true);
   }
 };

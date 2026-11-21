@@ -78,7 +78,7 @@ const tell = (event: DuplicateCheckEvent): void => {
   check = step.check;
   if (step.store !== null) Storage.setItemSync(KEY, step.store);
   if (step.readJournal)
-    void startupTurn()
+    void startupTurn("replacement duplicates")
       .then(() => WaveSoulseek.jobsSnapshot())
       .then(replacementJournalRead)
       .catch(() => undefined);

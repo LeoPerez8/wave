@@ -44,6 +44,13 @@ describe("a JS block over 50 ms while a screen is shown writes one line", () => 
     assert.deepEqual(lines, ["JS blocked 1.5 s on / by no background work"]);
   });
 
+  test("a long task starting on a turn the scheduler gave is put down to that turn's work", () => {
+    const { log, lines } = setup();
+    log.turnTaken("sync", 3000);
+    log.longTask(3000, 240);
+    assert.deepEqual(lines, ["JS blocked 240 ms on /search by sync"]);
+  });
+
   test("with no screen shown (Wave in the background), nothing is written", () => {
     const { log, lines } = setup(null);
     log.sliceRan("Magic Queue batch", 0, 900);
