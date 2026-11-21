@@ -112,15 +112,13 @@ const albumsOver = (library: MixIndexes): Promise<DjAlbum[]> => {
       appRuntime.runPromise(
         Effect.gen(function* () {
           const albums = yield* (yield* LibraryStore).listAlbums;
-          return albums.map(
-            (album): DjAlbum => ({
-              title: album.title,
-              artist: names.get(album.albumArtistId) ?? album.albumArtist,
-              libraryId: album.id,
-              cover: album.artworkPath ?? album.thumbPath,
-              compilation: album.compilation,
-            }),
-          );
+          return albums.map((album): DjAlbum => ({
+            title: album.title,
+            artist: names.get(album.albumArtistId) ?? album.albumArtist,
+            libraryId: album.id,
+            cover: album.artworkPath ?? album.thumbPath,
+            compilation: album.compilation,
+          }));
         }),
       ),
     saved: async (artist) => {
