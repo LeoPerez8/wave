@@ -6,7 +6,6 @@ import {
   rankEntityPlays,
   recentlyPlayedAlbums,
   sortKey,
-  streamedCredits,
   type ArtistFirstPlay,
   type ArtistStatsInput,
   type EntityPlayTotals,
@@ -19,15 +18,14 @@ import {
   type SongListening,
   type SongPlayTotals,
   type StatsWindow,
-  type YtAlbumSong,
 } from "@wave/core";
 import { sql } from "drizzle-orm";
 
 import type { AlbumRow, ArtistRow } from "../types.ts";
 import { selectAlbums } from "./albums.ts";
+import { keptPlayedTotals } from "./keptPlayTotals.ts";
+import { playedLibrary } from "./playedLibrary.ts";
 import * as schema from "./schema.ts";
-import { selectArtists } from "./artists.ts";
-import { readCredits } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
 import {
   artistFirstPlays,
@@ -127,28 +125,6 @@ const countedSums = (entry: StreamedListeningTotal) => ({
   latestPlayAt: entry.latestPlayAt,
 });
 
-/**
- * Metadata needed by Core's credit resolver, without reading play history.
- * Without [withAlbums] the Library's albums aren't read: a streamed song's
- * artists resolve the same, only its album goes unmatched.
- */
-const playedLibrary = (
-  db: LibraryDatabase,
-  releases: Iterable<YtAlbumSong> = [],
-  withAlbums = true,
-) => {
-  const artists = selectArtists(db, {});
-  const albums = withAlbums ? selectAlbums(db, undefined) : [];
-  const credits = db
-    .all<{ credit: string; stored: string | null }>(
-      sql`
-    SELECT DISTINCT artist_credit AS credit, artist_credits AS stored FROM tracks
-    UNION SELECT album_artist_credit, album_artist_credits FROM albums`,
-    )
-    .flatMap(({ credit, stored }) => readCredits(credit, stored));
-  return { artists, albums, resolve: streamedCredits({ artists, albums, credits, releases }) };
-};
-
 /** A streamed song's credited [artist] as Stats lists them: their Library row, or an online artist. */
 const playedArtist = (
   artist: PlayedArtistKey,
@@ -158,9 +134,13 @@ const playedArtist = (
     ? artistRows.get(artist.id)
     : { ...artist, id: artist.id, online: true, thumbPath: null, artworkPath: null };
 
-/** Stats and Home's album/artist totals share one resolution of every streamed song. */
+/**
+ * Stats and Home's album/artist totals share one resolution of every streamed
+ * song: read from the kept totals (`keptPlayedTotals`), or summed from the
+ * history while those still settle.
+ */
 export const playedEntityTotals = (db: LibraryDatabase, window: StatsWindow): PlayedEntityTotals =>
-  playedTotals(db, window, true);
+  keptPlayedTotals(db, window, true) ?? summedPlayedTotals(db, window, true);
 
 /**
  * Each played artist's totals as `playedEntityTotals` counts them, without
@@ -169,9 +149,15 @@ export const playedEntityTotals = (db: LibraryDatabase, window: StatsWindow): Pl
 export const playedArtistTotals = (
   db: LibraryDatabase,
   window: StatsWindow,
-): readonly PlayedEntityTotal<PlayedArtist>[] => playedTotals(db, window, false).artists;
+): readonly PlayedEntityTotal<PlayedArtist>[] =>
+  (keptPlayedTotals(db, window, false) ?? summedPlayedTotals(db, window, false)).artists;
 
-const playedTotals = (
+/**
+ * Each album's and artist's totals over [window] summed from the plays, as
+ * every read did before the kept totals (#1349); without [withAlbums], no
+ * albums. What the kept totals are checked against, and read while they settle.
+ */
+export const summedPlayedTotals = (
   db: LibraryDatabase,
   window: StatsWindow,
   withAlbums: boolean,

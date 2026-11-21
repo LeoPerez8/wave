@@ -20,6 +20,8 @@ export { pickStreamedAlbum, streamedCredits } from "./streamedCredits.ts";
 export type { PlayedAlbumKey, PlayedArtistKey } from "./streamedCredits.ts";
 export { rankEntityPlays, rankEntityPlaysSteps } from "./stats.ts";
 export type { EntityPlayTotals } from "./stats.ts";
+export { KEPT_BLOCK_DAYS, keptTotalsPlan, playBuckets } from "./keptPlayTotals.ts";
+export type { KeptRange, KeptTotalsPlan } from "./keptPlayTotals.ts";
 export { mergeCountedPlays } from "./countedPlays.ts";
 export type {
   CountedPlays,
