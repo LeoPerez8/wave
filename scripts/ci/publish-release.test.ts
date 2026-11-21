@@ -5,10 +5,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { releaseBody } from "./release-notes.ts";
 
 const repoFile = (path: string) => fileURLToPath(new URL(`../../${path}`, import.meta.url));
 
 const SHA = "a".repeat(40);
+
+/** The stub `gh`'s release body: `create` and `edit` write their notes file into it. */
+const keepBody = (dir: string) => `case "$2" in create|edit)
+  while [ $# -gt 0 ]; do [ "$1" = "--notes-file" ] && cp "$2" "${dir}/body.txt"; shift; done ;;
+esac`;
 
 /**
  * Runs the script for a branch push, with a `git` that says where the tag is and a stub `gh`.
@@ -34,6 +40,7 @@ const publish = (
       ? `case "$2" in view) exit 1 ;; esac; echo "gh $*" >> "${dir}/gh.log"`
       : `case "$2" in
   view)
+    case "$*" in *"--json body"*) cat "${dir}/body.txt" 2> /dev/null; exit 0 ;; esac
     case "$*" in *--json*)
       ${fail === "list" ? 'echo "HTTP 502" >&2; exit 1' : ":"}
       echo wave-1.3.0-ti.apk
@@ -47,7 +54,8 @@ const publish = (
     mkdir -p "$out" && cp "${dir}/existing.json" "$out/wave-1.3.0-ti.provenance.json"
     exit 0 ;;
 esac
-echo "gh $*" >> "${dir}/gh.log"`,
+echo "gh $*" >> "${dir}/gh.log"
+${keepBody(dir)}`,
   );
   writeFileSync(join(dir, "gh.log"), "");
   writeFileSync(join(dir, "app.apk"), "apk");
@@ -66,6 +74,7 @@ echo "gh $*" >> "${dir}/gh.log"`,
         GITHUB_REF_TYPE: "branch",
         GITHUB_REPOSITORY: "o/r",
         GITHUB_OUTPUT: output,
+        RELEASE_NOTES_SETTLE: "0",
         ...extra,
       },
     },
@@ -113,7 +122,10 @@ describe("publish-release.sh", () => {
     assert.ok(published.gh.includes(` ${manifest} ${directions} `), published.gh);
     assert.equal(readFileSync(manifest, "utf8"), '{"schema":"wave-release-source/1"}');
     const notes = /--notes-file (\S+)/.exec(published.gh)?.[1] ?? "";
-    assert.equal(readFileSync(notes, "utf8"), "- Fixed a thing\n\n## Source for Wave 1.3.0-ti\n");
+    assert.equal(
+      readFileSync(notes, "utf8"),
+      releaseBody("", "android", "- Fixed a thing\n\n## Source for Wave 1.3.0-ti\n"),
+    );
   });
 
   it("publishes without source files when the release job made none", () => {
@@ -239,7 +251,15 @@ describe("the release jobs", () => {
  */
 const publishTo = (
   app: "android" | "desktop",
-  { assets = [] as string[], missing = 0, failCreate = false, record = "" } = {},
+  {
+    assets = [] as string[],
+    missing = 0,
+    failCreate = false,
+    record = "",
+    body = "",
+    notes = "",
+    lose = false,
+  } = {},
 ) => {
   const dir = mkdtempSync(join(tmpdir(), "wave-release-"));
   const script = (name: string, body: string) => {
@@ -250,13 +270,17 @@ const publishTo = (
   writeFileSync(join(dir, "assets.txt"), assets.map((name) => `${name}\n`).join(""));
   writeFileSync(join(dir, "record.json"), record);
   writeFileSync(join(dir, "views"), "0");
+  writeFileSync(join(dir, "body.txt"), body);
+  // With `lose`, the other app's job writes the body it read before this job's first edit.
+  writeFileSync(join(dir, "before.txt"), body);
+  if (lose) writeFileSync(join(dir, "lose"), "");
   script(
     "gh",
     `case "$2" in
   view)
     n="$(cat "${dir}/views")"; echo $((n + 1)) > "${dir}/views"
     [ "$n" -ge ${missing} ] || exit 1
-    case "$*" in *--json*) cat "${dir}/assets.txt" ;; esac
+    case "$*" in *"--json body"*) cat "${dir}/body.txt" ;; *--json*) cat "${dir}/assets.txt" ;; esac
     exit 0 ;;
   download)
     while [ $# -gt 0 ]; do
@@ -266,7 +290,12 @@ const publishTo = (
     exit 0 ;;
 esac
 echo "gh $*" >> "${dir}/gh.log"
-case "$2" in create) ${failCreate ? "exit 1" : ":"} ;; esac`,
+case "$2" in create) ${failCreate ? "exit 1" : ":"} ;; esac
+command="$2"
+${keepBody(dir)}
+if [ "$command" = edit ] && [ -e "${dir}/lose" ]; then
+  rm "${dir}/lose"; cp "${dir}/before.txt" "${dir}/body.txt"
+fi`,
   );
   writeFileSync(join(dir, "gh.log"), "");
   writeFileSync(join(dir, "provenance.json"), JSON.stringify({ source: SHA }));
@@ -275,6 +304,7 @@ case "$2" in create) ${failCreate ? "exit 1" : ":"} ;; esac`,
       ? [join(dir, "app.apk")]
       : [join(dir, "wave-1.3.0-ti-win-x64.exe"), join(dir, "wave-1.3.0-ti-linux-x64.AppImage")];
   for (const file of files) writeFileSync(file, "installer");
+  if (notes) writeFileSync(join(dir, "notes.md"), notes);
   const output = join(dir, "output");
   writeFileSync(output, "");
   const { status, stdout } = spawnSync(
@@ -292,6 +322,8 @@ case "$2" in create) ${failCreate ? "exit 1" : ":"} ;; esac`,
         GITHUB_REPOSITORY: "o/r",
         GITHUB_OUTPUT: output,
         PROVENANCE_FILE: join(dir, "provenance.json"),
+        RELEASE_NOTES_SETTLE: "0",
+        ...(notes ? { RELEASE_NOTES_FILE: join(dir, "notes.md") } : {}),
       },
     },
   );
@@ -301,6 +333,7 @@ case "$2" in create) ${failCreate ? "exit 1" : ":"} ;; esac`,
     stdout,
     output: readFileSync(output, "utf8"),
     gh: readFileSync(join(dir, "gh.log"), "utf8"),
+    body: readFileSync(join(dir, "body.txt"), "utf8"),
   };
 };
 
@@ -324,11 +357,45 @@ describe("publish-release.sh for either app alone", () => {
     assert.match(output, /^url=https:.*\/releases\/tag\/v1\.3\.0-ti$/m);
   });
 
-  it("adds the desktop's installers to the phone's release and leaves its notes", () => {
-    const { status, gh } = publishTo("desktop", { assets: PHONE });
-    assert.equal(status, 0);
-    assert.match(gh, /release upload v1\.3\.0-ti .*win-x64\.exe.* --clobber/);
-    assert.doesNotMatch(gh, /create|edit|\.apk/);
+  it("adds the desktop's installers to the phone's release and keeps its notes", () => {
+    const body = releaseBody("", "android", "- Phone line\n");
+    const published = publishTo("desktop", { assets: PHONE, body, notes: "- Desktop line\n" });
+    assert.equal(published.status, 0);
+    assert.match(published.gh, /release upload v1\.3\.0-ti .*win-x64\.exe.* --clobber/);
+    assert.doesNotMatch(published.gh, /create|\.apk/);
+    assert.equal(published.body, releaseBody(body, "desktop", "- Desktop line\n"));
+  });
+
+  it("gives the release the same notes whichever app publishes first", () => {
+    const [phone, desktop] = ["- Phone line\n", "- Desktop line\n"];
+    const phoneFirst = publishTo("android", { missing: 99, notes: phone });
+    const thenDesktop = publishTo("desktop", {
+      assets: PHONE,
+      body: phoneFirst.body,
+      notes: desktop,
+    });
+    const desktopFirst = publishTo("desktop", { missing: 99, notes: desktop });
+    const thenPhone = publishTo("android", {
+      assets: DESKTOP,
+      body: desktopFirst.body,
+      notes: phone,
+    });
+    for (const run of [phoneFirst, thenDesktop, desktopFirst, thenPhone])
+      assert.equal(run.status, 0, run.stdout);
+    assert.equal(thenDesktop.body, thenPhone.body);
+    assert.match(thenPhone.body, /Phone line[\s\S]*Desktop line/);
+  });
+
+  it("writes its notes again when the other app's write took them out", () => {
+    const published = publishTo("desktop", {
+      assets: PHONE,
+      body: releaseBody("", "android", "- Phone line\n"),
+      notes: "- Desktop line\n",
+      lose: true,
+    });
+    assert.equal(published.status, 0);
+    assert.equal(published.gh.match(/release edit/g)?.length, 2);
+    assert.match(published.body, /Phone line[\s\S]*Desktop line/);
   });
 
   it("adds the APK to the desktop's release, writing the phone's notes", () => {

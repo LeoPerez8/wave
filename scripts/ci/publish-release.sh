@@ -2,7 +2,8 @@
 # Publishes one app's files to the GitHub Release "Wave <version>". Versions ending in -ti are
 # prereleases; stable versions become Latest. The phone and the desktop publish on their own
 # (mobile.yml, desktop.yml): whichever gets there first creates the release, and the other adds
-# its files to it.
+# its files to it. Each writes its own notes into the release's body, the phone's first
+# (release-notes.ts), so the notes are the same whichever app gets there first.
 # The tag already exists: the Version job pushed it with the version bump on main
 # (bump-version.sh), or a promotion pushed it (promote.sh), and either that or a hand-pushed
 # one passed check-release-tag.sh in Checks.
@@ -18,6 +19,7 @@
 # directions also added to the notes; docs/release-source.md).
 set -euo pipefail
 
+here="$(dirname "$0")"
 app="${RELEASE_APP:-android}"
 tag="${RELEASE_TAG:-${GITHUB_REF_NAME:?}}"
 version="${tag#v}"
@@ -98,7 +100,7 @@ fi
 # the app's record there names this run's source (docs/release-provenance.md). A release whose
 # record has another source, or whose files are from before records, keeps what it has; so does
 # any release GitHub can't list or whose record can't be downloaded. The other app's files and
-# record count for nothing. The phone also rewrites the notes; the desktop leaves them.
+# record count for nothing. Then it writes this app's notes beside the other app's.
 add_to_release() {
   if ! held="$(gh release view "$tag" --json assets --jq '.assets[].name')"; then
     echo "::error::GitHub didn't say what $tag holds, so nothing was replaced."
@@ -123,20 +125,42 @@ add_to_release() {
     exit 1
   fi
   gh release upload "$tag" "${assets[@]}" --clobber
-  if [ "$app" = android ]; then
-    edit=(--notes-file "$notes")
-    if [[ "$version" == *-ti ]]; then edit+=(--prerelease --latest=false); fi
-    gh release edit "$tag" "${edit[@]}"
-  fi
+  write_notes
+}
+
+# Both release jobs can write the body at once, and the later write wins. So after each write
+# this reads the body back, after a pause, and writes again while it lacks this app's notes.
+write_notes() {
+  local body="$dir/release-body.md" merged="$dir/release-body.merged.md" attempt=0
+  local edit=()
+  if [ "$app" = android ] && [[ "$version" == *-ti ]]; then edit=(--prerelease --latest=false); fi
+  while :; do
+    if ! gh release view "$tag" --json body --jq .body > "$body"; then
+      echo "::error::GitHub didn't give $tag's notes, so they weren't written."
+      exit 1
+    fi
+    if [ "$attempt" -gt 0 ] && node "$here/release-notes.ts" "$app" "$notes" --unchanged < "$body"; then
+      return 0
+    fi
+    if [ "$attempt" -eq 3 ]; then
+      echo "::warning::$tag's notes kept changing, so they may lack the $app notes."
+      return 0
+    fi
+    node "$here/release-notes.ts" "$app" "$notes" < "$body" > "$merged"
+    gh release edit "$tag" --notes-file "$merged" "${edit[@]}"
+    attempt=$((attempt + 1))
+    sleep "${RELEASE_NOTES_SETTLE:-5}"
+  done
 }
 
 create_release() {
+  node "$here/release-notes.ts" "$app" "$notes" < /dev/null > "$dir/release-body.md"
   if [ ${#target[@]} -gt 0 ]; then
     gh release create "$tag" "${assets[@]}" "${target[@]}" "${flags[@]}" \
-      --title "Wave $version" --notes-file "$notes"
+      --title "Wave $version" --notes-file "$dir/release-body.md"
   else
     gh release create "$tag" "${assets[@]}" --verify-tag "${flags[@]}" \
-      --title "Wave $version" --notes-file "$notes"
+      --title "Wave $version" --notes-file "$dir/release-body.md"
   fi
 }
 
