@@ -885,6 +885,10 @@ const createHandlers = (
             return songMenu(yield* Database, target, surface, (yield* YtMusic).enabled());
           })
         : refuse("songs.actions", "invalid songs or surface"),
+    "songs.showInFolder": (args) =>
+      args.length === 1 && songId(args[0])
+        ? libraryCall((library) => library.showInFolder(args[0] as number))
+        : refuse("songs.showInFolder", "invalid song"),
     "songs.run": ([target, action, playlistId, at]) =>
       validTarget(target) &&
       SONG_RUN_ACTIONS.includes(action as SongRunAction) &&

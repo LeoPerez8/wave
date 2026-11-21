@@ -37,6 +37,12 @@ const OFFERED: ReadonlySet<ItemAction> = new Set<ItemAction>([
   "select",
 ]);
 
+/**
+ * One entry of a desktop song menu: the phone's (`ItemActionEntry`), or the desktop's own Show in
+ * Folder, which opens the file manager on the song's file.
+ */
+export type DesktopSongEntry = ItemActionEntry | { readonly action: "showInFolder" };
+
 export interface DesktopSongSubject {
   /** One song for a menu, the checked ones (in list order) for the selection bar. */
   readonly items: readonly ActionItem[];
@@ -55,10 +61,10 @@ export interface DesktopSongSubject {
 }
 
 /** The entries to offer on [subject]'s songs, in the phone's order. */
-export const desktopSongActions = (subject: DesktopSongSubject): ItemActionEntry[] => {
+export const desktopSongActions = (subject: DesktopSongSubject): DesktopSongEntry[] => {
   const { items, page } = subject;
   if (items.length === 0) return [];
-  const entries = itemActions({
+  const entries: DesktopSongEntry[] = itemActions({
     kind: "track",
     items,
     surface: subject.surface,
@@ -69,6 +75,17 @@ export const desktopSongActions = (subject: DesktopSongSubject): ItemActionEntry
   }).filter(
     (entry) => OFFERED.has(entry.action) && (entry.action !== "share" || subject.share === true),
   );
+  // One song with a file here opens the file manager on it, before Select.
+  const [only] = items;
+  if (
+    (subject.surface ?? "menu") === "menu" &&
+    items.length === 1 &&
+    only?.missing !== true &&
+    only?.streamed !== true
+  ) {
+    const at = entries.findIndex((entry) => entry.action === "select");
+    entries.splice(at === -1 ? entries.length : at, 0, { action: "showInFolder" });
+  }
   // Streamed songs have no Library entry to take out.
   return items.some((item) => item.streamed === true)
     ? entries
@@ -102,7 +119,11 @@ export const desktopSelectionActions = (subject: {
 }): ItemActionEntry[] => {
   const { items } = subject;
   const kind = commonKind(items.map((item) => item.kind));
-  if (kind === "track") return desktopSongActions({ ...subject, surface: "selection" });
+  // The bar never holds Show in Folder: it is one song's.
+  if (kind === "track")
+    return desktopSongActions({ ...subject, surface: "selection" }).filter(
+      (entry): entry is ItemActionEntry => entry.action !== "showInFolder",
+    );
   const entries = itemActions({
     kind,
     items,

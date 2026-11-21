@@ -77,6 +77,7 @@ import type { UpNextPlace } from "@wave/core";
 import type { ArtistStatsPage, DesktopRecap, StatsOverview, StatsRow } from "./stats.ts";
 import type {
   ActionSurface,
+  ShowInFolderResult,
   SongMenu,
   SongRunAction,
   SongRunResult,
@@ -497,6 +498,11 @@ export interface BridgeContract
     ];
     readonly result: SongRunResult;
   };
+  /** Opens the file manager on a Library song's file: the song by its id, never a path. */
+  readonly "songs.showInFolder": {
+    readonly args: readonly [songId: number];
+    readonly result: ShowInFolderResult;
+  };
   /** Opens an audio file by its absolute path, paused at its start. */
   readonly "player.load": {
     readonly args: readonly [path: string];
@@ -657,6 +663,7 @@ export const BRIDGE_CALLS = [
   "songs.states",
   "songs.actions",
   "songs.run",
+  "songs.showInFolder",
   "player.load",
   "player.play",
   "player.pause",
@@ -905,6 +912,8 @@ export interface WaveBridge {
       playlistId?: number,
       at?: UpNextPlace,
     ) => Promise<SongRunResult>;
+    /** Opens the file manager on the song [songId]'s file; main finds the file. */
+    readonly showInFolder: (songId: number) => Promise<ShowInFolderResult>;
   };
   /** One song at a time; each call answers with the engine's status after it. */
   readonly player: {
@@ -1094,6 +1103,7 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     states: (ids) => invoke("songs.states", ids),
     actions: (target, surface) => invoke("songs.actions", target, surface),
     run: (target, action, playlistId, at) => invoke("songs.run", target, action, playlistId, at),
+    showInFolder: (songId) => invoke("songs.showInFolder", songId),
   },
   player: {
     load: (path) => invoke("player.load", path),

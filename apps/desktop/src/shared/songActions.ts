@@ -1,5 +1,5 @@
 /** What a song's menu and the selection bar act on, and what their actions report back. */
-import type { ActionSurface, ItemActionEntry, SongTagOutcome, TagLookupStop } from "@wave/core";
+import type { ActionSurface, DesktopSongEntry, SongTagOutcome, TagLookupStop } from "@wave/core";
 import type { BrowseScope } from "./browse.ts";
 
 /** The ordinary array limit; large table selections use a packed vector of IDs. */
@@ -18,7 +18,7 @@ export type { ActionSurface };
 
 /** The entries to show for a target (Core's `desktopSongActions`), with what they need. */
 export interface SongMenu {
-  readonly entries: readonly ItemActionEntry[];
+  readonly entries: readonly DesktopSongEntry[];
   /** How many songs the target holds. */
   readonly count: number;
   /** The first song's title, for the menu's name and Remove from Library's question. */
@@ -41,6 +41,9 @@ export const SONG_RUN_ACTIONS = [
   "fixSongs",
 ] as const;
 export type SongRunAction = (typeof SONG_RUN_ACTIONS)[number];
+
+/** What Show in Folder did: the file manager opened, the drive isn't connected, or no file. */
+export type ShowInFolderResult = "shown" | "unavailable" | "gone";
 
 /** What an action did, for its toast. */
 export type SongRunResult =

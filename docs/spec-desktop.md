@@ -385,6 +385,11 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   by Core's `readTypedReleaseDate`. It keeps the date as the phone does: in the synced
   `releaseDates.typed.*` preferences, and for a Library song in the index (not in its file), so it
   reaches the phone and a playlist's Release date sort places the song by it.
+- Show in Folder (#1224) is on the menu of one Library song with a file here, never a missing or
+  streamed one. The window asks with the song's id (`songs.showInFolder`), never a path: main
+  reads the file from the index and opens the system's file manager with it selected
+  (`shell.showItemInFolder`), on Windows and Linux. A song in a folder whose drive isn't connected
+  says so, and one whose file has gone asks for a Refresh.
 - Share, on a Library song and on a streamed song (#1209), is a submenu in place of the phone's
   share sheet: Copy Link (song.link), Copy Spotify Link (Spotify's own search as #1201's
   account), Copy YT Music Link, then Save Image (the system's save dialog) and Copy Image, which

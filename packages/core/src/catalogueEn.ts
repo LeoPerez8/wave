@@ -124,6 +124,9 @@ export const en = {
     /** Release Date's dialog: the date the song has ([date], `formatReleaseDate`'s), or none. */
     releaseDateKnown: (date: string) => `Released ${date}`,
     releaseDateUnknown: "No release date is known.",
+    /** A song menu's Show in Folder (Core's `desktopSongActions`), and its song's file gone. */
+    showInFolder: "Show in Folder",
+    fileGone: "The song's file isn't there anymore. Refresh the Library to find it again.",
     downloadStarted: (count: number) =>
       count === 1 ? "Download started" : `Downloading ${count} songs`,
     downloading: (title: string) => `Downloading ${title}`,

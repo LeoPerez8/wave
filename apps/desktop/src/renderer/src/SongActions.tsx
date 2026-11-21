@@ -15,7 +15,7 @@ import {
   tableSelectionOf,
   type ActionSurface,
   type AlertSpec,
-  type ItemActionEntry,
+  type DesktopSongEntry,
   type TableSelection,
   type UpNextPlace,
 } from "@wave/core";
@@ -130,12 +130,30 @@ export function useSongActions({ go, select, failed, changed, newPlaylist }: Opt
   /** [entry] as a menu item or a bar button; [finish] ends selection once it runs. */
   const itemFor = useCallback(
     (
-      entry: ItemActionEntry,
+      entry: DesktopSongEntry,
       target: SongTarget,
       about: SongMenu,
       surface: ActionSurface,
       finish: () => void,
     ): MenuItem => {
+      if (entry.action === "showInFolder") {
+        // Core offers it on one Library song's menu: main finds its file by the id.
+        const [id] = "ids" in target ? target.ids : [];
+        const label = text.desktopLibrary.showInFolder;
+        if (id === undefined) return { key: entry.action, label, disabled: true };
+        return {
+          key: entry.action,
+          label,
+          run: () =>
+            void window.wave.songs
+              .showInFolder(id)
+              .then((result) => {
+                if (result === "unavailable") failed(text.desktopLibrary.driveDisconnected);
+                else if (result === "gone") failed(text.desktopLibrary.fileGone);
+              })
+              .catch(() => failed()),
+        };
+      }
       const { action } = entry;
       const label =
         surface === "selection"
@@ -621,10 +639,12 @@ export function SelectionBar({
   const items =
     menu === undefined || target === null
       ? []
-      : menu.entries.map((entry) => ({
-          entry,
-          item: actions.itemFor(entry, target, menu, "selection", onDone),
-        }));
+      : menu.entries.flatMap((entry) =>
+          // Show in Folder is one song's menu's, never the bar's.
+          entry.action === "showInFolder"
+            ? []
+            : [{ entry, item: actions.itemFor(entry, target, menu, "selection", onDone) }],
+        );
   const { bar, more } = splitActionBar(
     items.map(({ entry, item }) => ({ action: entry.action, item })),
     5,
