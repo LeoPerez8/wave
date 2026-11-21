@@ -12,7 +12,7 @@ import kotlinx.serialization.json.long
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** The saved answers are Shazam's (`src/test/resources/fixtures/shazam/README.md`). */
+/** The saved answers are Shazam's (`src/testFixtures/resources/fixtures/shazam/README.md`). */
 class ShazamClientTest {
   private val signature = ShazamSignature("data:audio/vnd.shazam.sig;base64,gCX+yg==", 8000)
   private val requests = mutableListOf<ShazamRequest>()

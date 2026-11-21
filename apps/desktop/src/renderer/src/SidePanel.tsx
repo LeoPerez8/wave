@@ -6,6 +6,7 @@
 import { useState, type KeyboardEvent, type MouseEvent } from "react";
 
 import type { BrowseRow } from "../../shared/browse.ts";
+import type { UpNextPlace } from "@wave/core";
 import type { PlaybackCommand, PlayerView } from "../../shared/playerView.ts";
 import type { YtArtistCandidate } from "../../shared/ytPages.ts";
 import { Icon } from "./Icon.tsx";
@@ -13,6 +14,7 @@ import { LyricsView, trackIdOf } from "./LyricsView.tsx";
 import { panelTabs, shownPanelTab, stepPanelTab, type PanelTab } from "../../shared/panelTabs.ts";
 import { QueuePanel } from "./QueuePanel.tsx";
 import { RelatedPanel } from "./RelatedPanel.tsx";
+import { draggedSongs, type DraggedSongs } from "./songDrag.ts";
 import { labels, text } from "./text.ts";
 import type { GeniusAccess } from "./useSongGenius.ts";
 import "./panel.css";
@@ -43,6 +45,7 @@ export function SidePanel({
   onClose,
   geniusAccess,
   onGeniusSignIn,
+  onSongDrop,
   notify,
 }: {
   readonly tab: PanelTab;
@@ -62,6 +65,8 @@ export function SidePanel({
   readonly onClose: () => void;
   readonly geniusAccess: GeniusAccess;
   readonly onGeniusSignIn: () => void;
+  /** Songs dragged from a list and dropped in the Queue's Up Next [at]. */
+  readonly onSongDrop?: (songs: DraggedSongs, at: UpNextPlace | undefined) => void;
   /** Shows a toast: the lyrics card's Save Image and Copy Image answers. */
   readonly notify: (message: string) => void;
 }) {
@@ -88,6 +93,10 @@ export function SidePanel({
               aria-controls="panel-body"
               tabIndex={tab === name ? 0 : -1}
               onClick={() => onTab(name)}
+              // Songs dragged over the Queue tab open it, to be dropped in Up Next.
+              onDragOver={(event) => {
+                if (name === "queue" && tab !== name && draggedSongs(event)) onTab(name);
+              }}
             >
               {name === "related" ? text.playbackText.related : labels[name]}
             </button>
@@ -126,7 +135,13 @@ export function SidePanel({
             onSongMenu={onSongMenu}
           />
         ) : view === undefined ? null : (
-          <QueuePanel view={view} command={command} onError={onError} onMenu={onSongMenu} />
+          <QueuePanel
+            view={view}
+            command={command}
+            onError={onError}
+            onMenu={onSongMenu}
+            onSongDrop={onSongDrop}
+          />
         )}
       </div>
     </aside>

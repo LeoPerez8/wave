@@ -703,3 +703,68 @@ test("a restarted journal's pause is read back, so the page still says it", asyn
   );
   downloads.dispose();
 });
+
+test("a YT Music album's Download queues the songs the Library lacks, in album order, under the album", async () => {
+  const { journal, downloads } = setup();
+  try {
+    const track = (n: number, videoId: string) => ({ ...song, videoId, title: `Track ${n}` });
+    const songs = [track(1, "aaaaaaaaaa1"), track(2, "aaaaaaaaaa2"), track(3, "aaaaaaaaaa3")];
+    let had = new Set(["aaaaaaaaaa2"]);
+    const origin = { kind: "album", id: "MPREb_album", name: "Elis & Tom" } as const;
+    const album = {
+      songs,
+      inLibrary: (each: { videoId: string }) => had.has(each.videoId),
+      origin,
+    };
+    assert.deepEqual(downloads.ytListView(album), {
+      button: { action: "download", label: "Download" },
+      line: null,
+    });
+    await downloads.ytListAction("download", album);
+    assert.deepEqual(
+      requests(journal).map(({ song, origin }) => [song.videoId, origin]),
+      [
+        ["aaaaaaaaaa1", origin],
+        ["aaaaaaaaaa3", origin],
+      ],
+    );
+    // While they're on their way: Cancel, and the head counts the saved songs.
+    assert.deepEqual(downloads.ytListView(album), {
+      button: { action: "cancel", label: "Cancel" },
+      line: "Downloading · 0 of 2",
+    });
+    journal.set("aaaaaaaaaa1", {
+      phase: "completed",
+      acknowledged: true,
+      saved: { path: "/m/01 Track 1.m4a" },
+    });
+    // Saved, it's the Library's.
+    had = new Set([...had, "aaaaaaaaaa1"]);
+    await downloads.refresh();
+    assert.equal(downloads.ytListView(album).line, "Downloading · 1 of 2");
+    // One fails: Retry Failed asks for it again, under the album.
+    journal.set("aaaaaaaaaa3", { phase: "failed", reason: "notFound" });
+    await downloads.refresh();
+    assert.deepEqual(downloads.ytListView(album).button, {
+      action: "retryFailed",
+      label: "Retry Failed",
+    });
+    await downloads.ytListAction("retryFailed", album);
+    assert.deepEqual(
+      requests(journal)
+        .slice(2)
+        .map(({ song, origin }) => [song.videoId, origin]),
+      [["aaaaaaaaaa3", origin]],
+    );
+    await downloads.ytListAction("cancel", album);
+    assert.deepEqual(journal.asked("downloads.cancel"), [{ id: "aaaaaaaaaa3" }]);
+    // The Library has every song: Downloaded.
+    had = new Set(songs.map((each) => each.videoId));
+    assert.deepEqual(downloads.ytListView(album).button, {
+      action: "downloaded",
+      label: "Downloaded",
+    });
+  } finally {
+    downloads.dispose();
+  }
+});

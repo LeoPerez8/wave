@@ -11,7 +11,7 @@ import { ytMusicEnabled } from "@/settings/ytMusic";
 import { searchRecordingInTurn } from "@/ytmusic/askYtMusic";
 
 import { microphonePermission } from "./microphone";
-import type { RecognizeDeps, RecognizeNative } from "./recognizeSession";
+import type { RecognizeDeps, RecognizeNative } from "@wave/client/recognizeSession";
 import { resolveRecognition } from "@wave/client/resolveRecognition";
 
 /** What a Recognize session runs on, from the card or the tile. */

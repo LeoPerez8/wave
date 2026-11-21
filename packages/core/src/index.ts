@@ -98,6 +98,7 @@ export {
 export type {
   PendingMove,
   UpNextMove,
+  UpNextPlace,
   QueueCommand,
   QueueContext,
   QueueEntry,
@@ -2692,6 +2693,7 @@ export type {
   RecognizeCard,
   RecognizeCardAction,
   RecognizeCardView,
+  RecognizeCardOptions,
   RecognizedSong,
   RecognizeEnd,
   RecognizeEvent,
@@ -2717,7 +2719,7 @@ export type {
   RecognizeTrack,
   GeniusLyricsResultAction,
 } from "./recognition.ts";
-export { planShazamAdd } from "./shazamPlaylist.ts";
+export { SHAZAM_PLAYLIST_SETTING, planShazamAdd } from "./shazamPlaylist.ts";
 export { bounceDemoSwipe, sampleSwipeActions } from "./motionSample.ts";
 export type { BounceDemoSwipe } from "./motionSample.ts";
 export {

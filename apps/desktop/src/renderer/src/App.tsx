@@ -10,6 +10,7 @@ import {
   type RecapPeriod,
   type SearchOnline,
   type TableSelection,
+  type UpNextPlace,
 } from "@wave/core";
 import {
   useCallback,
@@ -63,8 +64,11 @@ import {
   pickCheckboxes,
   withCollection,
   withPick,
+  selectionWithPicks,
   type CollectionPicks,
 } from "./MixedSelection.tsx";
+import { useSongDrop, type DraggedSongs } from "./songDrag.ts";
+import { songActionToast } from "./songActionToast.ts";
 import { itemMenuEvents, type MenuPoint } from "./Menu.tsx";
 import { shuffleMenuEvents } from "./ShuffleKinds.tsx";
 import { usePlaylistEdits } from "./Playlists.tsx";
@@ -84,6 +88,7 @@ import type { DesktopRecap, StatsRoute } from "../../shared/stats.ts";
 import { ListeningHistory } from "./ListeningHistory.tsx";
 import type { HistoryRoute } from "../../shared/history.ts";
 import { isYtRoute, YtPage, type YtRoute } from "./YtPages.tsx";
+import { Recognize } from "./Recognize.tsx";
 import { AlbumArtistLink, ArtistPage, ArtistToggle, useArtistSection } from "./ArtistPage.tsx";
 import {
   NowPlayingSongActions,
@@ -178,6 +183,7 @@ export function App() {
   const percent = downloadPercent(downloads);
   const download = (run: Promise<unknown>) => void run.catch(failed);
   const [shortcuts, setShortcuts] = useState(false);
+  const [recognizing, setRecognizing] = useState(false);
   const panel = useSidePanel();
   const [nowPlaying, setNowPlaying] = useState(false);
   const linkPlaying = useCallback(() => setNowPlaying(true), [setNowPlaying]);
@@ -400,7 +406,9 @@ export function App() {
             : { ...own, checkboxes: true },
       onSelection: (selection) => setSelection(owner, selection),
       actions,
-      ...(searched !== undefined && picks ? { bar: false as const } : {}),
+      ...(searched !== undefined && picks
+        ? { bar: false as const, picks: (songs) => selectionWithPicks(picks, songs) }
+        : {}),
     };
   };
   const table = selectionFor(list);
@@ -490,6 +498,37 @@ export function App() {
       y: rect.top,
     });
   };
+  /**
+   * Songs dragged from a list and dropped onto a sidebar playlist, or the Queue: [at] in Up
+   * Next, or none for the end, as Add to Playlist and Add to Queue run with their toasts.
+   */
+  const dropSongs = (
+    songs: DraggedSongs,
+    on: { readonly playlist: number } | { readonly queue: UpNextPlace | undefined },
+  ) => {
+    const playlist = "playlist" in on ? on.playlist : undefined;
+    const at = "queue" in on ? on.queue : undefined;
+    const action = playlist === undefined ? "addToQueue" : "addToPlaylist";
+    if (songs.kind === "songs") return void actions.run(songs.target, action, "menu", playlist, at);
+    if (songs.kind === "streamed")
+      return void streamed.run(songs.videoId, action, "menu", playlist, at);
+    void window.wave.collections
+      .runSelection(songs.target, action, playlist, at)
+      .then((result) => {
+        playback.refresh();
+        if (result.kind === "queued" || result.kind === "playlist")
+          notify(
+            songActionToast(
+              result,
+              false,
+              "selection",
+              result.kind === "queued" ? result.count : 0,
+            ),
+          );
+      })
+      .catch(() => failed());
+  };
+  const playlistDrop = useSongDrop<number>();
   const playingSong = playback.view?.current ?? null;
   const playingStreamed = useStreamedSong(
     nowPlaying ? playingSong?.videoId : undefined,
@@ -737,6 +776,19 @@ export function App() {
             onFocus={() => route.kind !== "search" && go({ kind: "search", query: field })}
             onKeyDown={(event) => event.key === "Enter" && rememberSearch()}
           />
+          {field === "" && (
+            <button
+              className="search-recognize"
+              aria-label={text.playbackText.recognizeSong}
+              title={text.playbackText.recognizeSong}
+              onClick={(event) => {
+                event.preventDefault();
+                setRecognizing(true);
+              }}
+            >
+              <Icon name="microphone" size={16} />
+            </button>
+          )}
         </label>
         <nav aria-label={labels.library}>
           <button
@@ -824,11 +876,12 @@ export function App() {
           {playlists.map((row) => (
             <button
               key={row.id}
-              className="nav-item"
+              className={`nav-item ${playlistDrop.over === row.id ? "drop-over" : ""}`}
               aria-label={row.title}
               title={row.title}
               aria-current={route.kind === "playlist" && route.id === row.id ? "page" : undefined}
               onClick={() => go({ kind: "playlist", id: row.id })}
+              {...playlistDrop.props(row.id, (songs) => dropSongs(songs, { playlist: row.id }))}
               {...itemMenuEvents((at) =>
                 openCollectionMenu({ kind: "playlist", id: row.id }, row.title, at),
               )}
@@ -1186,6 +1239,7 @@ export function App() {
             run={playback.run}
             revision={playback.view?.revision ?? 0}
             go={go}
+            onLibraryAlbum={(id) => go({ kind: "album", id })}
             onSongMenu={ytSongMenu}
             onError={setError}
           />
@@ -1405,6 +1459,7 @@ export function App() {
           hidden={nowPlaying}
           geniusAccess={geniusAccess(account)}
           onGeniusSignIn={openGeniusSignIn}
+          onSongDrop={(songs, at) => dropSongs(songs, { queue: at })}
           notify={notify}
           onClose={() => {
             // Focus goes back to the bar's button for this tab; Related opens from Queue's.
@@ -1436,6 +1491,7 @@ export function App() {
         onMenu={playingMenu}
         shuffleMenu={shuffleMenu}
         links={ytLinks}
+        onSongDrop={(songs) => dropSongs(songs, { queue: undefined })}
       />
       <Links
         onPlaying={linkPlaying}
@@ -1450,6 +1506,16 @@ export function App() {
       {actions.overlays}
       {playlistEdits.overlays}
       {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}
+      {recognizing && (
+        <Recognize
+          onClose={() => setRecognizing(false)}
+          onAlbum={(id) => {
+            setNowPlaying(false);
+            go({ kind: "album", id });
+          }}
+          onChanged={playback.refresh}
+        />
+      )}
       {recap && <RecapViewer recap={recap} onClose={closeRecap} notify={notify} />}
     </main>
   );

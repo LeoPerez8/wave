@@ -41,7 +41,7 @@ third-party content, or material whose origin isn't recorded, and none of it shi
 
 ## Code under other licences
 
-- `apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/recognize/RealFft2048.kt`
+- `packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/recognize/RealFft2048.kt`
   is ported from chfft 0.3.4 and stays under the Mozilla Public License 2.0. MPL-2.0 section 3.3
   lets it be part of this GPL-3.0-only work.
 - Files ported or derived from Metrolist, NewPipe, innertubex, ytmusicapi, shazamio-core and
