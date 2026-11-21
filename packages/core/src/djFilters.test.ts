@@ -145,20 +145,19 @@ describe("ranking under New releases", () => {
       "undated",
       "old",
     ]);
-    assert.deepEqual(order(filtered("newReleases"), after(song("new", "Picked", "This Year")), []), [
-      "a",
-      "b",
-      "c",
-      "d",
-      "e",
-      "new",
-    ]);
+    assert.deepEqual(
+      order(filtered("newReleases"), after(song("new", "Picked", "This Year")), []),
+      ["a", "b", "c", "d", "e", "new"],
+    );
   });
 
   test("a release counts for the songs that credit the page's artist", () => {
     const namesake = after(song("other", "Stranger", "This Year"));
     assert.deepEqual(order(filtered("newReleases"), namesake), ["a", "b", "c", "d", "e", "other"]);
-    const featured = after({ ...song("feat", "Guest", "this  year"), artists: ["Guest", "PICKED"] });
+    const featured = after({
+      ...song("feat", "Guest", "this  year"),
+      artists: ["Guest", "PICKED"],
+    });
     assert.deepEqual(order(filtered("newReleases"), featured), ["feat", "a", "b", "c", "d", "e"]);
   });
 

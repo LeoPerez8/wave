@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { catalogueOf } from "./localisation.ts";
 import {
   DEFAULT_DJ_SETTINGS,
   DJ_FILTERS,
@@ -73,5 +74,22 @@ describe("Adjust's filters", () => {
     const chosen: DjSettings = { ...DEFAULT_DJ_SETTINGS, variety: "high", discovery: "discover" };
     const filtered = djToggleFilter(djToggleFilter(chosen, "lesserKnown"), "newReleases");
     assert.deepEqual([filtered.variety, filtered.discovery], ["high", "discover"]);
+  });
+
+  test("their text is in both languages", () => {
+    const en = catalogueOf("en").dj;
+    assert.equal(en.filters, "Filters");
+    assert.deepEqual(en.filterNames, {
+      trending: "Trending",
+      lesserKnown: "Lesser-known songs",
+      newReleases: "New releases",
+    });
+    const pt = catalogueOf("pt-BR").dj;
+    assert.equal(pt.filters, "Filtros");
+    assert.deepEqual(pt.filterNames, {
+      trending: "Em alta",
+      lesserKnown: "Músicas pouco conhecidas",
+      newReleases: "Lançamentos",
+    });
   });
 });
