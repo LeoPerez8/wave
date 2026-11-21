@@ -49,6 +49,20 @@ import type {
 import { saveReleaseDate, saveTypedReleaseDate } from "@wave/client/db/releaseDates";
 import { pendingStreamedGenres, keepStreamedGenre } from "@wave/client/db/streamedGenres";
 import {
+  pendingDjMoodSongs,
+  keepDjMoodFeatures,
+  selectDjMoodFeatures,
+  type DjMoodFeatureWrite,
+  type DjMoodLookupPage,
+} from "@wave/client/db/djMoodFeatures";
+import {
+  pendingDjLibraryMoodSongs,
+  keepDjLibraryMoodFeatures,
+  selectDjLibraryMoodFeatures,
+  type DjLibraryMoodFeatureWrite,
+  type DjLibraryMoodSong,
+} from "@wave/client/db/djLibraryMoodFeatures";
+import {
   readFollowShows,
   saveFollowShows,
   markShowNotified,
@@ -1229,6 +1243,36 @@ export class LibraryStore extends Context.Service<
       videoId: string,
       genre: string | null,
     ) => Effect.Effect<void, LibraryStoreError>;
+    /** Candidate catalog songs due for local mood feature lookup. */
+    readonly pendingDjMoodSongs: (
+      after: string,
+      now: number,
+    ) => Effect.Effect<DjMoodLookupPage, LibraryStoreError>;
+    /** Keeps feature matches permanently and misses for their retry window. */
+    readonly keepDjMoodFeatures: (
+      writes: readonly DjMoodFeatureWrite[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Cached ReccoBeats features by YouTube video id. */
+    readonly djMoodFeatures: (
+      videoIds: readonly string[],
+    ) => Effect.Effect<
+      ReadonlyMap<string, import("@wave/core").DjAudioFeatures>,
+      LibraryStoreError
+    >;
+    /** Library songs with an ISRC tag due for a mood feature lookup, after Track [afterTrackId]. */
+    readonly pendingDjLibraryMoodSongs: (
+      afterTrackId: number,
+      now: number,
+    ) => Effect.Effect<readonly DjLibraryMoodSong[], LibraryStoreError>;
+    /** Keeps Library songs' feature matches for their ISRC, and misses for their retry window. */
+    readonly keepDjLibraryMoodFeatures: (
+      writes: readonly DjLibraryMoodFeatureWrite[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Library songs' cached ReccoBeats features, by Track id as Core's candidates name it. */
+    readonly djLibraryMoodFeatures: () => Effect.Effect<
+      ReadonlyMap<string, import("@wave/core").DjAudioFeatures>,
+      LibraryStoreError
+    >;
     /** Library tags and cached streamed answers by ranking id; pass the Fix songs online setting. */
     readonly songGenres: (
       ids: readonly (number | string)[],
@@ -2076,6 +2120,20 @@ const make = Effect.gen(function* () {
       attempt("read pending streamed genres", () => pendingStreamedGenres(db, after)),
     keepStreamedGenre: (videoId, genre) =>
       writeAttempt("save a streamed genre", () => keepStreamedGenre(db, videoId, genre)),
+    pendingDjMoodSongs: (after, now) =>
+      attempt("read pending DJ mood songs", () => pendingDjMoodSongs(db, after, now)),
+    keepDjMoodFeatures: (writes) =>
+      writeAttempt("save DJ mood features", () => keepDjMoodFeatures(db, writes)),
+    djMoodFeatures: (videoIds) =>
+      attempt("read DJ mood features", () => selectDjMoodFeatures(db, videoIds)),
+    pendingDjLibraryMoodSongs: (afterTrackId, now) =>
+      attempt("read pending DJ Library mood songs", () =>
+        pendingDjLibraryMoodSongs(db, afterTrackId, now),
+      ),
+    keepDjLibraryMoodFeatures: (writes) =>
+      writeAttempt("save DJ Library mood features", () => keepDjLibraryMoodFeatures(db, writes)),
+    djLibraryMoodFeatures: () =>
+      attempt("read DJ Library mood features", () => selectDjLibraryMoodFeatures(db)),
     songGenres: (ids, includeStreamedGenres = true) =>
       attempt("read the songs' genres", () => songGenres(db, ids, includeStreamedGenres)),
 

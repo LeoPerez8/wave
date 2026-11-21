@@ -7,9 +7,15 @@ import {
   DJ_GRID_TILES,
   DJ_MAX_SELECTED,
   djArtistTile,
+  djAlbumTile,
+  djFamilyRadioAllowed,
+  djGenreTile,
+  djRadioSongAllowed,
   djGrid,
   djOpened,
   djReduce,
+  djReopened,
+  genreMixDjCandidates,
   djSelected,
   startDjQueue,
   DEFAULT_DJ_SETTINGS,
@@ -51,6 +57,94 @@ const graphOf = (pages: Record<string, string[]>) =>
 const names = (tiles: readonly DjTile[]): string[] => tiles.map((tile) => tile.name);
 
 describe("DJ's grid", () => {
+  test("offers up to four known genre families in taste order among its artist tiles", () => {
+    const artists = [
+      { id: 1, name: "Metal Artist" },
+      { id: 2, name: "Pop Artist" },
+      { id: 3, name: "Rock Artist" },
+      { id: 4, name: "Jazz Artist" },
+      { id: 5, name: "Folk Artist" },
+    ];
+    const songs = artists.flatMap((artist, index) =>
+      Array.from({ length: 5 }, (_, song) => ({
+        id: index * 5 + song + 1,
+        title: `Song ${index}-${song}`,
+        artist: artist.name,
+        artistIds: [artist.id],
+        durationMs: 180_000,
+        addedAt: 0,
+        genre: ["Metal", "Pop", "Rock", "Jazz", "Folk"][index]!,
+      })),
+    );
+    const tiles = djGrid({
+      artists,
+      taste: {
+        ...tasteOf({}),
+        genres: new Map([
+          ["metal", 2],
+          ["pop", 10],
+          ["rock", 8],
+          ["jazz", 6],
+          ["folk", 4],
+        ]),
+      },
+      graph: null,
+      genreLibrary: { artists, songs },
+    });
+    assert.deepEqual(
+      tiles.filter((tile) => tile.kind === "genre").map((tile) => tile.name),
+      ["Pop", "Rock", "Jazz", "Folk"],
+    );
+  });
+
+  test("leaves out a family that has no seed artist and shows none for an empty Library", () => {
+    const songs = Array.from({ length: 5 }, (_, index) => ({
+      id: index + 1,
+      title: `Song ${index}`,
+      artist: "Various Artists",
+      artistIds: [],
+      durationMs: 180_000,
+      addedAt: 0,
+      genre: "Pop",
+    }));
+    const taste = { ...tasteOf({}), genres: new Map([["pop", 3]]) };
+    assert.deepEqual(
+      djGrid({ artists: [], taste, graph: null, genreLibrary: { artists: [], songs } }),
+      [],
+    );
+    assert.deepEqual(
+      djGrid({ artists: [], taste: null, graph: null, genreLibrary: { artists: [], songs: [] } }),
+      [],
+    );
+  });
+
+  test("offers a family as soon as it knows one seedable artist", () => {
+    const artists = [{ id: 1, name: "One Pop Artist" }];
+    const tile = djGrid({
+      artists,
+      taste: { ...tasteOf({}), genres: new Map([["pop", 2]]) },
+      graph: null,
+      genreLibrary: {
+        artists,
+        songs: [
+          {
+            id: 1,
+            title: "One Pop Song",
+            artist: "One Pop Artist",
+            artistIds: [1],
+            durationMs: 180_000,
+            addedAt: 0,
+            genre: "Pop",
+          },
+        ],
+      },
+    });
+    assert.deepEqual(
+      tile.filter((candidate) => candidate.kind === "genre").map(({ name }) => name),
+      ["Pop"],
+    );
+  });
+
   test("shows the taste profile's highest-scored artists first", () => {
     const tiles = djGrid({
       artists: [
@@ -161,6 +255,34 @@ describe("DJ's grid", () => {
     });
     assert.deepEqual(names(tiles), ["Tricky", "Portishead"]);
   });
+  test("takes family candidates worked out once in place of the Library inputs", () => {
+    const artists = [{ id: 1, name: "Rock Artist" }];
+    const songs = Array.from({ length: 5 }, (_, index) => ({
+      id: index + 1,
+      title: `Rock ${index}`,
+      artist: "Rock Artist",
+      artistIds: [1],
+      durationMs: 180_000,
+      addedAt: 0,
+      genre: "Rock",
+    }));
+    const genreCandidates = genreMixDjCandidates({ artists, songs });
+    const taste = { ...tasteOf({}), genres: new Map([["rock", 1]]) };
+    const family = djGrid({ artists, taste, graph: null, genreCandidates }).find(
+      (tile) => tile.kind === "genre",
+    );
+    assert.equal(family?.name, "Rock");
+    const reopened = djReopened({
+      grid: [],
+      remembered: [djGenreTile("Rock")!],
+      artists,
+      genreCandidates,
+    });
+    assert.deepEqual(
+      djSeedTiles(reopened).map((tile) => (tile.kind === "genre" ? tile.artists : [])),
+      [artists],
+    );
+  });
 });
 
 /** [count] artist tiles, "Artist 0" first. */
@@ -168,6 +290,46 @@ const artistTiles = (count: number): DjTile[] =>
   Array.from({ length: count }, (_, at) => djArtistTile(`Artist ${at}`, at)!);
 
 describe("DJ's selection", () => {
+  test("a family opens its highest-taste artists immediately, without a page row", () => {
+    const artists = Array.from({ length: 30 }, (_, index) => ({
+      id: index + 1,
+      name: `Pop ${index}`,
+    }));
+    const songs = artists.flatMap((artist, index) =>
+      Array.from({ length: 5 }, (_, song) => ({
+        id: index * 5 + song + 1,
+        title: `Song ${index}-${song}`,
+        artist: artist.name,
+        artistIds: [artist.id],
+        durationMs: 180_000,
+        addedAt: 0,
+        genre: "Pop",
+      })),
+    );
+    const tiles = djGrid({
+      artists,
+      taste: {
+        ...tasteOf(Object.fromEntries(artists.map((artist, index) => [artist.name, 30 - index]))),
+        genres: new Map([["pop", 9]]),
+      },
+      graph: null,
+      genreLibrary: { artists, songs },
+    });
+    const family = tiles.find((tile) => tile.kind === "genre");
+    assert.ok(family);
+    const state = djReduce(djOpened(tiles), { type: "toggle", key: family.key });
+    assert.deepEqual(
+      state.tiles
+        .slice(
+          state.tiles.findIndex((tile) => tile.key === family.key) + 1,
+          state.tiles.findIndex((tile) => tile.key === family.key) + 4,
+        )
+        .map((tile) => tile.name),
+      ["Pop 23", "Pop 24", "Pop 25"],
+    );
+    assert.equal(state.rows[0]?.waiting, 0);
+  });
+
   test("a tap selects a tile and another unselects it", () => {
     const [first, second] = artistTiles(2);
     const opened = djOpened([first!, second!]);
@@ -255,6 +417,133 @@ describe("a Magic Queue with a DJ seed", () => {
   const tiles = artistTiles(5);
   const started = () => startDjQueue(tiles, { id: "dj1" })!;
 
+  test("a family radio keeps its family, excludes a known mismatch and leaves unknown genre neutral", () => {
+    const profileOf = (artist: string) =>
+      artist === "Metal Band"
+        ? new Map([["metal", 1]])
+        : artist === "Mixed Band"
+          ? new Map([
+              ["metal", 0.3],
+              ["pop", 0.7],
+            ])
+          : artist === "Pop Band"
+            ? new Map([["pop", 1]])
+            : null;
+    assert.equal(djFamilyRadioAllowed("metal", ["Metal Band"], profileOf), true);
+    assert.equal(djFamilyRadioAllowed("metal", ["Mixed Band"], profileOf), false);
+    assert.equal(djFamilyRadioAllowed("metal", ["Pop Band"], profileOf), false);
+    assert.equal(djFamilyRadioAllowed("metal", ["Unknown"], profileOf), true);
+  });
+
+  test("a radio artist without tags inherits a family from graph neighbours", () => {
+    const profileOf = (artist: string) =>
+      artist === "Pop Neighbour" ? new Map([["pop", 1]]) : null;
+    assert.equal(
+      djFamilyRadioAllowed(
+        "metal",
+        ["Untagged Artist"],
+        profileOf,
+        graphOf({ "Untagged Artist": ["Pop Neighbour"] }),
+      ),
+      false,
+    );
+  });
+
+  const familyProfileOf = (artist: string) =>
+    artist === "Metal Band"
+      ? new Map([["metal", 1]])
+      : artist === "Pop Band"
+        ? new Map([["pop", 1]])
+        : artist === "Jazz Band"
+          ? new Map([["jazz", 1]])
+          : null;
+  const familyTile = (name: string, artist: string): DjTile => ({
+    ...djGenreTile(name)!,
+    artists: [{ id: 1, name: artist }],
+  });
+
+  test("a song on a radio two families share passes when it fits either family", () => {
+    const session = startDjQueue(
+      [familyTile("Metal", "Shared Artist"), familyTile("Pop", "Shared Artist")],
+      {
+        id: "dj-two-families",
+      },
+    )!;
+    const radio = "artist:shared artist";
+    assert.equal(djRadioSongAllowed(session, radio, ["Metal Band"], familyProfileOf), true);
+    assert.equal(djRadioSongAllowed(session, radio, ["Pop Band"], familyProfileOf), true);
+    assert.equal(djRadioSongAllowed(session, radio, ["Jazz Band"], familyProfileOf), false);
+    assert.equal(djRadioSongAllowed(session, radio, ["Unknown"], familyProfileOf), true);
+  });
+
+  test("a radio no family brought keeps every song", () => {
+    const session = startDjQueue(
+      [familyTile("Metal", "Metal Seed"), djArtistTile("Other Artist")!],
+      {
+        id: "dj-mixed",
+      },
+    )!;
+    assert.equal(
+      djRadioSongAllowed(session, "artist:other artist", ["Jazz Band"], familyProfileOf),
+      true,
+    );
+    assert.equal(
+      djRadioSongAllowed(session, "artist:metal seed", ["Jazz Band"], familyProfileOf),
+      false,
+    );
+  });
+
+  test("an artist selected on its own keeps an open radio when a family also picks it", () => {
+    const session = startDjQueue(
+      [familyTile("Metal", "Shared Artist"), djArtistTile("Shared Artist")!],
+      {
+        id: "dj-artist-and-family",
+      },
+    )!;
+    assert.equal(
+      djRadioSongAllowed(session, "artist:shared artist", ["Jazz Band"], familyProfileOf),
+      true,
+    );
+  });
+
+  test("a selected album's artist keeps an open radio when a family also picks it", () => {
+    const album = djAlbumTile({ title: "Record", artist: "Shared Artist" })!;
+    const session = startDjQueue([familyTile("Metal", "Shared Artist"), album], {
+      id: "dj-album-and-family",
+    })!;
+    assert.equal(
+      djRadioSongAllowed(session, "artist:shared artist", ["Jazz Band"], familyProfileOf),
+      true,
+    );
+  });
+
+  test("a family contributes its Genre mix seed artists' radios", () => {
+    const artists = [{ id: 1, name: "Rock Artist" }];
+    const songs = Array.from({ length: 5 }, (_, index) => ({
+      id: index + 1,
+      title: `Rock ${index}`,
+      artist: "Rock Artist",
+      artistIds: [1],
+      durationMs: 180_000,
+      addedAt: 0,
+      genre: "Rock",
+    }));
+    const family = djGrid({
+      artists,
+      taste: { ...tasteOf({}), genres: new Map([["rock", 1]]) },
+      graph: null,
+      genreLibrary: { artists, songs },
+    }).find((tile) => tile.kind === "genre");
+    assert.ok(family);
+    const session = startDjQueue([family], { id: "dj-family" })!;
+    assert.deepEqual(
+      magicBatchRadios(session, () => 0).seeds.map((seed) => seed.title),
+      ["Rock Artist"],
+    );
+    assert.deepEqual(session.djGenreRadios, [{ id: "artist:rock artist", families: ["rock"] }]);
+    assert.deepEqual(parseMagicSession(JSON.parse(JSON.stringify(session))), session);
+  });
+
   test("starts with no song played, at DJ's default ranking choices", () => {
     const session = started();
     assert.deepEqual(session.seed, { kind: "dj", id: "dj1", title: "DJ" });
@@ -267,6 +556,7 @@ describe("a Magic Queue with a DJ seed", () => {
       discovery: "blend",
       popularity: "balanced",
       newReleases: false,
+      mood: null,
     });
     assert.equal(session.faithful, undefined);
   });
