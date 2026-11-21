@@ -14,7 +14,6 @@ import {
   useNowPlayingButtons,
 } from "./nowPlayingButtons";
 import { SettingsPageRow, SettingsPageScreen } from "./SettingsPage";
-import { useYtMusicEnabled } from "./ytMusic";
 
 /** A slot's name on its row and its picker's header: "Slot 1" for the leftmost. */
 const slotTitle = (slot: number): string => currentLocalisation().strings.settings.slot(slot + 1);
@@ -55,11 +54,8 @@ export function NowPlayingSlotsSection() {
   );
 }
 
-/** Every choice a slot's picker lists: None, then each action ([ytMusic]: Related only with it on). */
-const slotChoices = (ytMusic: boolean): readonly NowPlayingSlot[] => [
-  null,
-  ...nowPlayingSlotChoices(ytMusic),
-];
+/** Every choice a slot's picker lists: None, then each action. */
+const SLOT_CHOICES: readonly NowPlayingSlot[] = [null, ...nowPlayingSlotChoices()];
 
 /** Back to Now Playing's page, there being nothing under a picker opened from a link. */
 const closePicker = (): void => {
@@ -76,14 +72,13 @@ export function NowPlayingSlotPickerScreen({ slot }: { slot: number }) {
   const { strings } = useLocalisation();
   const title = slotTitle(slot);
   const buttons = useNowPlayingButtons();
-  const choices = slotChoices(useYtMusicEnabled());
   const chosen = buttons[slot];
   return (
     <SettingsPageScreen title={title}>
       <View>
         <Hairline />
         <View accessibilityRole="radiogroup" accessibilityLabel={title}>
-          {choices.map((choice) => {
+          {SLOT_CHOICES.map((choice) => {
             const label = nowPlayingSlotLabel(choice);
             const holder = choice === null ? -1 : buttons.indexOf(choice);
             return (

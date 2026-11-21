@@ -1,19 +1,11 @@
 import { useLocalisation } from "@/localisation/localisation";
-import {
-  IconCirclesRelation,
-  IconDots,
-  IconQuote,
-  IconRepeat,
-  IconRepeatOnce,
-  IconShare3,
-} from "@tabler/icons-react-native";
+import { IconQuote, IconRepeat, IconRepeatOnce, IconShare3 } from "@tabler/icons-react-native";
 import type { NowPlayingAction } from "@wave/core";
 import type { ComponentType } from "react";
 
 import { IconButton } from "@/components/IconButton";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { cycleRepeat, toggleShuffle } from "@/playback/actions";
-import { openPlayingActions } from "@/playback/ActionsMenu";
 import { useQueue } from "@/playback/hooks";
 
 import { slotChange, type SlotChange } from "./ChangeSlotMenu";
@@ -54,7 +46,7 @@ export function ViewToggle({
   );
 }
 
-/** What the slots' buttons act on: the song playing and the sheet's Lyrics and Related views. */
+/** What the slots' buttons act on: the song playing and the sheet's Lyrics view. */
 export interface SlotContext {
   readonly trackId: string | null;
   readonly ytSong: NativeYtSong | null;
@@ -62,8 +54,6 @@ export interface SlotContext {
   readonly title: string;
   readonly lyricsShown: boolean;
   readonly toggleLyrics: () => void;
-  readonly relatedShown: boolean;
-  readonly toggleRelated: () => void;
   /** Shares the song playing, as its menu's Share does. */
   readonly share: () => void;
 }
@@ -101,17 +91,14 @@ function RepeatSlot({ change }: { change: SlotChange }) {
 /**
  * The button slot [slot] of Now Playing's bottom row holds (0 for the first),
  * for [action]. A tap runs it; a long press opens the card that changes it.
- * Off, it shows disabled and only long-presses (Core's `nowPlayingSlotShow`).
  */
 export function SlotButton({
   slot,
   action,
-  off,
   context,
 }: {
   slot: number;
   action: NowPlayingAction;
-  off: boolean;
   context: SlotContext;
 }) {
   const { strings } = useLocalisation();
@@ -124,16 +111,6 @@ export function SlotButton({
           label={strings.playbackText.lyrics}
           on={context.lyricsShown}
           onPress={context.toggleLyrics}
-          change={change}
-        />
-      );
-    case "related":
-      return (
-        <ViewToggle
-          icon={IconCirclesRelation}
-          label={strings.playbackText.related}
-          on={context.relatedShown}
-          onPress={context.toggleRelated}
           change={change}
         />
       );
@@ -162,18 +139,6 @@ export function SlotButton({
           label={strings.playbackText.shareSong}
           tone="secondary"
           onPress={context.share}
-        />
-      );
-    case "songMenu":
-      return (
-        <IconButton
-          {...change}
-          icon={IconDots}
-          label={strings.playbackText.songMenu}
-          tone="secondary"
-          disabled={off}
-          opensMenu
-          onPress={openPlayingActions}
         />
       );
   }
