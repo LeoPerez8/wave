@@ -26,6 +26,7 @@ import type { AccountView } from "../../shared/account.ts";
 import type { YtAccountPanel } from "../../shared/ytAccount.ts";
 import { SpotifyAccountSettings } from "./SpotifyAccountSettings.tsx";
 import { PlaylistMissingSongs } from "./SpotifyImport.tsx";
+import { PlaylistSuggestionsPage } from "./PlaylistSuggestions.tsx";
 import type { BrowsePage, BrowseRow, BrowseScope } from "../../shared/browse.ts";
 import type { CollectionTarget } from "../../shared/collectionActions.ts";
 import type { ScanStatus } from "../../shared/library.ts";
@@ -717,6 +718,20 @@ export function App() {
     revision,
     failed,
   );
+  /** A songs table in its page: a playlist's, with its Recommended songs below, or an artist's. */
+  const listPage = (table: ReactNode) =>
+    playlistId !== undefined && ytMusic ? (
+      <PlaylistSuggestionsPage
+        playlistId={playlistId}
+        songs={hero?.count ?? 0}
+        sources={`${scan?.revision}:${account?.revision}:${playlistEdits.edits}`}
+        onError={failed}
+      >
+        {table}
+      </PlaylistSuggestionsPage>
+    ) : (
+      artistPage(table)
+    );
   /** An artist's songs table, inside their page's shelves and YouTube Music section. */
   const artistPage = (table: ReactNode) =>
     route.kind === "artist" && route.id !== undefined ? (
@@ -1403,7 +1418,7 @@ export function App() {
                 onDone={() => setSelection(list, undefined)}
               />
             )}
-            {artistPage(
+            {listPage(
               <VirtualTable
                 key={list}
                 scope={scope}

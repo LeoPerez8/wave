@@ -3,10 +3,7 @@
  * recommendations): those of 3 of its songs, drawn per renewal and kept apart
  * per playlist, each read as the Magic Queue reads a song's radio (#642).
  */
-import {
-  type PlaylistRecommendationTrack,
-  type RadioRankingPage,
-} from "@wave/core";
+import { type PlaylistRecommendationTrack, type RadioRankingPage } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { drawSuggestionSeeds } from "@wave/client/playlistSuggestionStorage";
 
@@ -33,7 +30,8 @@ const radioSeed = (track: PlaylistRecommendationTrack): SongRadioSeed => ({
 export const playlistSuggestionSeeds = (
   playlistId: number,
   playlist: readonly PlaylistRecommendationTrack[],
-): PlaylistRecommendationTrack[] => drawSuggestionSeeds(phoneSuggestionStorage, playlistId, playlist);
+): PlaylistRecommendationTrack[] =>
+  drawSuggestionSeeds(phoneSuggestionStorage, playlistId, playlist);
 
 /**
  * [seeds]' radios for visit [visitId], all at once: a cached first page at

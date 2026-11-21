@@ -68,6 +68,7 @@ import {
 } from "./magicQueue.ts";
 import { createYtPages, type YtPagesShape, type YtRelatedRead } from "./ytPages.ts";
 import { createArtistSection, type ArtistSectionShape } from "./artistSection.ts";
+import { createPlaylistSuggestions, type PlaylistSuggestionsShape } from "./playlistSuggestions.ts";
 import { YtMusic } from "./ytMusic.ts";
 
 /** Where the Magic Queue's session is kept across launches. */
@@ -81,6 +82,8 @@ export interface YtFeaturesShape {
   readonly magicQueue: MagicQueueShape;
   /** A Library artist page's YouTube Music section. */
   readonly artistSection: ArtistSectionShape;
+  /** A playlist page's Recommended songs. */
+  readonly playlistSuggestions: PlaylistSuggestionsShape;
   /**
    * Search's YouTube Music answer for [query]: its songs, artists and albums, and which of them
    * the Library already has. One search that fails fails them all, as on the phone.
@@ -446,6 +449,17 @@ export const ytFeaturesLayer = (options: {
         page: pages.artistWhole,
       });
 
+      const playlistSuggestions = createPlaylistSuggestions({
+        db,
+        pages,
+        ytMusic: yt.enabled,
+        online: options.online,
+        changed: playback.refresh,
+        log: (line) =>
+          process.stderr.write(`[WaveTiming] ${line}
+`),
+      });
+
       let related: { readonly videoId: string; readonly read: Promise<YtRelatedRead> } | undefined;
 
       return {
@@ -453,6 +467,7 @@ export const ytFeaturesLayer = (options: {
         discover,
         magicQueue,
         artistSection,
+        playlistSuggestions,
         search: async (query) => {
           const [found, catalog] = await Promise.all([yt.search(query), pages.catalog(query)]);
           const status = found.status !== "ok" ? found.status : catalog.status;

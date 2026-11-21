@@ -277,6 +277,12 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.recognize.audio",
       "wave.recognize.captureEnded",
       "wave.recognize.run",
+      "wave.playlistSuggestions.view",
+      "wave.playlistSuggestions.add",
+      "wave.playlistSuggestions.dismiss",
+      "wave.playlistSuggestions.refresh",
+      "wave.playlistSuggestions.retry",
+      "wave.playlistSuggestions.close",
     ],
   });
 });

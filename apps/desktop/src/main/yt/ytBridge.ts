@@ -38,7 +38,13 @@ type YtFeatureCall =
   | "magicQueue.start"
   | "magicQueue.startStreamed"
   | "magicQueue.view"
-  | "magicQueue.retry";
+  | "magicQueue.retry"
+  | "playlistSuggestions.view"
+  | "playlistSuggestions.add"
+  | "playlistSuggestions.dismiss"
+  | "playlistSuggestions.refresh"
+  | "playlistSuggestions.retry"
+  | "playlistSuggestions.close";
 
 export type YtFeatureHandlers = {
   readonly [C in YtFeatureCall]: (
@@ -51,6 +57,12 @@ export type YtFeatureHandlers = {
 };
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
+
+const playlistIdOf = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+/** A suggestion's key, as the visit makes them. */
+const offerKeyOf = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0 && value.length <= 100;
 
 /** A Library song clicked in Search (docs/spec.md, story 47). */
 export const playSearchSong = (scope: BrowseScope, index: number) =>
@@ -226,4 +238,28 @@ export const createYtFeatureHandlers = (
       : refuse("magicQueue.startStreamed", "invalid song"),
   "magicQueue.view": () => featuresCall(({ magicQueue }) => magicQueue.view()),
   "magicQueue.retry": () => featuresCall(({ magicQueue }) => magicQueue.retry()),
+  "playlistSuggestions.view": ([playlistId, sources]) =>
+    playlistIdOf(playlistId) && typeof sources === "string" && sources.length <= 200
+      ? featuresCall(({ playlistSuggestions }) => playlistSuggestions.view(playlistId, sources))
+      : refuse("playlistSuggestions.view", "invalid playlist"),
+  "playlistSuggestions.add": ([playlistId, key]) =>
+    playlistIdOf(playlistId) && offerKeyOf(key)
+      ? featuresCall(({ playlistSuggestions }) => playlistSuggestions.add(playlistId, key))
+      : refuse("playlistSuggestions.add", "invalid offer"),
+  "playlistSuggestions.dismiss": ([playlistId, key]) =>
+    playlistIdOf(playlistId) && offerKeyOf(key)
+      ? featuresCall(({ playlistSuggestions }) => playlistSuggestions.dismiss(playlistId, key))
+      : refuse("playlistSuggestions.dismiss", "invalid offer"),
+  "playlistSuggestions.refresh": ([playlistId]) =>
+    playlistIdOf(playlistId)
+      ? featuresCall(({ playlistSuggestions }) => playlistSuggestions.refresh(playlistId))
+      : refuse("playlistSuggestions.refresh", "invalid playlist"),
+  "playlistSuggestions.retry": ([playlistId, refill]) =>
+    playlistIdOf(playlistId) && typeof refill === "boolean"
+      ? featuresCall(({ playlistSuggestions }) => playlistSuggestions.retry(playlistId, refill))
+      : refuse("playlistSuggestions.retry", "invalid playlist"),
+  "playlistSuggestions.close": ([playlistId]) =>
+    playlistIdOf(playlistId)
+      ? featuresCall(({ playlistSuggestions }) => playlistSuggestions.close(playlistId))
+      : refuse("playlistSuggestions.close", "invalid playlist"),
 });
