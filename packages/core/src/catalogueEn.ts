@@ -142,6 +142,8 @@ export const en = {
     songMenu: (title: string) => `Actions for “${title}”`,
     chooseArtist: "Choose an Artist",
     noPlaylists: "No playlists yet",
+    /** Its menu, where the edits would be: the desktop shows and plays it and edits none of it. */
+    collaborativeOnPhone: "Edit collaborative playlists in Wave on your phone",
     checkSong: (title: string) => `Select “${title}”`,
     /** An artist page's songs from YouTube Music, a page at a time. */
     showMoreSongs: "Show more songs",

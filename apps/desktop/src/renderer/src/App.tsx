@@ -605,7 +605,11 @@ export function App() {
             <button
               key={row.id}
               className="nav-item"
-              aria-label={row.title}
+              aria-label={
+                row.collaborative
+                  ? `${row.title}, ${text.collaborativePage.libraryDetail(labels.songCount(row.count))}`
+                  : row.title
+              }
               title={row.title}
               aria-current={route.kind === "playlist" && route.id === row.id ? "page" : undefined}
               onClick={() => go({ kind: "playlist", id: row.id })}
@@ -614,7 +618,7 @@ export function App() {
                 playlistEdits.openMenu(row.id, { x: event.clientX, y: event.clientY });
               }}
             >
-              <Icon name="playlist" />
+              <Icon name={row.collaborative ? "collaborative" : "playlist"} />
               <span className="nav-monogram" aria-hidden="true">
                 {Array.from(row.title.trim())[0]?.toLocaleUpperCase()}
               </span>
@@ -693,7 +697,9 @@ export function App() {
                   labels[route.kind as "album" | "artist" | "playlist" | "genre"],
                   hero.genre,
                   hero.year,
-                  labels.songCount(hero.count),
+                  hero.collaborative
+                    ? text.collaborativePage.libraryDetail(labels.songCount(hero.count))
+                    : labels.songCount(hero.count),
                   listDuration(hero.durationMs, text.library),
                 ]
                   .filter(Boolean)
@@ -972,7 +978,10 @@ export function App() {
                               { scope, ids: [row.id] },
                               row.title,
                               at,
-                              scope.kind === "playlist" && scope.id !== undefined
+                              // A collaborative playlist's order is the members' to change, on a phone.
+                              scope.kind === "playlist" &&
+                                scope.id !== undefined &&
+                                !hero?.collaborative
                                 ? playlistEdits.moveItems(scope.id, row.id)
                                 : [],
                             )

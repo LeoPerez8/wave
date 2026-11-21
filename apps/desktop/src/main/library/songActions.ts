@@ -7,6 +7,7 @@ import type { LibraryDatabase } from "@wave/client/db/database";
 import { chunks } from "@wave/client/db/chunks";
 import { setFavorites } from "@wave/client/db/playHistory";
 import { addToPlaylist } from "@wave/client/db/playlists";
+import { isCollaborative, refuseCollaborative } from "./collaborativePlaylists.ts";
 import {
   canFixSong,
   desktopSongActions,
@@ -114,8 +115,10 @@ export const songMenu = (
   surface: ActionSurface,
   ytMusic = false,
 ): SongMenu => {
-  // A playlist's page offers Remove from Playlist.
-  const inPlaylist = target.scope.kind === "playlist";
+  // A playlist's page offers Remove from Playlist, unless the playlist is collaborative.
+  const { scope } = target;
+  const inPlaylist =
+    scope.kind === "playlist" && !(scope.id !== undefined && isCollaborative(db, scope.id));
   const items = songFacts(db, targetSongs(db, target)).map((song) => ({ ...song, inPlaylist }));
   const entries = desktopSongActions({
     items,
@@ -192,6 +195,7 @@ export const runSongAction = async (
     }
     case "addToPlaylist": {
       if (playlistId === undefined) throw new Error("No playlist to add to");
+      refuseCollaborative(db, playlistId);
       const result = addToPlaylist(
         db,
         playlistId,
@@ -210,6 +214,7 @@ export const runSongAction = async (
       const { scope } = target;
       if (scope.kind !== "playlist" || scope.id === undefined)
         throw new Error("The songs aren't a playlist's");
+      refuseCollaborative(db, scope.id);
       return { kind: "playlistRemoved", count: ports.removeFromPlaylist(scope.id, ids) };
     }
     case "removeFromLibrary":

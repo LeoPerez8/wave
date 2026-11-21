@@ -139,6 +139,7 @@ export const ptBR: Catalogue = {
     songMenu: (title: string) => `Ações de “${title}”`,
     chooseArtist: "Escolha um Artista",
     noPlaylists: "Nenhuma playlist ainda",
+    collaborativeOnPhone: "Edite playlists colaborativas no Wave do celular",
     checkSong: (title: string) => `Selecionar “${title}”`,
     showMoreSongs: "Mostrar mais músicas",
   },
