@@ -203,8 +203,7 @@ test("scan writes while a playlist reads neither fail nor restart its read; the 
   const { createFastAgainFixture } = await import("@wave/client/testing/fastAgainFixture");
   const { observePlaylistRecommendationInputs } =
     await import("../library/playlistRecommendationInputs.ts");
-  const { followPlaylistRecommendations } =
-    await import("../library/playlistRecommendationVisit.ts");
+  const { followPlaylistRecommendations } = await import("@wave/client/playlistSuggestionsFollow");
   const { onLibraryChange, publishLibraryChange } = await import("../library/libraryChanges.ts");
   const { playlistRecommendationSession } = await import("@wave/core");
   const fixture = await createFastAgainFixture();

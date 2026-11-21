@@ -1,19 +1,30 @@
 /**
- * Where each playlist's saved suggestions live (docs/spec.md, "Saved offers"): on the
- * phone, not synced. One key a playlist, because opening one reads its own and no others;
- * Core decides what they hold.
+ * What a playlist's suggestions keep on the device, not synced (docs/spec.md, "Saved
+ * offers"): each playlist's saved offers, one key a playlist, because opening one reads its
+ * own and no others, and each playlist's latest seed draws. Core decides what they hold; the
+ * phone keeps them in its key-value store, the desktop in its device settings.
  */
 import {
+  drawPlaylistSeeds,
   parsePlaylistOfferOrder,
+  parsePlaylistSeedHistory,
+  playlistSeedHistoryWith,
+  storedPlaylistSeedHistory,
   parseSavedPlaylistOffers,
   playlistOfferOrderWith,
   storedPlaylistOfferOrder,
   storedSavedPlaylistOffers,
   type PlaylistRecommendationTrack,
 } from "@wave/core";
-import { Storage } from "expo-sqlite/kv-store";
 
-import type { SongRow } from "@wave/client";
+import type { SongRow } from "./types.ts";
+
+/** A synchronous key-value store on the device; any of its calls may throw. */
+export interface SuggestionStorage {
+  readonly getItem: (key: string) => string | null;
+  readonly setItem: (key: string, value: string) => void;
+  readonly removeItem: (key: string) => void;
+}
 
 /** The playlists with saved offers, oldest first; each one's offers are under its id. */
 const ORDER = "playlistSuggestions.savedOffers";
@@ -73,12 +84,12 @@ const isRowOf = (track: PlaylistRecommendationTrack, row: unknown): row is SongR
 };
 
 /** Playlist [playlistId]'s saved offers; a Library offer without its row can't be listed. */
-export const readSavedOffers = (playlistId: number): SavedOffers => {
+export const readSavedOffers = (storage: SuggestionStorage, playlistId: number): SavedOffers => {
   const rows = new Map<string, SongRow>();
   const tracks: PlaylistRecommendationTrack[] = [];
   let text: string | null = null;
   try {
-    text = Storage.getItemSync(offersKey(playlistId));
+    text = storage.getItem(offersKey(playlistId));
   } catch {
     // Unreadable: the same as nothing saved.
   }
@@ -94,12 +105,13 @@ export const readSavedOffers = (playlistId: number): SavedOffers => {
 
 /** Saves [offers] as playlist [playlistId]'s, its latest; the oldest past the limit go. */
 export const writeSavedOffers = (
+  storage: SuggestionStorage,
   playlistId: number,
   offers: readonly PlaylistRecommendationTrack[],
   rowOf: (id: string) => SongRow | undefined,
 ): void => {
   try {
-    Storage.setItemSync(
+    storage.setItem(
       offersKey(playlistId),
       storedSavedPlaylistOffers(
         offers.map((track) => {
@@ -109,12 +121,45 @@ export const writeSavedOffers = (
       ),
     );
     const { order, dropped } = playlistOfferOrderWith(
-      parsePlaylistOfferOrder(Storage.getItemSync(ORDER)),
+      parsePlaylistOfferOrder(storage.getItem(ORDER)),
       playlistId,
     );
-    Storage.setItemSync(ORDER, storedPlaylistOfferOrder(order));
-    for (const old of dropped) Storage.removeItemSync(offersKey(old));
+    storage.setItem(ORDER, storedPlaylistOfferOrder(order));
+    for (const old of dropped) storage.removeItem(offersKey(old));
   } catch {
     // Not saved: the next visit shows what it read last, or starts from nothing.
   }
+};
+
+/** Each playlist's latest seed draws. */
+const SEED_DRAWS = "playlistSuggestions.seedDraws";
+
+/**
+ * Draws playlist [playlistId]'s next seeds and saves its recent history so
+ * subsequent renewals avoid them while other songs remain.
+ */
+export const drawSuggestionSeeds = (
+  storage: SuggestionStorage,
+  playlistId: number,
+  playlist: readonly PlaylistRecommendationTrack[],
+  random: () => number = Math.random,
+): PlaylistRecommendationTrack[] => {
+  let history = parsePlaylistSeedHistory(null);
+  try {
+    history = parsePlaylistSeedHistory(storage.getItem(SEED_DRAWS));
+  } catch {
+    // Unreadable history: the draw just doesn't avoid earlier seeds.
+  }
+  const recent = history.get(playlistId) ?? [];
+  const draw = drawPlaylistSeeds(playlist, { recent, random });
+  if (draw.recent !== recent)
+    try {
+      storage.setItem(
+        SEED_DRAWS,
+        storedPlaylistSeedHistory(playlistSeedHistoryWith(history, playlistId, draw.recent)),
+      );
+    } catch {
+      // Not saved: the next visit may draw these seeds again.
+    }
+  return draw.seeds;
 };

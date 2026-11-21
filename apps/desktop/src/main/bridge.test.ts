@@ -2586,6 +2586,12 @@ test("a Magic Queue, an artist page and Discover's row come through the bridge, 
       await assert.rejects(call("discover.playMix", "mix", -1), /Refused/);
       await assert.rejects(call("discover.playMix", "mix", 0, "yes"), /Refused/);
       await assert.rejects(call("yt.queue", "shuffle", "mayyounever"), /Refused/);
+      await assert.rejects(call("playlistSuggestions.view", -1, "1"), /Refused/);
+      await assert.rejects(call("playlistSuggestions.view", 1, 2), /Refused/);
+      await assert.rejects(call("playlistSuggestions.add", 1, ""), /Refused/);
+      await assert.rejects(call("playlistSuggestions.retry", 1, "yes"), /Refused/);
+      assert.equal(await call("playlistSuggestions.add", 999, "gone"), false);
+      assert.equal(await call("playlistSuggestions.refresh", 999), null);
       await assert.rejects(call("yt.queue", "playNow", "unknownsong"), /yt-unknown/);
       assert.equal(await call("discover.playMix", "gone", 0), false);
       assert.equal(await call("discover.playMix", "gone", 0, true), false);

@@ -432,6 +432,15 @@ The prototype was approved on 2026-11-18 after an Impeccable critique; its decis
   under it ("Album · Indie Folk · 1995 · 7 songs · 33 min", or "36 h 43 min" from an hour up, Core's `listDuration`; a table's Time
   column reads "36:43:09"), with no label above the title. Play
   and Shuffle are text buttons in the accent, without a filled box.
+- A playlist's page ends with Recommended songs while YT Music is on (#1193), by the phone's
+  rules (docs/spec.md, Playlist recommendations): five offers with Add and Dismiss, Refresh in
+  the heading, saved offers shown at once on a return, and the failure line with Try Again. The
+  page then scrolls as one, the table first, and Go to Suggestions shows while the section's
+  heading is below what it shows. Main holds the visit (`main/yt/playlistSuggestions.ts`, the
+  phone's shared visit in `@wave/client/playlistSuggestionsVisit`), keeps its saved offers and
+  seed draws in the device settings and reads each seed's radio as the Magic Queue does. The
+  artist graph and genre lookups aren't on the desktop, and an offer isn't played from the
+  section.
 - Search: a top result (artwork and name, no card), a Songs table, then Albums, Artists and
   Playlists shelves, then YouTube Music results. An empty field lists recent searches.
 - Settings is a page with its own side list: Library, Appearance, Window, Playback, Lyrics and

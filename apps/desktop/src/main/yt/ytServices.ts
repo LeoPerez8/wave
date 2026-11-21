@@ -69,6 +69,7 @@ import {
 } from "./magicQueue.ts";
 import { createYtPages, type YtPagesShape, type YtRelatedRead } from "./ytPages.ts";
 import { createArtistSection, type ArtistSectionShape } from "./artistSection.ts";
+import { createPlaylistSuggestions, type PlaylistSuggestionsShape } from "./playlistSuggestions.ts";
 import { createAlbumSection, type AlbumSectionShape } from "./albumSection.ts";
 import { YtMusic } from "./ytMusic.ts";
 
@@ -83,6 +84,8 @@ export interface YtFeaturesShape {
   readonly magicQueue: MagicQueueShape;
   /** A Library artist page's YouTube Music section. */
   readonly artistSection: ArtistSectionShape;
+  /** A playlist page's Recommended songs. */
+  readonly playlistSuggestions: PlaylistSuggestionsShape;
   /** A Library album page's YouTube Music section. */
   readonly albumSection: AlbumSectionShape;
   /**
@@ -462,6 +465,15 @@ export const ytFeaturesLayer = (options: {
         release: pages.album,
       });
 
+      const playlistSuggestions = createPlaylistSuggestions({
+        db,
+        pages,
+        ytMusic: yt.enabled,
+        online: options.online,
+        changed: playback.refresh,
+        log: (line) => process.stderr.write(`[WaveTiming] ${line}\n`),
+      });
+
       let related: { readonly videoId: string; readonly read: Promise<YtRelatedRead> } | undefined;
 
       return {
@@ -469,6 +481,7 @@ export const ytFeaturesLayer = (options: {
         discover,
         magicQueue,
         artistSection,
+        playlistSuggestions,
         albumSection,
         search: async (query) => {
           const [found, catalog] = await Promise.all([yt.search(query), pages.catalog(query)]);

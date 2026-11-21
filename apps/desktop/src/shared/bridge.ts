@@ -121,6 +121,11 @@ import {
   spotifyShareBridge,
   type SpotifyShareContract,
 } from "./spotifyShare.ts";
+import {
+  PLAYLIST_SUGGESTIONS_CALLS,
+  playlistSuggestionsBridge,
+  type PlaylistSuggestionsContract,
+} from "./playlistSuggestions.ts";
 export type Appearance = "system" | "light" | "dark";
 
 /** One window of a list, as a list call returns it. */
@@ -155,7 +160,8 @@ export interface BridgeContract
     RecognizeContract,
     SpotifyImportContract,
     MiniPlayerContract,
-    SpotifyShareContract {
+    SpotifyShareContract,
+    PlaylistSuggestionsContract {
   readonly "system.mediaBackend": {
     readonly args: readonly [];
     readonly result: "native" | "chromium";
@@ -754,6 +760,7 @@ export const BRIDGE_CALLS = [
   "cards.copyImage",
   ...HISTORY_CALLS,
   ...RECOGNIZE_CALLS,
+  ...PLAYLIST_SUGGESTIONS_CALLS,
 ] as const satisfies readonly BridgeCall[] &
   (BridgeContract extends PagedLists<BridgeContract> ? unknown : never);
 
@@ -773,6 +780,8 @@ export interface WaveBridge {
   readonly history: ReturnType<typeof historyBridge>;
   /** Recognize: the card main runs, and the capture it asks for. */
   readonly recognize: ReturnType<typeof recognizeBridge>;
+  /** A playlist page's Recommended songs: main holds the visit, the page reads its view. */
+  readonly playlistSuggestions: ReturnType<typeof playlistSuggestionsBridge>;
   /** The YouTube account: its session never reaches the window. */
   readonly ytAccount: ReturnType<typeof ytAccountBridge>;
   readonly spotifyAccount: ReturnType<typeof spotifyAccountBridge>;
@@ -1213,4 +1222,5 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   },
   history: historyBridge(invoke),
   recognize: recognizeBridge(invoke),
+  playlistSuggestions: playlistSuggestionsBridge(invoke),
 });
