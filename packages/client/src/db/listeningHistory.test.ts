@@ -151,7 +151,10 @@ test("upgrading fills Library, account, retained Stats and unknown snapshots in 
       })
       .run();
   }
+  // `deleteTracksById` reads the collaborations, which come only with a later migration.
+  db.run(sql`CREATE TABLE collaborations (playlist_sync_id text, owned integer)`);
   deleteTracksById(db, [account, stats]);
+  db.run(sql`DROP TABLE collaborations`);
   await migrateTestDatabase(db);
   const snapshots = listeningHistory(db).rows.map(({ snapshot }) => snapshot);
   assert.deepEqual(snapshots, [

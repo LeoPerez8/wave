@@ -5,7 +5,9 @@ import {
   alphabetIndex,
   DEFAULT_SONG_SORT,
   defaultSongSort,
+  libraryTableSortsFor,
   librarySongSort,
+  nextHeaderSort,
   readSongSort,
   sameSongSort,
   SONG_SORTS,
@@ -13,6 +15,7 @@ import {
   songSortLabel,
   songSpineKeys,
   sortKey,
+  songSortHasSpine,
   sortSongs,
   writeSongSort,
   type SongListKind,
@@ -383,6 +386,40 @@ describe("sorts per kind of song list", () => {
     );
     // The file-name order Library › Folders had, saved before Folders went.
     assert.deepEqual(readSongSort('{"key":"file","descending":false}', "songs"), DEFAULT_SONG_SORT);
+  });
+});
+
+describe("desktop Library table sorts", () => {
+  test("offers the Core song sorts to Songs and Favorites, and title in each grouped list", () => {
+    assert.deepEqual(libraryTableSortsFor("songs"), SONG_SORTS);
+    assert.deepEqual(libraryTableSortsFor("favorites"), songSortsFor("favorites"));
+    for (const kind of ["albums", "artists", "genres"])
+      assert.deepEqual(libraryTableSortsFor(kind), [
+        { key: "title", descending: false },
+        { key: "title", descending: true },
+      ]);
+    assert.deepEqual(libraryTableSortsFor("playlist"), []);
+  });
+
+  test("offers an artist's and a genre's songs the phone's sorts, Popular leading an artist's", () => {
+    assert.deepEqual(libraryTableSortsFor("artist"), songSortsFor("artist"));
+    assert.deepEqual(libraryTableSortsFor("artist")[0], { key: "popular", descending: false });
+    assert.deepEqual(libraryTableSortsFor("genre"), SONG_SORTS);
+  });
+
+  test("starts a header in its offered direction, reverses it, and marks date sorts without a spine", () => {
+    const choices = libraryTableSortsFor("songs");
+    assert.deepEqual(nextHeaderSort(choices, DEFAULT_SONG_SORT, "artist"), {
+      key: "artist",
+      descending: false,
+    });
+    assert.deepEqual(nextHeaderSort(choices, { key: "artist", descending: false }, "artist"), {
+      key: "artist",
+      descending: true,
+    });
+    assert.equal(nextHeaderSort(choices, DEFAULT_SONG_SORT, "genre"), undefined);
+    assert.equal(songSortHasSpine({ key: "added", descending: true }), false);
+    assert.equal(songSortHasSpine(DEFAULT_SONG_SORT), true);
   });
 });
 

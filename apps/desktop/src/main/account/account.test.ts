@@ -419,6 +419,30 @@ test("a show check's Ticketmaster routes go out with the session, and nothing el
     });
 });
 
+test("Genius uses the Wave session and only the fixed Worker routes", async () => {
+  const app = await desktop();
+  const account = app.open();
+  const search = "/v1/genius/search?q=Teardrop%20Massive%20Attack";
+  await assert.rejects(account.request("GET", search, null), { code: "ERR_WAVE_SIGNED_OUT" });
+  await account.signIn();
+  for (const path of [search, "/v1/genius/song?id=9", "/v1/genius/referents?song=9&page=2"])
+    assert.equal((await account.request("GET", path, null)).status, 200);
+  for (const [method, path, body] of [
+    ["POST", search, null],
+    ["GET", search, "{}"],
+    ["GET", "/v1/genius/search?q=a&q=b", null],
+    ["GET", "/v1/genius/song?id=9#other", null],
+    ["GET", "/v1/genius/referents?song=9&page=0", null],
+  ] as const)
+    await assert.rejects(account.request(method, path, body), {
+      code: "ERR_WAVE_FORBIDDEN_REQUEST",
+    });
+  assert.deepEqual(
+    app.service.upstream.calls.map(({ url }) => new URL(url).pathname),
+    ["/search", "/songs/9", "/referents"],
+  );
+});
+
 test("without a keyring, Settings says the session lasts until Wave quits", async () => {
   const app = await desktop();
   const account = app.open({

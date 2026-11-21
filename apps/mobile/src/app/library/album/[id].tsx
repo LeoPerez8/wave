@@ -1,6 +1,7 @@
 import { useScreenContent } from "@/lib/screenTiming";
 
 import {
+  albumDiscHeads,
   artistLink,
   ytAlbumSongCount,
   ytTrackId,
@@ -76,13 +77,16 @@ type Item =
 
 /** Tracks in album order, with a "Disc n" head before each disc when there is more than one. */
 const albumItems = (tracks: readonly AlbumTrackRow[]): Item[] => {
-  const discs = new Set(tracks.map((track) => track.discNumber ?? 1));
+  const heads = new Map(
+    albumDiscHeads(tracks.map((track) => track.discNumber ?? null)).map((head) => [
+      head.at,
+      head.disc,
+    ]),
+  );
   const items: Item[] = [];
-  let disc: number | null = null;
   tracks.forEach((track, index) => {
-    const current = track.discNumber ?? 1;
-    if (discs.size > 1 && current !== disc) items.push({ type: "disc", disc: current });
-    disc = current;
+    const disc = heads.get(index);
+    if (disc !== undefined) items.push({ type: "disc", disc });
     items.push({ type: "track", track, index });
   });
   return items;

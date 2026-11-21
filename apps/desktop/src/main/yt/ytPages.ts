@@ -101,7 +101,15 @@ export interface YtPagesShape {
   readonly artistWhole: (browseId: string) => Promise<YtArtistPage<YtAlbumSong>>;
   /** An Artists search; rejects as [artistWhole]. */
   readonly searchArtists: (query: string) => Promise<readonly YtArtistCandidate[]>;
+  readonly searchAlbums: (query: string) => Promise<readonly YtArtistAlbum[]>;
   readonly album: (browseId: string) => Promise<YtAlbumRead>;
+  /**
+   * The album [browseId]'s title and songs as its page was last read this session, so its
+   * download works from what the page shows; null when it wasn't read.
+   */
+  readonly albumSongs: (
+    browseId: string,
+  ) => { readonly title: string; readonly songs: readonly YtAlbumSong[] } | null;
   /** YouTube Music's artists and albums for [query], as Search shows them with its songs. */
   readonly catalog: (query: string) => Promise<YtCatalogRead>;
   readonly songRadio: (videoId: string) => Promise<YtRadioRead>;
@@ -120,6 +128,8 @@ const text = (value: unknown): value is string => typeof value === "string";
 const record = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 const list = (value: unknown): readonly unknown[] => (Array.isArray(value) ? value : []);
+/** Album pages kept for their downloads before the oldest is dropped. */
+const ALBUMS_KEPT = 50;
 const BROWSE_ID = /^[A-Za-z0-9_-]{2,128}$/;
 
 const coded = (code: string) => Object.assign(new Error(code), { code });
@@ -189,6 +199,8 @@ export const createYtPages = (deps: YtPagesDeps): YtPagesShape => {
     };
   };
   const noRadio = { songs: [], continuation: null };
+  /** Album pages read this session, the latest last, so a download finds what its page shows. */
+  const albumsRead = new Map<string, { readonly title: string; readonly songs: YtAlbumSong[] }>();
   /** The artist page [browseId] as read, its songs kept; rejects when it isn't one. */
   const artistPage = async (browseId: string) => {
     const page = record(await deps.call("artist", { browseId }));
@@ -249,6 +261,10 @@ export const createYtPages = (deps: YtPagesDeps): YtPagesShape => {
       if (!deps.enabled()) throw coded("ERR_YT_DISABLED");
       return artists(await deps.call("searchArtists", { query }));
     },
+    searchAlbums: async (query) => {
+      if (!deps.enabled()) throw coded("ERR_YT_DISABLED");
+      return albums(await deps.call("searchAlbums", { query }));
+    },
     artist: (browseId) =>
       read<YtArtistRead>({ page: null }, async () => ({ page: await artistPage(browseId) })),
     findArtist: (name) =>
@@ -263,22 +279,29 @@ export const createYtPages = (deps: YtPagesDeps): YtPagesShape => {
       read<YtAlbumRead>({ album: null }, async () => {
         const album = record(await deps.call("album", { browseId }));
         if (!text(album["title"])) throw new Error("Not an album page");
+        // Each song names its album page, so its download is tagged as the album (decisions.ts).
+        const read = songs(
+          list(album["tracks"]).map((track) => ({
+            album: album["title"],
+            artworkUrl: album["artworkUrl"],
+            ...record(track),
+            albumId: browseId,
+          })),
+        );
+        albumsRead.delete(browseId);
+        albumsRead.set(browseId, { title: album["title"], songs: read });
+        if (albumsRead.size > ALBUMS_KEPT) albumsRead.delete(albumsRead.keys().next().value!);
         return {
           album: {
             title: album["title"],
             artists: list(album["artists"]).filter(text),
             year: typeof album["year"] === "number" ? album["year"] : null,
             artworkUrl: text(album["artworkUrl"]) ? album["artworkUrl"] : null,
-            songs: songs(
-              list(album["tracks"]).map((track) => ({
-                album: album["title"],
-                artworkUrl: album["artworkUrl"],
-                ...record(track),
-              })),
-            ),
+            songs: read,
           },
         };
       }),
+    albumSongs: (browseId) => albumsRead.get(browseId) ?? null,
     catalog: (query) =>
       read<YtCatalogRead>({ artists: [], albums: [] }, async () => {
         const [found, releases] = await Promise.all([

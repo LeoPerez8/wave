@@ -284,8 +284,8 @@
       "status": "compatible",
       "licence": "MIT (shazamio-core 2.0.0), possibly GPL-3.0-or-later (SongRec)",
       "paths": [
-        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/recognize/SignatureGenerator.kt",
-        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/recognize/HanningWindow.kt"
+        "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/recognize/SignatureGenerator.kt",
+        "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/recognize/HanningWindow.kt"
       ],
       "evidence": "Ported 2026-10-28 (0504b9bc) from shazamio-core tag 2.0.0 (5690a2e99ba2aa6456a742c5b1defd8e7841826b): LICENSE \"MIT License, Copyright (c) 2024 dotX12\", Cargo.toml license = \"MIT\". HanningWindow.kt holds hanning.rs's literal table. Wave's comment calls the generator \"itself SongRec's\"; SongRec 0.8.2 (79d3d771) has src/core/fingerprinting/{algorithm,hanning,signature_format}.rs, Cargo.toml license = \"GPL-3.0+\", and shazamio-core's THIRD-PARTY-NOTICES.md doesn't name SongRec. Open rights question: whether shazamio-core's files derive from SongRec. Compatible either way, as MIT and GPL-3.0-or-later both allow GPL-3.0-only. Resolved 2026-11-18: both files carry shazamio-core's MIT notice and credit SongRec (GPL-3.0-or-later), since no comparison has shown shazamio-core's code independent. Each file's header says it was modified by Wave, from which date, and that it is conveyed under the GNU GPL version 3 (GPLv3 section 5a).",
       "notice": "shazamio-core 2.0.0, MIT, Copyright (c) 2024 dotX12; SongRec contributors, GPL-3.0-or-later. Headers in both files.",
@@ -297,7 +297,7 @@
       "status": "compatible",
       "licence": "MPL-2.0",
       "paths": [
-        "apps/mobile/modules/wave-native/android/src/main/java/expo/modules/wavenative/recognize/RealFft2048.kt"
+        "packages/kotlin-shared/src/main/kotlin/expo/modules/wavenative/recognize/RealFft2048.kt"
       ],
       "evidence": "\"Ported operation for operation\" from chfft 0.3.4's RFft1D (crates.io: MPL-2.0; crate sha256 103be009e532bf7f2cdbf24dc76953f55c83f03bac8a8ced0d2a21b639907dc0). Its source files carry the MPL-2.0 header and no Exhibit B notice, so MPL-2.0 section 3.3 allows the Larger Work under GPL-3.0-only, provided this file stays available under MPL-2.0 too. Resolved 2026-11-18: RealFft2048.kt carries the MPL-2.0 Exhibit A notice and names chfft 0.3.4 and its author; NOTICE.md keeps it out of the owner's GPL-3.0-only grant.",
       "notice": "Derived from chfft 0.3.4 (chalharu), MPL-2.0; this file remains under MPL-2.0.",
@@ -307,7 +307,7 @@
       "id": "first-party:shazam-fixture-tool",
       "kind": "first-party-code",
       "status": "compatible",
-      "evidence": "apps/mobile/modules/wave-native/android/src/test/fixtures-src/shazam: Wave's own scripts. They fetch shazamio-core 2.0.0 at build time and include its files by path; nothing of it is committed, and none of it ships."
+      "evidence": "packages/kotlin-shared/src/testFixtures/fixtures-src/shazam: Wave's own scripts. They fetch shazamio-core 2.0.0 at build time and include its files by path; nothing of it is committed, and none of it ships."
     },
     {
       "id": "com.github.MetrolistGroup.innertubex:innertubex:0.11.9",
@@ -576,7 +576,7 @@
       "id": "fixtures:shazam-pcm",
       "kind": "test-fixture",
       "status": "compatible",
-      "paths": ["apps/mobile/modules/wave-native/android/src/test/resources/fixtures/shazam/*"],
+      "paths": ["packages/kotlin-shared/src/testFixtures/resources/fixtures/shazam/*"],
       "evidence": "Synthesised notes and noise, made by make_fixtures.py as fixtures/shazam/README.md describes."
     },
     {
@@ -604,6 +604,24 @@
       "status": "compatible",
       "evidence": "Every v* release tag from v0.5.0 (the first) to v0.68.0-ti contains a3f085e9, which added innertubex and the Metrolist/NewPipe ports. Those APKs, OTA bundles and repacks were conveyed without a licence for the combined work, a notices file or source access tied to each release. The repository at each tag is public, which alone isn't a compliance finding. Owner exception, 2026-11-18: the owner declares GPL-3.0-only (LICENSE, NOTICE.md) and accepts the risk for the third-party GPL code those releases conveyed without notices or per-release source access; that has been the status quo of every release. The owner turns on RELEASE_SOURCE_DELIVERY and backfills source access for the published releases as docs/release-source.md describes (legacy manifests for the releases before the gate); GPLv3 section 8 reinstates rights once a violation is cured.",
       "resolution": "owner exception, 2026-11-18"
+    },
+    {
+      "id": "crate:symphonia-codec-alac",
+      "kind": "native-library",
+      "status": "compatible",
+      "licence": "MPL-2.0",
+      "evidence": "Version 0.6.1, enabled by Symphonia's alac feature. The crate's source carries the MPL-2.0 Exhibit A notice with no Exhibit B notice. Section 3.3 allows it in the GPL-3.0-only desktop engine. The covered files stay under MPL-2.0.",
+      "correspondingSource": "https://docs.rs/crate/symphonia-codec-alac/0.6.1/source/",
+      "notice": "Copyright (c) 2019-2026 The Project Symphonia Developers. See NOTICE.md for the licence and exact source."
+    },
+    {
+      "id": "crate:oxideav-aac",
+      "kind": "native-library",
+      "status": "compatible",
+      "licence": "MIT",
+      "evidence": "oxideav-aac 0.1.7 decodes HE-AAC v1 and v2. It depends on oxideav-core 0.1.43 in Cargo.lock. Both published crates declare MIT and carry the same copyright and licence text.",
+      "correspondingSource": "https://docs.rs/crate/oxideav-aac/0.1.7/source/ and https://docs.rs/crate/oxideav-core/0.1.43/source/",
+      "notice": "The desktop installer carries the MIT licence and copyright notice for both crates in NOTICE.md."
     }
   ]
 }

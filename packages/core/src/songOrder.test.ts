@@ -5,9 +5,11 @@ import {
   DEFAULT_SONG_SORT,
   librarySongSort,
   SONG_SORTS,
+  songBrowseOrderTerms,
   songOrderTerms,
   sortKey,
   sortSongs,
+  songSpineField,
   type SongOrderTerm,
   type SortableSong,
 } from "./index.ts";
@@ -83,6 +85,42 @@ describe("songOrderTerms", () => {
       assert.deepEqual(songOrderTerms(sort).at(-1), { field: "id", descending: false });
     }
   });
+});
+
+describe("songBrowseOrderTerms", () => {
+  const titleOrder = [
+    { field: "titleSort", descending: false },
+    { field: "artistSort", descending: false },
+    { field: "path", descending: false, nullAs: "" },
+    { field: "id", descending: false },
+  ];
+
+  test("Favorites sort by date starred in either direction, with ties in song name order", () => {
+    for (const descending of [false, true]) {
+      assert.deepEqual(songBrowseOrderTerms({ key: "starred", descending }), [
+        { field: "starredAt", descending },
+        ...titleOrder,
+      ]);
+    }
+  });
+
+  test("the database sorts by song name when Popular has no saved ranking", () => {
+    assert.deepEqual(songBrowseOrderTerms({ key: "popular", descending: false }), titleOrder);
+  });
+});
+
+test("only name sorts have an A–Z spine", () => {
+  const fields = {
+    title: "titleSort",
+    artist: "artistSort",
+    album: "albumSort",
+    added: undefined,
+    starred: undefined,
+    popular: undefined,
+  } as const;
+  for (const key of Object.keys(fields) as (keyof typeof fields)[]) {
+    assert.equal(songSpineField({ key, descending: false }), fields[key], key);
+  }
 });
 
 describe("librarySongSort", () => {

@@ -12,7 +12,7 @@
 import type { SongTags } from "../../shared/tags.ts";
 
 /** What main can ask the JVM, as `WaveDesktop.handle` answers it. */
-export interface KotlinMethods extends KotlinDownloadMethods {
+export interface KotlinMethods extends KotlinDownloadMethods, KotlinRecognizeMethods {
   /** A playlist of the signed-in account: its privacy and entries, or null when it is gone. */
   readonly ownPlaylist: {
     readonly params: { readonly playlistId: string };
@@ -189,6 +189,16 @@ export interface KotlinDownloadMethods {
     readonly params: { readonly ids: readonly string[] };
     readonly result: null;
   };
+  /** The pause on YouTube's downloads the journal keeps, across restarts too; null for none. */
+  readonly "downloads.youtubePause": {
+    readonly params: object;
+    readonly result: { readonly until: number; readonly level: number } | null;
+  };
+  /** YouTube's jobs wait until [until] (epoch ms; 0 lifts the pause), as Core's `ytThrottle` decided. */
+  readonly "downloads.pauseYoutube": {
+    readonly params: { readonly until: number; readonly level: number };
+    readonly result: null;
+  };
   readonly "downloads.start": { readonly params: object; readonly result: null };
   readonly "downloads.stop": { readonly params: object; readonly result: null };
   readonly "download.album": {
@@ -216,6 +226,41 @@ export interface KotlinDownloadMethods {
 export interface SoulseekSession {
   readonly status: "off" | "disconnected" | "connected";
   readonly username: string | null;
+}
+
+/**
+ * Recognize (`DesktopRecognize.kt`) over audio main sends: the JVM signs it and asks Shazam. It
+ * tells main `recognizeHeard` `{session, heardMs, audible}` and `recognizeCaptureFailed` `{session}`.
+ */
+export interface KotlinRecognizeMethods {
+  /** A session under main's id, replacing any other; `locale` is the app's language. */
+  readonly "recognize.start": {
+    readonly params: { readonly session: number; readonly locale?: string };
+    readonly result: number;
+  };
+  /** The session's next audio: 16 kHz mono 16-bit little-endian PCM, in base64. */
+  readonly "recognize.audio": {
+    readonly params: { readonly session: number; readonly pcm: string };
+    readonly result: null;
+  };
+  /** The capture stopped on its own: the JVM reports it as `recognizeCaptureFailed`. */
+  readonly "recognize.end": {
+    readonly params: { readonly session: number };
+    readonly result: null;
+  };
+  /** Shazam's answer about the latest [windowMs] heard (Core's `RecognizeAnswer`). */
+  readonly "recognize.ask": {
+    readonly params: {
+      readonly session: number;
+      readonly last: boolean;
+      readonly windowMs: number;
+    };
+    readonly result: unknown;
+  };
+  readonly "recognize.stop": {
+    readonly params: { readonly session: number };
+    readonly result: null;
+  };
 }
 
 export type KotlinMethod = keyof KotlinMethods;

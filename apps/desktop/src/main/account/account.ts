@@ -6,6 +6,7 @@
  * The phone's native module does the same (`WaveAccountClient.kt`).
  */
 import {
+  geniusUpstreamUrl,
   isCollaborationRequest,
   stepWaveAccount,
   ticketmasterUpstreamUrl,
@@ -90,13 +91,14 @@ export interface WaveAccountService {
    */
   readonly deleteAccount: () => Promise<void>;
   /**
-   * A push, a pull, a show check's Ticketmaster request or a collaborative playlist's (Core's
+   * A push, pull, supported provider request or collaborative playlist's request (Core's
    * `isCollaborationRequest`) with the session; a 401 ends it.
    */
   readonly request: (
     method: "GET" | "POST" | "PUT" | "DELETE",
     path: string,
     body: string | null,
+    signal?: AbortSignal,
   ) => Promise<{ readonly status: number; readonly body: string }>;
 }
 
@@ -115,6 +117,16 @@ const ticketmaster = (path: string): boolean => {
   if (at < 0 || path.includes("#")) return false;
   return (
     ticketmasterUpstreamUrl(path.slice(0, at), new URLSearchParams(path.slice(at + 1))) !== null
+  );
+};
+
+/** Genius's fixed routes, with the same parameters the Worker validates. */
+const genius = (path: string): boolean => {
+  const at = path.indexOf("?");
+  return (
+    at >= 0 &&
+    !path.includes("#") &&
+    geniusUpstreamUrl(path.slice(0, at), new URLSearchParams(path.slice(at + 1))) !== null
   );
 };
 
@@ -198,10 +210,15 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
     change({ status: "ended", account: current.account });
   };
   /** Sends with the session; a 401 ends it. */
-  const send = async (method: string, path: string, body: string | null): Promise<Response> => {
+  const send = async (
+    method: string,
+    path: string,
+    body: string | null,
+    signal?: AbortSignal,
+  ): Promise<Response> => {
     const session = signedIn();
     if (session === null) throw new WaveAccountError("ERR_WAVE_SIGNED_OUT");
-    const response = await exchange(method, session.serviceUrl + path, session.token, body);
+    const response = await exchange(method, session.serviceUrl + path, session.token, body, signal);
     if (response.status === 401) {
       end(session);
       throw new WaveAccountError("ERR_WAVE_SESSION_ENDED");
@@ -372,13 +389,14 @@ export const createWaveAccount = (deps: WaveAccountDeps): WaveAccountService => 
       change(null);
       step({ type: "accountDeleted" });
     },
-    request: async (method, path, body) => {
+    request: async (method, path, body, signal) => {
       const allowed =
         (method === "POST" && path === "/v1/push") ||
-        (method === "GET" && (PULL.test(path) || ticketmaster(path))) ||
+        (method === "GET" &&
+          (PULL.test(path) || ticketmaster(path) || (body === null && genius(path)))) ||
         isCollaborationRequest(method, path);
       if (!allowed) throw new WaveAccountError("ERR_WAVE_FORBIDDEN_REQUEST");
-      const response = await send(method, path, body);
+      const response = await send(method, path, body, signal);
       return { status: response.status, body: await response.text() };
     },
   };
