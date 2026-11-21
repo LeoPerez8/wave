@@ -137,12 +137,30 @@ class YtPages(private val client: YtClient) {
     }
   }
 
+  /**
+   * The shelves of playlists on the signed-in account's YouTube Music home,
+   * over its first pages ([YtHomeParser.readPlaylistShelves]), for Home's
+   * Community playlists. Everything else in the answers is discarded as they
+   * are read. Needs the session: signed out, it fails with
+   * [YtFailure.SIGNED_OUT] and nothing is asked.
+   */
+  suspend fun homePlaylistShelves(): List<YtPlaylistShelf> = client.request {
+    if (client.session.state !is YtSessionState.SignedIn) throw YtException(YtFailure.SIGNED_OUT)
+    YtHomeParser.readPlaylistShelves(
+      first = { client.innerTube.browse(YouTubeClient.WEB_REMIX, HOME).bodyAsText() },
+      next = { token -> client.innerTube.browse(YouTubeClient.WEB_REMIX, continuation = token).bodyAsText() },
+    )
+  }
+
   private companion object {
     /** What YouTube Music's own Start radio sends with a radio's `next`. */
     const val RADIO_PARAMS = "wAEB"
 
     /** The account's library page of playlists. */
     const val LIBRARY_PLAYLISTS = "FEmusic_liked_playlists"
+
+    /** The account's home, read for its shelves of playlists only ([homePlaylistShelves]). */
+    const val HOME = "FEmusic_home"
 
     /** YouTube Music's charts page (not the account's home). */
     const val CHARTS = "FEmusic_charts"

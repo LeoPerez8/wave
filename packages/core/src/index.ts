@@ -774,6 +774,18 @@ export {
   type PlaylistPlayEvent,
   type PlaylistPlays,
 } from "./fromYourLibrary.ts";
+export {
+  HOME_COMMUNITY_PLAYLISTS,
+  HOME_COMMUNITY_PLAYLISTS_RETRY_MS,
+  homeCommunityPlaylists,
+  homeCommunityPlaylistsDue,
+  homeCommunityPlaylistsShown,
+  keptCommunityPlaylists,
+  parseKeptCommunityPlaylists,
+  storedKeptCommunityPlaylists,
+  type KeptCommunityPlaylists,
+  type YtPlaylistShelf,
+} from "./homeCommunityPlaylists.ts";
 export { rowWindow, windowRows } from "./rowWindow.ts";
 export type { RowView, RowWindow } from "./rowWindow.ts";
 export {
