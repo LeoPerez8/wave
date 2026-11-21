@@ -13,6 +13,9 @@ import { IconButton } from "@/components/IconButton";
 import { skipToNext, skipToPrevious, togglePlayPause } from "@/playback/actions";
 import { playbackState } from "@/playback/Player";
 
+/** How much of the player shows through while its slots are edited. */
+export const EDITING_OPACITY = 0.45;
+
 /** A transport slot's place: the size of a slot's button, kept while the slot is empty. */
 const SLOT = CELL * 6;
 
@@ -37,9 +40,18 @@ function TransportSlot({ children }: { children: ReactNode }) {
  * Previous, play/pause and next, with a slot on each side ([left], [right]:
  * the slot's button, or null while it's empty). Previous restarts the track
  * after its first three seconds (Core's queue engine decides), like Apple
- * Music.
+ * Music. In edit mode ([editing]) the three dim and take no touches, and
+ * screen readers skip them.
  */
-export function Transport({ left, right }: { left: ReactNode; right: ReactNode }) {
+export function Transport({
+  left,
+  right,
+  editing,
+}: {
+  left: ReactNode;
+  right: ReactNode;
+  editing: boolean;
+}) {
   const { strings } = useLocalisation();
   const playing = useSyncExternalStore(
     playbackState.subscribe,
@@ -48,7 +60,13 @@ export function Transport({ left, right }: { left: ReactNode; right: ReactNode }
   return (
     <View className="flex-row items-center justify-between">
       <TransportSlot>{left}</TransportSlot>
-      <View className="flex-row items-center justify-center" style={{ gap: CELL * 3 }}>
+      <View
+        className="flex-row items-center justify-center"
+        style={{ gap: CELL * 3, opacity: editing ? EDITING_OPACITY : 1 }}
+        pointerEvents={editing ? "none" : "auto"}
+        importantForAccessibility={editing ? "no-hide-descendants" : "auto"}
+        accessibilityElementsHidden={editing}
+      >
         <IconButton
           tone="primary"
           haptic="impact"

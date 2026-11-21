@@ -819,6 +819,11 @@ export { pendingWriteDelay } from "./writePacing.ts";
 export type { WritePacing } from "./writePacing.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
 export { NOW_PLAYING_OPENS_ON, stepNowPlayingScreens } from "./nowPlayingScreens.ts";
+export {
+  nowPlayingEditHintDue,
+  readNowPlayingEditHintShown,
+  storedNowPlayingEditHintShown,
+} from "./nowPlayingEditHint.ts";
 export type {
   NowPlayingPage,
   NowPlayingScreen,

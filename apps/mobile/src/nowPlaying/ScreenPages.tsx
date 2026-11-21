@@ -31,7 +31,8 @@ import { isNowPlayingShown } from "./sheet";
 /**
  * Now Playing's screens: the player and the Queue side by side, one swipe
  * apart, and Related, a panel that rises over them (`RelatedPanel`). Core
- * decides which screen shows after each event (`stepNowPlayingScreens`) and
+ * decides which screen shows after each event and whether the player's slots
+ * are being edited (`stepNowPlayingScreens`), and
  * where a released swipe settles (`settleScreenSwipe`); this moves the pages
  * and the panel there.
  */
@@ -48,6 +49,8 @@ const SPRING = { damping: 30, stiffness: 300, mass: 1 } as const;
 export type ScreenPages = {
   /** The screen that shows, or the one a turn is heading to. */
   readonly screen: NowPlayingScreen;
+  /** Edit mode: the player's slots are being edited, and no screen turns or rises. */
+  readonly editing: boolean;
   /** The page in the pages' place: the one Related covers while it shows. */
   readonly page: NowPlayingPage;
   /** A swipe or its settle is under way: both pages are in sight. */
@@ -193,6 +196,7 @@ export const useScreenPages = (): ScreenPages => {
   return useMemo(
     () => ({
       screen: screens.screen,
+      editing: screens.editing,
       page,
       turning,
       queueMounted,
@@ -207,6 +211,7 @@ export const useScreenPages = (): ScreenPages => {
     }),
     [
       screens.screen,
+      screens.editing,
       page,
       turning,
       queueMounted,
