@@ -6,6 +6,7 @@ import { act, create } from "react-test-renderer";
 import { makeExternalStore } from "@wave/client/externalStore";
 import { ytAlbumDownload, type YtDownloadJournalJob } from "@wave/core";
 
+import { reactCompilerBuilds } from "../perf/reactCompilerBuilds.ts";
 import { equalToDepth, selectFrom, shallowEqual, useStoreSelector } from "./storeSelector.ts";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -146,4 +147,29 @@ test("a download progress tick leaves an album's download view, and its page, un
   await act(() => journal.set([job("a", 100), job("b", 0)]));
   assert.equal(renders, 2, "a second song joining does");
   await act(() => renderer!.unmount());
+});
+
+test("the React Compiler's build skips the same ticks as the build as written", async () => {
+  const builds = await reactCompilerBuilds<typeof import("./storeSelector.ts")>(
+    import.meta.resolve("./storeSelector.ts"),
+  );
+  for (const [name, build] of Object.entries(builds)) {
+    const store = makeExternalStore<Player>({ position: 0, shuffle: false, queue: ["a"] });
+    const rendered: number[] = [];
+    const Shuffle = () => {
+      rendered.push(1);
+      return String(build.useStoreSelector(store, shuffleOf));
+    };
+    let renderer: ReturnType<typeof create> | undefined;
+    await act(() => {
+      renderer = create(createElement(Shuffle));
+    });
+    for (let tick = 1; tick <= 5; tick++) {
+      await act(() => store.update((player) => ({ ...player, position: tick })));
+    }
+    await act(() => store.update((player) => ({ ...player, shuffle: true })));
+    assert.equal(rendered.length, 2, `${name}: only the shuffle change re-renders`);
+    assert.equal(renderer!.toJSON(), "true");
+    await act(() => renderer!.unmount());
+  }
 });

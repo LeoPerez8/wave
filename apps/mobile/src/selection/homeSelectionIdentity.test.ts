@@ -48,7 +48,7 @@ test("Home's selection keeps its identity until the selection itself changes", a
 test("Home's sections are memoized, so the stable selection and content reach them unchanged", async () => {
   const { readFileSync } = await import("node:fs");
   const source = readFileSync(new URL("../home/HomeSection.tsx", import.meta.url), "utf8");
-  assert.match(source, /export const HomeSection = memo\(function HomeSection\(/);
+  assert.match(source, /export const HomeSection = memo\(HomeSectionShown\)/);
   const content = readFileSync(new URL("../home/homeContent.ts", import.meta.url), "utf8");
   assert.match(content, /useMemo\(\(\) => \(cold === undefined \? read/);
 });

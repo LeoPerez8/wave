@@ -962,7 +962,7 @@ const INERT_HOME_SELECTION: HomeSelection = {
  * [home] is `useHome`'s answer. Memoized: a Home render (its arrangement, the
  * window, the opening state) leaves a section whose props kept their identity alone.
  */
-export const HomeSection = memo(function HomeSection({
+function HomeSectionShown({
   id,
   home,
   selection = INERT_HOME_SELECTION,
@@ -982,4 +982,7 @@ export const HomeSection = memo(function HomeSection({
   if (homeSectionWaiting(id, home)) return <HomeSectionSpace id={id} />;
   const Section = SECTIONS[id];
   return <Section home={home} title={homeSectionTitle(id, strings)} selection={selection} />;
-});
+}
+
+// A declaration wrapped apart: the compiler can't build a memo's function that names itself.
+export const HomeSection = memo(HomeSectionShown);
