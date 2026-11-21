@@ -1,17 +1,21 @@
 import {
   currentEntry,
+  dislikeKey,
+  dislikeKeys,
   dislikeSkipsPlaying,
   dislikeSongs as dislikeChange,
   isDisliked,
   noMarkChanges,
   splitCredit,
-  ytTrackId,
   type DislikedSong,
   type MarkChanges,
+  type SongIdentity,
 } from "@wave/core";
 
 import type { SongRow } from "@wave/client";
+import { currentLocalisation } from "@/localisation/localisation";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { showError } from "@/overlay/alert";
 import { showDislikeToast } from "@/overlay/dislikeToast";
 import { skipToNext } from "@/playback/actions";
 import { queueState } from "@/playback/Queue";
@@ -19,14 +23,18 @@ import type { FindInLibrary } from "@/ytmusic/libraryFinder";
 
 import { dislikedSongsNow, forgetDislikes, keepDislikes, loadDislikes } from "./dislikes";
 import { currentFavoriteIds, knownStarNow, ytSongStarredNow } from "./favorites";
+import { LibraryStore } from "./LibraryStore";
+import { appRuntime } from "./runtime";
 import { starSongs, type SongsToStar } from "./starSongs";
 
 /**
  * Dislike (docs/spec.md): a mark that keeps a song out of what Wave picks on
  * its own. Core's `dislikeSongs` decides what it changes (a disliked song is
  * no favorite) and what Undo puts back; this writes it, for the Library's
- * songs and YT Music's alike, kept by the identity favorites use: a YT Music
- * song the Library has by now is disliked as the Library's song.
+ * songs and YT Music's alike. A song is one song under every key it has, its
+ * Track id, the video it was downloaded from and the videos it is reached as:
+ * it reads disliked under any of them, and removing its dislike forgets them
+ * all. A new dislike is kept under Core's `dislikeKey`.
  */
 
 /** A song to dislike: as its dislike is kept, and as its star is set. */
@@ -34,29 +42,38 @@ interface Subject {
   readonly dislike: Omit<DislikedSong, "dislikedAt">;
   readonly track: SongRow | null;
   readonly ytSong: NativeYtSong | null;
-  /** The videos it was disliked as, which it may be playing as (a streamed song the Library has). */
-  readonly videoIds: string[];
+  /**
+   * Everything it is told by: the Library's song with its own video, and the
+   * videos it was passed as (a streamed song the Library has), which it may
+   * be disliked under or playing as.
+   */
+  readonly identities: SongIdentity[];
 }
 
-const subjects = ({ tracks, ytSongs }: SongsToStar, find: FindInLibrary): Subject[] => {
-  const byKey = new Map<string, Subject>();
+const subjects = (
+  { tracks, ytSongs }: SongsToStar,
+  find: FindInLibrary,
+  videoOf: ReadonlyMap<number, string>,
+): Subject[] => {
+  const byTrack = new Map<number, Subject>();
+  const byVideo = new Map<string, Subject>();
   const addTrack = (track: SongRow, videoId?: string): void => {
-    const key = String(track.id);
-    const known = byKey.get(key);
+    const known = byTrack.get(track.id);
     if (known !== undefined) {
-      if (videoId !== undefined) known.videoIds.push(videoId);
+      if (videoId !== undefined) known.identities.push({ videoId });
       return;
     }
-    byKey.set(key, {
+    const identity = { id: track.id, videoId: videoOf.get(track.id) };
+    byTrack.set(track.id, {
       dislike: {
-        key,
+        key: dislikeKey(identity) ?? String(track.id),
         title: track.title,
         artists: splitCredit(track.artist),
         durationMs: track.durationMs,
       },
       track,
       ytSong: null,
-      videoIds: videoId === undefined ? [] : [videoId],
+      identities: videoId === undefined ? [identity] : [identity, { videoId }],
     });
   };
   for (const track of tracks) addTrack(track);
@@ -66,9 +83,10 @@ const subjects = ({ tracks, ytSongs }: SongsToStar, find: FindInLibrary): Subjec
       addTrack(track, ytSong.videoId);
       continue;
     }
-    const key = ytTrackId(ytSong.videoId);
-    if (byKey.has(key)) continue;
-    byKey.set(key, {
+    const identity = { videoId: ytSong.videoId };
+    const key = dislikeKey(identity);
+    if (key === null || byVideo.has(key)) continue;
+    byVideo.set(key, {
       dislike: {
         key,
         title: ytSong.title,
@@ -77,10 +95,26 @@ const subjects = ({ tracks, ytSongs }: SongsToStar, find: FindInLibrary): Subjec
       },
       track: null,
       ytSong,
-      videoIds: [ytSong.videoId],
+      identities: [identity],
     });
   }
-  return [...byKey.values()];
+  return [...byTrack.values(), ...byVideo.values()];
+};
+
+/** The video each Library song among [songs] was downloaded from, by Track id. */
+const trackVideos = (
+  { tracks, ytSongs }: SongsToStar,
+  find: FindInLibrary,
+): Promise<ReadonlyMap<number, string>> => {
+  const ids = [
+    ...new Set([
+      ...tracks.map((track) => track.id),
+      ...ytSongs.flatMap((song) => find(song)?.id ?? []),
+    ]),
+  ];
+  if (ids.length === 0) return Promise.resolve(new Map());
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+  return appRuntime.runPromise(LibraryStore.use((store) => store.videoIds(ids)));
 };
 
 /** The Library songs' stars, read from the store only when this phone doesn't know one yet. */
@@ -90,15 +124,31 @@ const starredTracks = async (songs: readonly Subject[]): Promise<(id: number) =>
   return (id) => knownStarNow(id) ?? read?.has(id) ?? false;
 };
 
-/** Writes [changes]: the dislikes, and the stars they replace or put back (silently). */
-const write = (changes: MarkChanges<Subject>, find: FindInLibrary): Promise<void> => {
+/**
+ * Writes [changes]: the dislikes, then the stars they replace or put back
+ * (silently). The stars wait for the dislikes, so a dislike that fails to
+ * save takes no star with it.
+ */
+const write = async (changes: MarkChanges<Subject>, find: FindInLibrary): Promise<void> => {
   const stars = (songs: readonly Subject[]): SongsToStar => ({
     tracks: songs.flatMap(({ track }) => (track === null ? [] : [track])),
     ytSongs: songs.flatMap(({ ytSong }) => (ytSong === null ? [] : [ytSong])),
   });
-  return Promise.all([
-    forgetDislikes(changes.removeDislike.map((song) => song.dislike.key)),
-    keepDislikes(changes.dislike.map((song) => song.dislike)),
+  await Promise.all([
+    // Every key the song has: it may be kept under another than a new dislike takes.
+    forgetDislikes(
+      changes.removeDislike.flatMap(({ identities }) => identities.flatMap(dislikeKeys)),
+    ),
+    keepDislikes(
+      changes.dislike.map((song) => song.dislike),
+      changes.dislike.flatMap(({ identities }) =>
+        identities.flatMap(({ id, videoId }) =>
+          typeof id === "number" && typeof videoId === "string" ? [{ id, videoId }] : [],
+        ),
+      ),
+    ),
+  ]);
+  await Promise.all([
     // Now Playing's source: the star changes without a toast of its own.
     changes.unfavorite.length === 0
       ? undefined
@@ -106,7 +156,12 @@ const write = (changes: MarkChanges<Subject>, find: FindInLibrary): Promise<void
     changes.favorite.length === 0
       ? undefined
       : starSongs(stars(changes.favorite), true, find, "nowPlaying"),
-  ]).then(() => undefined);
+  ]);
+};
+
+/** Tells the owner a dislike, its removal or its Undo wasn't saved. */
+export const dislikeFailed = (error: unknown): void => {
+  void showError(currentLocalisation().strings.playbackText.couldntUpdateTheSong, error);
 };
 
 /**
@@ -117,14 +172,16 @@ const write = (changes: MarkChanges<Subject>, find: FindInLibrary): Promise<void
  * Once the changes are saved, a dislike of the song that is playing skips to
  * the next one, in any queue, as the Next button does (Core's
  * `dislikeSkipsPlaying`); removing a dislike never skips, and Undo doesn't go
- * back to the song. Resolves after the save and the skip.
+ * back to the song. Resolves after the save and the skip, and rejects when
+ * the save failed: nothing is confirmed or skipped then, and the caller says
+ * so (`dislikeFailed`).
  */
 export const dislikeSongs = async (
   songs: SongsToStar,
   on: boolean,
   find: FindInLibrary,
 ): Promise<void> => {
-  const targets = subjects(songs, find);
+  const targets = subjects(songs, find, await trackVideos(songs, find));
   if (targets.length === 0) return;
   await loadDislikes();
   const starred = await starredTracks(targets);
@@ -136,20 +193,17 @@ export const dislikeSongs = async (
         song.track !== null
           ? starred(song.track.id)
           : song.ytSong !== null && ytSongStarredNow(song.ytSong.videoId, null),
-      disliked: disliked.has(song.dislike.key),
+      disliked: song.identities.some((identity) => isDisliked(disliked, identity)),
     })),
     on,
   );
   if (noMarkChanges(changes)) return;
-  const saved = write(changes, find);
-  showDislikeToast(on, changes.dislike.length, () => void write(undo, find));
-  await saved;
+  await write(changes, find);
+  showDislikeToast(on, changes.dislike.length, () => void write(undo, find).catch(dislikeFailed));
   if (!on) return;
   const playing = currentEntry(queueState.get())?.trackId ?? null;
-  const set = changes.dislike.flatMap(({ track, videoIds }) => [
-    { id: track?.id },
-    ...videoIds.map((videoId) => ({ videoId })),
-  ]);
+  // By the Track id, its own video and the videos it was passed as: whichever it plays as.
+  const set = changes.dislike.flatMap(({ identities }) => identities);
   if (dislikeSkipsPlaying(playing, set)) await skipToNext();
 };
 

@@ -245,7 +245,7 @@ export function useSongRows<T>({
           item: {
             ...entry.facts,
             favorite: starred,
-            // A dislike is kept under the song's queue track id (Core's `dislikeKey`).
+            // The set holds a disliked Library song's Track id, whatever key keeps it (Core's `dislikedSongs`).
             disliked: disliked.has(songRowTrackId(source) ?? ""),
             download: state.download,
           },

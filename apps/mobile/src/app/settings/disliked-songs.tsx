@@ -9,6 +9,7 @@ import { TextButton } from "@/components/TextButton";
 import { useScreenContent } from "@/lib/screenTiming";
 import { useDislikedSongList } from "@/library/dislikedSongList";
 import { forgetDislikes } from "@/library/dislikes";
+import { dislikeFailed } from "@/library/dislikeSongs";
 import { useLocalisation } from "@/localisation/localisation";
 import { SECTION_GAP, SettingsEditorScreen } from "@/settings/SettingsPage";
 
@@ -40,7 +41,7 @@ const DislikedSongItem = memo(function DislikedSongItem({ song }: { song: Dislik
           label={strings.settings.remove}
           accessibilityLabel={strings.settings.removeDislikeOf(song.title)}
           // Removing a dislike leaves the star alone and says nothing (Core's `dislikeSongs`).
-          onPress={() => void forgetDislikes([song.key])}
+          onPress={() => void forgetDislikes([song.key]).catch(dislikeFailed)}
         />
       </View>
       <Hairline />

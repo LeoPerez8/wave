@@ -14,7 +14,7 @@ import * as Result from "effect/Result";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
-import { useDislikedSongs } from "@/library/dislikes";
+import { useDislikeCount } from "@/library/dislikes";
 import { useFixSongsRun } from "@/library/findLyricsAndGenre";
 import { useScanRoots, useScanStatus } from "@/library/hooks";
 import { WaveAccount } from "@/native/waveAccount";
@@ -83,7 +83,7 @@ const useAccountsSummary = (): string | null => {
 export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
   const { strings } = useLocalisation();
   const follows = useFollowCount();
-  const disliked = useDislikedSongs().size;
+  const disliked = useDislikeCount();
   const roots = useScanRoots();
   const scanning = useScanStatus() === "scanning";
   const lookup = useFixSongsRun();

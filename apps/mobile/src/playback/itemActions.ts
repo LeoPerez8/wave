@@ -28,7 +28,7 @@ import type { LinkRows } from "@wave/client/db/links";
 import { songHasFile, type ArtistRow, type SongRow } from "@wave/client";
 import { useLiveFavoriteIds, useLivePendingFavoriteVideos } from "@/library/favorites";
 import { useDislikedSongs } from "@/library/dislikes";
-import { dislikeSongs } from "@/library/dislikeSongs";
+import { dislikeFailed, dislikeSongs } from "@/library/dislikeSongs";
 import { starSongs } from "@/library/starSongs";
 import { fixSongs } from "@/library/findLyricsAndGenre";
 import {
@@ -548,7 +548,7 @@ export const itemActionPress = ({
         },
         on,
         find,
-      );
+      ).catch(dislikeFailed);
     });
 
   const playlist = target.kind === "playlist" ? target.items[0] : undefined;

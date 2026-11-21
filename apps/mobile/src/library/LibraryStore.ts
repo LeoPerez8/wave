@@ -321,7 +321,13 @@ import {
   removePendingFavorites,
   selectPendingFavorites,
 } from "@wave/client/db/pendingFavorites";
-import { removeDislikes, selectDislikes, setDislikes } from "@wave/client/db/dislikes";
+import {
+  removeDislikes,
+  selectDislikedTracks,
+  selectDislikes,
+  setDislikes,
+  type DislikedTrack,
+} from "@wave/client/db/dislikes";
 import {
   forgetSavedLyrics,
   indexSavedLyrics,
@@ -1025,6 +1031,8 @@ export class LibraryStore extends Context.Service<
     readonly removeDislikes: (keys: readonly string[]) => Effect.Effect<void, LibraryStoreError>;
     /** Every dislike kept, the newest first. */
     readonly listDislikes: Effect.Effect<readonly DislikedSong[], LibraryStoreError>;
+    /** The Library's songs the dislikes are about, each with its video (Core's `dislikedSongs` reads them). */
+    readonly dislikedTracks: Effect.Effect<readonly DislikedTrack[], LibraryStoreError>;
     /** Every Library file with its length, bitrate and size (Core's `qualityUpgradeSongs` weighs them). */
     readonly qualityFiles: Effect.Effect<readonly QualityFile[], LibraryStoreError>;
     /** The Tracks recorded as having no better copy in [direction]. This phone only. */
@@ -1904,6 +1912,7 @@ const make = Effect.gen(function* () {
       writeAttempt("forget dislikes", () => removeDislikes(db, keys, Date.now())),
 
     listDislikes: attempt("read dislikes", () => selectDislikes(db)),
+    dislikedTracks: attempt("read the disliked songs' tracks", () => selectDislikedTracks(db)),
 
     qualityFiles: attempt("read the files' quality", () => selectQualityFiles(db)),
     noBetterCopies: (direction) =>

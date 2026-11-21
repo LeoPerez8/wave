@@ -817,11 +817,12 @@ export const magicQueueEdits = (
 
 /**
  * The entries of [session]'s queue a dislike takes out, by key: the
- * recommendations not yet played whose song is in [disliked] (by
- * `dislikeKey`, a queue track id). The song playing stays, as does what
- * played already and what the owner lined up by hand; none when [state]
- * isn't the session's queue. The app removes each (`remove`), which the
- * session then learns as a recommendation taken out (`magicQueueEdits`).
+ * recommendations not yet played whose song is in [disliked] (by its queue
+ * track id: the set holds a Library song's Track id and its video alike).
+ * The song playing stays, as does what played already and what the owner
+ * lined up by hand; none when [state] isn't the session's queue. The app
+ * removes each (`remove`), which the session then learns as a
+ * recommendation taken out (`magicQueueEdits`).
  */
 export const magicQueueDislikedEntries = (
   session: MagicSession,
