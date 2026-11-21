@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 test("both desktop CI runners measure performance and keep the run's memory at rest", () => {
   const workflow = readFileSync(
-    new URL("../../../.github/workflows/ci.yml", import.meta.url),
+    new URL("../../../.github/workflows/desktop.yml", import.meta.url),
     "utf8",
   );
   const desktop = workflow.split("\n  desktop:")[1]!.split(/\n  [a-z-]+:/)[0]!;
