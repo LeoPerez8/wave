@@ -25,6 +25,7 @@
     "./playCheckpoints": "./src/playCheckpoints.ts",
     "./queueSaves": "./src/queueSaves.ts",
     "./sync/syncCycle": "./src/sync/syncCycle.ts",
+    "./sync/collaborationService": "./src/sync/collaborationService.ts",
     "./testing/syncService": "./src/sync/testSyncService.ts"
   },
   "scripts": {
