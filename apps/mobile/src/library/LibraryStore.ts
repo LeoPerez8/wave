@@ -367,6 +367,7 @@ import {
   selectPlaylistEntriesRevision,
   selectPlaylistEntrySongs,
   selectPlaylistEntryVideoIdsPage,
+  selectPlaylistEntryVideoIds,
   selectPlaylists,
   selectPlaylistPlays,
   selectPlaylistsLastPlayed,
@@ -859,6 +860,8 @@ export class LibraryStore extends Context.Service<
     readonly playlistEntryVideoIdsPage: (
       after: number,
     ) => Effect.Effect<VideoPage<number>, LibraryStoreError>;
+    /** Every page of `playlistEntryVideoIdsPage` in one read, each video once (#1351). */
+    readonly playlistEntryVideoIds: Effect.Effect<readonly string[], LibraryStoreError>;
     /** The YT Music songs the playlists hold as these video ids, one per video, in no particular order. */
     readonly playlistEntrySongs: (
       videoIds: readonly string[],
@@ -1927,6 +1930,9 @@ const make = Effect.gen(function* () {
       attempt("read a page of Home's playlist seed ids", (db) =>
         selectPlaylistEntryVideoIdsPage(db, after),
       ),
+    playlistEntryVideoIds: attempt("read Home's playlist seed ids", (db) =>
+      selectPlaylistEntryVideoIds(db),
+    ),
     playlistEntrySongs: (videoIds) =>
       attempt("read Home's playlist seeds", (db) => selectPlaylistEntrySongs(db, videoIds)),
 

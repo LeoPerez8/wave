@@ -23,6 +23,7 @@ import { readMixInputs } from "../../home/mixInputs.ts";
 import { readMixCatalog } from "../../home/readMixCatalog.ts";
 import { readMixBuildLibrary } from "../../home/mixBuildLibrary.ts";
 import { readKnownVideos } from "../../home/knownVideosRead.ts";
+import { readPlaylistSeedIds } from "../../home/playlistSeedIds.ts";
 
 const root = fileURLToPath(new URL("../../../../../", import.meta.url));
 
@@ -107,6 +108,8 @@ const measure = async (size: FastAgainSize) => {
           const cold = yield* readMixBuildLibrary(null, store, Effect.void);
           yield* cold.matchRadios(radio);
           yield* readKnownVideos(store);
+          // The Magic Queue carousel's playlist side.
+          yield* readPlaylistSeedIds(store);
         }),
       ),
     );

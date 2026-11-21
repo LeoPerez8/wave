@@ -52,11 +52,12 @@ export interface MagicQueueSection {
   readonly refresh: (index: number) => void;
 }
 
-/** The row's playlist entries, read in pages between free turns: it's waiting to be shown. */
+/** The row's playlist entries, in one read on a free turn: it's waiting to be shown. */
 const seedIds = createPlaylistSeedIdsRead(
-  Effect.flatMap(LibraryStore, (store) => readPlaylistSeedIds(store, freeTurnEffect)).pipe(
-    namedWork("Home Magic Queue seeds"),
-  ),
+  Effect.andThen(
+    freeTurnEffect,
+    Effect.flatMap(LibraryStore, (store) => readPlaylistSeedIds(store)),
+  ).pipe(namedWork("Home Magic Queue seeds")),
 );
 onLibraryChange(seedIds.change);
 
