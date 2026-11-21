@@ -150,6 +150,14 @@ export interface PlaylistContract {
     readonly args: readonly [playlistId: number, large: boolean];
     readonly result: string | null;
   };
+  /**
+   * A drag on a playlist's page in its own order: [target]'s songs, together, go before row
+   * [before] (a row's ID), or to the end when it is null.
+   */
+  readonly "playlists.place": {
+    readonly args: readonly [playlistId: number, target: SongTarget, before: number | null];
+    readonly result: void;
+  };
   readonly "playlists.listView": { readonly args: readonly []; readonly result: PlaylistListView };
   /** Sorts the Playlists list; Custom brings back the order arranged before. */
   readonly "playlists.sortList": {
@@ -187,6 +195,7 @@ export const PLAYLIST_CALLS = [
   "playlists.cancelImage",
   "playlists.removeImage",
   "playlists.image",
+  "playlists.place",
   "playlists.listView",
   "playlists.sortList",
   "playlists.showListAs",
@@ -218,6 +227,7 @@ export interface PlaylistBridge {
   readonly cancelImage: Call<"playlists.cancelImage">;
   readonly removeImage: Call<"playlists.removeImage">;
   readonly image: Call<"playlists.image">;
+  readonly place: Call<"playlists.place">;
   readonly listView: Call<"playlists.listView">;
   readonly sortList: Call<"playlists.sortList">;
   readonly showListAs: Call<"playlists.showListAs">;
@@ -246,6 +256,7 @@ export const playlistBridge = (invoke: Invoke): PlaylistBridge => ({
   cancelImage: () => invoke("playlists.cancelImage"),
   removeImage: (playlistId) => invoke("playlists.removeImage", playlistId),
   image: (playlistId, large) => invoke("playlists.image", playlistId, large),
+  place: (playlistId, target, before) => invoke("playlists.place", playlistId, target, before),
   listView: () => invoke("playlists.listView"),
   sortList: (sort) => invoke("playlists.sortList", sort),
   showListAs: (layout) => invoke("playlists.showListAs", layout),

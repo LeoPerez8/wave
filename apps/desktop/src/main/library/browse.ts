@@ -2,6 +2,7 @@ import { asc, desc, sql, type SQL } from "drizzle-orm";
 import type { LibraryDatabase } from "@wave/client/db/database";
 import { selectYtArtist } from "@wave/client/db/ytArtists";
 import {
+  albumDiscHeads,
   artistPopularSongs,
   artistSongOrder,
   defaultSongSort,
@@ -406,12 +407,22 @@ export const browseLibrary = (
     }
   }
   const shown = ownSort ?? sort;
+  // An album with several discs heads each one's songs (it lists them by disc and track).
+  const discs =
+    scope.kind === "album"
+      ? albumDiscHeads(
+          db
+            .all<{ disc: number | null }>(sql`SELECT disc FROM (${source}) ORDER BY ${order}`)
+            .map((song) => song.disc),
+        )
+      : [];
   return {
     items,
     offset,
     total,
     ...(hero ? { hero } : {}),
     ...(shown ? { sort: shown } : {}),
+    ...(discs.length > 0 ? { discs } : {}),
     ...(scope.kind === "playlists" ? { listSort: playlistListSort(db) } : {}),
   };
 };

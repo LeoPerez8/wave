@@ -27,6 +27,7 @@ import {
 } from "react";
 import type { ImageEdit, ImportAnswer, PlaylistCreateTarget } from "../../shared/playlists.ts";
 import type { SpotifyImportResult } from "../../shared/spotifyImport.ts";
+import type { SongTarget } from "../../shared/songActions.ts";
 import "./playlists.css";
 import { copyLink } from "./copyLink.ts";
 import { shareToSpotify } from "./shareToSpotify.ts";
@@ -233,6 +234,13 @@ export function usePlaylistEdits({ go, deleted, failed, changed, importStarted }
           .catch(() => failed(text.desktopLibrary.actionFailed)),
     }));
 
+  /** A drag or Alt+arrow on a playlist's page: [target] goes before row [before], or to the end. */
+  const place = (playlistId: number, target: SongTarget, before: number | null) =>
+    void window.wave.playlists
+      .place(playlistId, target, before)
+      .then(changed)
+      .catch(() => failed(text.desktopLibrary.actionFailed));
+
   /** From Files: the file picker, a question per name another playlist has, the summary. */
   const importFiles = async () => {
     try {
@@ -328,6 +336,7 @@ export function usePlaylistEdits({ go, deleted, failed, changed, importStarted }
     newPlaylist,
     playlistItems,
     moveItems,
+    place,
     importPlaylists: (at?: MenuPoint) => void importPlaylists(at),
     /** Opens the From Spotify picker (it signs in first when signed out). */
     importFromSpotify: () => setFromSpotify(true),
