@@ -4,7 +4,7 @@
  * like turning a page.
  */
 
-import type { NowPlayingScreen } from "./nowPlayingScreens.ts";
+import type { NowPlayingPage } from "./nowPlayingScreens.ts";
 
 export type SkipDirection = "next" | "previous";
 
@@ -48,7 +48,7 @@ export const resolveSkipSwipe = ({
 /** A swipe between Now Playing's screens, let go. */
 export interface ScreenSwipe extends SkipSwipe {
   /** The screen the drag started on. */
-  readonly from: NowPlayingScreen;
+  readonly from: NowPlayingPage;
 }
 
 /**
@@ -57,7 +57,7 @@ export interface ScreenSwipe extends SkipSwipe {
  * travel and speed that skip a song on the mini player; anything else settles
  * back where it started.
  */
-export const settleScreenSwipe = ({ from, ...swipe }: ScreenSwipe): NowPlayingScreen => {
+export const settleScreenSwipe = ({ from, ...swipe }: ScreenSwipe): NowPlayingPage => {
   const turn = resolveSkipSwipe(swipe);
   if (from === "player") return turn === "next" ? "queue" : "player";
   return turn === "previous" ? "player" : "queue";
