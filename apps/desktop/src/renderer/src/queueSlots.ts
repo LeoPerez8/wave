@@ -10,7 +10,8 @@ export interface MagicBatch {
 }
 
 export type QueueSlot =
-  | { readonly kind: "historyHead" | "nowPlayingHead" }
+  | { readonly kind: "historyHead" }
+  | { readonly kind: "nowPlayingHead" }
   /** Up Next's heading: its song count, and the seed of the Magic Queue it holds. */
   | { readonly kind: "upNext"; readonly count: number; readonly seed: string | null }
   | { readonly kind: "note"; readonly note: "nothingUpNext" | "noSongsFound" | "couldntLoad" }
