@@ -877,7 +877,6 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   links: linkBridge(invoke),
   artistPage: artistPageBridge(invoke),
   streamed: streamedBridge(invoke),
-  history: historyBridge(invoke),
   ytAccount: ytAccountBridge(invoke),
   spotifyAccount: spotifyAccountBridge(invoke),
   stats: {
@@ -886,4 +885,5 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     play: (period, key, full) => invoke("stats.play", period, key, full),
     open: (ranking, period, key, full) => invoke("stats.open", ranking, period, key, full),
   },
+  history: historyBridge(invoke),
 });
