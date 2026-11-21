@@ -58,12 +58,14 @@ export const magicRadioExclusions = (
   return exclude;
 };
 
-/** About a third from liked radios, filling shortages from the other pool. */
-export const magicRadioBatch = (
-  seed: readonly RankedRadioSong[],
-  liked: readonly RankedRadioSong[],
-  options: { readonly size: number; readonly newMusicShare: number },
-): RankedRadioSong[] => {
+/**
+ * The liked radios' songs a batch may take beside [seed]'s: a recording the
+ * original radio brought belongs to its majority, even if a liked radio has it too.
+ */
+export const magicLearnedExtras = <S extends Pick<RankedRadioSong, "trackId" | "song">>(
+  seed: readonly S[],
+  liked: readonly S[],
+): S[] => {
   const ids = new Set(seed.map((song) => song.trackId));
   const recordings = new Map<string, NonNullable<RankedRadioSong["song"]>[]>();
   for (const candidate of seed) {
@@ -73,8 +75,7 @@ export const magicRadioBatch = (
     bucket.push(candidate.song);
     recordings.set(key, bucket);
   }
-  // A recording the original radio brought belongs to its majority, even if a liked radio has it too.
-  const extra = liked.filter((candidate) => {
+  return liked.filter((candidate) => {
     if (ids.has(candidate.trackId)) return false;
     const song = candidate.song;
     return (
@@ -93,6 +94,29 @@ export const magicRadioBatch = (
       )
     );
   });
+};
+
+/** Whether a batch of [session] may take a song of [candidates]: one it hasn't played or learned from. */
+export const magicRadioEligible = <S extends Pick<RankedRadioSong, "trackId" | "song">>(
+  session: MagicSession,
+  candidates: readonly S[],
+): ((song: S) => boolean) => {
+  const exclude = magicRadioExclusions(
+    session,
+    candidates.flatMap((s) => s.song ?? []),
+  );
+  return (song) =>
+    !exclude.has(song.trackId) &&
+    (song.song === null || !exclude.has(ytTrackId(song.song.videoId)));
+};
+
+/** About a third from liked radios, filling shortages from the other pool. */
+export const magicRadioBatch = (
+  seed: readonly RankedRadioSong[],
+  liked: readonly RankedRadioSong[],
+  options: { readonly size: number; readonly newMusicShare: number },
+): RankedRadioSong[] => {
+  const extra = magicLearnedExtras(seed, liked);
   const learned = radioRankingBatch(extra, {
     ...options,
     size: Math.max(Math.round(options.size / 3), options.size - seed.length),
@@ -165,13 +189,7 @@ export const completeMagicRadioBatch = (
   readonly trackIds: readonly string[];
   readonly songs: readonly RankedRadioSong[];
 } => {
-  const exclude = magicRadioExclusions(
-    session,
-    [...seed, ...liked].flatMap((s) => s.song ?? []),
-  );
-  const eligible = (song: RankedRadioSong) =>
-    !exclude.has(song.trackId) &&
-    (song.song === null || !exclude.has(ytTrackId(song.song.videoId)));
+  const eligible = magicRadioEligible(session, [...seed, ...liked]);
   const primary = magicRadioBatch(seed.filter(eligible), liked.filter(eligible), {
     size: batchSize(session),
     newMusicShare: session.ytShare,

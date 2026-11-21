@@ -227,6 +227,28 @@ describe("Artist variety in a DJ session", () => {
     assert.deepEqual(once.liked, []);
   });
 
+  test("a short batch still comes out whole when a filled learned song repeats a seed one", () => {
+    const seed = [...songsBy(4, "Picked"), ...songsBy(4, "Stranger")];
+    // The learned radio brings one of the seed's songs again, and more by someone outside.
+    const liked = [{ ...seed[5]! }, ...songsBy(3, "Stranger")];
+    const artists = batchArtists("low", seed, null, liked);
+    assert.equal(artists.length, 10);
+    assert.equal(count(artists, "Picked"), 4);
+  });
+
+  test("a fill ranks behind the songs the step allows", () => {
+    const pools = djVarietyCandidates(
+      session({ variety: "low" }),
+      graph,
+      { seed: [...songsBy(12, "Stranger"), ...songsBy(2, "Picked")], liked: [] },
+      10,
+    );
+    assert.deepEqual(
+      pools.seed.slice(0, 3).map((song) => song.song!.artists[0]),
+      ["Picked", "Picked", "Stranger"],
+    );
+  });
+
   test("every selected artist counts as picked", () => {
     const started = session({ variety: "low" }, ["Picked", "Stranger"]);
     const pools = djVarietyCandidates(

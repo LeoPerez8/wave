@@ -68,6 +68,7 @@ import { ytMusicEnabled, subscribeYtMusicEnabled } from "@/settings/ytMusic";
 import { subscribeConnectivity } from "@/native/waveNative";
 
 import { magicQueueYtCandidates } from "./magicQueueRadio";
+import { MAGIC_RADIO_DEADLINE_MS } from "./songRadioSession";
 import { magicSignalsOf } from "./magicSongs";
 import { Player, playbackState, sleepTimerState, sleepTimerLoaded } from "./Player";
 import { onPlayEnded } from "./PlayHistory";
@@ -510,16 +511,14 @@ const batchStreams = (batch: ReturnType<typeof completeMagicRadioBatch>): YtSong
  */
 export type DjStart = "started" | "empty" | "failed";
 
-/** How long a selected album's YT Music page may take, as its radios may. */
-const DJ_ALBUM_PAGE_TIMEOUT = "8 seconds";
-
 /**
  * The songs of the albums among a DJ seed's [tiles], as seed songs with
  * their counted plays (`readDjAlbumSongs`): the Library album's, with or
- * without a file, else the songs of its YT Music page, read under the
- * radios' deadline. Only the album's browse id is sent.
+ * without a file, else the songs of its YT Music page, read by
+ * [deadlineAt] (epoch ms), the first batch's deadline its radios share.
+ * Only the album's browse id is sent.
  */
-const djAlbumSeedSongs = (tiles: readonly DjTile[]) =>
+const djAlbumSeedSongs = (tiles: readonly DjTile[], deadlineAt: number) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
     const playsOf = (trackIds: readonly string[]) =>
@@ -553,7 +552,7 @@ const djAlbumSeedSongs = (tiles: readonly DjTile[]) =>
     const page = (browseId: string) =>
       Effect.gen(function* () {
         const album = yield* Effect.tryPromise(() => readYtAlbum(browseId)).pipe(
-          Effect.timeout(DJ_ALBUM_PAGE_TIMEOUT),
+          Effect.timeout(Math.max(0, deadlineAt - Date.now())),
         );
         const songs = ytAlbumSongs(browseId, album);
         return magicListSeedSongs(
@@ -577,20 +576,22 @@ const djAlbumSeedSongs = (tiles: readonly DjTile[]) =>
  * the queue (with Undo, as any play does), its first song playing. It ranks
  * with [settings], DJ's own choices from Adjust, not Discover's sliders, and
  * its Artist variety limits who each batch may hold (`magicQueueYtCandidates`). Nothing is waited for but
- * the radios: the Library, catalog, graph and taste profile are the last
- * ones derived. The queue that's playing is left alone unless it starts.
+ * the album pages and the radios, under one deadline from the tap
+ * (`MAGIC_RADIO_DEADLINE_MS`): the radios get what the album pages leave of
+ * it. The Library, catalog, graph and taste profile are the last ones derived. The queue that's playing is left alone unless it starts.
  */
 export const startDjMagicQueue = (tiles: readonly DjTile[], settings: DjSettings) =>
   Effect.gen(function* () {
     if (!ytMusicEnabled()) return "failed" satisfies DjStart;
     const startedAt = Date.now();
+    const deadlineAt = startedAt + MAGIC_RADIO_DEADLINE_MS;
     const latest = recommendationSnapshot.peek();
     const library = latest.library ?? { songs: [], artists: [] };
     const started = startDjSession(tiles, {
       id: String(startedAt),
       played: latest.library?.topArtists ?? [],
       settings,
-      albumSongs: yield* djAlbumSeedSongs(tiles),
+      albumSongs: yield* djAlbumSeedSongs(tiles, deadlineAt),
     });
     if (started === null) return "empty" satisfies DjStart;
     const drawn = magicBatchRadios(started, Math.random);
@@ -600,6 +601,7 @@ export const startDjMagicQueue = (tiles: readonly DjTile[], settings: DjSettings
       taste: latestTasteProfile(),
       sliders: magicSessionSliders(drawn.session, discoverSliders.get()),
       profileOf: magicProfileOf(library),
+      deadlineAt,
     });
     const batch = completeMagicRadioBatch(
       drawn.session,

@@ -187,3 +187,21 @@ test("the network deadline cancels a stalled first read", async () => {
   assert.equal(await Effect.runPromise(session.read({ online: true, low: false })), null);
   assert.equal(cancelled, true);
 });
+test("a read given a shared deadline gets only the time left of it", async () => {
+  const session = createSongRadioSession(seed, {
+    cached: null,
+    radio: () => Effect.never,
+    search: () => Effect.succeed([]),
+    artist: () => Effect.succeed(null),
+    more: () => Effect.die("no continuation"),
+    save: () => Effect.void,
+    fallback: () => {},
+  });
+  const started = Date.now();
+  // Most of the 8 seconds went on reading something else first.
+  const read = await Effect.runPromise(
+    session.read({ online: true, low: false, deadlineAt: started + 20 }),
+  );
+  assert.equal(read, null);
+  assert.ok(Date.now() - started < 1000);
+});
