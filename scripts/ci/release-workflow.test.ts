@@ -141,13 +141,16 @@ describe("the split", () => {
 });
 
 describe("the release source", () => {
-  it("is chosen once, after the version bump and the autofix commit, with no token", () => {
+  it("is chosen once, after the version bump and the autofix commit, with a read-only token", () => {
     assert.deepEqual(needsOf("source"), ["version", "autofix-apply"]);
-    assert.match(job("source"), /^ {4}permissions: \{\}$/m);
+    // Only a promotion's run reads anything: the commit of the ti release it names.
+    assert.match(job("source"), /^ {4}permissions:\n {6}contents: read\n {4}outputs:/m);
     assert.match(
       job("source"),
       /needs\.autofix-apply\.outputs\.sha \|\| needs\.version\.outputs\.sha \|\| github\.event\.pull_request\.head\.sha \|\| github\.sha/,
     );
+    assert.match(job("source"), /if \[ -n "\$PROMOTED_FROM" \]; then/);
+    assert.match(job("source"), /\[ "\$GITHUB_EVENT_NAME" != workflow_dispatch \]/);
   });
 
   it("is what every job the gates trust checks out, and each reports what it checked out", () => {
@@ -272,19 +275,65 @@ describe("a promotion", () => {
       text,
       /startsWith\(github\.ref, 'refs\/tags\/v'\) && !endsWith\(github\.ref, '-ti'\)/,
     );
-    assert.match(text, /gh release download "\$\{GITHUB_REF_NAME\}-ti"/);
+    // The ti release promote.sh named, by default the stable tag's own number.
+    assert.match(text, /promoted="\$\{PROMOTED_FROM:-\$\{GITHUB_REF_NAME\}-ti\}"/);
+    assert.match(text, /PROMOTED_FROM: \$\{\{ inputs\.promoted_from \}\}/);
+    assert.match(text, /gh release download "\$promoted"/);
     assert.doesNotMatch(text, /secrets\./);
     assert.match(
       step("release-gate", "Admit the release", "mobile.yml"),
-      /release-gate\.ts admit "\$RUNNER_TEMP\/needs\.json" "\$RUNNER_TEMP\/promoted\/wave-\$\{GITHUB_REF_NAME#v\}-ti\.provenance\.json"/,
+      /release-gate\.ts admit "\$RUNNER_TEMP\/needs\.json" "\$RUNNER_TEMP\/promoted\/wave-\$\{promoted#v\}\.provenance\.json" "\$promoted"/,
     );
   });
 
-  it("checks the ti release before it pushes the stable tag", () => {
+  it("links the desktop's stable record to the ti release its installers come from", () => {
+    const steps = stepsOf("release-gate", "desktop.yml");
+    const names = steps.map((step) => step.name);
+    const link = names.indexOf("Link the promoted ti release");
+    assert.ok(link >= 0 && link < names.indexOf("Create desktop provenance input"), names.join());
+    const text = steps[link]!.text;
+    assert.match(text, /if: \$\{\{ !endsWith\(inputs\.release_tag, '-ti'\) \}\}/);
+    assert.match(text, /release-gate\.ts promote-desktop/);
+    assert.doesNotMatch(text, /secrets\./);
+    assert.match(
+      step("release-gate", "Create desktop provenance input", "desktop.yml"),
+      /promotedFrom/,
+    );
+  });
+
+  it("hands each app the ti release it is built from", () => {
+    for (const name of ["mobile", "desktop"])
+      assert.match(job(name, "ci.yml"), /promoted_from: \$\{\{ inputs\.promoted_from \}\}/, name);
+    assert.match(job("source", "ci.yml"), /PROMOTED_FROM: \$\{\{ inputs\.promoted_from \}\}/);
+    assert.match(job("changes", "ci.yml"), /PROMOTED_APP: \$\{\{ inputs\.app \}\}/);
+    // Two runs of one promotion on the same tag don't cancel each other.
+    assert.match(
+      text["ci.yml"],
+      /group: ci-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}\$\{\{ inputs\.app && format\('-\{0\}', inputs\.app\) \|\| '' \}\}/,
+    );
+  });
+
+  it("checks each app's ti release before it pushes the stable tag", () => {
     const promote = readFileSync(new URL("./promote.sh", import.meta.url), "utf8");
-    const verify = promote.indexOf('verified-release.sh" "$from"');
-    assert.ok(verify > 0, "promote.sh doesn't check the ti release");
-    assert.ok(verify < promote.indexOf('git tag "$to"'));
+    const tag = promote.indexOf('git tag "$to"');
+    for (const check of [
+      'verified-release.sh" "$mobile"',
+      'verified-desktop-release.sh" "$desktop"',
+    ]) {
+      const verify = promote.indexOf(check);
+      assert.ok(verify > 0, `promote.sh doesn't run ${check}`);
+      assert.ok(verify < tag, check);
+    }
+  });
+
+  it("takes the app and RELEASE_DESKTOP_MAIN from the workflow", () => {
+    const workflow = readFileSync(
+      new URL("../../.github/workflows/promote.yml", import.meta.url),
+      "utf8",
+    );
+    assert.match(workflow, /options: \[both, mobile, desktop\]\n\s+default: both/);
+    assert.match(workflow, /RELEASE_DESKTOP_MAIN: \$\{\{ vars\.RELEASE_DESKTOP_MAIN \}\}/);
+    assert.match(workflow, /scripts\/ci\/promote\.sh "\$VERSION" "\$APP"/);
   });
 });
 
@@ -357,8 +406,19 @@ describe("a rollback", () => {
     );
     assert.match(
       named("Check the release's provenance"),
-      /if \[ "\$TARGET" = android \] && \[ "\$ALLOW_UNRECORDED" = "true" \]; then flags=\(--allow-unrecorded\); fi/,
+      /if \[ "\$APP" = mobile \] && \[ "\$ALLOW_UNRECORDED" = "true" \]; then flags=\(--allow-unrecorded\); fi/,
     );
+  });
+
+  it("asks which app to roll back, and touches only that app's files", () => {
+    assert.match(
+      rollback,
+      /app:\n\s+description: .+\n\s+required: true\n\s+type: choice\n\s+options: \[mobile, desktop\]\n/,
+    );
+    assert.match(named("Promote the update"), /if: inputs\.app == 'mobile'/);
+    assert.match(named("Roll back both desktop installers"), /if: inputs\.app == 'desktop'/);
+    assert.doesNotMatch(named("Promote the update"), /DESKTOP/);
+    assert.doesNotMatch(named("Roll back both desktop installers"), /UPDATES_SIGNING_KEY:/);
   });
 
   it("keeps its channel's Environment and reads nothing but the repo", () => {
@@ -368,13 +428,18 @@ describe("a rollback", () => {
     assert.match(rollback, /sparse-checkout: \|\n\s+apps\/updates\n\s+scripts\/ci/);
   });
 
-  it("rolls the desktop back on the desktop's own record when the release has one", () => {
-    const verify = named("Verify the published desktop installers");
-    assert.match(verify, /\.desktop\.provenance\.json/);
-    assert.match(verify, /desktop-release\.ts verify-published "\$PROVENANCE"/);
+  it("rolls the desktop back on the desktop's own record, with no APK", () => {
+    assert.match(
+      named("Check the release's provenance"),
+      /desktop\) scripts\/ci\/verified-desktop-release\.sh "v\$version" "\$RUNNER_TEMP\/release"/,
+    );
+    const script = readFileSync(new URL("./verified-desktop-release.sh", import.meta.url), "utf8");
+    assert.match(script, /\.desktop\.provenance\.json/);
+    assert.match(script, /desktop-release\.ts" names|"\$updates" names/);
+    assert.match(script, /"\$updates" verify-published "\$record" "\$dir"/);
     assert.match(
       named("Roll back both desktop installers"),
-      /PROVENANCE: \$\{\{ steps\.desktop_provenance\.outputs\.file \}\}/,
+      /PROVENANCE: \$\{\{ steps\.provenance\.outputs\.file \}\}/,
     );
   });
 });

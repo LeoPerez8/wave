@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -332,5 +332,58 @@ describe("changes.ts as a command", () => {
       run(["--all"], ""),
       "app=true\ncore=true\nsync=true\nupdates=true\nworkspace=true\nci=true\nperf=true\ntsconfig=true\nnative=true\ndesktop=true\nallPackages=true\nnativeTests=true\ndesktopChecks=true\nphoneRelease=true\ndesktopRelease=true\n",
     );
+  });
+});
+
+describe("changes.sh on a promotion's run", () => {
+  const shell = fileURLToPath(new URL("./changes.sh", import.meta.url));
+  /** A repo whose one commit is tagged v1.0.0, with a `gh` that lists no releases. */
+  const promotion = (ref: string, app: string) => {
+    const dir = mkdtempSync(join(tmpdir(), "wave-changes-"));
+    const git = (...args: string[]) =>
+      execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+    git("init", "-q");
+    writeFileSync(join(dir, "README.md"), "Wave\n");
+    git("add", "README.md");
+    git("-c", "user.name=ci", "-c", "user.email=ci@localhost", "commit", "-q", "-m", "one");
+    git("tag", "v1.0.0");
+    const bin = join(dir, "bin");
+    execFileSync("mkdir", ["-p", bin]);
+    writeFileSync(join(bin, "gh"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    const output = join(dir, "output");
+    writeFileSync(output, "");
+    const result = spawnSync("bash", [shell], {
+      cwd: dir,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH}`,
+        GITHUB_REPOSITORY: "o/r",
+        GITHUB_REF: ref,
+        GITHUB_OUTPUT: output,
+        PR_NUMBER: "",
+        PROMOTED_APP: app,
+      },
+    });
+    return { ...result, output: readFileSync(output, "utf8") };
+  };
+
+  it("publishes the apps the promotion names, whatever changed", () => {
+    for (const [app, phone, desktop] of [
+      ["both", "true", "true"],
+      ["mobile", "true", "false"],
+      ["desktop", "false", "true"],
+    ] as const) {
+      const { status, output, stderr } = promotion("refs/tags/v1.0.0", app);
+      assert.equal(status, 0, stderr);
+      assert.match(output, new RegExp(`^phoneRelease=${phone}$`, "m"), app);
+      assert.match(output, new RegExp(`^desktopRelease=${desktop}$`, "m"), app);
+    }
+  });
+
+  it("refuses named apps anywhere but a stable tag, or an app that isn't one", () => {
+    assert.notEqual(promotion("refs/tags/v1.0.0-ti", "mobile").status, 0);
+    assert.notEqual(promotion("refs/heads/main", "mobile").status, 0);
+    assert.notEqual(promotion("refs/tags/v1.0.0", "tv").status, 0);
   });
 });
