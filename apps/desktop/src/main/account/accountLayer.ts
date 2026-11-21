@@ -5,6 +5,7 @@
  */
 import { Database } from "@wave/client";
 import {
+  GENIUS_INSIGHTS_SETTING,
   LANGUAGE_PREFERENCE,
   type LanguageChoice,
   type SyncClock,
@@ -24,6 +25,8 @@ import type { WaveAccountService } from "./account.ts";
 import type { LanguageView } from "../../shared/language.ts";
 import { readDesktopLanguage, saveDesktopLanguage } from "../language.ts";
 import { editDesktopTheme, THEME_PREFERENCE } from "../theme.ts";
+import { geniusInsightsEnabled } from "../library/lyricsAndTags.ts";
+import { createDesktopGenius, type DesktopGenius } from "../lyrics/genius.ts";
 
 export interface AccountShape {
   readonly language: () => LanguageView;
@@ -33,6 +36,7 @@ export interface AccountShape {
   /** A synced setting was saved and stamped here: it goes up without waiting for the timed sync. */
   readonly settingsEdited: () => void;
   readonly view: () => AccountView;
+  readonly genius: DesktopGenius;
   readonly signIn: () => Promise<void>;
   readonly cancelSignIn: () => void;
   readonly signOut: () => Promise<void>;
@@ -59,6 +63,7 @@ export const accountLayer = (options: {
   readonly languageChanged?: (view: LanguageView) => void;
   /** The account's theme changed, here or in a pull: its stored value. */
   readonly themeChanged?: (stored: string | null) => void;
+  readonly fetch?: typeof globalThis.fetch;
 }) =>
   Layer.effect(
     Account,
@@ -74,7 +79,18 @@ export const accountLayer = (options: {
           .catch((error: unknown) => console.warn("[wave] The stars' downloads failed", error));
       const { account } = options;
       const language = () => readDesktopLanguage(db, options.preferredLanguages?.() ?? []);
-      const languageChanged = () => options.languageChanged?.(language());
+      const genius = createDesktopGenius({
+        db,
+        account,
+        playback,
+        language: () => language().language,
+        fetch: options.fetch ?? globalThis.fetch,
+      });
+      const stopSession = account.subscribe(() => genius.cancel());
+      const languageChanged = () => {
+        genius.cancel();
+        options.languageChanged?.(language());
+      };
       languageChanged();
       const sync = createDesktopSync({
         db,
@@ -86,6 +102,7 @@ export const accountLayer = (options: {
           if (keys.includes(LANGUAGE_PREFERENCE)) languageChanged();
           if (keys.includes(THEME_PREFERENCE))
             options.themeChanged?.(syncedPreference(db, THEME_PREFERENCE));
+          if (keys.includes(GENIUS_INSIGHTS_SETTING) && !geniusInsightsEnabled(db)) genius.cancel();
           if (changesPlaybackSettings(keys))
             playback
               .applySettings()
@@ -112,6 +129,8 @@ export const accountLayer = (options: {
       sync.start();
       yield* Effect.addFinalizer(() =>
         Effect.promise(async () => {
+          stopSession();
+          genius.cancel();
           stopScans();
           stopPlayback();
           sync.dispose();
@@ -125,6 +144,7 @@ export const accountLayer = (options: {
         }),
       );
       return {
+        genius,
         language,
         setLanguage: (choice) => {
           saveDesktopLanguage(db, choice);
@@ -137,7 +157,10 @@ export const accountLayer = (options: {
           sync.edited({ songs: false });
           return stored;
         },
-        settingsEdited: () => sync.edited({ songs: false }),
+        settingsEdited: () => {
+          if (!geniusInsightsEnabled(db)) genius.cancel();
+          sync.edited({ songs: false });
+        },
         view: () => {
           const { account: view, keyringMissing, deletionSent } = account.view();
           return {
@@ -151,6 +174,7 @@ export const accountLayer = (options: {
               preference(db, INVITATION) === undefined,
             revision: sync.revision(),
             theme: syncedPreference(db, THEME_PREFERENCE),
+            geniusInsights: geniusInsightsEnabled(db),
           };
         },
         // Signing in from Settings answers the invitation too.

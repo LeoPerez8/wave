@@ -47,6 +47,7 @@ import { applyLanguage, labels, text, useLanguage, tagTitle, artistName } from "
 import { LanguageSettings } from "./LanguageSettings.tsx";
 import { ThemeSettings } from "./ThemeSettings.tsx";
 import { LyricsAndTagsSettings } from "./LyricsAndTagsSettings.tsx";
+import { geniusAccess } from "./useSongGenius.ts";
 import { Home } from "./Home.tsx";
 import { Stats } from "./Stats.tsx";
 import type { StatsRoute } from "../../shared/stats.ts";
@@ -190,6 +191,11 @@ export function App() {
     setPosition(position + 1);
     setHero(undefined);
     setError(undefined);
+  };
+  const openGeniusSignIn = () => {
+    setNowPlaying(false);
+    setSetting("accounts");
+    if (route.kind !== "settings") go({ kind: "settings" });
   };
   const back = useCallback(() => {
     setHero(undefined);
@@ -938,7 +944,13 @@ export function App() {
               ) : setting === "downloads" ? (
                 <DownloadSettings onError={failed} />
               ) : setting === "lyricsAndTags" ? (
-                <LyricsAndTagsSettings onError={failed} notify={notify} />
+                <LyricsAndTagsSettings
+                  onError={failed}
+                  notify={notify}
+                  onGeniusChanged={(enabled) =>
+                    setAccount((view) => view && { ...view, geniusInsights: enabled })
+                  }
+                />
               ) : (
                 <p className="secondary">{labels.unavailableSection}</p>
               )}
@@ -1116,6 +1128,8 @@ export function App() {
           run={playback.run}
           onError={failed}
           hidden={nowPlaying}
+          geniusAccess={geniusAccess(account)}
+          onGeniusSignIn={openGeniusSignIn}
           onClose={() => {
             // Focus goes back to the bar's button for this tab; Related opens from Queue's.
             const opener = panel.tab === "lyrics" ? labels.lyrics : labels.queue;
@@ -1133,6 +1147,8 @@ export function App() {
           links={ytLinks}
           onClose={() => setNowPlaying(false)}
           actions={nowPlayingActions}
+          geniusAccess={geniusAccess(account)}
+          onGeniusSignIn={openGeniusSignIn}
         />
       )}
       <PlayerBar
