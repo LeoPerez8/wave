@@ -23,6 +23,7 @@ import {
 } from "@wave/client/db/libraryQueries";
 import { songHasFile, Database as ClientDatabase, databaseLayer } from "@wave/client";
 import { sqliteDriverLayer } from "./sqliteDriver.ts";
+import { collaborationStore, type CollaborationStore } from "@/collaboration/collaborationStore";
 import type {
   AlbumDetail,
   AlbumRow,
@@ -1397,6 +1398,8 @@ export class LibraryStore extends Context.Service<
      * like", in the page's order (the artist graph's similar artists).
      */
     readonly ytArtistSimilar: Effect.Effect<readonly YtArtistSimilar[], LibraryStoreError>;
+    /** The account's collaborative playlists on this device, as their menu reads and writes them. */
+    readonly collaborations: CollaborationStore<LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -2137,6 +2140,10 @@ const make = Effect.gen(function* () {
 
     ytArtistSimilar: attempt("read the saved artist pages' similar artists", () =>
       selectYtArtistSimilar(db),
+    ),
+    collaborations: collaborationStore(
+      db,
+      (operation, cause) => new LibraryStoreError({ operation, cause }),
     ),
   });
 });

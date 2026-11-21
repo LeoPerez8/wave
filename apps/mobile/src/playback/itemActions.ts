@@ -8,6 +8,7 @@ import {
   playlistPlayback,
   playlistRemovals,
   unsearchedSongJob,
+  type ActionItem,
   type ActionSurface,
   type FavoriteSource,
   type ItemAction,
@@ -60,6 +61,18 @@ import {
 } from "@/settings/lyricsAndGenre";
 import { ytMusicEnabled, useYtMusicEnabled } from "@/settings/ytMusic";
 import { openSharePlaylist } from "@/share/sharePlaylist";
+import { useCollaborativePlaylists } from "@/settings/collaborativePlaylists";
+import { shazamPlaylistId } from "@/settings/shazamPlaylist";
+import {
+  endCollaborationFlow,
+  leavePlaylistFlow,
+  makeCollaborativeFlow,
+  openInvite,
+  openMembers,
+  otherMembers,
+  useCollaborations,
+} from "@/collaboration/collaborativePlaylists";
+import type { CollaborativePlaylist } from "@wave/client/db/collaborations";
 import { shareLibrarySong, shareStreamedSong } from "@/share/songShare";
 import {
   cancelMissingSongDownload,
@@ -226,8 +239,15 @@ function usePlan(
   readonly perAlbum: readonly (readonly number[])[];
   /** The Library songs of the collection the menu is about (none otherwise): what Fix Songs runs on. */
   readonly collectionSongs: readonly SongRow[];
+  /** The account's collaborative playlists here (none with the switch off). */
+  readonly collaborations: ReadonlyMap<number, CollaborativePlaylist>;
 } {
   const here = usePathname();
+  // Collaborative playlists, while Settings › Developer has them on.
+  const collaborativePlaylists = useCollaborativePlaylists();
+  const collaborations = useCollaborations(
+    collaborativePlaylists && target.kind === "playlist" && target.readOnAction !== true,
+  );
   const onlineLookups = useLyricsAndGenreLookupsEnabled();
   const ytMusic = useYtMusicEnabled();
   const download = useMissingSongDownloadStatus(onlyMissingSong(target));
@@ -258,7 +278,11 @@ function usePlan(
   };
   // Starred YT Music songs waiting for their files: their Favorite reads Remove from Favorites.
   const pending = useLivePendingFavoriteVideos(!deferred);
-  const facts = targetFacts(target, favorites, find, pending);
+  const facts = playlistCollaborationFacts(
+    target,
+    targetFacts(target, favorites, find, pending),
+    collaborations,
+  );
   const planned = itemActions({
     kind: target.kind,
     ytMusic,
@@ -277,9 +301,35 @@ function usePlan(
     here,
     streamedArtists,
     playing,
+    collaborativePlaylists,
   });
-  return { planned, missingSongs, perAlbum, collectionSongs };
+  return { planned, missingSongs, perAlbum, collectionSongs, collaborations };
 }
+
+/**
+ * [facts] of a playlist target with what its collaborative entries need: whether the account
+ * owns each playlist or is another member, and which one is the Shazam playlist.
+ */
+const playlistCollaborationFacts = (
+  target: ActionItems,
+  facts: readonly ActionItem[],
+  collaborations: ReadonlyMap<number, CollaborativePlaylist>,
+): readonly ActionItem[] => {
+  if (target.kind !== "playlist") return facts;
+  const shazam = shazamPlaylistId();
+  return facts.map((item, index) => {
+    const playlist = target.items[index];
+    if (playlist === undefined) return item;
+    const collaboration = collaborations.get(playlist.id);
+    return {
+      ...item,
+      ...(collaboration === undefined
+        ? {}
+        : { collaboration: collaboration.owned ? "owner" : "member" }),
+      ...(shazam !== null && playlist.syncId === shazam ? { shazam: true } : {}),
+    };
+  });
+};
 
 /**
  * The entries Core's `itemActions` offers for [target] on [surface], here and
@@ -325,12 +375,16 @@ export function useItemActions(
   const find = useStreamedSongFinder(hasStreamedSongs(target) && !deferred);
 
   // [missingSongs]: the albums' missing songs, which their download entries act on.
-  const { planned, missingSongs, perAlbum, collectionSongs } = usePlan(target, favorites, {
-    surface,
-    selectable: onSelect !== undefined,
-    collectionSongs: readFirst,
-    playing,
-  });
+  const { planned, missingSongs, perAlbum, collectionSongs, collaborations } = usePlan(
+    target,
+    favorites,
+    {
+      surface,
+      selectable: onSelect !== undefined,
+      collectionSongs: readFirst,
+      playing,
+    },
+  );
 
   // Read ahead, so Go to Album / Go to Artist open header-first.
   let goAlbumId: number | undefined;
@@ -353,6 +407,7 @@ export function useItemActions(
     missingSongs,
     perAlbum,
     collectionSongs,
+    collaborations,
   };
   const press = itemActionPress(context);
   const [only] = target.kind === "track" ? target.items : [];
@@ -435,10 +490,13 @@ export interface PressContext {
   readonly perAlbum?: readonly (readonly number[])[] | undefined;
   /** The Library songs of the collection the menu is about: what Fix Songs runs on. */
   readonly collectionSongs?: readonly SongRow[] | undefined;
+  /** The account's collaborative playlists here, by playlist id (none with the switch off). */
+  readonly collaborations?: ReadonlyMap<number, CollaborativePlaylist> | undefined;
 }
 
 const NO_LINKS: LinkRows = { album: null, artist: null };
 const NO_IDS: readonly number[] = [];
+const NO_COLLABORATIONS: ReadonlyMap<number, CollaborativePlaylist> = new Map();
 
 /**
  * What each of [context]'s target's entries does, as the menu and the
@@ -456,6 +514,7 @@ export const itemActionPress = ({
   missingSongs = NO_IDS,
   perAlbum = [],
   collectionSongs = NO_SONGS,
+  collaborations = NO_COLLABORATIONS,
 }: PressContext): ((entry: ItemActionEntry<ArtistRow>) => () => void) => {
   const allTracks = target.kind === "track" ? target.items : [];
   const tracks = allTracks.filter(isLibraryTrack);
@@ -585,7 +644,11 @@ export const itemActionPress = ({
         return run(() => playlist !== undefined && void removePlaylistImageFlow(playlist));
       case "deletePlaylist":
       case "deletePlaylists": {
-        const playlists = target.kind === "playlist" ? target.items : [];
+        // A collaborative playlist's question says its other members keep a copy.
+        const playlists = (target.kind === "playlist" ? target.items : []).map((each) => ({
+          ...each,
+          otherMembers: otherMembers(collaborations.get(each.id)),
+        }));
         const onDeleted = () => {
           // Leave a playlist's screen once it's gone.
           if (playlists.some(({ id }) => isDetailPath(here, "playlist", id))) router.back();
@@ -594,6 +657,33 @@ export const itemActionPress = ({
           void confirmDeletePlaylists(playlists, { onConfirm, onDeleted });
         });
       }
+      // A collaborative playlist's entries (docs/spec.md, Collaborative playlists, The menu).
+      case "makeCollaborative":
+        return run(() => playlist !== undefined && void makeCollaborativeFlow(playlist));
+      case "invite":
+        return run(() => playlist !== undefined && openInvite(playlist));
+      case "members":
+        return run(
+          () =>
+            playlist !== undefined &&
+            openMembers(playlist, () => {
+              if (isDetailPath(here, "playlist", playlist.id)) router.back();
+            }),
+        );
+      case "endCollaboration":
+        return run(() => playlist !== undefined && void endCollaborationFlow(playlist));
+      case "leavePlaylist":
+        return asking(entry.action, (onConfirm) => {
+          if (playlist === undefined) return;
+          void leavePlaylistFlow(
+            playlist,
+            () => {
+              // Leave the playlist's screen once it's gone from the Library.
+              if (isDetailPath(here, "playlist", playlist.id)) router.back();
+            },
+            onConfirm,
+          );
+        });
       case "fixSong":
       case "fixSongs":
         // Only the songs missing something are fixed (Core's `songsToFix`); a
