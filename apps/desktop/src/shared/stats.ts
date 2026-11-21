@@ -15,6 +15,18 @@ export interface StatsOverview {
   readonly hasPlays: boolean;
 }
 
+/** All-time listening on an artist page, with its most played songs ready for the table. */
+export type ArtistStatsPage =
+  | { readonly played: false }
+  | {
+      readonly played: true;
+      readonly plays: string;
+      readonly minutesListened: string;
+      readonly songsListened: string;
+      readonly lastPlayed: string;
+      readonly mostPlayed: readonly StatsRow[];
+    };
+
 export interface StatsRoute {
   readonly kind: "stats";
   readonly period: StatsPeriod;
