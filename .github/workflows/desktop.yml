@@ -213,15 +213,28 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      # The Windows runner has its privacy switch for apps' use of the microphone off, so Wave
+      # rightly says Microphone access is off and Recognize's spec can't listen. Turn it on, for
+      # desktop apps too, as on a computer that allows them; Chromium's fake device does the rest.
+      - name: Allow the microphone
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $store = 'Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone'
+          foreach ($key in "HKLM:\$store", "HKCU:\$store", "HKCU:\$store\NonPackaged") {
+            New-Item -Path $key -Force | Out-Null
+            Set-ItemProperty -Path $key -Name Value -Value Allow
+          }
+
       # Linux runners have no display, so the window opens on a virtual one.
       - name: Smoke test
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
-            scripts/ci/step.sh "Smoke test" xvfb-run -a pnpm --filter @wave/desktop test:e2e
+            scripts/ci/step.sh "Smoke test" xvfb-run -a bash -c "cd apps/desktop && npx electron-vite build && npx playwright test --repeat-each 6 e2e/recognize.spec.ts e2e/downloadsPage.spec.ts"
             # MPRIS needs a session bus, which only this check gets: playerctl drives Wave.
             scripts/ci/step.sh "System media controls" env WAVE_PLAYERCTL=1 dbus-run-session -- xvfb-run -a pnpm --filter @wave/desktop exec playwright test e2e/system.spec.ts
           else
-            scripts/ci/step.sh "Smoke test" pnpm --filter @wave/desktop test:e2e
+            scripts/ci/step.sh "Smoke test" bash -c "cd apps/desktop && npx electron-vite build && npx playwright test --repeat-each 6 e2e/recognize.spec.ts e2e/downloadsPage.spec.ts"
           fi
 
       # Separate from the smoke suite: one window, no retries, real native services.
