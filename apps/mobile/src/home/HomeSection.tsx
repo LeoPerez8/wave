@@ -80,6 +80,7 @@ import {
   homeOpeningState,
   homeSectionWaiting,
   magicQueueGrid,
+  SECTION_GAP,
   type HomeContent,
 } from "./homeOpening";
 
@@ -897,10 +898,19 @@ function CommunityPlaylists({ title, selection }: SectionProps) {
  * when it has nothing to show. A section added to the catalogue needs its
  * entry here (the type insists).
  */
-/** DJ has its own place in Home's arrangement and is unavailable with YT Music off. */
+/**
+ * DJ has its own place in Home's arrangement and is unavailable with YT Music
+ * off. Like every section it leaves `SECTION_GAP` above itself.
+ */
 function Dj() {
-  return useYtMusicEnabled() ? <DjCard /> : null;
+  return useYtMusicEnabled() ? (
+    <View style={DJ_SECTION}>
+      <DjCard />
+    </View>
+  ) : null;
 }
+
+const DJ_SECTION = { marginTop: SECTION_GAP } as const;
 
 const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
   dj: Dj,
@@ -940,9 +950,6 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
   favorites: Favorites,
   stats: HomeStats,
 };
-
-/** Space above every section but the first on a screen: what `TitledSection` puts there. */
-export const SECTION_GAP = CELL * 5;
 
 const INERT_HOME_SELECTION: HomeSelection = {
   enabled: false,

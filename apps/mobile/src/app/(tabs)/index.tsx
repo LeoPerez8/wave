@@ -14,9 +14,15 @@ import { IconButton } from "@/components/IconButton";
 import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { StagedSections } from "@/components/StagedSections";
 import { useHomeArrangement, homeTitleLongPress } from "@/home/homeArrangement";
-import { HomeSection, SECTION_GAP } from "@/home/HomeSection";
+import { HomeSection } from "@/home/HomeSection";
 import { useHomeScreenContent } from "@/home/homeContent";
-import { afterHomeFrame, homeItemEstimate, homeOpeningState } from "@/home/homeOpening";
+import {
+  afterHomeFrame,
+  homeItemEstimate,
+  homeOpeningState,
+  SECTION_GAP,
+} from "@/home/homeOpening";
+import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { startSavingHomeSnapshot } from "@/home/homeSnapshot";
 import { useHomeWorkSight } from "@/home/useHomeWorkSight";
 import { useHomeSelection } from "@/selection/useHomeSelection";
@@ -107,6 +113,7 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
   useScreenContent(ready);
   const arrangement = useHomeArrangement();
   const { fontScale, width } = useWindowDimensions();
+  const ytMusic = useYtMusicEnabled();
   // The first frame mounts the sections that start on screen; the rest follow a screen a
   // frame, before a scroll can reach them (#1380).
   const shown = homeItems(arrangement, { nothingPlayed });
@@ -133,7 +140,9 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
           <HomeRecap period={newRecap} />
           {/* Sections with nothing to show draw nothing, so whichever shows first is pulled up. */}
           <View style={newRecap === null ? FIRST_SECTION : undefined}>
-            <StagedSections estimate={(index) => homeItemEstimate(shown[index]!, fontScale, width)}>
+            <StagedSections
+              estimate={(index) => homeItemEstimate(shown[index]!, fontScale, width, ytMusic)}
+            >
               {shown.map((item, index) =>
                 item === "no-sections" ? (
                   <HomeLine key={item} top={SECTION_GAP}>
