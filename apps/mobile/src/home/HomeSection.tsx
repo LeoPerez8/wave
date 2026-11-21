@@ -123,14 +123,13 @@ function MostPlayedAlbums({ title, selection }: SectionProps) {
 
 /**
  * Home's Discover section: one header, its adjustments icon opening the
- * settings card all three rows share (`DiscoverSettingsButton`), the DJ card
- * while YT Music is on, then the rows in the owner's order, each under its label. A row with nothing to show isn't drawn: a mix row shows placeholder tiles
+ * settings card all three rows share (`DiscoverSettingsButton`), then the
+ * rows in the owner's order, each under its label. A row with nothing to show isn't drawn: a mix row shows placeholder tiles
  * while its first mixes build and is gone with YT Music off (Core's
  * `discoverMixesSection`), the Magic Queue row is gone while it has nothing
  * to show (Core's `magicQueueRow`: before its pages are first read, or with
  * an empty pool and no chart mix to take songs from). The section
- * is gone when every arranged row is gone and YT Music is off, which hides
- * the DJ card.
+ * is gone when every arranged row is gone and YT Music is off.
  */
 function Discover({ home, title, selection }: SectionProps) {
   const ytMusic = useYtMusicEnabled();
@@ -162,7 +161,6 @@ function Discover({ home, title, selection }: SectionProps) {
       selecting={selection.selecting}
     >
       <View style={{ gap: CELL * 3 }}>
-        {ytMusic && <DjCard />}
         {rows.map((id) =>
           id === "magic-queue" ? (
             <MagicQueueRow key={id} section={magicQueue} selection={selection} />
@@ -899,7 +897,13 @@ function CommunityPlaylists({ title, selection }: SectionProps) {
  * when it has nothing to show. A section added to the catalogue needs its
  * entry here (the type insists).
  */
+/** DJ has its own place in Home's arrangement and is unavailable with YT Music off. */
+function Dj() {
+  return useYtMusicEnabled() ? <DjCard /> : null;
+}
+
 const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
+  dj: Dj,
   discover: Discover,
   "in-your-orbit": InYourOrbit,
   "from-your-library": FromYourLibrary,

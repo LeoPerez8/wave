@@ -118,6 +118,7 @@ export const homeItemEstimate = (item: HomeItem, fontScale: number, width: numbe
   const { section } = item;
   if (MAY_DRAW_NOTHING.has(section)) return 0;
   const available = width - grid.margin * 2;
+  if (section === "dj") return CELL * 21;
   if (section === "discover") return SECTION_HEADING + magicQueueGrid(available, fontScale).height;
   return SECTION_HEADING + homePlaceholderHeight(section, fontScale, available);
 };

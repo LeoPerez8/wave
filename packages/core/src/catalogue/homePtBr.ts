@@ -3,6 +3,7 @@ import type { homeEn } from "./homeEn.ts";
 export const homePtBr: typeof homeEn = {
   title: "Wave",
   sections: {
+    dj: "DJ",
     discover: "Descobrir",
     "in-your-orbit": "Na sua órbita",
     "from-your-library": "Da sua biblioteca",
