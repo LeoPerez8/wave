@@ -148,7 +148,7 @@ const wireSnapshot = (snapshot: PlaySnapshot | null): PlaySnapshot | null =>
       };
 
 /** A local row a pushed row was read from, and the change it had then. */
-type PushMark =
+export type PushMark =
   | { readonly table: "songs"; readonly key: string; readonly changedAt: number }
   | { readonly table: "playlists" | "entries"; readonly id: number; readonly changedAt: number }
   | { readonly table: "favorites"; readonly trackId: number; readonly changedAt: number }
@@ -574,9 +574,22 @@ const followRows = {
 
 /**
  * Records that the account has the changes behind [marks] (`selectUnpushed`).
- * A row changed again since it was read keeps waiting.
+ * A row changed again since it was read keeps waiting. A row the service
+ * stored with its own time, because the one pushed was ahead of its clock
+ * ([storedAt], by mark), takes that time, so the phone and the service agree.
  */
-export const markPushed = (db: LibraryDatabase, marks: readonly PushMark[]): void => {
+export const markPushed = (
+  db: LibraryDatabase,
+  marks: readonly PushMark[],
+  storedAt: ReadonlyMap<PushMark, number> = new Map(),
+): void => {
+  /** What a pushed row behind [from] becomes. */
+  const pushedAs = (from: PushMark & { readonly changedAt: number }) => {
+    const at = storedAt.get(from);
+    return at === undefined || at >= from.changedAt
+      ? { pushed: true }
+      : { pushed: true, changedAt: at };
+  };
   const { accountSongs, playlists, playlistItems, favorites, preferenceChanges, playEvents } =
     schema;
   const { syncRemovals } = schema;
@@ -586,7 +599,7 @@ export const markPushed = (db: LibraryDatabase, marks: readonly PushMark[]): voi
       switch (from.table) {
         case "songs":
           tx.update(accountSongs)
-            .set({ pushed: true })
+            .set(pushedAs(from))
             .where(
               and(
                 eq(accountSongs.recordingKey, from.key),
@@ -597,19 +610,19 @@ export const markPushed = (db: LibraryDatabase, marks: readonly PushMark[]): voi
           break;
         case "playlists":
           tx.update(playlists)
-            .set({ pushed: true })
+            .set(pushedAs(from))
             .where(and(eq(playlists.id, from.id), eq(playlists.changedAt, from.changedAt)))
             .run();
           break;
         case "entries":
           tx.update(playlistItems)
-            .set({ pushed: true })
+            .set(pushedAs(from))
             .where(and(eq(playlistItems.id, from.id), eq(playlistItems.changedAt, from.changedAt)))
             .run();
           break;
         case "favorites":
           tx.update(favorites)
-            .set({ pushed: true })
+            .set(pushedAs(from))
             .where(
               and(eq(favorites.trackId, from.trackId), eq(favorites.changedAt, from.changedAt)),
             )
@@ -617,7 +630,7 @@ export const markPushed = (db: LibraryDatabase, marks: readonly PushMark[]): voi
           break;
         case "preferences":
           tx.update(preferenceChanges)
-            .set({ pushed: true })
+            .set(pushedAs(from))
             .where(
               and(
                 eq(preferenceChanges.key, from.key),
@@ -632,7 +645,7 @@ export const markPushed = (db: LibraryDatabase, marks: readonly PushMark[]): voi
         case "dismissedSuggestions": {
           const { table, key } = followRows[from.table];
           tx.update(table)
-            .set({ pushed: true })
+            .set(pushedAs(from))
             .where(and(eq(key, from.key), eq(table.changedAt, from.changedAt)))
             .run();
           break;

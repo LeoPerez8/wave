@@ -183,7 +183,8 @@ Migration `0009_dismissed_suggestions` adds `dismissed_suggestions`, the follow 
 the owner dismissed. Deploy it before an app that sends them; as with follows, only a phone
 with a dismissal would be refused by an older service.
 
-`200`, how many rows of each table won (and were stored):
+`200`, how many rows of each table won (and were stored), and the rows stored with another
+change time than the one pushed:
 
 ```json
 {
@@ -198,9 +199,19 @@ with a dismissal would be refused by an older service.
     "hiddenReleases": 0,
     "notifiedShows": 0,
     "dismissedSuggestions": 0
+  },
+  "corrected": {
+    "playlists": [{ "id": "…", "changedAt": 1760443200000 }]
   }
 }
 ```
+
+A `changedAt` ahead of the service's clock is stored as the service's time (Core's
+`withinServiceClock`), before the merge, in every table but `plays`, which carries none.
+`corrected` names each such row that was stored, by table, with the time it now has; a table
+with none is left out. The app takes that time for its own row (Core's `readPushAnswer`), so
+it agrees with the service and doesn't push the row again. An app from before `corrected`
+ignores it.
 
 A push is all or nothing. `400 { "error": "bad_request", "detail": "songs[3].durationMs isn't an integer" }`
 for a row that isn't valid or a table that doesn't exist.

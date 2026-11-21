@@ -244,6 +244,7 @@ describe("POST /v1/push and GET /v1/pull", () => {
         notifiedShows: 0,
         dismissedSuggestions: 0,
       },
+      corrected: {},
     });
 
     const pulled = await pull(service, phoneB);
@@ -729,4 +730,92 @@ test("Graveyard tombstones keep their song and manual removal date through push 
   await push(service, session, { playlistEntries: [entry] });
   const page = await pullAll(service, session);
   assert.deepEqual(readPullPage(JSON.stringify(page))?.playlistEntries, [entry]);
+});
+
+describe("a change time ahead of the service's clock", () => {
+  test("is stored as the service's time, and a later change by another device wins over it", async () => {
+    const service = await harness();
+    const ahead = await service.signIn();
+    const other = await service.signIn();
+    const storedAt = service.now;
+
+    const answer = await push(service, ahead, {
+      playlists: [playlist("drive", storedAt + 86_400_000, "phone-z", "Drive")],
+    });
+    assert.deepEqual(answer.accepted && (answer.accepted as Record<string, number>).playlists, 1);
+    assert.deepEqual(answer.corrected, { playlists: [{ id: "drive", changedAt: storedAt }] });
+    assert.equal((await pull(service, other)).playlists[0]?.changedAt, storedAt);
+
+    service.now += 60_000;
+    const renamed = playlist("drive", service.now, "phone-a", "Road");
+    await push(service, other, { playlists: [renamed] });
+    assert.deepEqual((await pullAll(service, ahead)).playlists, [renamed]);
+  });
+
+  test("is corrected in every table that carries one", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const at = service.now + 5_000;
+    const stamp = { changedAt: at, phoneId: "phone-a", deleted: false };
+
+    const answer = await push(service, session, {
+      songs: [song("song-1", at)],
+      playlists: [playlist("drive", at, "phone-a", "Drive")],
+      playlistEntries: [
+        { id: "e1", ...stamp, playlistId: "drive", orderKey: "a0", songId: "song-1", addedAt: 1 },
+      ],
+      favorites: [favorite("song-1", at)],
+      preferences: [preference(at, "on")],
+      plays: [play("phone-a:1")],
+      follows: [{ id: "tricky", changedAt: at, phoneId: "phone-a", deleted: true }],
+      hiddenReleases: [{ id: "deezer:1", ...stamp }],
+      notifiedShows: [{ id: "show-1", ...stamp }],
+      dismissedSuggestions: [{ id: "bjork", ...stamp, dismissedAt: 10 }],
+    });
+    const now = service.now;
+    assert.deepEqual(answer.corrected, {
+      songs: [{ id: "song-1", changedAt: now }],
+      playlists: [{ id: "drive", changedAt: now }],
+      playlistEntries: [{ id: "e1", changedAt: now }],
+      favorites: [{ id: "song-1", changedAt: now }],
+      preferences: [{ id: "settings.ytMusic", changedAt: now }],
+      follows: [{ id: "tricky", changedAt: now }],
+      hiddenReleases: [{ id: "deezer:1", changedAt: now }],
+      notifiedShows: [{ id: "show-1", changedAt: now }],
+      dismissedSuggestions: [{ id: "bjork", changedAt: now }],
+    });
+    const page = await pullAll(service, session);
+    for (const table of Object.keys(answer.corrected as object) as (keyof typeof page)[]) {
+      assert.deepEqual(
+        (page[table] as readonly { changedAt?: unknown }[]).map((row) => row.changedAt),
+        [now],
+        table,
+      );
+    }
+  });
+
+  test("a row whose time is not ahead is stored unchanged, and the answer names none", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const rows = [
+      playlist("past", service.now - 1, "phone-a", "Past"),
+      playlist("present", service.now, "phone-a", "Present"),
+    ];
+    const answer = await push(service, session, { playlists: rows });
+    assert.deepEqual(answer.corrected, {});
+    assert.deepEqual((await pullAll(service, session)).playlists, rows);
+  });
+
+  test("a corrected row that loses to the row held isn't named", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    await push(service, session, {
+      playlists: [playlist("drive", service.now, "phone-z", "Held")],
+    });
+    const answer = await push(service, session, {
+      playlists: [playlist("drive", service.now + 9_000, "phone-a", "Ahead")],
+    });
+    assert.deepEqual(answer.corrected, {});
+    assert.equal((await pullAll(service, session)).playlists[0]?.name, "Held");
+  });
 });

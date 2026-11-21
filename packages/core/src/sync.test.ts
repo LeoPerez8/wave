@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  withinServiceClock,
   fillMissingSongs,
   findRecording,
   joinLibraries,
@@ -245,6 +246,27 @@ describe("mergeRows", () => {
 });
 
 const play = (id: string, listenedMs: number) => ({ id, recordingKey: "k", listenedMs });
+
+describe("withinServiceClock", () => {
+  const row = (id: string, changedAt: number) => ({ id, changedAt, phoneId: "a", deleted: false });
+
+  test("a change time ahead of the service's clock becomes the service's time", () => {
+    assert.deepEqual(withinServiceClock([row("p1", 9_000)], 5_000), [row("p1", 5_000)]);
+  });
+
+  test("a change time that isn't ahead stays as it is, the same row", () => {
+    const rows = [row("p1", 4_999), row("p2", 5_000)];
+    const stored = withinServiceClock(rows, 5_000);
+    assert.equal(stored[0], rows[0]);
+    assert.equal(stored[1], rows[1]);
+  });
+
+  test("a change corrected to the service's time loses to a later change by another phone", () => {
+    const ahead = withinServiceClock([{ ...row("p1", 99_000), phoneId: "z" }], 5_000);
+    const later = { ...row("p1", 6_000), phoneId: "a" };
+    assert.deepEqual(mergeRows(ahead, [later]).accepted, [later]);
+  });
+});
 
 describe("mergePlays", () => {
   test("a play is added once, and a play already held is never changed", () => {

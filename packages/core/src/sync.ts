@@ -156,6 +156,15 @@ export const mergeRows = <R extends SyncRow>(
   return { rows: sortedById(winners.values()), accepted: sortedById(accepted.values()) };
 };
 
+/**
+ * Pushed [rows] as the service stores them at its time [now]: a change time
+ * ahead of the service's clock becomes [now], so a phone whose clock runs
+ * ahead doesn't win over the changes other phones make later. A row that
+ * isn't ahead is returned as it is, the same object.
+ */
+export const withinServiceClock = <R extends SyncRow>(rows: readonly R[], now: number): R[] =>
+  rows.map((row) => (row.changedAt > now ? { ...row, changedAt: now } : row));
+
 /** A synced play event: its id is made on the phone that recorded it, and is the same everywhere. */
 export interface SyncPlay {
   readonly id: string;
