@@ -66,6 +66,7 @@ import { Player, playbackState, sleepTimerState, sleepTimerLoaded } from "./Play
 import { onPlayEnded } from "./PlayHistory";
 import { Queue, queueState, toQueueTrack, type QueueTrack } from "./Queue";
 import { queueTracks, toYtQueueTrack } from "./queueTracks";
+import { fillingPlay } from "./fillingPlay";
 import { readQueueContinuationSeed } from "./queueContinuationSeed";
 import { savedDiscoverMixForContinuation } from "../home/discoverMixes";
 import { makeQueueLengths } from "./queueLengths";
@@ -231,6 +232,7 @@ const continuationSeedNow = (state: QueueState) =>
         enabled: continueQueueOn(),
         sleepTimer: sleepTimerState.get(),
         ahead: timeAhead(),
+        filling: fillingPlay.get(),
       })
     : null;
 
@@ -840,6 +842,8 @@ export const layer = Layer.effectDiscard(
           sleepTimerState.subscribe(onQueue),
           subscribeStreamBuffer(followQueueEnd),
           onContinueQueue(followQueueEnd),
+          // A play done adding its songs lets its queue continue.
+          fillingPlay.subscribe(followQueueEnd),
           subscribeConnectivity(askAgain),
           subscribeYtMusicEnabled(askAgain),
           retryBatch.subscribe(() => fork(fill)),

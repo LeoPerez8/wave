@@ -4,6 +4,7 @@ import {
   EMPTY_QUEUE,
   MAGIC_QUEUE_CONTEXT,
   RECAP_PLAY_CONTEXT,
+  FOLLOW_PLAY_CONTEXT,
   queueContinuation,
   reduceQueue,
   queueWrite,
@@ -269,4 +270,21 @@ test("without radios a continuation can draw from other Library artists, still l
     ranked.map((candidate) => candidate.trackId),
     ["3", "4", "2"],
   );
+});
+
+test("a play still adding its songs holds the continuation until it's done", () => {
+  const context = { kind: FOLLOW_PLAY_CONTEXT, id: "play-1" };
+  const single = reduceQueue(EMPTY_QUEUE, { type: "play", trackIds: ["1"], context }).state;
+  const ahead = { bufferMs: 60_000, durationMs: () => 30_000 };
+  assert.equal(queueContinuation(single, { ahead, filling: context }), null);
+  assert.equal(queueContinuation(single, { filling: context }), null);
+  // Another play's filling doesn't hold this queue, and once it's done the queue continues.
+  assert.deepEqual(
+    queueContinuation(single, { filling: { kind: FOLLOW_PLAY_CONTEXT, id: "play-0" } }),
+    {
+      kind: "track",
+      id: "1",
+    },
+  );
+  assert.deepEqual(queueContinuation(single, { ahead, filling: null }), { kind: "track", id: "1" });
 });
