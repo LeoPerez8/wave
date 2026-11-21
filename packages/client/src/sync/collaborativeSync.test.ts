@@ -66,6 +66,7 @@ const AIRBAG_RETAGGED: FixtureTrack = {
   album: "OK Computer (Remastered)",
   artist: "Radiohead",
   durationMs: 285_000,
+  artworkHash: "airbag-cover",
 };
 
 /** A phone of [account], signed in, with [songs]; [collaborative] gives it the collaboration service. */
@@ -164,6 +165,16 @@ const shared = async ({ pageSize }: { readonly pageSize?: number } = {}) => {
 };
 
 describe("a member's device", () => {
+  test("a matched Library entry reads the matched Track's cached cover", async () => {
+    const { bea } = await shared();
+    await bea.sync();
+    const airbag = selectPlaylist(bea.db, bea.playlist("Drive").id)?.items[0];
+    assert.equal(airbag?.source, "library");
+    if (airbag?.source !== "library") throw new Error("Airbag should match its local Track");
+    assert.equal(airbag.track.thumbPath, "/covers/airbag-cover.thumb.jpg");
+    assert.equal(airbag.track.artworkPath, "/covers/airbag-cover.jpg");
+  });
+
   test("shows the owner's playlist after a cycle, and its own changes reach the owner", async () => {
     const { world, ana, bea } = await shared();
     await bea.sync();
@@ -647,6 +658,20 @@ const adders = (device: Phone) =>
   selectPlaylist(device.db, device.playlist("Drive").id)?.items.map((item) => item.addedBy);
 
 describe("who added each entry", () => {
+  test("the owner pull keeps every member, including its own named account", async () => {
+    const { ana, bea } = await shared();
+    await ana.sync();
+    await bea.sync();
+    const owner = selectCollaborations(ana.db)[0];
+    assert.deepEqual(
+      owner?.members.map(({ accountId, name, self }) => [accountId, name, self]),
+      [
+        ["ana", "ana", true],
+        ["bea", "bea", false],
+      ],
+    );
+  });
+
   test("every device reads the account that added each entry", async () => {
     const { ana, bea } = await shared();
     await bea.sync();

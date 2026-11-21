@@ -8,6 +8,7 @@
 import { UNKNOWN_ALBUM, UNKNOWN_ARTIST } from "./library.ts";
 import type { UnsearchedEntry } from "./playlistEntries.ts";
 import { normalizeSearchText } from "./search.ts";
+import { videoCoverUrl } from "./streamedCover.ts";
 import { libraryMatches, type YtSong } from "./ytMusic.ts";
 
 /**
@@ -142,7 +143,7 @@ export const collaborativeEntryMatcher = <T extends EntryTrack>(
       artists: entry.credit === null ? [] : [entry.credit],
       album: entry.album,
       durationMs: knownLength(entry.durationMs),
-      artworkUrl: null,
+      artworkUrl: entry.videoId === null ? null : videoCoverUrl(entry.videoId),
     };
     return entry.videoId === null
       ? { source: "unsearched", song }

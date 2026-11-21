@@ -2,11 +2,12 @@ import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
 import { usePanGesture } from "react-native-gesture-handler";
 import { useSharedValue, type SharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
-import type { OverlayRect } from "@wave/core";
+import type { NowPlayingSlot, OverlayRect } from "@wave/core";
 
 import { measureRect, type Measurable } from "@/motion/measureRect";
 import { handleHold } from "@/motion/handleHold";
 
+import { slotCanDrag } from "./slotCanDrag";
 import { slotRectsInFrame, slotUnderFinger } from "./slotHit";
 import { slotTapGuard } from "./slotTapGuard";
 
@@ -93,9 +94,14 @@ export function useNowPlayingSlotDrag(
 }
 
 /** A held edit slot follows the finger until it lands on one of the seven slots. */
-export function useSlotDragGesture(drag: ReturnType<typeof useNowPlayingSlotDrag>, slot: number) {
+export function useSlotDragGesture(
+  drag: ReturnType<typeof useNowPlayingSlotDrag>,
+  slot: number,
+  action: NowPlayingSlot,
+) {
   const { rects, x, y, source, target } = drag.state;
   const pan = usePanGesture({
+    enabled: slotCanDrag(action),
     activateAfterLongPress: handleHold.activateAfterLongPress,
     minDistance: handleHold.minDistance,
     onActivate: (event) => {

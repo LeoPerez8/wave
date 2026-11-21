@@ -6,12 +6,15 @@ import {
   artistGraph,
   DJ_GRID_TILES,
   DJ_MAX_SELECTED,
+  EMPTY_QUEUE,
+  MAGIC_QUEUE_CONTEXT,
   djArtistTile,
   djAlbumTile,
   djFamilyRadioAllowed,
   djGenreTile,
   djNewToYou,
   djRadioSongAllowed,
+  djFirstLibrarySong,
   djGrid,
   djOpened,
   djReduce,
@@ -32,9 +35,78 @@ import {
   djSeedTiles,
   djSelectable,
   magicArtistKey,
+  reduceQueue,
+  wantsMagicBatch,
   type DjTile,
   type TasteProfile,
 } from "./index.ts";
+
+test("DJ can take its first playable Library song from the selected artist or album", () => {
+  const artist = djArtistTile("Portishead")!;
+  const album = djAlbumTile({ title: "Dummy", artist: "Portishead", libraryId: 42 })!;
+  const songs = [
+    { id: 1, path: null, albumId: 2, artistIds: [7], artistNames: ["Portishead"], genre: null },
+    {
+      id: 2,
+      path: "song.flac",
+      albumId: 2,
+      artistIds: [7],
+      artistNames: ["Portishead"],
+      genre: null,
+    },
+    { id: 3, path: "album.flac", albumId: 42, artistIds: [9], artistNames: ["Other"], genre: null },
+    {
+      id: 4,
+      path: "family.flac",
+      albumId: 2,
+      artistIds: [10],
+      artistNames: ["Metal Act"],
+      genre: "Metal",
+    },
+  ];
+  assert.equal(djFirstLibrarySong([artist], songs)?.id, 2);
+  assert.equal(djFirstLibrarySong([album], songs)?.id, 3);
+  const family = { ...djGenreTile("Metal")!, artists: [{ id: 10, name: "Metal Act" }] };
+  assert.equal(djFirstLibrarySong([family], songs)?.id, 4);
+});
+
+test("DJ's first Library song follows candidate ranking, exclusions and randomized ties", () => {
+  const artist = djArtistTile("Portishead")!;
+  const songs = [
+    {
+      id: 2,
+      path: "first.flac",
+      albumId: 1,
+      artistIds: [7],
+      artistNames: ["Portishead"],
+      genre: null,
+    },
+    {
+      id: 3,
+      path: "second.flac",
+      albumId: 1,
+      artistIds: [7],
+      artistNames: ["Portishead"],
+      genre: null,
+    },
+  ];
+  const ranked = (id: number) => (id === 2 ? 1 : 2);
+  assert.equal(djFirstLibrarySong([artist], songs, { scoreOf: (song) => ranked(song.id) })?.id, 3);
+  assert.equal(
+    djFirstLibrarySong([artist], songs, {
+      scoreOf: (song) => ranked(song.id),
+      excluded: new Set(["3"]),
+    })?.id,
+    2,
+  );
+  assert.equal(
+    djFirstLibrarySong([artist], songs, {
+      scoreOf: () => 1,
+      random: () => 0.99,
+    })?.id,
+    3,
+  );
+});
 
 /** A taste profile scoring [artists] by name. */
 const tasteOf = (artists: Record<string, number>): TasteProfile => ({
@@ -635,6 +707,36 @@ describe("a Magic Queue with a DJ seed", () => {
     assert.equal(batch.trackIds[0], ytTrackId("v0"));
     assert.equal(batch.session.batches, 1);
     assert.equal(completeMagicRadioBatch(batch.session, candidates, []).trackIds.length, 4);
+  });
+
+  test("the batch appends nine after a Library song already started", () => {
+    const candidates = Array.from({ length: 14 }, (_, at) =>
+      rankedSong(`v${at}`, `Artist ${at % 5}`),
+    );
+    const batch = completeMagicRadioBatch({ ...started(), used: ["42"] }, candidates, []);
+    assert.equal(batch.trackIds.length, 9);
+    assert.equal(batch.session.batches, 1);
+  });
+
+  test("Library and radio starts each complete to ten songs and do not trigger a second batch", () => {
+    const radioFirst = ytTrackId("v0");
+    const candidates = Array.from({ length: 11 }, (_, at) =>
+      rankedSong(`v${at}`, `Artist ${at % 5}`),
+    );
+    for (const first of ["42", radioFirst]) {
+      const batch = completeMagicRadioBatch({ ...started(), used: [first] }, candidates, []);
+      assert.equal(batch.trackIds.length, 9);
+      const queue = reduceQueue(EMPTY_QUEUE, {
+        type: "play",
+        trackIds: [first, ...batch.trackIds],
+        startIndex: 0,
+        context: { kind: MAGIC_QUEUE_CONTEXT, id: batch.session.id },
+        shuffle: false,
+      }).state;
+      assert.equal(queue.entries.length, 10);
+      assert.equal(queue.entries[queue.index]?.trackId, first);
+      assert.equal(wantsMagicBatch(batch.session, queue), false);
+    }
   });
 
   test("ranks at its own choices, whatever Discover's sliders say", () => {

@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { TAB_PATH, detailPath, inLibraryStack, isDetailPath, tabOfPath } from "./index.ts";
+import {
+  TAB_PATH,
+  detailPath,
+  inLibraryStack,
+  isDetailPath,
+  playlistAddSongsPath,
+  tabOfPath,
+} from "./index.ts";
 
 describe("tabOfPath", () => {
   test("each tab's own screen", () => {
@@ -55,6 +62,19 @@ describe("detailPath", () => {
     assert.equal(detailPath("/library/artists", "artist", 3), "/library/artist/3");
     assert.equal(detailPath("/search", "playlist", 2), "/library/playlist/2");
     assert.equal(detailPath("/now-playing", "artist", 3), "/library/artist/3");
+  });
+});
+
+describe("playlistAddSongsPath", () => {
+  test("keeps Add Songs inside the playlist's section stack", () => {
+    assert.equal(playlistAddSongsPath("/playlists/playlist/2", 2), "/playlists/playlist/2/add");
+    assert.equal(playlistAddSongsPath("/favorites/playlist/2", 2), "/favorites/playlist/2/add");
+    assert.equal(playlistAddSongsPath("/songs/playlist/2", 2), "/songs/playlist/2/add");
+  });
+
+  test("uses the Library stack for screens opened outside a section tab", () => {
+    assert.equal(playlistAddSongsPath("/library/playlist/2", 2), "/library/playlist/2/add");
+    assert.equal(playlistAddSongsPath("/search", 2), "/library/playlist/2/add");
   });
 });
 

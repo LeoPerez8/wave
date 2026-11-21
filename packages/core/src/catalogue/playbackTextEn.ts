@@ -135,6 +135,7 @@ export const playbackTextEn = {
   repeatOne: "Repeat One",
   search: "Search",
   searchYourLibrary: "Search your library",
+  searchSongs: "Search songs",
   searchingForLyrics: "Searching for lyrics",
   selectsThisLineToShare: "Selects this line to share",
   share: "Share",

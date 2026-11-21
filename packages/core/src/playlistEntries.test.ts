@@ -3,6 +3,9 @@ import { describe, test } from "node:test";
 
 import {
   planPlaylistSongs,
+  playlistAddVisit,
+  holdPlaylistAddVisitSong,
+  stepPlaylistAddVisit,
   playlistEntryLinks,
   playlistPlayback,
   readPlaylistEntrySong,
@@ -77,6 +80,54 @@ describe("planPlaylistSongs", () => {
     // Video ids are letters; a Library id is a number: the keys can't meet.
     const plan = planPlaylistSongs([library(7)], [stream(yt("7"))]);
     assert.deepEqual(plan.add, [stream(yt("7"))]);
+  });
+});
+
+describe("playlist add search visits", () => {
+  test("songs already in the playlist start checked and cannot be removed by a tap", () => {
+    const held = [library(1), stream(yt("online"))];
+    const visit = playlistAddVisit(held);
+
+    assert.deepEqual(stepPlaylistAddVisit(visit, library(1)), {
+      visit,
+      action: "none",
+      checked: true,
+    });
+    assert.deepEqual(stepPlaylistAddVisit(visit, stream(yt("online"))), {
+      visit,
+      action: "none",
+      checked: true,
+    });
+  });
+
+  test("an added song can be tapped again to undo only that visit's add", () => {
+    const held = library(1);
+    const added = library(2);
+    const opened = playlistAddVisit([held]);
+    const first = stepPlaylistAddVisit(opened, added);
+    assert.equal(first.action, "add");
+    assert.equal(first.checked, true);
+
+    const undo = stepPlaylistAddVisit(first.visit, added);
+    assert.equal(undo.action, "remove");
+    assert.equal(undo.checked, false);
+    assert.equal(stepPlaylistAddVisit(undo.visit, held).action, "none");
+  });
+
+  test("a song found to have arrived from another member becomes checked and inert", () => {
+    const song = stream(yt("collaborative"));
+    const visit = playlistAddVisit([]);
+    const tapped = stepPlaylistAddVisit(visit, song);
+    const held = holdPlaylistAddVisitSong(tapped.visit, song);
+    assert.equal(stepPlaylistAddVisit(held, song).action, "none");
+    assert.equal(held.added.has("yt:collaborative"), false);
+  });
+
+  test("the same recording as a Library song and a YT Music song is a different entry", () => {
+    const visit = playlistAddVisit([library(7)]);
+    const result = stepPlaylistAddVisit(visit, stream(yt("7")));
+    assert.equal(result.action, "add");
+    assert.equal(result.checked, true);
   });
 });
 

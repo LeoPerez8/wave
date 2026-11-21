@@ -51,6 +51,10 @@ describe("entryAdder", () => {
     assert.deepEqual(entryAdder("ana", [LEO, ANA]), { initial: "A", name: "Ana Souza" });
   });
 
+  test("the owner's own entries resolve through the full member list too", () => {
+    assert.deepEqual(entryAdder("leo", [LEO, ANA]), { initial: "L", name: "Leo Perez" });
+  });
+
   test("shows no one for an entry of a deleted account, an unknown one or none", () => {
     assert.equal(entryAdder("gone", [LEO, ANA]), null);
     assert.equal(entryAdder(null, [LEO, ANA]), null);
