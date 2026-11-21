@@ -304,6 +304,19 @@ and by Move Up, and the failed section. Its screenshots are `downloads-<step>-<p
 JVM, and a live YouTube download with its tags read back and its Library entry visible. The live
 check stops after search on CI; inspect its annotations if YouTube refuses the machine.
 
+## Home's editor
+
+`e2e/homeEditor.spec.ts` edits Home from its Edit Home dialog with the keyboard alone (Move Up,
+Remove, Add, Discover's rows), drags a row, then edits again under Settings › Home. It checks
+Home's headings after each change and, once the app has closed, that a section this Wave doesn't
+draw kept its place in the stored arrangement. Screenshots are `home-editor-<platform>-light.png`,
+`-dark.png` and `-settings.png`.
+
+`home.arrangement()` gives Core's `HomeArrangement`; `home.edit(edit)` takes one
+`HomeArrangementEdit`, which main checks with `readHomeArrangementEdit`, applies to the synced
+`settings.homeArrangement` with `editStoredHomeArrangement` (`src/main/homeArrangement.ts`) and
+stamps for sync. `bridge.test.ts` syncs it with a phone both ways.
+
 ## Lyrics translation
 
 `e2e/lyricsTranslation.spec.ts` turns Translate on in the Lyrics tab and Now Playing against a
@@ -335,6 +348,20 @@ the same card and no service is asked anything. It also checks that pasted text 
 does nothing, that a paste into the search field stays a paste, and that Copy Link reaches the
 system clipboard. What a link opens with YT Music on is tested in
 `src/main/links/links.test.ts`, against a fake JVM and `fetch`.
+
+## Online lyrics search
+
+`lyrics.searchOnline(query)` asks Genius through the sync service with the Wave session
+(`src/main/lyrics/geniusLyricsSearch.ts`, the phone's `requestGeniusLyricsSearch` from
+`@wave/client/geniusLyricsSearch`), and `lyrics.openOnlineHit(id)` plays or opens a hit of the
+last answer. The window waits for the typing pause and lists the hits (`OnlineLyrics.tsx`).
+
+`e2e/geniusLyricsSearch.spec.ts` runs it against the sync service in memory and a fake Genius
+(`e2e/geniusFixture.ts`), with YT Music off: the three-word rule, the signed-out, failed and
+offline lines, five hits then twenty, the hit a Library Lyrics row hides, a Library song that
+plays and a Genius page that opens. A hit that plays from YT Music is tested in
+`src/main/lyrics/geniusLyricsSearch.test.ts` against a fake search; the live one is an owner
+check.
 
 ## Opening files
 

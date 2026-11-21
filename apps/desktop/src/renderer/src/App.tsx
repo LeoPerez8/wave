@@ -54,6 +54,14 @@ import {
   type SongSelectionControls,
 } from "./SongActions.tsx";
 import { collectionActions, CollectionSelectionBar } from "./CollectionActions.tsx";
+import {
+  MixedSelectionBar,
+  onlyCollection,
+  pickCheckboxes,
+  withCollection,
+  withPick,
+  type CollectionPicks,
+} from "./MixedSelection.tsx";
 import { itemMenuEvents, type MenuPoint } from "./Menu.tsx";
 import { usePlaylistEdits } from "./Playlists.tsx";
 import { Graveyard } from "./Graveyard.tsx";
@@ -65,6 +73,7 @@ import { FollowButton } from "./FollowButton.tsx";
 import { FollowedArtistsSettings } from "./FollowedArtistsSettings.tsx";
 import { geniusAccess } from "./useSongGenius.ts";
 import { Home } from "./Home.tsx";
+import { HomeSettings } from "./HomeEditor.tsx";
 import { Stats } from "./Stats.tsx";
 import type { StatsRoute } from "../../shared/stats.ts";
 import { ListeningHistory } from "./ListeningHistory.tsx";
@@ -104,6 +113,7 @@ const ytPages = [
 const settings = [
   "library",
   "appearance",
+  "home",
   "window",
   "playback",
   "lyricsAndTags",
@@ -171,11 +181,31 @@ export function App() {
     readonly list: string;
     readonly selection: TableSelection;
   }>();
-  const [selectedItem, setSelectedItem] = useState<{
+  /** The albums, artists, genres and playlists checked on a page, alone or with its songs. */
+  const [picked, setPicked] = useState<{
     readonly route: Route;
-    readonly target: CollectionTarget;
+    readonly picks: CollectionPicks;
   }>();
-  const collectionSelection = selectedItem?.route === route ? selectedItem.target : undefined;
+  const picks = picked?.route === route ? picked.picks : undefined;
+  const setPicks = (change: (picks: CollectionPicks | undefined) => CollectionPicks | undefined) =>
+    setPicked((current) => {
+      const next = change(current?.route === route ? current.picks : undefined);
+      return next && { route, picks: next };
+    });
+  // Search lists songs beside collections: its checked songs act with them, under one bar.
+  const searched = route.kind === "search" ? (route.query ?? "").trim() : undefined;
+  const searchSongs =
+    selecting !== undefined &&
+    searched !== undefined &&
+    [`search-songs:${searched}`, `search-lyrics:${searched}`].includes(selecting.list)
+      ? { scope: { kind: "search", query: searched } as const, selection: selecting.selection }
+      : undefined;
+  const pickedSongs = picks && searchSongs;
+  const searchBoxes =
+    searched !== undefined && (pickCheckboxes(picks) || searchSongs?.selection.checkboxes === true);
+  /** One collection checked through its menu's Select keeps its own bar. */
+  const collectionSelection =
+    pickedSongs === undefined && pickCheckboxes(picks) ? onlyCollection(picks) : undefined;
   const playlistEdits = usePlaylistEdits({
     go: (next) => go(next),
     deleted: (id) => {
@@ -323,11 +353,21 @@ export function App() {
     changed: playback.refresh,
     newPlaylist: playlistEdits.newPlaylist,
   });
-  const selectionFor = (owner: string): SongSelectionControls => ({
-    selection: selecting?.list === owner ? selecting.selection : undefined,
-    onSelection: (selection) => setSelection(owner, selection),
-    actions,
-  });
+  const selectionFor = (owner: string): SongSelectionControls => {
+    const own = selecting?.list === owner ? selecting.selection : undefined;
+    return {
+      selection: !searchBoxes
+        ? own
+        : own === undefined
+          ? tableSelectionOf([], true)
+          : own.checkboxes
+            ? own
+            : { ...own, checkboxes: true },
+      onSelection: (selection) => setSelection(owner, selection),
+      actions,
+      ...(searched !== undefined && picks ? { bar: false as const } : {}),
+    };
+  };
   const table = selectionFor(list);
   // Says a download began, wherever it was asked for; a notice from before the window opened isn't news.
   const noticeSeen = useRef<number | null | undefined>(undefined);
@@ -350,8 +390,10 @@ export function App() {
       if (actions.closeMenu()) return;
       if (shortcuts) return setShortcuts(false);
       if (nowPlaying) return setNowPlaying(false);
-      if (selecting) return setSelecting(undefined);
-      if (collectionSelection) return setSelectedItem(undefined);
+      if (selecting || picks) {
+        setSelecting(undefined);
+        return setPicked(undefined);
+      }
       return false;
     },
   });
@@ -492,8 +534,8 @@ export function App() {
     play: (target, shuffle) => playList(shuffle, target),
     goToArtist: (id) => go({ kind: "artist", id }),
     select: (target) => {
-      setSelecting(undefined);
-      setSelectedItem({ route, target });
+      if (searched === undefined) setSelecting(undefined);
+      setPicks((current) => withCollection(current, target));
     },
     newPlaylist: playlistEdits.newPlaylist,
     playlistEdits: playlistEdits.playlistItems,
@@ -918,16 +960,31 @@ export function App() {
           </p>
         )}
         {account?.invitation && <SignInInvitation onError={failed} />}
-        {collectionSelection && (
+        {collectionSelection ? (
           <CollectionSelectionBar
             key={`${collectionSelection.kind}:${collectionSelection.id}`}
             target={collectionSelection}
             here={here}
             itemsFor={collections.itemsFor}
             openItems={actions.openItems}
-            done={() => setSelectedItem(undefined)}
+            done={() => setPicked(undefined)}
             failed={failed}
           />
+        ) : (
+          picks && (
+            <MixedSelectionBar
+              picks={picks}
+              songs={pickedSongs}
+              revision={revision}
+              actions={actions}
+              changed={playback.refresh}
+              failed={failed}
+              done={() => {
+                setPicked(undefined);
+                if (pickedSongs) setSelecting(undefined);
+              }}
+            />
+          )
         )}
         {route.kind === "settings" ? (
           <div className="settings-page">
@@ -1024,6 +1081,8 @@ export function App() {
                 <WindowSettings onError={failed} />
               ) : setting === "versionHistory" ? (
                 <VersionHistory />
+              ) : setting === "home" ? (
+                <HomeSettings revision={revision} onError={failed} />
               ) : setting === "downloads" ? (
                 <DownloadSettings onError={failed} />
               ) : setting === "followedArtists" ? (
@@ -1076,6 +1135,11 @@ export function App() {
             query={route.query ?? ""}
             ytMusic={ytMusic}
             searchOnline={searchOnline}
+            onlineLyrics={{
+              access: geniusAccess(account),
+              onSignIn: openGeniusSignIn,
+              onOpen: rememberSearch,
+            }}
             onYtPlay={(videoId) => {
               rememberSearch();
               playback.run(window.wave.magicQueue.startStreamed(videoId));
@@ -1106,6 +1170,11 @@ export function App() {
               playback.run(window.wave.playback.start(scope, index));
             }}
             selectionFor={selectionFor}
+            collectionSelection={(kind) => ({
+              selection: picks?.[kind] ?? (searchBoxes ? tableSelectionOf([], true) : undefined),
+              onSelection: (selection) =>
+                setPicks((current) => withPick(current, kind, selection, searchBoxes)),
+            })}
             onCollectionMenu={openCollectionMenu}
             onUnavailable={() => setError(text.desktopLibrary.driveDisconnected)}
             onPick={(picked) => {
@@ -1201,17 +1270,14 @@ export function App() {
                 onSort={setShownSort}
                 onOpen={open}
                 onError={failed}
-                selection={
-                  collectionSelection && collectionSelection.kind === collectionKind
-                    ? tableSelectionOf([collectionSelection.id], true)
-                    : table.selection
-                }
+                selection={collectionKind ? picks?.[collectionKind] : table.selection}
                 onSelection={
-                  collectionSelection && collectionSelection.kind === collectionKind
-                    ? () => setSelectedItem(undefined)
+                  collectionKind
+                    ? (selection) =>
+                        setPicks((current) => withPick(current, collectionKind, selection))
                     : table.onSelection
                 }
-                {...(collectionSelection
+                {...(picks
                   ? {}
                   : {
                       onMenu: (row: BrowseRow, at: MenuPoint) => {

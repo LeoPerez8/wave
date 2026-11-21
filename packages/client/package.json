@@ -28,6 +28,9 @@
     "./testing/syncService": "./src/sync/testSyncService.ts",
     "./geniusSource": "./src/geniusSource.ts",
     "./geniusStorage": "./src/geniusStorage.ts",
+    "./geniusLyricsSearch": "./src/geniusLyricsSearch.ts",
+    "./geniusHitMenu": "./src/geniusHitMenu.ts",
+    "./resolveRecognition": "./src/resolveRecognition.ts",
     "./lyricsTranslationSource": "./src/lyricsTranslationSource.ts"
   },
   "scripts": {

@@ -29,6 +29,7 @@ import type { DesktopFolder, DesktopSong, ScanStatus } from "./library.ts";
 import type { BrowseKind, BrowseScope, BrowsePage, BrowseRow } from "./browse.ts";
 import type { YtSearchPage, YtStatus } from "./yt.ts";
 import type { SearchOnline } from "@wave/core";
+import type { HomeArrangement, HomeArrangementEdit } from "@wave/core";
 import type {
   DiscoverMixesView,
   DiscoverSettings,
@@ -47,6 +48,7 @@ import type {
   MissingSongsList,
   MissingSongsView,
 } from "./downloads.ts";
+import type { GeniusHitOpened, GeniusLyricsSearchView } from "./geniusLyricsSearch.ts";
 import type { GeniusPhase, SongGenius, SongLyrics, SongTranslation } from "./lyrics.ts";
 import {
   PLAYLIST_CALLS,
@@ -78,6 +80,10 @@ import type {
   CollectionRunAction,
   CollectionRunResult,
   CollectionTarget,
+  SelectionMenu,
+  SelectionRunAction,
+  SelectionRunResult,
+  SelectionTarget,
 } from "./collectionActions.ts";
 import {
   LYRICS_AND_TAGS_CALLS,
@@ -193,6 +199,16 @@ export interface BridgeContract
   readonly "lyrics.cancelGenius": {
     readonly args: readonly [requestId: string];
     readonly result: void;
+  };
+  /** Search's online lyrics for a query: Genius's songs, or the line to show instead. */
+  readonly "lyrics.searchOnline": {
+    readonly args: readonly [query: string];
+    readonly result: GeniusLyricsSearchView;
+  };
+  /** A click on a hit of the last answer, by Genius's song id. */
+  readonly "lyrics.openOnlineHit": {
+    readonly args: readonly [id: number];
+    readonly result: GeniusHitOpened;
   };
   /** Whether the Lyrics view's Translate button is on; kept on this computer. */
   readonly "lyrics.translateOn": { readonly args: readonly []; readonly result: boolean };
@@ -419,6 +435,18 @@ export interface BridgeContract
     ];
     readonly result: CollectionRunResult;
   };
+  readonly "collections.selectionActions": {
+    readonly args: readonly [target: SelectionTarget];
+    readonly result: SelectionMenu;
+  };
+  readonly "collections.runSelection": {
+    readonly args: readonly [
+      target: SelectionTarget,
+      action: SelectionRunAction,
+      playlistId?: number,
+    ];
+    readonly result: SelectionRunResult;
+  };
   readonly "songs.run": {
     readonly args: readonly [target: SongTarget, action: SongRunAction, playlistId?: number];
     readonly result: SongRunResult;
@@ -464,6 +492,11 @@ export interface BridgeContract
   readonly "home.releaseArtwork": {
     readonly args: readonly [key: string];
     readonly result: string | null;
+  };
+  readonly "home.arrangement": { readonly args: readonly []; readonly result: HomeArrangement };
+  readonly "home.edit": {
+    readonly args: readonly [edit: HomeArrangementEdit];
+    readonly result: HomeArrangement;
   };
   readonly "stats.overview": {
     readonly args: readonly [period: StatsPeriod];
@@ -520,6 +553,8 @@ export const BRIDGE_CALLS = [
   "lyrics.song",
   "lyrics.genius",
   "lyrics.cancelGenius",
+  "lyrics.searchOnline",
+  "lyrics.openOnlineHit",
   "lyrics.translateOn",
   "lyrics.setTranslateOn",
   "lyrics.translation",
@@ -605,6 +640,8 @@ export const BRIDGE_CALLS = [
   "account.answerInvitation",
   "collections.actions",
   "collections.run",
+  "collections.selectionActions",
+  "collections.runSelection",
   ...PLAYLIST_CALLS,
   ...LYRICS_AND_TAGS_CALLS,
   "search.library",
@@ -617,6 +654,8 @@ export const BRIDGE_CALLS = [
   "home.followCheck",
   "home.openRelease",
   "home.releaseArtwork",
+  "home.arrangement",
+  "home.edit",
   ...FOLLOWS_CALLS,
   ...LINK_CALLS,
   ...ARTIST_PAGE_CALLS,
@@ -681,6 +720,10 @@ export interface WaveBridge {
     readonly openRelease: (key: string) => Promise<HomeReleaseOpening>;
     /** A release card's cover as a data URL, or null. */
     readonly releaseArtwork: (key: string) => Promise<string | null>;
+    /** Home's sections and Discover rows as the account arranges them, for Home's editor. */
+    readonly arrangement: () => Promise<HomeArrangement>;
+    /** Makes one change of Home's editor to the synced arrangement and gives it as it is then. */
+    readonly edit: (edit: HomeArrangementEdit) => Promise<HomeArrangement>;
   };
   /** An artist page's Follow button and Settings › Followed artists. */
   readonly follows: FollowsBridge;
@@ -701,6 +744,8 @@ export interface WaveBridge {
       phase: GeniusPhase,
     ) => Promise<SongGenius>;
     readonly cancelGenius: (requestId: string) => Promise<void>;
+    readonly searchOnline: (query: string) => Promise<GeniusLyricsSearchView>;
+    readonly openOnlineHit: (id: number) => Promise<GeniusHitOpened>;
     readonly translateOn: () => Promise<boolean>;
     readonly setTranslateOn: (on: boolean) => Promise<boolean>;
     readonly translation: (
@@ -858,6 +903,13 @@ export interface WaveBridge {
       action: CollectionRunAction,
       playlistId?: number,
     ) => Promise<CollectionRunResult>;
+    /** The selection bar's entries for songs and collections checked together. */
+    readonly selectionActions: (target: SelectionTarget) => Promise<SelectionMenu>;
+    readonly runSelection: (
+      target: SelectionTarget,
+      action: SelectionRunAction,
+      playlistId?: number,
+    ) => Promise<SelectionRunResult>;
   };
   readonly playlists: PlaylistBridge;
   /** Settings › Lyrics and tags. */
@@ -892,6 +944,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     song: (trackId) => invoke("lyrics.song", trackId),
     genius: (trackId, requestId, phase) => invoke("lyrics.genius", trackId, requestId, phase),
     cancelGenius: (requestId) => invoke("lyrics.cancelGenius", requestId),
+    searchOnline: (query) => invoke("lyrics.searchOnline", query),
+    openOnlineHit: (id) => invoke("lyrics.openOnlineHit", id),
     translateOn: () => invoke("lyrics.translateOn"),
     setTranslateOn: (on) => invoke("lyrics.setTranslateOn", on),
     translation: (trackId, language) => invoke("lyrics.translation", trackId, language),
@@ -1001,6 +1055,9 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
   collections: {
     actions: (target, options) => invoke("collections.actions", target, options),
     run: (target, action, playlistId) => invoke("collections.run", target, action, playlistId),
+    selectionActions: (target) => invoke("collections.selectionActions", target),
+    runSelection: (target, action, playlistId) =>
+      invoke("collections.runSelection", target, action, playlistId),
   },
   playlists: playlistBridge(invoke),
   lyricsAndTags: lyricsAndTagsBridge(invoke),
@@ -1017,6 +1074,8 @@ export const createBridge = (invoke: Invoke): WaveBridge => ({
     followCheck: () => invoke("home.followCheck"),
     openRelease: (key) => invoke("home.openRelease", key),
     releaseArtwork: (key) => invoke("home.releaseArtwork", key),
+    arrangement: () => invoke("home.arrangement"),
+    edit: (edit) => invoke("home.edit", edit),
   },
   follows: followsBridge(invoke),
   links: linkBridge(invoke),
