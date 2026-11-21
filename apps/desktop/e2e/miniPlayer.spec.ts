@@ -123,13 +123,11 @@ test("the mini player opens from the player bar and the tray, controls playback 
     // Its buttons skip, pause, play and star, and both windows follow.
     const view = () =>
       page.evaluate(() =>
-        (window as unknown as { wave: WaveBridge }).wave.playback
-          .view()
-          .then((v) => ({
-            title: v.current?.title,
-            state: v.status.state,
-            at: v.status.positionMs,
-          })),
+        (window as unknown as { wave: WaveBridge }).wave.playback.view().then((v) => ({
+          title: v.current?.title,
+          state: v.status.state,
+          at: v.status.positionMs,
+        })),
       );
     const t0 = Date.now();
     console.log("DIAG before-next", JSON.stringify(await view()));
@@ -234,7 +232,22 @@ test("the mini player opens from the player bar and the tray, controls playback 
       ).trayMenu.find((item) => item.label === "Mini Player")!;
       (entry.click as () => void)();
     });
-    const reopened = await again;
+    const reopened = await again.catch(async (e) => {
+      console.log(
+        "DIAG TRAY",
+        JSON.stringify(
+          await app.evaluate(({ BrowserWindow }) =>
+            BrowserWindow.getAllWindows().map((w) => ({
+              title: w.getTitle(),
+              visible: w.isVisible(),
+              destroyed: w.isDestroyed(),
+            })),
+          ),
+        ),
+        JSON.stringify(app.windows().map((w) => w.url())),
+      );
+      throw e;
+    });
     await expect(reopened.getByText("Mini Song 2", { exact: true })).toBeVisible();
     // Where it was left.
     expect((await windowState(app, "Mini Player"))?.position).toEqual([180, 140]);

@@ -72,7 +72,22 @@ test("YT Music artists and albums open from Search, a result's names, the bar an
     await songs
       .getByRole("button", { name: new RegExp(`^${goToArtist}`) })
       .first()
-      .click();
+      .click()
+      .catch(async (e) => {
+        console.log(
+          "DIAG YT",
+          JSON.stringify({
+            songs: await songs.count(),
+            text: (await page.locator("main").innerText()).slice(0, 3000),
+            buttons: await songs
+              .getByRole("button")
+              .evaluateAll((all) =>
+                all.slice(0, 20).map((b) => b.getAttribute("aria-label") ?? b.textContent),
+              ),
+          }),
+        );
+        throw e;
+      });
     await expect(page.getByTestId("yt-artist")).toBeVisible({ timeout: 45_000 });
     await page.screenshot({ path: "test-results/yt-navigation-artist.png" });
     await back.click();

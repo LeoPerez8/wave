@@ -230,7 +230,7 @@ jobs:
       - name: Smoke test
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
-            scripts/ci/step.sh "Smoke test" xvfb-run -a bash -c "cd apps/desktop && npx electron-vite build && npx playwright test e2e/miniPlayer.spec.ts"
+            scripts/ci/step.sh "Smoke test" xvfb-run -a bash -c "cd apps/desktop && npx electron-vite build && npx playwright test --repeat-each 15 --retries 0 e2e/recap.spec.ts e2e/ytNavigation.spec.ts"
             # MPRIS needs a session bus, which only this check gets: playerctl drives Wave.
             scripts/ci/step.sh "System media controls" env WAVE_PLAYERCTL=1 dbus-run-session -- xvfb-run -a pnpm --filter @wave/desktop exec playwright test e2e/system.spec.ts
           else

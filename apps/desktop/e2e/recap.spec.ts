@@ -189,10 +189,34 @@ test("a Recap plays its stories over the window, with its music, and a story sav
     });
 
     // Esc closes it: the queue is as it was, and Home stops announcing the Recap.
+    await page.evaluate(() => {
+      const w = window as unknown as { wave: WaveBridge; trace: string[] };
+      w.trace = [];
+      const start = Date.now();
+      let last = "";
+      const tick = async () => {
+        const v = await w.wave.playback.view();
+        const bar = document.querySelector(".player-bar .player-title")?.textContent;
+        const line = `${v.current?.title ?? null}|${v.length}|${v.status.state}|${v.status.positionMs}|bar=${bar}`;
+        if (line !== last) w.trace.push(`${Date.now() - start} ${line}`);
+        last = line;
+        if (Date.now() - start < 8000) setTimeout(() => void tick(), 20);
+      };
+      void tick();
+    });
     await page.keyboard.press("Escape");
     await expect(viewer).toHaveCount(0);
     await expect.poll(playing).toMatchObject({ title: null, length: 0 });
-    await expect(page.locator(".player-title")).toHaveText(en.desktopLayout.nothingPlaying);
+    try {
+      await expect(page.locator(".player-title")).toHaveText(en.desktopLayout.nothingPlaying);
+    } catch (e) {
+      await page.waitForTimeout(3000);
+      console.log(
+        "DIAG RECAP",
+        JSON.stringify(await page.evaluate(() => (window as unknown as { trace: string[] }).trace)),
+      );
+      throw e;
+    }
     await expect(card).toHaveCount(0);
 
     // Stats lists every Recap, newest first, and a tile opens its stories.
