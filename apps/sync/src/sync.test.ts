@@ -47,6 +47,7 @@ const play = (id: string, overrides: Readonly<Record<string, unknown>> = {}) => 
   counted: true,
   contextType: "album",
   contextId: "Mezzanine",
+  contextPlaylistId: null,
   source: "phone",
   importedFrom: null,
   ...overrides,
@@ -133,6 +134,28 @@ describe("POST /v1/push and GET /v1/pull", () => {
       });
     }
     assert.deepEqual((await pull(service, session)).plays, []);
+  });
+
+  test("a playlist play keeps its playlist's sync id, and one pushed without it has none", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const fromPlaylist = play("playlist-play", {
+      contextType: "playlist",
+      contextId: "7",
+      contextPlaylistId: "playlist-sync-id",
+    });
+    const { contextPlaylistId: _, ...older } = play("older-playlist-play", {
+      contextType: "playlist",
+      contextId: "7",
+    });
+    await push(service, session, { plays: [fromPlaylist, older] });
+
+    const page = await pull(service, session);
+    assert.deepEqual(page.plays, [
+      { ...fromPlaylist, snapshot: null, videoId: null },
+      { ...older, contextPlaylistId: null, snapshot: null, videoId: null },
+    ]);
+    assert.deepEqual(readPullPage(JSON.stringify(page))?.plays, page.plays);
   });
 
   test("an older client can push and pull plays without snapshot or video id", async () => {

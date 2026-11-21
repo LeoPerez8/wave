@@ -157,3 +157,56 @@ test("In your orbit follows Discover with the artists played in the last 14 days
     "Joni Mitchell",
   );
 });
+
+test("In your orbit holds ten Library artists though online artists were played more", async () => {
+  const db = await openTestDatabase();
+  const now = Date.now();
+  for (let i = 0; i < 12; i++) {
+    recordPlay(
+      db,
+      {
+        trackId: `yt:online-${i}`,
+        startedAt: now - i,
+        listenedMs: 60_000,
+        durationMs: 180_000,
+        endReason: "completed",
+        counted: true,
+        source: "desktop",
+        context: null,
+      },
+      false,
+      {
+        videoId: `online-${i}`,
+        title: `Online ${i}`,
+        artists: [`Online artist ${i}`],
+        album: null,
+        durationMs: 180_000,
+        artworkUrl: null,
+        explicit: false,
+        albumId: null,
+      },
+    );
+  }
+  const expected: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const id = addTrack(db, { title: `Local ${i}`, artist: `Local artist ${i}` });
+    expected.push(`Local artist ${i}`);
+    recordPlay(db, {
+      trackId: String(id),
+      startedAt: now - 100 - i,
+      listenedMs: 60_000,
+      durationMs: 180_000,
+      endReason: "completed",
+      counted: true,
+      source: "desktop",
+      context: null,
+    });
+  }
+  const home = readHome(db, null);
+  assert.deepEqual(
+    home.items
+      .find((section) => section.id === "in-your-orbit")
+      ?.rows.items.map((row) => row.title),
+    expected,
+  );
+});

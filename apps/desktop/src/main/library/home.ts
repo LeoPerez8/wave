@@ -32,7 +32,9 @@ export const readHome = (db: LibraryDatabase, stored: string | null): HomeView =
     ).map((row) => ({ ...row, playCount: counts.get(row.id)! }));
   };
   // In your orbit, the Library's artists of it: the desktop has no online artist page to open.
-  const orbit = inYourOrbit(playedArtistTotals(db, inYourOrbitWindow(now)));
+  const orbit = inYourOrbit(
+    playedArtistTotals(db, inYourOrbitWindow(now)).filter((row) => typeof row.item.id === "number"),
+  );
   const played = home.mostPlayed.filter((r) => r.source === "library");
   const counts = new Map(played.map((r) => [r.track.id, r.playCount]));
   const rows: Record<LocalHomeSectionId, readonly HomeRow[]> = {

@@ -419,6 +419,9 @@ export const selectUnpushed = (
   const plays = db
     .select({
       ...getTableColumns(playEvents),
+      contextPlaylistId: sql<string | null>`CASE WHEN ${playEvents.contextType} = 'playlist' THEN
+        (SELECT sync_id FROM playlists WHERE id = CAST(${playEvents.contextId} AS INTEGER))
+        ELSE NULL END`,
       currentTitle: tracks.title,
       currentArtist: tracks.artistCredit,
       currentAlbum: schema.albums.title,
@@ -451,6 +454,7 @@ export const selectUnpushed = (
           counted: row.counted,
           contextType: row.contextType,
           contextId: row.contextId,
+          contextPlaylistId: row.contextPlaylistId,
           source: row.source,
           importedFrom: row.importedFrom,
           snapshot: wireSnapshot(
@@ -1129,6 +1133,22 @@ const applyPreference = (
   return { key: row.id, value: row.deleted ? null : row.value };
 };
 
+/**
+ * A pulled playlist play's context on this phone. Playlist numbers differ
+ * between phones, so the play names its playlist by sync id; one that names
+ * none (a Wave from before it did) or a playlist this phone lacks keeps no
+ * playlist, and counts for none.
+ */
+const playlistContext = (tx: LibraryDatabase, row: SyncPlayRow): string | null => {
+  if (row.contextPlaylistId == null) return null;
+  const playlist = tx
+    .select({ id: schema.playlists.id })
+    .from(schema.playlists)
+    .where(eq(schema.playlists.syncId, row.contextPlaylistId))
+    .get();
+  return playlist === undefined ? null : String(playlist.id);
+};
+
 const applyPlay = (
   tx: LibraryDatabase,
   row: SyncPlayRow,
@@ -1203,7 +1223,7 @@ const applyPlay = (
       endReason: row.endReason,
       counted: row.counted,
       contextType: row.contextType,
-      contextId: row.contextId,
+      contextId: row.contextType === "playlist" ? playlistContext(tx, row) : row.contextId,
       source: row.source,
       importedFrom: row.importedFrom,
       ongoing: false,
