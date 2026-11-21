@@ -103,3 +103,16 @@ test("a planted unbounded cache fails the guard", () => {
     "planted.ts#kept",
   ]);
 });
+
+test("a screen under a push is frozen as a hidden tab is (#1423)", () => {
+  const stacks = Object.entries(sources).filter(([, text]) => /<Stack(?![.\w])/.test(text));
+  assert.ok(stacks.length >= 3, "the root, Library and section-tab stacks are found");
+  for (const [file, text] of stacks) {
+    for (const [stack] of text.matchAll(/<Stack(?![.\w])[^>]*?(?:\/>|>)/gs)) {
+      assert.match(stack, /screenOptions=\{screenOptions\}/, `${file}: ${stack}`);
+    }
+    assert.match(text, /const screenOptions = useStackScreenOptions\(\);/, file);
+  }
+  const tabs = sources["chrome/tabScreens.tsx"]!;
+  assert.match(tabs, /freezeOnBlur: TAB_SCREENS\.freeze/);
+});

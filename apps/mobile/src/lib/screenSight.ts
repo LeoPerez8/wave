@@ -6,6 +6,7 @@ import { AppState } from "react-native";
 import { isNowPlayingShown, onNowPlayingShownChange } from "@/nowPlaying/sheet";
 
 import { sightOf, useStoreInSight, type ScreenSight, type SightCondition } from "./sight";
+import { selectFrom, type Selectable } from "./storeSelector";
 
 export type { ScreenSight } from "./sight";
 
@@ -73,4 +74,18 @@ export const useSightedStore = <A>(
 ): A => {
   const sight = useScreenSight();
   return useStoreInSight(FOLLOW_HIDDEN ? null : sight, subscribe, get);
+};
+
+/**
+ * The slice [select] takes of [store] as the calling screen follows it
+ * (`useSightedStore`), re-rendering only when it changes by [equals]
+ * (`useStoreSelector`). [store], [select] and [equals] must be stable.
+ */
+export const useSightedSelector = <A, B>(
+  store: Selectable<A>,
+  select: (value: A) => B,
+  equals?: (previous: B, next: B) => boolean,
+): B => {
+  const slice = useMemo(() => selectFrom(store, select, equals), [store, select, equals]);
+  return useSightedStore(slice.subscribe, slice.get);
 };

@@ -14,6 +14,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
 import {
@@ -171,6 +172,51 @@ function ClearUncovered({
 }
 
 /**
+ * What a row's swipe uncovers on both edges, each showing while the row moves
+ * off it, faint until armed. Mounted on the row's first touch or demo (#1423).
+ */
+function Edges({
+  swipe,
+  clear,
+  offsetX,
+  width,
+}: {
+  swipe: RowSwipe;
+  clear: boolean;
+  offsetX: SharedValue<number>;
+  width: SharedValue<number>;
+}) {
+  const strength = (moved: number) => {
+    "worklet";
+    return moved <= 0 ? 0 : rowSwipeArmed({ translationX: moved, width: width.get() }) ? 1 : 0.5;
+  };
+  const rightStyle = useAnimatedStyle(() => ({ opacity: strength(offsetX.get()) }));
+  const leftStyle = useAnimatedStyle(() => ({ opacity: strength(-offsetX.get()) }));
+  return (
+    <>
+      {swipe.right !== null && (
+        <Animated.View pointerEvents="none" className="absolute inset-0" style={rightStyle}>
+          {clear ? (
+            <ClearUncovered action={swipe.right} edge="start" offsetX={offsetX} width={width} />
+          ) : (
+            <Uncovered action={swipe.right} edge="start" />
+          )}
+        </Animated.View>
+      )}
+      {swipe.left !== null && (
+        <Animated.View pointerEvents="none" className="absolute inset-0" style={leftStyle}>
+          {clear ? (
+            <ClearUncovered action={swipe.left} edge="end" offsetX={offsetX} width={width} />
+          ) : (
+            <Uncovered action={swipe.left} edge="end" />
+          )}
+        </Animated.View>
+      )}
+    </>
+  );
+}
+
+/**
  * A song row that swipes sideways to run an action of its menu ([swipe]):
  * past a third of its width it arms with a light tick, letting go runs the
  * action, letting go sooner springs back, swinging past its rest as far as
@@ -227,13 +273,11 @@ export function SwipeableRow({
   const contentStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: offsetX.get() }],
   }));
-  // Each edge shows while the row moves off it, faint until armed.
-  const strength = (moved: number) => {
-    "worklet";
-    return moved <= 0 ? 0 : rowSwipeArmed({ translationX: moved, width: width.get() }) ? 1 : 0.5;
-  };
-  const rightStyle = useAnimatedStyle(() => ({ opacity: strength(offsetX.get()) }));
-  const leftStyle = useAnimatedStyle(() => ({ opacity: strength(-offsetX.get()) }));
+  // What a swipe uncovers is drawn from the first touch (well before the drag
+  // slop is crossed) or demo on, and kept.
+  const [uncovering, setUncovering] = useState(false);
+  const [firstDemo] = useState(demo);
+  if (demo !== firstDemo && !uncovering) setUncovering(true);
 
   const settle = () => {
     offsetX.set(reduceMotion ? 0 : withSpring(0, spring));
@@ -244,9 +288,8 @@ export function SwipeableRow({
   useLayoutEffect(() => {
     motion.current = { spring, reduceMotion };
   });
-  const firstDemo = useRef(demo);
   useEffect(() => {
-    if (demo === firstDemo.current) return;
+    if (demo === firstDemo) return;
     const plan = bounceDemoSwipe({
       width: widthRef.current,
       reduceMotion: motion.current.reduceMotion,
@@ -258,7 +301,7 @@ export function SwipeableRow({
         withSpring(0, motion.current.spring),
       ),
     );
-  }, [demo, offsetX]);
+  }, [demo, firstDemo, offsetX]);
 
   const finish = (translationX: number, velocityX: number, canceled: boolean) => {
     const side =
@@ -320,25 +363,9 @@ export function SwipeableRow({
         widthRef.current = measured;
         width.set(measured);
       }}
+      onTouchStart={active && !uncovering ? () => setUncovering(true) : undefined}
     >
-      {swipe.right !== null && (
-        <Animated.View pointerEvents="none" className="absolute inset-0" style={rightStyle}>
-          {clear ? (
-            <ClearUncovered action={swipe.right} edge="start" offsetX={offsetX} width={width} />
-          ) : (
-            <Uncovered action={swipe.right} edge="start" />
-          )}
-        </Animated.View>
-      )}
-      {swipe.left !== null && (
-        <Animated.View pointerEvents="none" className="absolute inset-0" style={leftStyle}>
-          {clear ? (
-            <ClearUncovered action={swipe.left} edge="end" offsetX={offsetX} width={width} />
-          ) : (
-            <Uncovered action={swipe.left} edge="end" />
-          )}
-        </Animated.View>
-      )}
+      {uncovering && <Edges swipe={swipe} clear={clear} offsetX={offsetX} width={width} />}
       <GestureDetector gesture={pan}>
         <Animated.View className={clear ? undefined : "bg-background"} style={contentStyle}>
           {children}
