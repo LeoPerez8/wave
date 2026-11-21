@@ -102,3 +102,37 @@
 .graveyard-copy .secondary {
   font-size: 12px;
 }
+.spotify-import {
+  width: min(480px, calc(100vw - 32px));
+  overflow: hidden;
+}
+.spotify-import .account-actions {
+  margin: 0;
+}
+.spotify-import-rows {
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.spotify-import-rows label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px;
+  border-radius: 6px;
+}
+.spotify-import-rows label:hover {
+  background: var(--color-fill);
+}
+.spotify-import-rows .yt-account-names {
+  flex: 1;
+}
+.spotify-import-imported {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.missing-songs li {
+  padding: 6px;
+}

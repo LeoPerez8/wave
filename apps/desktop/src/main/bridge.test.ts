@@ -46,6 +46,7 @@ import { desktopLinksLayer } from "./links/layer.ts";
 import { ytFeaturesLayer } from "./yt/ytServices.ts";
 import { ytAccountLayer } from "./yt/ytAccountLayer.ts";
 import { spotifyAccountLayer } from "./spotify/spotifyAccountLayer.ts";
+import { spotifyImportLayer } from "./spotify/spotifyImportLayer.ts";
 import type { YtBrowserOutcome } from "./yt/ytBrowserSignIn.ts";
 import { createYtSessions, ytSessionStore } from "./yt/ytSessionStore.ts";
 import { lyricsLayer } from "./lyrics/lyrics.ts";
@@ -529,19 +530,23 @@ const connect = (
             online: () => true,
             startSignIn: () => ({ outcome: Promise.resolve(browser.outcome), cancel: () => {} }),
           }),
-          spotifyAccountLayer({
-            clientId: null,
-            store: {
-              keyringMissing: () => true,
-              load: () => null,
-              save: () => {},
-              clear: () => {},
-            },
-            fetch: () => Promise.reject(new Error("no network")),
-            online: () => true,
-            openExternal: async () => {},
-            page: () => ({ title: "", message: "" }),
-          }),
+          spotifyImportLayer({ fetch: () => Promise.reject(new Error("no network")) }).pipe(
+            Layer.provideMerge(
+              spotifyAccountLayer({
+                clientId: null,
+                store: {
+                  keyringMissing: () => true,
+                  load: () => null,
+                  save: () => {},
+                  clear: () => {},
+                },
+                fetch: () => Promise.reject(new Error("no network")),
+                online: () => true,
+                openExternal: async () => {},
+                page: () => ({ title: "", message: "" }),
+              }),
+            ),
+          ),
         ).pipe(
           Layer.provideMerge(
             ytFeaturesLayer({ online: () => true }).pipe(
@@ -831,6 +836,52 @@ test("the Spotify account bridge refuses extra arguments and exposes no authoriz
       const photo = handlers.get("spotifyAccount.photo");
       assert.ok(photo);
       await assert.rejects(async () => photo(trusted, "https://elsewhere.test/image"), /Refused/);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("From Spotify's bridge checks what the window sends and answers without the account", async () => {
+  await withFile(async (file) => {
+    const { runtime, handlers, exposed } = connect(file);
+    try {
+      const wave = exposed.get("wave") as WaveBridge;
+      assert.deepEqual(Object.keys(wave.spotifyImport).sort(), [
+        "artwork",
+        "cancel",
+        "library",
+        "missing",
+        "run",
+      ]);
+      // This build names no Spotify client, so there is nothing to read.
+      const library = await wave.spotifyImport.library(false);
+      assert.equal(library.status, "failed");
+      assert.equal(library.status === "failed" && library.action, null);
+      const call = (name: string, ...args: unknown[]) => handlers.get(name)!(trusted, ...args);
+      await assert.rejects(call("spotifyImport.library", "yes"), /Refused/);
+      await assert.rejects(call("spotifyImport.library", false, 1), /Refused/);
+      await assert.rejects(call("spotifyImport.run", [], false), /Refused/);
+      await assert.rejects(call("spotifyImport.run", ["PLnotspotify"], false), /Refused/);
+      await assert.rejects(
+        call("spotifyImport.run", ["spotify:collection", "spotify:collection"], false),
+        /Refused/,
+      );
+      await assert.rejects(call("spotifyImport.run", ["spotify:collection"], "yes"), /Refused/);
+      await assert.rejects(call("spotifyImport.artwork", "https://i.scdn.co/image/a"), /Refused/);
+      await assert.rejects(call("spotifyImport.cancel", 1), /Refused/);
+      await assert.rejects(call("spotifyImport.missing", -1), /Refused/);
+      assert.deepEqual(await wave.spotifyImport.missing(7), {
+        total: 0,
+        songs: [],
+        finding: false,
+      });
+      // Nothing was listed, so Import has nothing to name; the window learns no more than that.
+      await assert.rejects(
+        call("spotifyImport.run", ["spotify:collection"], false),
+        /^Error: Spotify import failed$/,
+      );
+      assert.equal(await wave.spotifyImport.artwork("spotify:collection"), null);
     } finally {
       await runtime.dispose();
     }
@@ -2700,6 +2751,24 @@ test("main refuses download calls with bad songs, actions, ids or pages", async 
       await assert.rejects(call("downloads.retry", [7]), /Refused/);
       await assert.rejects(call("downloads.cancel", "abcdefghijk"), /Refused/);
       await assert.rejects(call("downloads.rows", 0, 10_000), /Refused/);
+      await assert.rejects(call("downloads.rows", 0, 10, "yes"), /Refused/);
+      await assert.rejects(
+        call("downloads.move", { kind: "song", from: "../journal", step: 1 }),
+        /Refused/,
+      );
+      await assert.rejects(
+        call("downloads.move", { kind: "group", from: "songs", step: 2 }),
+        /Refused/,
+      );
+      await assert.rejects(call("downloads.move", { kind: "group", from: "songs" }), /Refused/);
+      await assert.rejects(
+        call("downloads.move", { kind: "group", from: "songs", to: "album:7", step: 1 }),
+        /Refused/,
+      );
+      await assert.rejects(call("downloads.failedReason", "Not found online", "delete"), /Refused/);
+      // A move that names nothing waiting is taken and does nothing.
+      await call("downloads.move", { kind: "group", from: "songs", step: 1 });
+      await call("downloads.failedReason", "Not found online", "retry");
       await assert.rejects(call("downloads.setBestQuality", "on"), /Refused/);
     } finally {
       await runtime.dispose();

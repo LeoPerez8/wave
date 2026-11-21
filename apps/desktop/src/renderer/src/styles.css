@@ -1234,10 +1234,22 @@ kbd {
 .yt-download:focus-visible {
   color: var(--color-accent);
 }
-/* Downloads: the songs on their way and the ones that failed. */
+/* Downloads: the run's panel over one virtual list of groups, waiting songs and failures. */
 .downloads-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  font-variant-numeric: tabular-nums;
+}
+.downloads-scroll {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   padding-right: 22px;
+}
+.downloads-list {
+  position: relative;
 }
 .downloads-bar {
   display: flex;
@@ -1256,13 +1268,63 @@ kbd {
 .downloads-note {
   padding: 0 12px 14px;
 }
+.downloads-run {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 560px;
+  padding: 0 12px 16px;
+  font-size: 12px;
+}
+.downloads-run h2 {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-secondary);
+}
+.run-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.run-panel strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.run-bar {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-separator);
+  overflow: hidden;
+}
+.run-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--color-accent);
+}
 .download-row {
+  position: absolute;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 48px;
+  height: 52px;
   padding: 0 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--color-separator) 45%, transparent);
+}
+.download-row.movable {
+  cursor: grab;
+}
+.download-row.dragging {
+  opacity: 0.4;
+}
+.download-row.drop-over {
+  background: var(--color-fill);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
 }
 .download-song {
   flex: 1;
@@ -1272,6 +1334,39 @@ kbd {
 }
 .download-song > .secondary {
   font-size: 12px;
+}
+/* A group's header: its name, its counts, and its bar along the bottom edge. */
+.download-group {
+  align-items: flex-end;
+  padding-bottom: 10px;
+}
+.download-group h3 {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+}
+.download-group > .secondary {
+  font-size: 12px;
+}
+.download-group > .run-bar {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 2px;
+  height: 3px;
+}
+/* Move Up and Move Down show on the row under the pointer and while a key is on them. */
+.download-move {
+  display: flex;
+  opacity: 0;
+}
+.download-row:hover .download-move,
+.download-move:focus-within {
+  opacity: 1;
+}
+.download-move .icon-button {
+  width: 24px;
+  height: 24px;
 }
 .nav-count {
   margin-left: auto;
