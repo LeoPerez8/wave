@@ -388,6 +388,21 @@ export const queueDiscoverSongs = (
 };
 
 /**
+ * More of the playing context: a mixed list's [songs] join the end of the
+ * queue as context entries (Core's `append`), the Library's files and the
+ * others streamed. Missing songs are left out; nothing joins an empty queue.
+ */
+export const appendDiscoverSongs = (listed: readonly QueuedSong[]): Promise<void> => {
+  const songs = listed.filter(playable);
+  return dispatchWithYt(
+    { type: "append", trackIds: songs.map(queueSongTrackId) },
+    streamedSongs(songs),
+    undefined,
+    libraryQueueTracks(songs),
+  );
+};
+
+/**
  * Plays a listed [song] now as the current song (a related song tapped),
  * keeping Up Next and the songs lined up as they were (Core's `playNow`):
  * the Library's file when it has the song, else streamed. A missing song

@@ -41,6 +41,8 @@ describe("swipeActionTone", () => {
       "addToQueue",
       "magicQueue",
       "addToPlaylist",
+      "dislike",
+      "removeDislike",
       "download",
       "retryDownload",
       "goToAlbum",
@@ -129,6 +131,15 @@ describe("rowSwipeActions", () => {
     assert.equal(rowSwipeActions(starred, settings).right, "unfavorite");
   });
 
+  test("Dislike runs as the row's menu offers it: Remove dislike on a disliked song", () => {
+    const settings = { enabled: true, right: "remove", left: "dislike" } as const;
+    assert.equal(rowSwipeActions(songMenu(libraryFile), settings).left, "dislike");
+    const disliked = songMenu({ ...libraryFile, disliked: true });
+    assert.equal(rowSwipeActions(disliked, settings).left, "removeDislike");
+    assert.equal(rowSwipeActions(ytMenu({ disliked: false }), settings).left, "dislike");
+    assert.equal(rowSwipeActions(ytMenu({ disliked: true }), settings).left, "removeDislike");
+  });
+
   test("a direction set to an action the row's menu lacks does nothing on that row", () => {
     // Go to Album on the album's own page, Magic Queue on a YT Music song.
     const onAlbum = songMenu(libraryFile, "/library/album/3");
@@ -181,6 +192,14 @@ describe("configured swipes on each kind of row", () => {
     assert.equal(rowSwipeActions(done, both("download")).left, null);
   });
 
+  test("Dislike does nothing on a row whose menu has no Dislike", () => {
+    // A playlist's unavailable entry and its unsearched one have no video to dislike.
+    const unavailable = unavailableEntryActions({ search: true });
+    assert.deepEqual(rowSwipeActions(unavailable, both("dislike")), { right: null, left: null });
+    const unsearched = songMenu({ streamed: true, unsearched: true }, "/library/playlist/4");
+    assert.deepEqual(rowSwipeActions(unsearched, both("dislike")), { right: null, left: null });
+  });
+
   test("an unavailable entry offers neither a star nor a share: those directions do nothing", () => {
     const menu = unavailableEntryActions({ search: true });
     assert.deepEqual(rowSwipeActions(menu, both("favorite")), { right: null, left: null });
@@ -213,6 +232,7 @@ describe("SWIPE_CHOICES", () => {
       "Magic Queue",
       "Add to Playlist",
       "Favorite",
+      "Dislike",
       "Download",
       "Go to Album",
       "Go to Artist",
@@ -293,9 +313,13 @@ describe("swipe labels in Portuguese", () => {
       accessibilityLabel: "Remover da Playlist",
     });
     assert.deepEqual(swipeActionLabels("search", "pt-BR").label, "Buscar");
-    assert.deepEqual((["addToQueue", "remove"] as const).map(swipeChoiceLabelFor("pt-BR")), [
-      "Adicionar à Fila",
-      "Remover",
-    ]);
+    assert.deepEqual(
+      (["addToQueue", "dislike", "remove"] as const).map(swipeChoiceLabelFor("pt-BR")),
+      ["Adicionar à Fila", "Não gostei", "Remover"],
+    );
+    assert.deepEqual(swipeActionLabels("removeDislike", "pt-BR"), {
+      label: "Remover não gostei",
+      accessibilityLabel: "Remover não gostei",
+    });
   });
 });

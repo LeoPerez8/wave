@@ -211,7 +211,12 @@ export default function SearchScreen() {
   const rows = useMemo(() => {
     if (results === null) return [];
     const ytFound =
-      ytView === null ? 0 : ytView.songs.length + ytView.artists.length + ytView.albums.length;
+      ytView === null
+        ? 0
+        : ytView.songs.length +
+          ytView.artists.length +
+          ytView.albums.length +
+          ytView.playlists.length;
     const onlineLyrics = geniusLyrics.status === "hits" ? geniusLyrics.hits : [];
     const onlineLyricsStatus =
       geniusLyrics.status === "signedOut" ||

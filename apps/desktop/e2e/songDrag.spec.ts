@@ -108,12 +108,21 @@ test("songs drag onto a sidebar playlist, the Queue panel and the Queue button",
   });
   try {
     const page = await app.firstWindow();
-    await page.setViewportSize({ width: 1400, height: 900 });
     const toast = (message: string) => page.getByRole("status").filter({ hasText: message });
     const row = (title: string) => page.getByRole("row", { name: new RegExp(title) });
     const sidebar = page.locator(".sidebar-playlists");
     const evening = sidebar.getByRole("button", { name: "Evening", exact: true });
     await page.getByRole("button", { name: "Songs", exact: true }).click();
+    const find = page.locator(".find-field input");
+    const expectFindInContent = async () => {
+      await expect(find).toBeVisible();
+      expect((await find.boundingBox())!.x).toBeGreaterThanOrEqual(
+        await page.locator(".sidebar").evaluate((sidebar) => sidebar.getBoundingClientRect().right),
+      );
+      await expect(find).toHaveCSS("opacity", "1");
+    };
+    await expectFindInContent();
+    await page.setViewportSize({ width: 1400, height: 900 });
 
     // One row onto a sidebar playlist: it highlights while over it, and the toast says so.
     await dragOnto(page, row("Alpha"), evening);
@@ -176,8 +185,8 @@ test("songs drag onto a sidebar playlist, the Queue panel and the Queue button",
     // With the sidebar collapsed to icons, a playlist still takes the drop.
     await page.setViewportSize({ width: 1000, height: 900 });
     await expect(evening.locator(".nav-monogram")).toBeVisible();
-    const collapsedPlaylist = (await evening.boundingBox())!;
-    await dragOnto(page, row("Charlie"), evening, collapsedPlaylist.width - 10);
+    await expectFindInContent();
+    await dragOnto(page, row("Charlie"), evening);
     await expect(toast(describePlaylistAdd("Evening", 1, 0, "en"))).toBeVisible();
     await page.screenshot({
       path: test.info().outputPath(`song-drag-collapsed-${process.platform}.png`),

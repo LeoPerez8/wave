@@ -57,6 +57,7 @@ const LIMIT_NAMES: Record<Table, string> = {
   hiddenReleases: "maxHiddenReleases",
   notifiedShows: "maxNotifiedShows",
   dismissedSuggestions: "maxDismissedSuggestions",
+  dislikes: "maxDislikes",
 };
 
 export const testSyncService = (options: { readonly pageSize?: number } = {}): TestSyncService => {

@@ -142,6 +142,7 @@ test("Listening History lists every counted play, searches them all and opens a 
 
     // Clearing the field restores the full list, and a double click plays the song.
     await find.fill("");
+    await expect.poll(scrollHeight).toBeGreaterThan(first);
     await viewport.evaluate((element) => element.scrollTo(0, 0));
     await row("Rock Track").dblclick();
     await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeEnabled();

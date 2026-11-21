@@ -7,6 +7,7 @@ import { importsEn } from "./catalogue/importsEn.ts";
 import { homeEn } from "./catalogue/homeEn.ts";
 import { arrangementEn } from "./catalogue/arrangementEn.ts";
 import { discoverEn } from "./catalogue/discoverEn.ts";
+import { djEn } from "./catalogue/djEn.ts";
 import { statsEn } from "./catalogue/statsEn.ts";
 import { recapEn } from "./catalogue/recapEn.ts";
 import { listeningHistoryEn } from "./catalogue/listeningHistoryEn.ts";
@@ -192,6 +193,7 @@ export const en = {
   home: homeEn,
   arrangement: arrangementEn,
   discover: discoverEn,
+  dj: djEn,
   stats: statsEn,
   recap: recapEn,
   listeningHistory: listeningHistoryEn,
@@ -220,6 +222,8 @@ export const en = {
   } satisfies Record<TabBarTab, string>,
   newReleases: {
     title: "New from Artists You Follow",
+    /** TalkBack's name for the section header's Play, with the section's title. */
+    playSection: (title: string) => `Play ${title}`,
     single: "Single",
     ep: "EP",
     album: "Album",

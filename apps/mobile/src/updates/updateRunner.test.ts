@@ -705,7 +705,7 @@ describe("the update runner", () => {
     });
   });
 
-  describe("the update button", () => {
+  describe("the update action on the Version History row", () => {
     const apkAvailable: UpdateClient["checkNative"] = Effect.succeed("available");
     const apkDownloaded: UpdateClient["checkNative"] = Effect.succeed("downloaded");
 
@@ -718,23 +718,46 @@ describe("the update runner", () => {
       return run;
     };
 
-    const tap = async ({ runner, settle }: Pick<ReturnType<typeof setup>, "runner" | "settle">) => {
-      runner.tapUpdateButton();
+    type Run = Pick<ReturnType<typeof setup>, "runner" | "settle">;
+    /** A pull on Settings. */
+    const pull = async ({ runner, settle }: Run) => {
+      runner.pullToCheck();
+      runner.reconsider();
+      await settle();
+    };
+    /** A tap on Install Now, on the Version History row. */
+    const installNow = async ({ runner, settle }: Run) => {
+      runner.tapInstallNow();
       runner.reconsider();
       await settle();
     };
 
     it("checks at a tap inside the 15 minutes and says Wave is up to date", async () => {
       const run = await opened();
-      await tap(run);
+      await pull(run);
       assert.deepEqual(run.did, ["check"]);
       assert.deepEqual(run.notices, ["upToDate"]);
+    });
+
+    it("installs nothing at a pull with an update ready, which Install Now takes", async () => {
+      const run = await opened({ checkNative: apkDownloaded });
+      assert.equal(run.runner.buttonLook(), "installNow");
+      await pull(run);
+      assert.deepEqual(run.did, []);
+      assert.equal(run.runner.buttonLook(), "installNow");
+    });
+
+    it("does nothing at Install Now with no update ready", async () => {
+      const run = await opened();
+      await installNow(run);
+      assert.deepEqual(run.did, []);
+      assert.deepEqual(run.notices, []);
     });
 
     it("installs at a tap a downloaded APK the pill was swiped away for", async () => {
       const run = await opened({ checkNative: apkDownloaded });
       assert.equal(run.runner.offeredVersion(), "1.3.0");
-      await tap(run);
+      await installNow(run);
       assert.deepEqual(run.did, ["install"]);
       assert.deepEqual(run.notices, []);
     });
@@ -743,7 +766,7 @@ describe("the update runner", () => {
       const run = await opened({ checkNative: apkDownloaded });
       assert.equal(run.runner.buttonLook(), "installNow");
       run.surroundings.playing = true;
-      await tap(run);
+      await installNow(run);
       assert.deepEqual(run.did, ["install"]);
     });
 
@@ -751,7 +774,7 @@ describe("the update runner", () => {
       const run = await opened({ checkNative: apkDownloaded });
       run.surroundings.installAccess = "needsPermission";
       assert.equal(run.runner.buttonLook(), "installNow");
-      await tap(run);
+      await installNow(run);
       assert.deepEqual(run.did, ["permission"]);
       // Android's screen takes Wave's place, and Wave comes back with the permission.
       run.surroundings.visible = false;
@@ -766,14 +789,14 @@ describe("the update runner", () => {
     it("says when Install Now's install fails, and is the refresh button once the APK is gone", async () => {
       const run = await opened({ checkNative: apkDownloaded, installApk: failing });
       assert.equal(run.runner.buttonLook(), "installNow");
-      await tap(run);
+      await installNow(run);
       assert.deepEqual(run.notices, ["installFailed"]);
       assert.equal(run.runner.buttonLook(), "idle");
     });
 
     it("holds Install Now disabled while Android has the APK, then offers it again", async () => {
       const run = await opened({ checkNative: apkDownloaded });
-      await tap(run);
+      await installNow(run);
       assert.deepEqual(run.did, ["install"]);
       assert.equal(run.runner.buttonLook(), "installing");
       run.runner.installAbandoned(false);
@@ -792,17 +815,17 @@ describe("the update runner", () => {
       });
       assert.equal(run.runner.buttonLook(), "idle");
       offering = true;
-      await tap(run);
+      await pull(run);
       assert.deepEqual(run.did, ["check", "install"]);
     });
 
     it("keeps Install Now after Android's confirmation is declined, for another tap", async () => {
       const run = await opened({ checkNative: apkDownloaded });
-      await tap(run);
+      await installNow(run);
       run.runner.installAbandoned(false);
       assert.equal(run.runner.buttonLook(), "installNow");
       run.did.length = 0;
-      await tap(run);
+      await installNow(run);
       assert.deepEqual(run.did, ["install"]);
     });
 
@@ -810,7 +833,7 @@ describe("the update runner", () => {
       let answer: NativeUpdate = "none";
       const run = await opened({ checkNative: Effect.sync(() => answer) });
       answer = "available";
-      await tap(run);
+      await pull(run);
       assert.deepEqual(run.did, ["check", "downloadApk", "install"]);
     });
 
@@ -819,7 +842,7 @@ describe("the update runner", () => {
       const run = await opened({ checkNative: Effect.sync(() => answer) });
       run.surroundings.installAccess = "needsPermission";
       answer = "available";
-      await tap(run);
+      await pull(run);
       assert.deepEqual(run.did, ["check", "downloadApk", "permission"]);
     });
 
@@ -828,7 +851,7 @@ describe("the update runner", () => {
       const run = await opened({ checkNative: Effect.sync(() => answer) });
       run.surroundings.network = "metered";
       answer = "available";
-      await tap(run);
+      await pull(run);
       assert.deepEqual(run.did, ["check", "askMobileData", "downloadApkOnMobileData", "install"]);
     });
 
@@ -840,7 +863,7 @@ describe("the update runner", () => {
       });
       run.surroundings.network = "metered";
       answer = "available";
-      await tap(run);
+      await pull(run);
       assert.deepEqual(run.did, ["check"]);
       assert.deepEqual(run.notices, []);
       assert.equal(run.runner.buttonLook(), "idle");
@@ -850,7 +873,7 @@ describe("the update runner", () => {
       let available = false;
       const run = await opened({ check: Effect.sync(() => available) });
       available = true;
-      await tap(run);
+      await pull(run);
       assert.deepEqual(run.did, ["download"]);
       assert.deepEqual(run.notices, ["bundleOnItsWay"]);
     });
@@ -859,10 +882,10 @@ describe("the update runner", () => {
       let available = false;
       const run = await opened({ check: Effect.sync(() => available) });
       available = true;
-      await tap(run);
+      await pull(run);
       assert.equal(run.runner.buttonLook(), "installNow");
       run.did.length = 0;
-      await tap(run);
+      await installNow(run);
       assert.deepEqual(run.did, ["apply"]);
       assert.deepEqual(run.notices, ["bundleOnItsWay"]);
     });
@@ -875,7 +898,7 @@ describe("the update runner", () => {
       assert.equal(run.runner.buttonLook(), "installNow");
       run.surroundings.playing = true;
       run.surroundings.network = "none";
-      await tap(run);
+      await installNow(run);
       assert.deepEqual(run.did, ["download", "apply"]);
       assert.deepEqual(run.notices, []);
     });
@@ -884,11 +907,11 @@ describe("the update runner", () => {
       const run = setup({ check: found, apply: failing });
       run.runner.reconsider();
       await run.settle();
-      await tap(run);
+      await installNow(run);
       assert.deepEqual(run.notices, ["installFailed"]);
       assert.equal(run.runner.buttonLook(), "installNow");
       run.notices.length = 0;
-      await tap(run);
+      await installNow(run);
       assert.deepEqual(run.notices, ["installFailed"]);
     });
 
@@ -908,18 +931,18 @@ describe("the update runner", () => {
 
     it("says when the check fails", async () => {
       const run = await opened({ checkNative: failing });
-      await tap(run);
+      await pull(run);
       assert.deepEqual(run.notices, ["checkFailed"]);
       run.notices.length = 0;
       run.passMinutes(1);
-      await tap(run);
+      await pull(run);
       assert.deepEqual(run.notices, ["checkFailed"]);
     });
 
     it("says the check failed with no network, and tries nothing", async () => {
       const run = await opened();
       run.surroundings.network = "none";
-      await tap(run);
+      await pull(run);
       assert.deepEqual(run.did, []);
       assert.deepEqual(run.notices, ["checkFailed"]);
       assert.equal(run.runner.buttonLook(), "idle");
@@ -930,7 +953,7 @@ describe("the update runner", () => {
         let answer: NativeUpdate = "none";
         const run = await opened({ checkNative: Effect.sync(() => answer), downloadApk });
         answer = "available";
-        await tap(run);
+        await pull(run);
         assert.deepEqual(run.notices, ["downloadFailed"]);
         assert.deepEqual(run.did, ["check"]);
       }
@@ -953,11 +976,11 @@ describe("the update runner", () => {
 
     it("says when Android refuses the install, and a tap can try again", async () => {
       const run = await opened({ checkNative: apkDownloaded });
-      await tap(run);
+      await installNow(run);
       run.runner.installRefused();
       assert.deepEqual(run.notices, ["installFailed"]);
       run.did.length = 0;
-      await tap(run);
+      await pull(run);
       assert.deepEqual(run.did, ["check", "install"]);
     });
 
@@ -969,10 +992,10 @@ describe("the update runner", () => {
           finish = resume;
         }),
       });
-      run.runner.tapUpdateButton();
+      run.runner.pullToCheck();
       run.runner.reconsider();
       assert.equal(run.runner.buttonLook(), "checking");
-      run.runner.tapUpdateButton();
+      run.runner.pullToCheck();
       run.runner.reconsider();
       finish(Effect.succeed(false));
       await run.settle();
@@ -990,7 +1013,7 @@ describe("the update runner", () => {
         }),
       });
       answer = "available";
-      await tap(run);
+      await pull(run);
       assert.deepEqual(run.runner.buttonLook(), { downloading: 0 });
       run.runner.downloadProgress(42);
       assert.deepEqual(run.runner.buttonLook(), { downloading: 42 });
@@ -1013,7 +1036,7 @@ describe("the update runner", () => {
       run.runner.reconsider();
       await run.settle();
       assert.deepEqual(run.runner.buttonLook(), { downloading: 0 });
-      run.runner.tapUpdateButton();
+      run.runner.pullToCheck();
       run.runner.reconsider();
       finish(Effect.succeed(true));
       await run.settle();
@@ -1084,7 +1107,7 @@ describe("the update runner", () => {
         }),
       });
       run.answer.now = "available";
-      run.runner.tapUpdateButton();
+      run.runner.pullToCheck();
       run.runner.reconsider();
       await run.settle();
       assert.deepEqual(run.runner.buttonLook(), { downloading: 0 });
@@ -1107,7 +1130,7 @@ describe("the update runner", () => {
         }),
       });
       run.answer.now = "available";
-      run.runner.tapUpdateButton();
+      run.runner.pullToCheck();
       run.runner.reconsider();
       await run.settle();
       run.surroundings.visible = false;
@@ -1126,7 +1149,7 @@ describe("the update runner", () => {
       });
       run.surroundings.installAccess = "needsPermission";
       run.answer.now = "available";
-      run.runner.tapUpdateButton();
+      run.runner.pullToCheck();
       run.runner.reconsider();
       await run.settle();
       await leave(run);
@@ -1145,7 +1168,7 @@ describe("the update runner", () => {
       });
       run.surroundings.network = "metered";
       run.answer.now = "available";
-      run.runner.tapUpdateButton();
+      run.runner.pullToCheck();
       run.runner.reconsider();
       await leave(run);
       finish(Effect.succeed(false));
@@ -1162,7 +1185,7 @@ describe("the update runner", () => {
           finish = resume;
         }),
       });
-      run.runner.tapUpdateButton();
+      run.runner.pullToCheck();
       run.runner.reconsider();
       assert.equal(run.runner.buttonLook(), "checking");
       await leave(run);
@@ -1180,12 +1203,12 @@ describe("the update runner", () => {
         }),
       });
       run.answer.now = "available";
-      run.runner.tapUpdateButton();
+      run.runner.pullToCheck();
       run.runner.reconsider();
       await run.settle();
       await leave(run);
       await comeBack(run);
-      run.runner.tapUpdateButton();
+      run.runner.pullToCheck();
       run.runner.reconsider();
       finish(Effect.succeed(true));
       await run.settle();
@@ -1224,7 +1247,7 @@ describe("the update runner", () => {
       const run = await handedOver();
       run.runner.cameToFront();
       assert.equal(run.runner.offeredVersion(), "1.3.0");
-      run.runner.tapUpdateButton();
+      run.runner.tapInstallNow();
       run.runner.reconsider();
       await run.settle();
       assert.deepEqual(run.did, ["install"]);

@@ -11,6 +11,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { makeExternalStore, subscribeAll } from "@wave/client/externalStore";
 import { useSightedStore } from "@/lib/screenSight";
 
+import { dislikesRemovedByStars } from "./dislikes";
 import {
   onSavedStars,
   publishLibraryChange,
@@ -96,7 +97,9 @@ const showStars = (stars: ReadonlyMap<number, FavoriteStar>, saved: boolean): vo
 
 /**
  * Stars or unstars tracks (a selection's, say) with one write. Accepts queue
- * track ids (strings) as well.
+ * track ids (strings) as well. A favorite isn't disliked: the store removes a
+ * starred song's dislike with the star, and the disliked set follows
+ * (`dislikesRemovedByStars`).
  */
 export const setFavorites = (
   trackIds: readonly (number | string)[],
@@ -125,7 +128,10 @@ export const setFavorites = (
     appRuntime
       // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
       .runPromise(LibraryStore.use((store) => store.setFavorites(ids, on)))
-      .then(settle(on), settle(null))
+      .then((undisliked) => {
+        settle(on)();
+        dislikesRemovedByStars(undisliked);
+      }, settle(null))
   );
 };
 
@@ -339,6 +345,18 @@ export const useLivePendingFavoriteVideos = (active = true): ReadonlySet<string>
   useLoadedPendingFavorites(active);
   return useSyncExternalStore(pendingFavorites.subscribe, pendingVideosNow);
 };
+
+/**
+ * The pending favorites' videos: as held in memory once read, else as the store holds them
+ * now (for a star read outside any screen, the match notification's).
+ */
+export const currentPendingFavoriteVideos = (): Promise<ReadonlySet<string>> =>
+  pendingFavorites.get().loaded
+    ? Promise.resolve(pendingVideosNow())
+    : appRuntime
+        // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+        .runPromise(LibraryStore.use((store) => store.listPendingFavorites))
+        .then((songs) => new Set(songs.map((song) => song.videoId)));
 
 /**
  * Whether YT Music song [videoId] shows starred (Core's `ytSongStarred`): its pending favorite,

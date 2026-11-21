@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   DISCOVER_LEVEL_SETTING,
   DISCOVER_SLIDERS_SETTING,
+  DJ_REMEMBERED_SETTING,
   DONT_PLAY_EXPLICIT_SETTING,
   FOLLOWED_ARTISTS_SETTING,
   HOME_ARRANGEMENT_SETTING,
@@ -21,6 +22,7 @@ test("the phone and the computer keep each setting under the key it has always h
     {
       DISCOVER_LEVEL_SETTING,
       DISCOVER_SLIDERS_SETTING,
+      DJ_REMEMBERED_SETTING,
       DONT_PLAY_EXPLICIT_SETTING,
       FOLLOWED_ARTISTS_SETTING,
       HOME_ARRANGEMENT_SETTING,
@@ -34,6 +36,7 @@ test("the phone and the computer keep each setting under the key it has always h
     {
       DISCOVER_LEVEL_SETTING: "home.discoverLevel",
       DISCOVER_SLIDERS_SETTING: "home.discoverSliders",
+      DJ_REMEMBERED_SETTING: "dj.remembered",
       DONT_PLAY_EXPLICIT_SETTING: "settings.dontPlayExplicit",
       FOLLOWED_ARTISTS_SETTING: "settings.followedArtists",
       HOME_ARRANGEMENT_SETTING: "settings.homeArrangement",

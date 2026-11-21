@@ -399,39 +399,45 @@ export const createUpdateRunner = ({
     notify();
   };
 
+  /** What Settings asks of the update action, as Core's `updateButtonAction` says. */
+  const updateAction = (gesture: "pull" | "installNow"): void => {
+    const action = updateButtonAction({
+      gesture,
+      nativeUpdate,
+      bundleDownloaded,
+      offeredApkVersion: client.offeredApkVersion(),
+      installTap,
+      updateRequest,
+      downloadingApk: running === "downloadApk",
+    });
+    switch (action) {
+      case "install":
+        requestInstall();
+        return;
+      case "check":
+      case "installBundle":
+        updateRequest = action;
+        notify();
+        return;
+      case "followDownload":
+        updateRequest = "download";
+        return;
+      case "none":
+    }
+  };
+
   return {
     reconsider,
     offeredVersion,
     /**
-     * A tap on the offer. Nothing installs but from a tap: this, or what the update button asked for
-     * when its check or download ends. Call `reconsider` after.
+     * A tap on the offer. Nothing installs but from a tap: this, Install Now, or what a pull on
+     * Settings asked for when its check or download ends. Call `reconsider` after.
      */
     requestInstall,
-    /** A tap on the update button in Settings. Call `reconsider` after it. */
-    tapUpdateButton: (): void => {
-      const action = updateButtonAction({
-        nativeUpdate,
-        bundleDownloaded,
-        offeredApkVersion: client.offeredApkVersion(),
-        installTap,
-        updateRequest,
-        downloadingApk: running === "downloadApk",
-      });
-      switch (action) {
-        case "install":
-          requestInstall();
-          return;
-        case "check":
-        case "installBundle":
-          updateRequest = action;
-          notify();
-          return;
-        case "followDownload":
-          updateRequest = "download";
-          return;
-        case "none":
-      }
-    },
+    /** A pull on Settings: a check now, or following an APK download. Call `reconsider` after. */
+    pullToCheck: (): void => updateAction("pull"),
+    /** A tap on Install Now, on Settings' Version History row. Call `reconsider` after it. */
+    tapInstallNow: (): void => updateAction("installNow"),
     /** The same object while it says the same, as `useSyncExternalStore` needs. */
     buttonLook: (): UpdateButtonLook => {
       const next = updateButtonLook({

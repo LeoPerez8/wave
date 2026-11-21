@@ -11,6 +11,7 @@ export const settingsPtBr: typeof settingsEn = {
     playback: "Reprodução",
     history: "Histórico de Ouvidas",
     followedArtists: "Artistas Seguidos",
+    dislikedSongs: "Músicas de que não gostei",
     lyricsAndTags: "Letras e tags",
     downloads: "Downloads",
     accounts: "Contas",
@@ -143,7 +144,7 @@ export const settingsPtBr: typeof settingsEn = {
   tint: "Tonalidade",
   rim: "Borda",
   howTheTabBarMiniPlayerMenus:
-    "Como a barra de abas, o miniplayer, os menus e os diálogos mostram o que está atrás. O desfoque suaviza, a refração curva as bordas, a tonalidade mantém o texto legível e a borda dá brilho ao contorno. Desativar a refração mantém os outros efeitos. A amostra mostra cada alteração; o vidro do app muda quando você sai de Aparência.",
+    "Como a barra de abas, o miniplayer, os menus e os diálogos mostram o que está atrás. O desfoque suaviza, a refração curva as bordas, a tonalidade mantém o texto legível e a borda dá brilho ao contorno. Desativar a refração mantém os outros efeitos; desativar a borda remove o contorno. A amostra mostra cada alteração; o vidro do app muda quando você sai de Aparência.",
   resetToDefaults: "Restaurar padrões",
   sampleSong: "Música de exemplo",
   sampleSongRow: "Linha de música de exemplo",
@@ -214,7 +215,9 @@ export const settingsPtBr: typeof settingsEn = {
   sampleGlassCardOverColouredStripesDrawn:
     "Cartão de vidro de exemplo sobre faixas coloridas, com os ajustes abaixo",
   nowPlayingsBottomRowLeftToRight:
-    "A linha inferior de Tocando Agora, da esquerda para a direita, com Fila sempre à direita. Nenhum remove a posição, e os outros botões se distribuem.",
+    "As posições 1 a 5 são o rodapé de Tocando Agora, da esquerda para a direita; as outras duas ficam ao lado de Anterior e Próxima. Nenhum deixa a posição sem botão, e os botões do rodapé se distribuem.",
+  slotLeftOfPrevious: "À Esquerda de Anterior",
+  slotRightOfNext: "À Direita de Próxima",
   resetToDefault: "Restaurar Padrão",
   aButtonAnotherSlotHoldsSwapsPlaces:
     "Um botão que já ocupa outra posição troca de lugar com o desta posição.",
@@ -391,6 +394,10 @@ export const settingsPtBr: typeof settingsEn = {
     "As músicas das pastas excluídas e de suas subpastas saem da biblioteca. Os arquivos ficam no telefone.",
   followedArtists: "Artistas seguidos",
   youArentFollowingAnyArtistsYet: "Você ainda não segue nenhum artista.",
+  dislikedSongsAreLeftOut:
+    "O Wave deixa estas músicas fora do que escolhe sozinho. Elas ainda tocam quando você escolhe.",
+  youHaventDislikedAnySongs: "Você ainda não marcou nenhuma música como não gostei.",
+  removeDislikeOf: (title) => `Remover não gostei, ${title}`,
   developerIsOn: "Developer is on",
   developerHidden: "Developer hidden",
   settings: "Ajustes",
@@ -420,7 +427,7 @@ export const settingsPtBr: typeof settingsEn = {
     "Uma seção do Início, mostrada abaixo das linhas da Biblioteca quando há conteúdo.",
   everyShuffleUsesItALongPress:
     "Vale para todos os botões Aleatório. Mantenha um botão pressionado para escolher; em uma posição de Tocando Agora, isso altera o botão.",
-  pressBackAgainWithin2SecondsTo: "Pressione Voltar novamente em até 2 segundos para sair",
+  backAgainToExit: "Voltar de novo para sair",
   dismisses: "Fecha",
   close: "Fechar",
   selectionActions: "Ações de seleção",

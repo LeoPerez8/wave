@@ -147,6 +147,7 @@ test("the mini player opens from the player bar and the tray, controls playback 
     await mini.locator(".mini-song").click();
     await mini.keyboard.press("Space");
     await expect.poll(() => playerState(page)).toBe("paused");
+    await expect(mini.getByRole("button", { name: "Play", exact: true })).toBeEnabled();
     await mini.keyboard.press("Space");
     await expect.poll(() => playerState(page)).toBe("playing");
 

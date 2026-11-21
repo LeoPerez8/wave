@@ -1,5 +1,7 @@
 import {
+  NO_DISLIKES,
   randomMagicQueuePicks,
+  type DislikedSongs,
   type LibraryReads,
   type MagicQueueSeed,
   type MagicQueueSeedId,
@@ -14,8 +16,8 @@ let nextRead = 0;
 /**
  * A fresh Home opening reads ids only (the Library's files, and the playlists'
  * YT Music entries as [videoIds] brings them), then metadata for its nine random seeds. A video whose
- * stored song can't be read leaves the pool for the visit, and its place is
- * drawn again.
+ * stored song can't be read leaves the pool until the next draw, and its place is
+ * drawn again. Disliked songs ([disliked]) are never drawn.
  */
 export const randomMagicQueueRead = (
   random: RandomSource,
@@ -29,12 +31,18 @@ export const randomMagicQueueRead = (
     read: <E, R>(
       store: LibraryStore["Service"],
       entryVideoIds: Effect.Effect<readonly string[], E, R>,
+      dislikedSongs: Effect.Effect<DislikedSongs> = Effect.succeed(NO_DISLIKES),
     ) =>
       Effect.gen(function* () {
         const trackIds = yield* store.playableSongIds;
         const videoIds = yield* entryVideoIds;
+        const disliked = yield* dislikedSongs;
         for (;;) {
-          const pool = { trackIds, videoIds: videoIds.filter((id) => !unreadable.has(id)) };
+          const pool = {
+            trackIds,
+            videoIds: videoIds.filter((id) => !unreadable.has(id)),
+            disliked,
+          };
           const picked = randomMagicQueuePicks(pool, random, ids);
           ids = picked;
           const files = yield* store.songsByIds(

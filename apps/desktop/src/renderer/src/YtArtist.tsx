@@ -53,7 +53,17 @@ function YtPageQuiet({ status, again }: { readonly status: YtStatus; readonly ag
 
 const readArtist = (id: string) => window.wave.yt.artist(id);
 const noArtist: YtArtistView = { status: "failed", page: null };
-const readAlbum = (id: string) => window.wave.yt.album(id);
+/** An album page its opener already read (a new release's tap), shown once instead of asking again. */
+let held: { readonly id: string; readonly view: YtAlbumView } | undefined;
+/** Hands the album page [id] the read [view], for the page about to open. */
+export const holdYtAlbum = (id: string, view: YtAlbumView): void => {
+  held = { id, view };
+};
+const readAlbum = (id: string) => {
+  const given = held?.id === id ? held.view : undefined;
+  held = undefined;
+  return given === undefined ? window.wave.yt.album(id) : Promise.resolve(given);
+};
 const noAlbum: YtAlbumView = { status: "failed", album: null };
 
 const videoIds = (songs: readonly BrowseRow[]) =>

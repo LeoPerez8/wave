@@ -19,6 +19,8 @@ export const homeFollowCards = (
   options: {
     now: number;
     enabled?: boolean;
+    /** YT Music's switch: off, only the Library's releases show. */
+    ytMusic?: boolean;
     blockExplicit?: boolean;
     country?: string;
     admitted?: HomeFollowSnapshot;

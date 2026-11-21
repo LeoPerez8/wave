@@ -11,6 +11,14 @@ import { libraryLayer } from "../src/main/database.ts";
 
 const appFolder = join(import.meta.dirname, "..");
 const shots = join(appFolder, "test-results");
+const hiddenSections = [
+  "New from Artists You Follow",
+  "Upcoming Shows",
+  "Discover",
+  "In your orbit",
+  "From your library",
+  "Community playlists",
+];
 
 /** Presses Tab until the focused button is [name], as someone without a mouse would. */
 const tabTo = async (page: Page, name: string) => {
@@ -58,7 +66,14 @@ test("Home's editor reorders, removes and adds sections from Home and Settings, 
           "favorites",
           "stats",
         ],
-        hidden: ["new-releases", "upcoming-shows", "discover"],
+        hidden: [
+          "new-releases",
+          "upcoming-shows",
+          "discover",
+          "in-your-orbit",
+          "from-your-library",
+          "community-playlists",
+        ],
       });
       db.run(
         sql`INSERT INTO desktop_synced_preferences(key,value) VALUES('settings.homeArrangement',${stored})`,
@@ -105,7 +120,7 @@ test("Home's editor reorders, removes and adds sections from Home and Settings, 
       "Favorites",
       "Stats",
     ]);
-    await expect(hidden).toHaveText(["New from Artists You Follow", "Upcoming Shows", "Discover"]);
+    await expect(hidden).toHaveText(hiddenSections);
 
     // Move Up keeps the focus on its button, so Enter repeats it; Home follows behind the dialog.
     await tabTo(page, "Move up: Favorites");
@@ -123,12 +138,7 @@ test("Home's editor reorders, removes and adds sections from Home and Settings, 
     await tabTo(page, "Remove Stats from Home");
     await page.keyboard.press("Enter");
     await expect(headings).toHaveCount(6);
-    await expect(hidden).toHaveText([
-      "New from Artists You Follow",
-      "Upcoming Shows",
-      "Discover",
-      "Stats",
-    ]);
+    await expect(hidden).toHaveText([...hiddenSections, "Stats"]);
     await expect(
       dialog.getByRole("button", { name: "Remove Most played artists from Home" }),
     ).toBeFocused();

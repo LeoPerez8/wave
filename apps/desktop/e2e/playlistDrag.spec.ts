@@ -43,8 +43,11 @@ const placed = (titles: readonly string[], moved: readonly string[], before: str
 
 /** Drags [from] to the top edge of [to], checks the line showing where it lands, and drops. */
 const dragAbove = async (page: Page, from: Locator, to: Locator) => {
-  await from.hover();
+  await from.hover({ position: { x: 100, y: 16 } });
+  const source = (await from.boundingBox())!;
   await page.mouse.down();
+  // Start the drag before hovering a target that may scroll the source row away.
+  await page.mouse.move(source.x + 110, source.y + 16);
   // A synthetic drag gets one event per move: the drag starts, enters [to], then goes over it.
   for (const x of [100, 104, 108]) await to.hover({ position: { x, y: 4 } });
   await expect(page.locator(".table-drop-line")).toBeVisible();
@@ -90,6 +93,8 @@ test("a playlist's songs drag to a new place, and the order stays after a restar
     // A selection moves together, in the playlist's order.
     await row("Song 09").click();
     await row("Song 07").click({ modifiers: ["Control"] });
+    await expect(row("Song 09")).toHaveAttribute("aria-selected", "true");
+    await expect(row("Song 07")).toHaveAttribute("aria-selected", "true");
     await dragAbove(page, row("Song 09"), row("Song 02"));
     expected = placed(expected, ["Song 07", "Song 09"], "Song 02");
     await expect.poll(() => playlistTitles(page)).toEqual(expected);

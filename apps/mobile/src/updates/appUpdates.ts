@@ -229,8 +229,9 @@ const reconsiderWithFreshAccess = (): void => {
 
 /**
  * A tap on the "Update the app" pill: installs the downloaded APK now, or opens Android's permission
- * screen first. Nothing installs but from a tap, this one or the update button's (`tapUpdateButton`),
- * whose check or download becomes one when it ends with Wave still in front.
+ * screen first. Nothing installs but from a tap, this one or Install Now's (`tapInstallNow`), or
+ * from a pull on Settings (`pullToCheckForUpdates`), whose check or download becomes one when it
+ * ends with Wave still in front.
  */
 export const installAppUpdate = (): void => {
   runner.requestInstall();
@@ -238,16 +239,25 @@ export const installAppUpdate = (): void => {
 };
 
 /**
- * The update button in Settings: Install Now with an update ready, which reloads Wave on a bundle at
- * once or does what the "Update the app" pill does for an APK; and otherwise a check now, whose APK
- * it downloads and installs.
+ * A pull on Settings: a check now, past the 15-minute wait, whose APK it downloads (asking first on
+ * mobile data) and installs; or following the APK download under way. With an update ready it does
+ * nothing, as Install Now takes that.
  */
-export const tapUpdateButton = (): void => {
-  runner.tapUpdateButton();
+export const pullToCheckForUpdates = (): void => {
+  runner.pullToCheck();
   reconsiderWithFreshAccess();
 };
 
-/** What the update button shows. */
+/**
+ * Install Now on Settings' Version History row: reloads Wave on a ready bundle at once, or does
+ * what the "Update the app" pill does for a downloaded APK.
+ */
+export const tapInstallNow = (): void => {
+  runner.tapInstallNow();
+  reconsiderWithFreshAccess();
+};
+
+/** What the update action shows: a check running, a download's percentage, or Install Now. */
 export const useUpdateButtonLook = (): UpdateButtonLook =>
   useSyncExternalStore(runner.subscribe, runner.buttonLook);
 

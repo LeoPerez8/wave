@@ -55,7 +55,9 @@ before the field existed have one without being rewritten.
 
 Every ask is answered from the channel's notes history, `notes/<channel>.json`, in one R2 read
 however many releases there are. `publish-notes.ts` adds each release to it, dated at publish
-time. When it's absent (the first ask after this Worker is deployed) or can't be read, the Worker
+time. With `WAVE_EARLIER_NOTES` it first adds the versions before it that were tagged but never
+published (`scripts/ci/earlier-notes.sh`), each dated by its tag and skipped when its notes file
+is already there. When it's absent (the first ask after this Worker is deployed) or can't be read, the Worker
 builds it once from the notes files, dated by their upload time, with a read per release, and
 stores it. While there's none, `publish-notes.ts` writes none either: one holding a single release
 would hide the rest. To rebuild it, delete it

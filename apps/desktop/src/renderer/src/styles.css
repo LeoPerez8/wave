@@ -147,6 +147,7 @@ input::placeholder {
   color: var(--color-secondary);
 }
 .sidebar {
+  --sidebar-gap: 10px;
   width: var(--sidebar-width);
   min-height: 0;
   background: var(--color-grouped);
@@ -155,7 +156,7 @@ input::placeholder {
   flex-direction: column;
   /* The right padding leaves room for the scrollbar's gutter, so entries never shift. */
   padding: 18px 4px 12px 12px;
-  gap: 14px;
+  gap: var(--sidebar-gap);
   /* One scroller for the whole sidebar; the search field and Settings stay in view. */
   overflow: hidden auto;
   scrollbar-gutter: stable;
@@ -909,13 +910,13 @@ h2 {
   .nav-item:has(> .nav-monogram) svg {
     display: none;
   }
-  .search-field {
+  .sidebar > .search-field {
     border: 0;
     padding: 0;
     height: 34px;
     justify-content: center;
   }
-  .search-field input {
+  .sidebar > .search-field input {
     position: absolute;
     opacity: 0;
     width: 34px;
@@ -923,7 +924,7 @@ h2 {
     cursor: text;
   }
   /* Ctrl+F opens the field in the title bar, after Back and Forward, over no page title. */
-  .search-field:focus-within {
+  .sidebar > .search-field:focus-within {
     position: fixed;
     left: calc(var(--sidebar-width) + 116px);
     top: 7px;
@@ -934,14 +935,14 @@ h2 {
     z-index: 5;
     padding: 0 8px;
   }
-  .search-field:focus-within::before {
+  .sidebar > .search-field:focus-within::before {
     display: none;
   }
-  /* Its slot stays, so a click on an entry isn't lost when leaving the field moves them. */
+  /* Search's slot and its following gap stay in place while the field is in the title bar. */
   .sidebar:has(> .search-field:focus-within) {
-    padding-top: calc(18px + 34px + 14px);
+    padding-top: calc(18px + 34px + var(--sidebar-gap));
   }
-  .search-field:focus-within input {
+  .sidebar > .search-field:focus-within input {
     outline: none;
     position: static;
     opacity: 1;

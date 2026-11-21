@@ -440,20 +440,65 @@ describe("ytArtistIntegrated", () => {
 describe("ytArtistAnswerKept", () => {
   test("an answer read without the artist's full list (an album's) never replaces one standing with it", () => {
     const standing = found(NOW - DAY);
-    assert.equal(ytArtistAnswerKept(standing, savedBefore(NOW), NOW), standing);
+    const kept = ytArtistAnswerKept(standing, savedBefore(NOW), NOW);
+    assert.equal(kept.checkedAt, NOW - DAY);
+    assert.deepEqual(kept.outcome === "found" && kept.page.allSongs, [song("a")]);
+  });
+
+  test("the page-only answer's About and similar artists join the one that stands", () => {
+    const standing = found(NOW - DAY);
+    const answer = savedBefore(NOW);
+    const about = {
+      description: "French electronic duo.",
+      subscribers: "7.19M",
+      views: "6,030,217,324",
+      similar: [{ name: "Justice", browseId: "UCjustice", audience: null }],
+    };
+    assert.equal(answer.outcome, "found");
+    if (answer.outcome !== "found" || standing.outcome !== "found") return;
+    const withAbout = { ...answer, page: { ...answer.page, ...about } };
+    assert.deepEqual(ytArtistAnswerKept(standing, withAbout, NOW), {
+      ...standing,
+      page: { ...standing.page, ...about },
+    });
+    // What the answer leaves out stays as kept, and with no description either way it says so.
+    const described = { ...standing, page: { ...standing.page, ...about } };
+    assert.deepEqual(ytArtistAnswerKept(described, answer, NOW), described);
+    assert.deepEqual(ytArtistAnswerKept(standing, answer, NOW), {
+      ...standing,
+      page: { ...standing.page, description: null },
+    });
+    // Another artist's page (the match changed) adds nothing.
+    const other = { ...withAbout, browseId: "UCother" };
+    assert.equal(ytArtistAnswerKept(standing, other, NOW), standing);
+    assert.equal(ytArtistAnswerKept(unmatched(NOW - DAY), withAbout, NOW).outcome, "unmatched");
+  });
+
+  test("an answer that is kept says whether its page has a description", () => {
+    const answer = ytArtistAnswerKept(null, found(NOW), NOW);
+    assert.equal(answer.outcome === "found" && answer.page.description, null);
+    const about = found(NOW);
+    if (about.outcome !== "found") return;
+    const described = { ...about, page: { ...about.page, description: "French electronic duo." } };
+    assert.equal(ytArtistAnswerKept(null, described, NOW), described);
   });
 
   test("otherwise the new answer is kept: nothing saved, a week on, or no full list either", () => {
     const answer = savedBefore(NOW);
-    assert.equal(ytArtistAnswerKept(null, answer, NOW), answer);
-    assert.equal(ytArtistAnswerKept(found(NOW - 8 * DAY), answer, NOW), answer);
-    assert.equal(ytArtistAnswerKept(savedBefore(NOW - DAY), answer, NOW), answer);
+    const kept = { ...answer, page: { ...page([song("a")]), description: null } };
+    delete kept.page.allSongs;
+    assert.deepEqual(ytArtistAnswerKept(null, answer, NOW), kept);
+    assert.deepEqual(ytArtistAnswerKept(found(NOW - 8 * DAY), answer, NOW), kept);
+    assert.deepEqual(ytArtistAnswerKept(savedBefore(NOW - DAY), answer, NOW), kept);
   });
 
   test("an answer with the full list, or 'no match', replaces whatever was saved", () => {
     const standing = found(NOW - DAY);
     const full = found(NOW, [song("b")]);
-    assert.equal(ytArtistAnswerKept(standing, full, NOW), full);
+    assert.deepEqual(ytArtistAnswerKept(standing, full, NOW), {
+      ...full,
+      page: { ...page([song("b")]), description: null },
+    });
     const none = unmatched(NOW);
     assert.equal(ytArtistAnswerKept(standing, none, NOW), none);
   });

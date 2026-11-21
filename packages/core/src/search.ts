@@ -366,6 +366,22 @@ export const searchIndexOver = <E extends SearchEntry>(
   };
 };
 
+/**
+ * The kinds of [candidates], each once, in the order their groups show for
+ * [query]: by each kind's best match, as `search` orders its groups. Kinds
+ * none of whose candidates match come after, in the order given (YT Music's
+ * artists for a song title, say).
+ */
+export const searchKindOrder = (
+  query: string,
+  candidates: readonly SearchEntry[],
+): SearchKind[] => {
+  const matched = createSearchIndex(candidates)
+    .search(query, { limit: 1 })
+    .groups.map((group) => group.kind);
+  return [...new Set([...matched, ...candidates.map((candidate) => candidate.kind)])];
+};
+
 /** How many recent searches are kept. */
 export const RECENT_SEARCHES = 10;
 

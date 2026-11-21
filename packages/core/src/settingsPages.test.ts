@@ -5,9 +5,12 @@ import {
   LAYOUT_PAGES,
   SETTINGS_PAGES,
   accountsSummary,
+  catalogueOf,
+  dislikedSongsSummary,
   downloadsSummary,
   visibleSettingsPages,
   queuedDownloadCounts,
+  type Catalogue,
   type SpotifySession,
   type WaveSession,
   type YtSession,
@@ -36,6 +39,7 @@ describe("Settings pages", () => {
         "playback",
         "history",
         "followedArtists",
+        "dislikedSongs",
         "lyricsAndTags",
         "downloads",
         "accounts",
@@ -66,6 +70,12 @@ describe("Settings pages", () => {
         icon: "userCheck",
       },
       {
+        page: "dislikedSongs",
+        title: "Disliked songs",
+        route: "/settings/disliked-songs",
+        icon: "circleMinus",
+      },
+      {
         page: "lyricsAndTags",
         title: "Lyrics and tags",
         route: "/settings/lyrics-and-tags",
@@ -81,6 +91,25 @@ describe("Settings pages", () => {
         icon: "versions",
       },
     ]);
+  });
+});
+
+const en = catalogueOf("en");
+const ptBR = catalogueOf("pt-BR");
+
+describe("the Disliked songs page", () => {
+  test("is named in both languages", () => {
+    const title = (catalogue: Catalogue): string | undefined =>
+      visibleSettingsPages(false, catalogue).find(({ page }) => page === "dislikedSongs")?.title;
+    assert.equal(title(en), "Disliked songs");
+    assert.equal(title(ptBR), "Músicas de que não gostei");
+  });
+
+  test("its row counts the disliked songs, and says nothing with none", () => {
+    assert.equal(dislikedSongsSummary(0), null);
+    assert.equal(dislikedSongsSummary(1), "1 song");
+    assert.equal(dislikedSongsSummary(1200), "1,200 songs");
+    assert.equal(dislikedSongsSummary(3, ptBR), "3 músicas");
   });
 });
 

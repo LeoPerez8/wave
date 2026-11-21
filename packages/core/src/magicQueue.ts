@@ -1,9 +1,12 @@
 import { en, type Catalogue } from "./catalogueEn.ts";
 import { artistPhotoName } from "./artistPhoto.ts";
+import type { DislikedSongs } from "./dislikes.ts";
 import { DISCOVER_MIX_LEVELS, type DiscoverMixLevel } from "./discoverMixLevels.ts";
 import type { DiscoverRadioSong } from "./discoverMixes.ts";
+import { djMixSliders, parseDjSettings, type DjSettings } from "./djSettings.ts";
 import { type GenreProfile, type GenreProfileOf, type GenreTagged } from "./genreAffinity.ts";
 import { commonStyle, songFamilies, songStyle } from "./genreMixes.ts";
+import type { MixSliders } from "./mixSliders.ts";
 import type { PlayEnd } from "./playEvents.ts";
 import type { QueueState } from "./queue.ts";
 import type { SleepTimer } from "./sleepTimer.ts";
@@ -116,7 +119,8 @@ export const magicYtSong = (
 
 /** What a Magic Queue was started from. */
 export interface MagicSeed {
-  readonly kind: "track" | "album" | "artist" | "playlist" | "list";
+  /** `dj`: the tiles selected in DJ (`startDjQueue`), which Up Next names "DJ". */
+  readonly kind: "track" | "album" | "artist" | "playlist" | "list" | "dj";
   readonly id: string;
   /** Its name, as Up Next says it ("Magic Queue · from <title>"). */
   readonly title: string;
@@ -176,6 +180,12 @@ export const magicListSeedSongs = (
 export interface MagicSession {
   /** Search starts and automatic queue continuations keep to their seed. */
   readonly faithful?: boolean;
+  /**
+   * Began as a plain play of its seed song (a tap in Search, an opened song
+   * link), not as a Magic Queue the owner asked for: Up Next names it
+   * Related (`magicQueueLabel`). Sessions saved before have none.
+   */
+  readonly plainPlay?: boolean;
   /** Continued from an ordinary queue: the first batch adds ten songs after it. */
   readonly continuation?: boolean;
   readonly radioSeed?: MagicSongRadioSeed;
@@ -191,6 +201,11 @@ export interface MagicSession {
   readonly seedDraws?: readonly string[];
   /** The seed songs whose radios batch [batch] reads, by id. */
   readonly seedRadios?: { readonly batch: number; readonly ids: readonly string[] };
+  /**
+   * The ranking choices of a session started from DJ, which it ranks with
+   * in place of Discover's sliders (`magicSessionSliders`); none otherwise.
+   */
+  readonly dj?: DjSettings;
   /** Signals consumed by the shared radio ranking. Old sessions have none. */
   readonly radioSignals?: readonly MagicSignal[];
   /** Tells this session apart from the others: its queue's context id. */
@@ -309,8 +324,9 @@ export const magicQueueShare = (level: DiscoverMixLevel): number =>
  * itself for a song seed): it plays that song, or a random one of the
  * seed's otherwise. Its YouTube Music radio grows from [radio] (none
  * without). YouTube Music's share of a batch starts at [ytShare]
- * (`magicQueueShare`, kept within 20-100%), half without. Null when the seed
- * has no songs.
+ * (`magicQueueShare`, kept within 20-100%), half without. [plainPlay] marks
+ * a session a plain play of the song began (`MagicSession.plainPlay`). Null
+ * when the seed has no songs.
  */
 export const startMagicQueue = (
   seed: MagicSeed,
@@ -321,12 +337,14 @@ export const startMagicQueue = (
     radio,
     ytShare = YT_SHARE_START,
     faithful = false,
+    plainPlay = false,
   }: {
     readonly id: string;
     readonly random: RandomSource;
     readonly radio?: MagicRadioSeed;
     readonly ytShare?: number;
     readonly faithful?: boolean;
+    readonly plainPlay?: boolean;
   },
 ): { readonly session: MagicSession; readonly first: string } | null => {
   const pick =
@@ -338,6 +356,7 @@ export const startMagicQueue = (
     session: {
       id,
       ...(faithful ? { faithful: true } : {}),
+      ...(plainPlay ? { plainPlay: true } : {}),
       seed,
       ...(radio?.song === undefined ? {} : { radioSeed: radio.song }),
       ...(radio?.songs === undefined || radio.songs.length === 0
@@ -494,11 +513,13 @@ export const startStreamedMagicQueue = (
     id,
     ytShare,
     faithful = false,
+    plainPlay = false,
     firstTrackId,
   }: {
     readonly id: string;
     readonly ytShare?: number;
     readonly faithful?: boolean;
+    readonly plainPlay?: boolean;
     /** Queue id of a local file that will play for this streamed seed. */
     readonly firstTrackId?: string;
   },
@@ -511,6 +532,7 @@ export const startStreamedMagicQueue = (
       id,
       random: () => 0,
       faithful,
+      plainPlay,
       radio: {
         song: {
           id: `song:${trackId}`,
@@ -814,6 +836,27 @@ export const magicQueueEdits = (
   return added.length === 0 && removed.length === 0 ? NO_EDITS : { added, removed };
 };
 
+/**
+ * The entries of [session]'s queue a dislike takes out, by key: the
+ * recommendations not yet played whose song is in [disliked] (by its queue
+ * track id: the set holds a Library song's Track id and its video alike).
+ * The song playing stays, as does what played already and what the owner
+ * lined up by hand; none when [state] isn't the session's queue. The app
+ * removes each (`remove`), which the session then learns as a
+ * recommendation taken out (`magicQueueEdits`).
+ */
+export const magicQueueDislikedEntries = (
+  session: MagicSession,
+  state: QueueState,
+  disliked: DislikedSongs,
+): string[] =>
+  disliked.size === 0 || !isMagicQueue(session, state)
+    ? []
+    : state.entries
+        .slice(state.index + 1)
+        .filter((entry) => recommended(entry) && disliked.has(entry.trackId))
+        .map((entry) => entry.key);
+
 /** How many artists' radios a Magic Queue's YouTube Music candidates come from. */
 const RADIO_ARTISTS = 2;
 
@@ -839,9 +882,25 @@ export const magicRadioArtists = (
 /** A YouTube Music candidate of a Magic Queue: a song it weighs, with the radio's [song] it is. */
 export type MagicYtCandidate<S extends DiscoverRadioSong> = MagicSong & { readonly song: S };
 
-/** What Up Next says over a Magic Queue: "Magic Queue · from <seed>". */
+/**
+ * What Up Next says over a Magic Queue: "Magic Queue · from <seed>", "from DJ"
+ * for a DJ seed, or "Related · from <song>" over one a plain play of a song
+ * began (`MagicSession.plainPlay`).
+ */
 export const magicQueueLabel = (session: MagicSession, catalogue: Catalogue = en): string =>
-  catalogue.playbackText.magicQueueFrom(session.seed.title);
+  session.seed.kind === "dj"
+    ? catalogue.dj.magicQueueFromDj
+    : session.plainPlay === true
+      ? catalogue.playbackText.relatedFrom(session.seed.title)
+      : catalogue.playbackText.magicQueueFrom(session.seed.title);
+
+/**
+ * The sliders [session]'s batches rank with: a DJ session's own choices
+ * (`djMixSliders`), whatever [discover] (Discover's sliders) says; any other
+ * session follows Discover's.
+ */
+export const magicSessionSliders = (session: MagicSession, discover: MixSliders): MixSliders =>
+  session.dj === undefined ? discover : djMixSliders(session.dj);
 
 const isStrings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string");
@@ -849,7 +908,14 @@ const isStrings = (value: unknown): value is string[] =>
 const isWeights = (value: unknown): value is Record<string, number> =>
   isRecord(value) && Object.values(value).every((weight) => typeof weight === "number");
 
-const SEED_KINDS: ReadonlySet<unknown> = new Set(["track", "album", "artist", "playlist", "list"]);
+const SEED_KINDS: ReadonlySet<unknown> = new Set([
+  "track",
+  "album",
+  "artist",
+  "playlist",
+  "list",
+  "dj",
+]);
 
 /** Whether [value] is a saved `MagicSongRadioSeed`. */
 const isRadioSeed = (value: unknown): value is Record<string, unknown> =>
@@ -908,9 +974,11 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
     ...(validSeed ? { radioSeed: radioSeed as unknown as MagicSongRadioSeed } : {}),
     ...(value["continuation"] === true ? { continuation: true } : {}),
     ...(value["faithful"] === true ? { faithful: true } : {}),
+    ...(value["plainPlay"] === true ? { plainPlay: true } : {}),
     ...(Array.isArray(likedRadios) && likedRadios.every(isRadioSeed)
       ? { likedRadios: likedRadios as unknown as readonly MagicSongRadioSeed[] }
       : {}),
+    ...(seed["kind"] === "dj" ? { dj: parseDjSettings(value["dj"]) } : {}),
     ...(validSignals ? { radioSignals: radioSignals as unknown as readonly MagicSignal[] } : {}),
     // A list session saved before its seed songs were kept reads its old radio, if any.
     ...(validSeedSongs

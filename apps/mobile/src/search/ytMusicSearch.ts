@@ -2,13 +2,15 @@ import {
   YT_SECTION_HIDDEN,
   stepYtSection,
   ytSearchAsksVideos,
+  type YtCommunityPlaylist,
   type YtPick,
   type YtSection,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { useCallback, useEffect, useReducer } from "react";
+import { useCallback, useEffect, useReducer, useSyncExternalStore } from "react";
 
+import { online, subscribeConnectivity } from "@/native/waveNative";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useSearchOnlineAlways } from "@/settings/searchOnline";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
@@ -26,10 +28,84 @@ const inTurn = <A, R>(
   search: Effect.Effect<A, YtMusicError, R>,
 ): Effect.Effect<A, YtMusicError, R> => (always ? withSearchTurn("search", query, search) : search);
 
+/** What `useYtMusicSection` steps its section with (Core's `stepYtSection`). */
+type YtSectionStep = Parameters<typeof stepYtSection<NativeYtSong>>[1];
+
 /**
- * What Search has asked YT Music for [query] (its songs, artists and albums,
- * asked together), and what picking a segment of the Library | Online toggle
- * does. Typing alone asks only when the Library has nothing for the query
+ * YT Music's songs (unless [songless]), artists and albums for [query], and
+ * its matching official music videos when no song matches (Core's
+ * `ytSearchAsksVideos`), handed to [step] as soon as they are in; then the
+ * Community playlists shelf (none when [songless]), which the answer carries.
+ * Kept out of the hook, so the React Compiler builds the hook.
+ */
+const searchAll = (
+  query: string,
+  always: boolean,
+  songless: boolean,
+  step: (event: YtSectionStep) => void,
+) =>
+  // Only the query is sent. A failed Songs, Artists or Albums search fails the three: one quiet line.
+  askYtMusic((ytMusic) =>
+    Effect.all(
+      {
+        found: Effect.gen(function* () {
+          const found = yield* Effect.all(
+            {
+              songs: songless
+                ? Effect.succeed({ songs: [] as NativeYtSong[] })
+                : inTurn(always, query, ytMusic.searchSongs(query)),
+              artists: inTurn(always, query, ytMusic.searchArtists(query)),
+              albums: inTurn(always, query, ytMusic.searchAlbums(query)),
+            },
+            { concurrency: "unbounded" },
+          );
+          const videos =
+            !songless && ytSearchAsksVideos(query, found.songs.songs)
+              ? yield* inTurn(always, query, ytMusic.searchVideos(query)).pipe(
+                  Effect.map((page) => page.songs),
+                  Effect.orElseSucceed(() => []),
+                )
+              : undefined;
+          // Shown as soon as they are in, without waiting for the shelf.
+          step({
+            type: "found",
+            query,
+            songs: found.songs.songs,
+            artists: found.artists,
+            albums: found.albums,
+            videos,
+          });
+        }),
+        // The shelf is an extra, asked alongside: a failed read shows none and leaves the rest.
+        playlists: songless
+          ? Effect.succeed([] as readonly YtCommunityPlaylist[])
+          : inTurn(always, query, ytMusic.searchCommunityPlaylists(query)).pipe(
+              Effect.orElseSucceed((): readonly YtCommunityPlaylist[] => []),
+            ),
+      },
+      { concurrency: "unbounded" },
+    ),
+  );
+
+/**
+ * What a search embedded in another flow asks YT Music for, in place of the
+ * Search tab's. It asks only while the phone is online (offline, the
+ * Library's results stand alone), and asks again for what's typed once the
+ * phone is back online.
+ */
+export interface YtSearchScope {
+  /**
+   * Artists and albums alone, every query asked once typing pauses whatever
+   * Search online says (the flow has no Library | Online toggle).
+   */
+  readonly artistsAndAlbums: true;
+}
+
+/**
+ * What Search has asked YT Music for [query] (its songs, artists, albums and
+ * community playlists, asked together; the first three show as soon as they
+ * are in, and the Community playlists shelf joins them when it arrives), and
+ * what picking a segment of the Library | Online toggle does. Typing alone asks only when the Library has nothing for the query
  * ([libraryHasResults] false) and Library wasn't picked, once typing pauses;
  * Online asks at once (or shows again what it already has for the query),
  * and the view then follows the query until the field is cleared. Library
@@ -39,16 +115,25 @@ const inTurn = <A, R>(
  * so every query is asked once typing pauses, each search taking its turn in
  * the shared search allowance (`withSearchTurn`). When no song result matches
  * the query (Core's `ytSearchAsksVideos`), one Videos search follows, and its
- * matching official music videos show among the songs; a failed one shows none.
- * Off in Settings, it stays hidden and nothing is asked.
+ * matching official music videos show among the songs; a failed one shows none,
+ * as a failed Community playlists search does.
+ * Off in Settings, it stays hidden and nothing is asked. A [scope] narrows
+ * it for a search embedded in another flow (DJ's: `YtSearchScope`), which
+ * asks for no songs, videos or community playlists.
  */
 export const useYtMusicSection = (
   query: string,
   libraryHasResults: boolean,
+  scope?: YtSearchScope,
 ): readonly [YtSection<NativeYtSong>, (pick: YtPick) => void] => {
-  const enabled = useYtMusicEnabled();
+  const on = useYtMusicEnabled();
+  // Followed, so a reconnect asks again for what's typed.
+  const isOnline = useSyncExternalStore(subscribeConnectivity, online);
+  const enabled = on && (scope === undefined || isOnline);
   // A search visit lasts until the field is cleared.
-  const always = useSearchOnlineAlways(query === "");
+  const preferred = useSearchOnlineAlways(query === "");
+  const always = scope === undefined ? preferred : true;
+  const songless = scope !== undefined;
   const [section, dispatch] = useReducer(stepYtSection<NativeYtSong>, YT_SECTION_HIDDEN);
 
   // Choosing Always asks for what's typed now; On demand leaves what shows until the field is cleared.
@@ -62,38 +147,18 @@ export const useYtMusicSection = (
   useEffect(() => {
     if (loading === null) return undefined;
     const timer = setTimeout(() => {
-      // Only the query is sent. One that fails fails them all: one quiet line.
-      const search = askYtMusic((ytMusic) =>
-        Effect.gen(function* () {
-          const found = yield* Effect.all(
-            {
-              songs: inTurn(always, loading, ytMusic.searchSongs(loading)),
-              artists: inTurn(always, loading, ytMusic.searchArtists(loading)),
-              albums: inTurn(always, loading, ytMusic.searchAlbums(loading)),
-            },
-            { concurrency: "unbounded" },
-          );
-          const videos = ytSearchAsksVideos(loading, found.songs.songs)
-            ? yield* inTurn(always, loading, ytMusic.searchVideos(loading)).pipe(
-                Effect.map((page) => page.songs),
-                Effect.orElseSucceed(() => []),
-              )
-            : undefined;
-          return { ...found, videos };
-        }),
-      );
+      const search = searchAll(loading, always, songless, dispatch);
       void search.then((result) => {
-        if (Result.isSuccess(result)) {
-          const { songs, artists, albums, videos } = result.success;
-          dispatch({ type: "found", query: loading, songs: songs.songs, artists, albums, videos });
-        }
+        // The shelf joins the answer shown, if it is still this query's (Core's `stepYtSection`).
+        if (Result.isSuccess(result))
+          dispatch({ type: "playlistsFound", query: loading, playlists: result.success.playlists });
         // Turned off meanwhile: the section is already hidden.
         else if (result.failure.reason !== "disabled")
           dispatch({ type: "failed", query: loading, reason: result.failure.reason });
       });
     }, delayMs);
     return () => clearTimeout(timer);
-  }, [loading, delayMs, always]);
+  }, [loading, delayMs, always, songless]);
 
   const pick = useCallback((picked: YtPick) => dispatch({ type: "picked", pick: picked }), []);
   return [section, pick] as const;

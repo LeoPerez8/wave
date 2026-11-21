@@ -338,6 +338,8 @@ export const recognizeCardActionLabels = (
     playNext: text.playNext,
     addToShazam: text.addToShazam,
     addToPlaylist: text.addToPlaylist,
+    favorite: catalogue.itemActions.labels.favorite,
+    unfavorite: catalogue.itemActions.labels.unfavorite,
     goToAlbum: text.goToAlbum,
     download: text.download,
     cancelDownload: text.cancelDownload,

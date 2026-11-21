@@ -56,7 +56,8 @@ const offRecord = ({
 /**
  * The signals of [held] that [history] doesn't have yet. A play is on record
  * by its song and start, a streamed song's too; a star once its write landed
- * (it's announced before); a streamed song's star or download is never on record.
+ * (it's announced before), as a dislike, a streamed song's too; a streamed
+ * song's star or download is never on record.
  */
 function* historyMembership(
   history: TasteHistory | null,
@@ -64,7 +65,8 @@ function* historyMembership(
   if (history === null) return () => false;
   const plays = new Set<string>(),
     favorites = new Set<string>(),
-    downloads = new Set<string>();
+    downloads = new Set<string>(),
+    dislikes = new Set<string>();
   for (const play of history.plays) {
     plays.add(`${play.trackId}@${play.startedAt}`);
     yield;
@@ -77,13 +79,19 @@ function* historyMembership(
     downloads.add(download.trackId);
     yield;
   }
+  for (const dislike of history.dislikes ?? []) {
+    dislikes.add(dislike.trackId);
+    yield;
+  }
   return ({ kind, song, at }) =>
     !offRecord({ kind, song }) &&
     (kind === "favorite"
       ? favorites.has(song.trackId)
       : kind === "download"
         ? downloads.has(song.trackId)
-        : plays.has(`${song.trackId}@${at}`));
+        : kind === "dislike"
+          ? dislikes.has(song.trackId)
+          : plays.has(`${song.trackId}@${at}`));
 }
 
 /**
@@ -111,6 +119,9 @@ export const makeLiveTaste = <R>({
   /** Only one derivation at a time: a second ask waits for the first's profile. */
   const deriving = Semaphore.makeUnsafe(1);
 
+  /** Bumped when the profile is forgotten: a derivation started before it isn't kept. */
+  let generation = 0;
+
   /** Teaches the profile [kind] about each of [trackIds], at [at]. */
   const learn = (kind: TasteSignalKind, trackIds: readonly string[], at: number) =>
     Effect.gen(function* () {
@@ -122,7 +133,12 @@ export const makeLiveTaste = <R>({
           trackIds.every((id) => !offRecord({ kind, song: { trackId: id } })))
       )
         return;
-      const songs = yield* songsOf(trackIds);
+      yield* learnSongs(kind, yield* songsOf(trackIds), at);
+    }).pipe(Effect.ignore);
+
+  /** Teaches the profile [kind] about each of [songs], already told apart, at [at]. */
+  const learnSongs = (kind: TasteSignalKind, songs: readonly MagicSong[], at: number) =>
+    Effect.sync(() => {
       const signals = songs.map((song) => ({ kind, song, at }));
       for (const signal of signals) {
         const entry = { order: signalOrder++, signal };
@@ -130,10 +146,22 @@ export const makeLiveTaste = <R>({
         else held?.push(entry);
       }
       if (known !== null) known = learned(known, signals);
-    }).pipe(Effect.ignore);
+    });
 
-  /** Bumped when the profile is forgotten: a derivation started before it isn't kept. */
-  let generation = 0;
+  /**
+   * Forgets the profile, so the next ask derives it again without the [kind]
+   * signals of [trackIds] (every one of that kind when not given): what one
+   * added can't be taken back alone, when it was given not being known here.
+   * A derivation going on isn't kept.
+   */
+  const forget = (kind: TasteSignalKind, trackIds?: readonly string[]): void => {
+    generation += 1;
+    known = null;
+    const stays = ({ signal }: OrderedSignal): boolean =>
+      signal.kind !== kind || (trackIds !== undefined && !trackIds.includes(signal.song.trackId));
+    streamed = streamed.filter(stays);
+    if (held !== null) held = held.filter(stays);
+  };
 
   const derived = (read = deriveWithSnapshot ?? (() => derive)) =>
     Effect.gen(function* () {
@@ -218,25 +246,27 @@ export const makeLiveTaste = <R>({
 
     /**
      * The owner unstarred songs: the profile is forgotten, so the next ask
-     * derives it again without their favorites (when a star was given isn't
-     * known here, so what it added can't be taken back alone). A derivation
-     * going on isn't kept.
+     * derives it again without their favorites.
      */
-    unstarred: (trackIds?: readonly string[]): void => {
-      generation += 1;
-      known = null;
-      streamed = streamed.filter(
-        ({ signal }) =>
-          signal.kind !== "favorite" ||
-          (trackIds !== undefined && !trackIds.includes(signal.song.trackId)),
-      );
-      if (held !== null)
-        held = held.filter(
-          ({ signal }) =>
-            signal.kind !== "favorite" ||
-            (trackIds !== undefined && !trackIds.includes(signal.song.trackId)),
-        );
-    },
+    unstarred: (trackIds?: readonly string[]): void => forget("favorite", trackIds),
+
+    /**
+     * The owner disliked [songs] at [at], each as the profile weighs it (the
+     * caller tells them, a dislike keeping its song's artists): it counts
+     * against their artists at once. It's in the history the profile is
+     * derived from again, a streamed song's too, so before the first ask
+     * it's left to that.
+     */
+    disliked: (songs: readonly MagicSong[], at: number) =>
+      songs.length === 0 || (known === null && held === null)
+        ? Effect.void
+        : learnSongs("dislike", songs, at),
+
+    /**
+     * The dislikes of [trackIds] were removed: the profile is forgotten, so
+     * the next ask derives it again without them.
+     */
+    undisliked: (trackIds: readonly string[]): void => forget("dislike", trackIds),
     /** Metadata changed: an in-flight snapshot must not become the shared answer. */
     invalidate: (): void => {
       generation += 1;

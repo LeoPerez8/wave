@@ -22,10 +22,13 @@ import {
   tryAgainSettles,
   unsearchedSettles,
   unsearchedTrackId,
+  playlistOfContextId,
+  recentWindowStart,
   writePlaylistEntrySong,
   type AppLanguage,
   type OrderedEntry,
   type PlaylistItem,
+  type PlaylistPlays,
   type PlaylistSong,
   type StoredPlaylistSong,
   type TryAgainAnswered,
@@ -1399,6 +1402,47 @@ export const selectPlaylistsLastPlayed = (db: LibraryDatabase): Map<number, numb
     if (Number.isSafeInteger(playlistId)) lastPlayed.set(playlistId, at);
   }
   return lastPlayed;
+};
+
+/**
+ * Each playlist's counted plays (plays whose context is the playlist,
+ * streamed songs' included), with those inside the recent window that ends
+ * at [now] counted apart, in playlist id order: what Core's `playlistPlays`
+ * answers for the same plays, for Home's From your library (Core's
+ * `fromYourLibrary`). Playlists without a counted play aren't in it; deleted
+ * ones' plays are, for the caller to leave out.
+ */
+export const selectPlaylistPlays = (db: LibraryDatabase, now: number): PlaylistPlays[] => {
+  const { playEvents } = schema;
+  const recent = sql`${playEvents.startedAt} >= ${recentWindowStart(now)} AND ${playEvents.startedAt} <= ${now}`;
+  const rows = db
+    .select({
+      contextId: playEvents.contextId,
+      recentPlays: sql<number>`coalesce(sum(CASE WHEN ${playEvents.counted} AND ${recent} THEN 1 ELSE 0 END), 0)`,
+      plays: sql<number>`coalesce(sum(${playEvents.counted}), 0)`,
+      latestPlayAt: sql<
+        number | null
+      >`max(CASE WHEN ${playEvents.counted} THEN ${playEvents.startedAt} END)`,
+    })
+    .from(playEvents)
+    .where(and(eq(playEvents.contextType, "playlist"), isNotNull(playEvents.contextId)))
+    .groupBy(playEvents.contextId)
+    .all();
+  // Two spellings of one number ("7", "07") are one playlist.
+  const byPlaylist = new Map<number, PlaylistPlays>();
+  for (const { contextId, recentPlays, plays, latestPlayAt } of rows) {
+    const id = playlistOfContextId(contextId);
+    if (id === null || plays <= 0 || latestPlayAt === null) continue;
+    const so = byPlaylist.get(id);
+    byPlaylist.set(id, {
+      id,
+      recentPlays: (so?.recentPlays ?? 0) + recentPlays,
+      plays: (so?.plays ?? 0) + plays,
+      latestPlayAt: Math.max(so?.latestPlayAt ?? latestPlayAt, latestPlayAt),
+    });
+  }
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+  return [...byPlaylist.values()].sort((a, b) => a.id - b.id);
 };
 
 /**

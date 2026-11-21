@@ -8,6 +8,7 @@ import type { BrowseScope } from "../../shared/browse.ts";
 import type { HomeFollowView, HomeReleaseCard, HomeShowCard } from "../../shared/homeFollow.ts";
 import { Icon } from "./Icon.tsx";
 import { language, text } from "./text.ts";
+import { holdYtAlbum } from "./YtArtist.tsx";
 import type { YtRoute } from "./YtPages.tsx";
 import "./homeFollow.css";
 
@@ -102,8 +103,11 @@ export function HomeNewReleases({
       .openRelease(card.key)
       .then((opened) => {
         if (opened.kind === "album") go({ kind: "album", id: opened.id });
-        else if (opened.kind === "ytAlbum") go({ kind: "ytAlbum", id: opened.browseId });
-        else
+        else if (opened.kind === "ytAlbum") {
+          // The tap read the album already; its page shows that read.
+          if (opened.album !== undefined) holdYtAlbum(opened.browseId, opened.album);
+          go({ kind: "ytAlbum", id: opened.browseId });
+        } else
           notify(
             opened.kind === "ytMusicOff"
               ? text.newReleases.ytMusicOff

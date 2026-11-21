@@ -20,7 +20,7 @@ const known: HomeFollowSnapshot = {
       releaseDate: "2026-10-01",
       artworkUrl: null,
       explicit: false,
-      browseId: null,
+      browseId: "MPREb_r",
       videoIds: [],
       recordingKeys: [],
     },
@@ -142,5 +142,20 @@ test("an unfollowed visit still removes hidden releases, counted plays and expir
   assert.equal(
     homeFollowCards(source, { now: Date.parse("2026-11-02"), admitted: known }).showCards.length,
     0,
+  );
+});
+
+test("cached release cards without a YT Music match hide at once, and all but the Library's with YT Music off", () => {
+  const owned = { ...known.releases[0]!, key: "owned", browseId: null, libraryAlbumId: 3 };
+  const unmatched = { ...known.releases[0]!, key: "unmatched", browseId: null };
+  const cached = { ...known, releases: [...known.releases, owned, unmatched] };
+  const now = Date.parse("2026-10-20");
+  assert.deepEqual(
+    homeFollowCards(cached, { now }).releaseCards.map((r) => r.key),
+    ["owned", "r"],
+  );
+  assert.deepEqual(
+    homeFollowCards(cached, { now, ytMusic: false }).releaseCards.map((r) => r.key),
+    ["owned"],
   );
 });

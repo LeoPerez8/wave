@@ -3,6 +3,7 @@ import { NativeModule, requireOptionalNativeModule } from "expo";
 
 import type { RecognizeNative } from "@wave/client/recognizeSession";
 import type { RecognizeTileNative } from "@/recognize/recognizeTile";
+import type { RecognizeTileFavoriteNative } from "@/recognize/recognizeTileFavorite";
 
 /** Recognize's native half (`modules/wave-native`, `recognize/RecognizeModule.kt`). */
 type WaveRecognizeEvents = {
@@ -17,6 +18,8 @@ type WaveRecognizeEvents = {
   onRecognizeTileRequested: () => void;
   /** The tile or its notification cancelled tap [tap]'s session. */
   onRecognizeTileCancelled: (event: { tap: number }) => void;
+  /** A tap on the match notification's star is waiting for `takeTileFavorite`. */
+  onRecognizeTileFavorite: () => void;
 };
 
 declare class WaveRecognizeModule extends NativeModule<WaveRecognizeEvents> {
@@ -36,7 +39,16 @@ declare class WaveRecognizeModule extends NativeModule<WaveRecognizeEvents> {
   tileListeningEnded(tap: number): void;
   tileFinished(): void;
   notifyTileMatch(title: string, text: string, coverUrl: string | null, match: string | null): void;
-  tileMatchSaved(line: string, match: string): void;
+  /** [favoriteLabel]: the star button, null for none; [favoriteOn]: the star its tap asks for. */
+  tileMatchSaved(
+    line: string,
+    match: string,
+    favoriteLabel?: string | null,
+    favoriteOn?: boolean,
+  ): void;
+  takeTileFavorite(): { tap: number; match: string; on: boolean } | null;
+  /** Tap [tap] is answered; [label] null leaves the button as it is. */
+  tileFavoriteDone(tap: number, match: string, label: string | null, on: boolean): void;
   /** [microphone]: the action is Use Microphone rather than Try Again. */
   notifyTileFailure(title: string, text: string, actionLabel: string, microphone: boolean): void;
 }
@@ -80,6 +92,20 @@ export const recognizeNative: RecognizeNative | null =
         },
       };
 
+/** The match notification's star button; null in an APK from before it. */
+export const recognizeTileFavorites: RecognizeTileFavoriteNative | null =
+  WaveRecognize === null || typeof WaveRecognize.takeTileFavorite !== "function"
+    ? null
+    : {
+        take: () => WaveRecognize.takeTileFavorite(),
+        onRequested: (listener) => {
+          const subscription = WaveRecognize.addListener("onRecognizeTileFavorite", listener);
+          return () => subscription.remove();
+        },
+        favoriteDone: (tap, match, favorite) =>
+          WaveRecognize.tileFavoriteDone(tap, match, favorite?.label ?? null, favorite?.on ?? true),
+      };
+
 /** Null in an older APK, whose tile opens the card. */
 export const recognizeTile: (RecognizeTileNative & { readonly capture: RecognizeNative }) | null =
   WaveRecognize === null ||
@@ -104,7 +130,17 @@ export const recognizeTile: (RecognizeTileNative & { readonly capture: Recognize
         },
         listeningEnded: (tap) => WaveRecognize.tileListeningEnded(tap),
         finished: () => WaveRecognize.tileFinished(),
-        matchSaved: (line, match) => WaveRecognize.tileMatchSaved(line, match),
+        matchSaved: (line, match, favorite) => {
+          // An APK from before the star button takes the line and the match only.
+          if (recognizeTileFavorites === null) WaveRecognize.tileMatchSaved(line, match);
+          else
+            WaveRecognize.tileMatchSaved(
+              line,
+              match,
+              favorite?.label ?? null,
+              favorite?.on ?? true,
+            );
+        },
         notify: (notice) => {
           if (notice.kind === "match") {
             WaveRecognize.notifyTileMatch(notice.title, notice.text, notice.coverUrl, notice.match);

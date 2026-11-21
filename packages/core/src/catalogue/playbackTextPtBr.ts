@@ -25,9 +25,15 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   backToCurrentSong: "Voltar à Música Atual",
   cancel: "Cancelar",
   changeButton: "Alterar Botão",
+  editButtons: "Editar botões",
+  doneEditing: "Concluir",
+  tapASlotToChooseItsAction: "Toque num espaço para escolher a ação",
+  holdAButtonToEditThisScreen: "Segure um botão para editar esta tela",
   checkYourConnectionAndTryAgain: "Verifique sua conexão e tente novamente.",
   clear: "Limpar",
   clearSearch: "Limpar busca",
+  /** Search's shelf of community playlists (docs/spec.md, Language). */
+  communityPlaylists: "Playlists da comunidade",
   closeNowPlaying: "Fechar Tocando Agora",
   /** Shared by manual saves and the tile notification's silent save update. */
   couldntAddToShazam: "Não foi possível adicionar ao Shazam",
@@ -216,6 +222,8 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   theseLyricsAreAlreadyInValue: (value0: string | number) => `Esta letra já está em ${value0}.`,
   selectUpToValueLines: (value0: string | number) => `Selecione até ${value0} versos`,
   valueOfValue: (value0: string | number, value1: string | number) => `${value0} de ${value1}`,
+  pageValueOfValue: (value0: string | number, value1: string | number) =>
+    `Página ${value0} de ${value1}`,
   removeValueFromFavorites: (value0: string | number) => `Remover ${value0} das Favoritas`,
   favoriteValue: (value0: string | number) => `Favoritar ${value0}`,
   removeValueFromUpNext: (value0: string | number) => `Remover ${value0} de A Seguir`,
@@ -253,6 +261,8 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   ofTime: "de",
   couldntLoadRecommendations: "Não foi possível carregar as recomendações.",
   magicQueueFrom: (title: string) => `Fila Mágica · a partir de ${title}`,
+  relatedFrom: (title: string) => `Relacionadas · de ${title}`,
+  upNextFrom: (title: string) => `A seguir · de ${title}`,
   newQueuePlaying: "Nova fila em reprodução",
   undo: "Desfazer",
   actions: "Ações",

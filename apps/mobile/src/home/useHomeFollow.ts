@@ -121,6 +121,7 @@ const useHomeFollowState = (reading: boolean) => {
   const cards = homeFollowCards(visit.latest, {
     now,
     enabled,
+    ytMusic: yt,
     blockExplicit: explicit,
     country: currentFollowCountry(),
     admitted: visit.admitted,

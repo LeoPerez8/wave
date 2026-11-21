@@ -10,7 +10,6 @@ import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { Hairline } from "@/catalog/Hairline";
-import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { SettingsSlider } from "@/components/SettingsSlider";
 import { TextButton } from "@/components/TextButton";
 
@@ -74,10 +73,11 @@ export function GlassSettingsSection() {
         format={percent}
       />
       <Hairline />
-      <SettingsSwitch
+      <GlassLevelSlider
         label={strings.settings.rim}
+        setting="rim"
         value={glass.rim}
-        onValueChange={(value) => setGlassSetting("rim", value)}
+        format={(value) => (value === 0 ? strings.settings.off : percent(value))}
       />
       <Hairline />
       <Text className="mt-2 font-sans text-footnote text-secondary">
