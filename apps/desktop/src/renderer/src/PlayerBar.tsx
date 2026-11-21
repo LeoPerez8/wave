@@ -311,6 +311,13 @@ export function PlayerBar({
             song === null,
           )}
           {button(
+            "miniPlayer",
+            text.desktopWindow.miniPlayer,
+            () => run(window.wave.miniPlayer.open()),
+            undefined,
+            false,
+          )}
+          {button(
             view?.muted ? "mute" : "volume",
             view?.muted ? labels.unmute : labels.mute,
             () => run(window.wave.playback.volume(view?.volume ?? 1, !view?.muted)),

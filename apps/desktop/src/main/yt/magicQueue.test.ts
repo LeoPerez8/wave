@@ -59,7 +59,13 @@ const setup = ({
 } = {}) => {
   let state: QueueState = EMPTY_QUEUE;
   const asked: string[] = [];
-  const world = { online, songRadio, playing: true, sleepTimer: null as SleepTimer | null };
+  const world = {
+    online,
+    songRadio,
+    playing: true,
+    sleepTimer: null as SleepTimer | null,
+    continueQueue: true,
+  };
   const magic = createMagicQueue({
     queue: () => state,
     dispatch: async (command: QueueCommand) => {
@@ -84,7 +90,7 @@ const setup = ({
     },
     ytMusic: () => true,
     online: () => world.online,
-    continueQueue: () => true,
+    continueQueue: () => world.continueQueue,
     playing: () => world.playing,
     sleepTimer: () => world.sleepTimer,
     ahead: () => null,
@@ -227,6 +233,29 @@ test("an album's queue at its last song goes on as a Magic Queue of the album", 
   );
   assert.equal(state.index, 1);
   assert.equal(state.entries.length, 2 + 10);
+});
+
+test("with Continue with Magic Queue off a queue stops at its last song, and goes on once it is on", async () => {
+  const { magic, queue, toLast, play, world, asked } = setup({
+    continuation: () => ({
+      seed: { kind: "album", id: "7", title: "Random Access Memories" },
+      songs: [getLucky, librarySong(2, "Instant Crush")],
+      streamed: [],
+    }),
+  });
+  world.continueQueue = false;
+  await play({ type: "play", trackIds: ["1", "2"], context: { kind: "album", id: "7" } });
+  await toLast();
+  assert.equal(queue().context?.kind, "album");
+  assert.equal(queue().entries.length, 2);
+  assert.deepEqual(asked, [], "nothing is read for a queue that stops");
+
+  // Settings › Playback turns it on: the queue at its last song goes on.
+  world.continueQueue = true;
+  magic.queueChanged();
+  await magic.settled();
+  assert.equal(queue().context?.kind, "magic");
+  assert.equal(queue().entries.length, 2 + 10);
 });
 
 test("with the sleep timer at End of Queue no batch joins and no queue goes on, until it is off", async () => {

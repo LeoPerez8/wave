@@ -189,6 +189,25 @@ and [Development Mode requirements](https://developer.spotify.com/documentation/
 folder for each test. It checks the profile, restart, Sign Out, Sign In Again, and the no-keyring
 notice. The owner can verify the system browser and consent screen with a registered Spotify app.
 
+## From Spotify
+
+Import Playlists on the Playlists page offers From Files and, while YT Music is on, From Spotify.
+Main reads the account with Spotify's Web API (`src/main/spotify/spotifyImport.ts`, Core's
+`readSpotifyWebLibrary` and `readSpotifyWebPlaylist`) and the window uses
+`wave.spotifyImport.library`, `run`, `cancel`, `artwork` and `missing`. `run` accepts only
+sources the last `library` listed. A playlist Spotify answers 403 or 404 for is skipped, which
+is what Development Mode does for playlists the account doesn't own.
+
+A playlist page hides songs the Library lacks until YT Music has them, so its hero counts them
+("2 not in your library") and lists them. Reading that list has main look them up on YT Music;
+each one found takes its place among the page's rows.
+
+`e2e/spotifyImport.spec.ts` fakes Spotify's browser and Web API. It checks the choice with YT
+Music off and on, the sign-in before the picker, the rows, Import, the Imported label, Try Again
+and Sign In Again. Its two absent songs are looked up on the live YT Music when the JVM is
+built; the check holds whether or not it answers. Import & Download's queueing is covered in
+`src/main/spotify/spotifyImport.test.ts`. A real account and a real download are owner checks.
+
 ## Share to Spotify
 
 A playlist's menu has Share to Spotify when the build names a Spotify client ID. Main matches the
@@ -244,6 +263,15 @@ and `tags.writeSong`. Its `downloadsChanged` events trigger journal reads. Souls
 are sealed by main's `seal/unseal` host calls through Electron's keyring; without a keyring they
 stay in memory. Rebuild the JAR with `pnpm --filter @wave/desktop build:jvm` after Kotlin changes.
 
+The Downloads page reads `downloads.rows(offset, limit, failedShown)`: Core's `downloadListRows`
+then `failedDownloadRows`, the failed songs only while shown. `downloads.move` takes a waiting
+song or a group onto another's place (`to`) or one step (`step`), and `downloads.failedReason`
+retries or removes every song that failed for one reason. `downloads.view()` carries the run's
+`panel`, the `summary` line and `pauseNotice`; main follows Core's `ytThrottle` and has the JVM
+pause YouTube's jobs (`downloads.pauseYoutube`). `e2e/downloadsPage.spec.ts` checks the page
+offline with 1,205 queued songs: the groups, a bounded list, a group and a song moved by drag
+and by Move Up, and the failed section. Its screenshots are `downloads-<step>-<platform>.png`.
+
 `e2e/downloads.spec.ts` checks a missing Search song waiting offline and resuming through the real
 JVM, and a live YouTube download with its tags read back and its Library entry visible. The live
 check stops after search on CI; inspect its annotations if YouTube refuses the machine.
@@ -298,6 +326,17 @@ start and Settings › Window. Two variables add the real system controls to it:
 
 The spec never turns on Start with the system, so it writes no login entry. `autostart.test.ts`
 covers what the switch registers.
+
+## Mini player
+
+`e2e/miniPlayer.spec.ts` opens the mini player from the player bar and from the tray menu's
+entry (read off the menu template Wave builds, since Playwright can't click a tray), checks that
+it is above other windows with the main window's web preferences and CSP, drives its buttons and
+Space, hides and brings back the main window, and checks the position after a restart and after
+a stored position that is on no screen. The screenshot is `mini-player-<platform>.png`. Find the
+windows by title: the main one is "Wave", the mini player is the catalogue's "Mini Player".
+`src/main/system/miniPlayer.test.ts` covers the window's placement against fake screens.
+Dragging it by hand and unplugging a monitor remain owner checks.
 
 ## Linux under WSLg
 

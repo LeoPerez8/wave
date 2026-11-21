@@ -24,10 +24,12 @@ import { readArtwork } from "./library/artwork.ts";
 import { appearance, preference, savePreference } from "./preferences.ts";
 import {
   SEARCH_ONLINE_SETTING,
+  isSpotifyLibrarySource,
   libraryTableSortsFor,
   readSearchOnline,
   readThemeEdit,
   writeSearchOnline,
+  type AppLanguage,
   ytTrackId,
 } from "@wave/core";
 import {
@@ -52,6 +54,9 @@ import { VIDEO_ID, YtMusic } from "./yt/ytMusic.ts";
 import { Downloads } from "./downloads/downloadsLayer.ts";
 import {
   MISSING_SONGS_ACTIONS,
+  FAILED_REASON_ACTIONS,
+  type DownloadMove,
+  type FailedReasonAction,
   MISSING_SONGS_LISTS,
   type MissingSongsList,
 } from "../shared/downloads.ts";
@@ -64,12 +69,19 @@ import { linkHandlers } from "./links/handlers.ts";
 import { artistPageHandlers } from "./artistPageHandlers.ts";
 import { YtAccount } from "./yt/ytAccountLayer.ts";
 import { SpotifyAccount } from "./spotify/spotifyAccountLayer.ts";
+import { SpotifyImport } from "./spotify/spotifyImportLayer.ts";
+import { SPOTIFY_IMPORT_MOST } from "../shared/spotifyImport.ts";
 import { DesktopPlaylists } from "./library/playlists.ts";
 import { playlistHandlers } from "./playlistHandlers.ts";
 import { searchLibrary } from "./library/search.ts";
 import { validWindowSettings } from "../shared/windowSettings.ts";
 import { readWindowSettings, changeWindowSettings } from "./system/windowSettings.ts";
 import { homeHandlers } from "./homeHandlers.ts";
+import {
+  miniPlayerHandlers,
+  noMiniPlayer,
+  type MiniPlayerCalls,
+} from "./system/miniPlayerHandlers.ts";
 import { statsHandlers } from "./statsHandlers.ts";
 import { lyricsAndTagsHandlers } from "./lyricsAndTagsHandlers.ts";
 import { HomeFollow } from "./follows/homeFollow.ts";
@@ -170,7 +182,8 @@ export type BridgeServices =
   | HomeFollow
   | FollowedArtists
   | YtAccount
-  | SpotifyAccount;
+  | SpotifyAccount
+  | SpotifyImport;
 
 const refuse = (call: BridgeCall, why: string) => Effect.fail(new Error(`Refused ${call}: ${why}`));
 
@@ -245,6 +258,22 @@ const downloadIds = (value: unknown): readonly string[] | undefined =>
     ? (value as string[])
     : undefined;
 
+/**
+ * A move on the Downloads page: a waiting song (a job id) or a group (its key), onto another's
+ * place or one step up or down.
+ */
+const downloadMove = (value: unknown): DownloadMove | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { kind, from, to, step } = value as Record<string, unknown>;
+  if (kind !== "song" && kind !== "group") return undefined;
+  const named = (name: unknown): name is string =>
+    typeof name === "string" &&
+    (kind === "song" ? DOWNLOAD_ID.test(name) : name.length > 0 && name.length <= 300);
+  if (!named(from)) return undefined;
+  if (step === undefined) return named(to) ? { kind, from, to } : undefined;
+  return to === undefined && (step === -1 || step === 1) ? { kind, from, step } : undefined;
+};
+
 /** At most a queue's worth of Track ids. */
 const trackIds = (value: unknown): readonly number[] | undefined =>
   Array.isArray(value) && value.length > 0 && value.length <= 500 && value.every(songId)
@@ -296,6 +325,27 @@ const spotifyAccountCall =
         })
       : refuse(call, "expected no arguments");
 
+/** Runs a From Spotify call in the language main resolved: the window's own idea of it is never asked. */
+const spotifyImportCall = <A>(
+  run: (spotify: SpotifyImport["Service"], language: AppLanguage) => A | Promise<A>,
+) =>
+  Effect.gen(function* () {
+    const spotify = yield* SpotifyImport;
+    const { language } = (yield* Account).language();
+    return yield* Effect.tryPromise({
+      try: async () => run(spotify, language),
+      catch: () => new Error("Spotify import failed"),
+    });
+  });
+
+/** Picker rows' sources: Liked Songs or a playlist URI, each once. */
+const spotifySources = (value: unknown): value is string[] =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.length <= SPOTIFY_IMPORT_MOST &&
+  value.every((source) => typeof source === "string" && isSpotifyLibrarySource(source)) &&
+  new Set(value).size === value.length;
+
 /** What each call does; `args` come from the window and are checked here before use. */
 type Handlers = {
   readonly [C in BridgeCall]: (
@@ -308,6 +358,7 @@ const createHandlers = (
   setLogin: (on: boolean) => Promise<void>,
   mediaBackend: () => "native" | "chromium",
   versionHistory: (offset: number, reload: boolean) => Promise<DesktopVersionHistory>,
+  miniPlayer: MiniPlayerCalls,
 ): Handlers => {
   let loadedPath: string | undefined;
   const streamed = streamedHandlers();
@@ -466,10 +517,23 @@ const createHandlers = (
         ? ytCall((yt) => yt.artwork(url))
         : refuse("yt.artwork", "invalid address"),
     "downloads.view": () => downloadsCall((d) => d.view()),
-    "downloads.rows": ([offset, limit]) =>
-      validPage(offset, limit)
-        ? downloadsCall((d) => d.rows(offset as number, limit as number))
+    "downloads.rows": ([offset, limit, failedShown]) =>
+      validPage(offset, limit) && (failedShown === undefined || typeof failedShown === "boolean")
+        ? downloadsCall((d) => d.rows(offset as number, limit as number, failedShown === true))
         : refuse("downloads.rows", "invalid page"),
+    "downloads.move": ([value]) => {
+      const move = downloadMove(value);
+      return move === undefined
+        ? refuse("downloads.move", "invalid move")
+        : downloadsCall((d) => d.move(move));
+    },
+    "downloads.failedReason": ([reason, action]) =>
+      typeof reason === "string" &&
+      reason.length > 0 &&
+      reason.length <= 500 &&
+      FAILED_REASON_ACTIONS.includes(action as FailedReasonAction)
+        ? downloadsCall((d) => d.failedReason(reason, action as FailedReasonAction))
+        : refuse("downloads.failedReason", "invalid reason or action"),
     "downloads.list": ([value]) => {
       const list = missingSongsList(value);
       return list === undefined
@@ -735,6 +799,7 @@ const createHandlers = (
     ...lyricsAndTagsHandlers,
     ...homeFollowHandlers,
     ...followsHandlers,
+    ...miniPlayerHandlers(miniPlayer),
     "search.library": ([query]) =>
       searchQuery(query)
         ? Effect.gen(function* () {
@@ -763,6 +828,32 @@ const createHandlers = (
     "spotifyAccount.signOut": spotifyAccountCall("spotifyAccount.signOut", (a) => a.signOut()),
     "spotifyAccount.check": spotifyAccountCall("spotifyAccount.check", (a) => a.check()),
     "spotifyAccount.photo": spotifyAccountCall("spotifyAccount.photo", (a) => a.photo()),
+    "spotifyImport.library": (args) =>
+      args.length === 1 && typeof args[0] === "boolean"
+        ? spotifyImportCall((spotify, language) => spotify.library(args[0] as boolean, language))
+        : refuse("spotifyImport.library", "invalid request"),
+    "spotifyImport.run": (args) => {
+      const [sources, download] = args;
+      return args.length === 2 && spotifySources(sources) && typeof download === "boolean"
+        ? spotifyImportCall((spotify, language) => spotify.run(sources, download, language))
+        : refuse("spotifyImport.run", "invalid playlists");
+    },
+    "spotifyImport.cancel": (args) =>
+      args.length === 0
+        ? spotifyImportCall((spotify) => spotify.cancel())
+        : refuse("spotifyImport.cancel", "expected no arguments"),
+    "spotifyImport.missing": (args) => {
+      const [playlistId] = args;
+      return args.length === 1 && songId(playlistId)
+        ? spotifyImportCall((spotify) => spotify.missing(playlistId as number))
+        : refuse("spotifyImport.missing", "invalid playlist");
+    },
+    "spotifyImport.artwork": (args) => {
+      const [source] = args;
+      return args.length === 1 && typeof source === "string" && isSpotifyLibrarySource(source)
+        ? spotifyImportCall((spotify) => spotify.artwork(source))
+        : refuse("spotifyImport.artwork", "invalid playlist");
+    },
     "spotifyShare.playlist": (args) =>
       args.length === 1 && songId(args[0])
         ? Effect.gen(function* () {
@@ -797,8 +888,9 @@ export const registerBridge = (
     currentListed: false,
     releases: { items: [], offset: 0, total: 0 },
   }),
+  miniPlayer: MiniPlayerCalls = noMiniPlayer,
 ): void => {
-  const handlers = createHandlers(onAppearance, setLogin, mediaBackend, versionHistory);
+  const handlers = createHandlers(onAppearance, setLogin, mediaBackend, versionHistory, miniPlayer);
   for (const call of BRIDGE_CALLS) {
     const handler: (args: readonly unknown[]) => Effect.Effect<unknown, unknown, BridgeServices> =
       handlers[call];

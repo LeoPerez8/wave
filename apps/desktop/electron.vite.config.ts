@@ -53,5 +53,11 @@ export default defineConfig({
   },
   renderer: {
     plugins: [react(), tailwindcss(), csp()],
+    // The mini player is a second page of the same renderer.
+    build: {
+      rolldownOptions: {
+        input: { index: "src/renderer/index.html", mini: "src/renderer/mini.html" },
+      },
+    },
   },
 });
