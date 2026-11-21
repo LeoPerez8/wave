@@ -584,6 +584,7 @@ const createHandlers = (
     "account.signOutEverywhere": () => accountCall((a) => a.signOutEverywhere()),
     "account.deleteAccount": () => accountCall((a) => a.deleteAccount()),
     "account.answerInvitation": () => accountCall((a) => a.answerInvitation()),
+    "account.answerBringYourMusic": () => accountCall((a) => a.answerBringYourMusic()),
     "ytAccount.view": () => ytAccountCall((a) => a.view()),
     "ytAccount.signIn": () => ytAccountCall((a) => a.signIn()),
     "ytAccount.cancelSignIn": () => ytAccountCall((a) => a.cancelSignIn()),

@@ -163,6 +163,7 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.account.signOutEverywhere",
       "wave.account.deleteAccount",
       "wave.account.answerInvitation",
+      "wave.account.answerBringYourMusic",
       "wave.collections.actions",
       "wave.collections.run",
       "wave.playlists.checkName",
