@@ -60,7 +60,7 @@ import type { ArtistRow } from "@wave/client";
 import { DjAdjust } from "./DjAdjust";
 import { readDjAlbums } from "./djAlbums";
 import { DjSearch } from "./DjSearch";
-import { runDjDone, type DjDone } from "./djDone";
+import { djDone, type DjDone, type DjDoneRunner } from "./djDone";
 import { djRemembered } from "./djRemembered";
 import { readDjSimilar } from "./djSimilar";
 
@@ -436,17 +436,26 @@ export function DjScreen() {
   const cells = useMemo(() => (state === undefined ? [] : djCells(state)), [state]);
   const loading = done === "loading";
   const canStart = state !== undefined && djCanStart(state);
+  // Done for this opening; leaving DJ (Close, Android's Back) cancels a start
+  // still loading, so it never replaces the queue nor closes another screen.
+  const doneRunner = useRef<DjDoneRunner | null>(null);
+  useEffect(() => {
+    const runner = djDone(setDone, () => router.back());
+    doneRunner.current = runner;
+    return () => {
+      runner.cancel();
+      doneRunner.current = null;
+    };
+  }, []);
   const start = (): void =>
-    void runDjDone(
-      done,
-      () => appRuntime.runPromise(startDjMagicQueue(seed, settings)),
-      setDone,
-      () => {
-        // The queue started: this DJ is the one the next opening shows.
-        djRemembered.set({ tiles: seed, settings });
-        router.back();
-      },
-    );
+    void doneRunner.current?.run(async (closed) => {
+      const outcome = await appRuntime.runPromise(startDjMagicQueue(seed, settings, closed), {
+        signal: closed,
+      });
+      // The queue started: this DJ is the one the next opening shows.
+      if (outcome === "started") djRemembered.set({ tiles: seed, settings });
+      return outcome;
+    });
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: insets.top + 4 }}>
       <View className="flex-row justify-between" style={{ paddingHorizontal: grid.margin - 12 }}>
