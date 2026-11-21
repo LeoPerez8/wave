@@ -166,3 +166,12 @@ export const djReopened = ({
   const added = [...selected.values()].filter((tile) => !fresh.has(tile.key));
   return { ...djOpened([...added, ...grid]), selected: [...selected.keys()] };
 };
+
+/** Reopens an already kept grid with a remembered selection, without rebuilding tiles or opening rows. */
+export const djRestoredGrid = (grid: readonly DjTile[], remembered: readonly DjTile[]): DjState => {
+  const present = new Set(grid.map((tile) => tile.key));
+  const selected = [...new Set(remembered.map((tile) => tile.key))]
+    .filter((key) => present.has(key))
+    .slice(0, DJ_MAX_SELECTED);
+  return { ...djOpened(grid), selected };
+};
