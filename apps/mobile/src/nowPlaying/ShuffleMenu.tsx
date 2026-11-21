@@ -74,7 +74,7 @@ const SHUFFLES: Record<
 const KINDS = Object.keys(SHUFFLES) as ShuffleKind[];
 
 /**
- * The kind of shuffle as Settings › Layout › Now Playing offers it: the
+ * The kind of shuffle as Settings › Layout offers it: the
  * card's kinds, under their card names. It's the card's own preference, so a
  * choice in either place shows in the other. Choosing here only saves it;
  * the next shuffle uses it.

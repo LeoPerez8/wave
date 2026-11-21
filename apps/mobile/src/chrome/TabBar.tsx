@@ -54,6 +54,8 @@ function Tab({ name, showLabel = true, onSwitch, onTap }: TabProps) {
       accessibilityHint={strings.tabBar.editHint}
       accessibilityState={{ selected: focused }}
       accessibilityActions={[{ name: "editTabBar", label: strings.tabBar.edit }]}
+      menuRequestId="layout-tab-bar"
+      onMenuRequest={openTabBarEditor}
       onAccessibilityAction={({ nativeEvent: { actionName } }) => {
         if (actionName === "editTabBar") openTabBarEditor();
       }}

@@ -18,6 +18,7 @@ describe("an edit to the stored Home arrangement", () => {
     assert.deepEqual(parseHomeArrangement(edited).sections, [
       "new-releases",
       "upcoming-shows",
+      "dj",
       "discover",
       "in-your-orbit",
       "from-your-library",
@@ -43,6 +44,7 @@ describe("an edit to the stored Home arrangement", () => {
       hidden: [
         "new-releases",
         "upcoming-shows",
+        "dj",
         "discover",
         "in-your-orbit",
         "from-your-library",
@@ -64,6 +66,7 @@ describe("an edit to the stored Home arrangement", () => {
       hidden: [
         "new-releases",
         "upcoming-shows",
+        "dj",
         "discover",
         "in-your-orbit",
         "from-your-library",
@@ -91,6 +94,7 @@ describe("an edit to the stored Home arrangement", () => {
       hidden: [
         "new-releases",
         "upcoming-shows",
+        "dj",
         "discover",
         "in-your-orbit",
         "from-your-library",

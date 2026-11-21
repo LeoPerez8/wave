@@ -1,5 +1,5 @@
 import { useLocalisation } from "@/localisation/localisation";
-import { type Catalogue, type LayoutPage, type SettingsIcon, type SettingsPage } from "@wave/core";
+import { type Catalogue, type SettingsIcon, type SettingsPage } from "@wave/core";
 import { memo, type ReactNode } from "react";
 import { ScrollView, Text, View } from "react-native";
 
@@ -22,19 +22,13 @@ export const SECTION_GAP = 48;
 const SECTION_ESTIMATE = grid.row + CELL * 4;
 
 /**
- * A page of Settings, one of Settings › Layout's, or a page one of them opens
- * for a single setting (a swipe direction's picker), by its title.
+ * A Settings page, or a page it opens for one setting (a swipe direction's
+ * picker), by its title.
  */
-type PageId =
-  | { readonly page: SettingsPage }
-  | { readonly layoutPage: LayoutPage }
-  | { readonly title: string };
+type PageId = { readonly page: SettingsPage } | { readonly title: string };
 
 const pageTitle = (id: PageId, strings: Catalogue): string => {
-  if ("title" in id) return id.title;
-  return "page" in id
-    ? strings.settings.pages[id.page]
-    : strings.settings.layoutPages[id.layoutPage];
+  return "page" in id ? strings.settings.pages[id.page] : id.title;
 };
 
 /**

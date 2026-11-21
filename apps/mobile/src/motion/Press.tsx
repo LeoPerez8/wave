@@ -33,6 +33,7 @@ import { useLongPressDelayMs } from "@/settings/longPressDelay";
 
 import { cancelHeldTouch, holdTouch, moveHeldTouch, releaseHeldTouch } from "./heldTouch";
 import { measurePressed, type Measurable } from "./measureRect";
+import { listenForAnchoredMenu } from "./menuRequest";
 import { runPressedAt } from "./pressedRect";
 import { HandOverPress } from "./pressHandle";
 import { traceLongPress } from "./longPressTrace";
@@ -59,6 +60,10 @@ type Props = Omit<PressableProps, "children" | "style"> & {
    * long-press does: it stays highlighted while the card is open.
    */
   opensMenu?: boolean;
+  /** A one-shot request to open this press's existing anchored menu. */
+  menuRequestId?: string;
+  /** The menu handler used by a long press and by [menuRequestId]. */
+  onMenuRequest?: (() => void) | undefined;
   /** Looks pressed without a touch of its own (e.g. the menu entry a sliding finger is over). */
   highlighted?: boolean;
   /**
@@ -91,6 +96,8 @@ export function Press({
   onLongPress,
   delayLongPress,
   opensMenu = false,
+  menuRequestId,
+  onMenuRequest,
   highlighted = false,
   highlightAs,
   onTouchStart,
@@ -155,6 +162,14 @@ export function Press({
     () => handOver?.({ key, run: (handler) => latestRunAnchored.current(handler) }),
     [handOver, key],
   );
+
+  useEffect(() => {
+    if (menuRequestId === undefined || onMenuRequest === undefined) return;
+    return listenForAnchoredMenu(
+      menuRequestId,
+      () => void latestRunAnchored.current(onMenuRequest),
+    );
+  }, [menuRequestId, onMenuRequest]);
 
   // The finger stays down as a long-press menu opens and can slide onto an entry
   // (slide to choose). A long-press that opens no menu (a tab's) lets it go again.

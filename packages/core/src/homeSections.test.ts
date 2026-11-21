@@ -33,6 +33,7 @@ const homeItems = (sections: HomeArrangement, options: Parameters<typeof items>[
 const TODAYS_HOME = [
   "new-releases",
   "upcoming-shows",
+  "dj",
   "discover",
   "in-your-orbit",
   "from-your-library",
@@ -55,6 +56,7 @@ describe("Home's section catalogue", () => {
       [
         ["new-releases", "New from Artists You Follow"],
         ["upcoming-shows", "Upcoming Shows"],
+        ["dj", "DJ"],
         ["discover", "Discover"],
         ["in-your-orbit", "In your orbit"],
         ["from-your-library", "From your library"],
@@ -71,6 +73,8 @@ describe("Home's section catalogue", () => {
   });
 
   test("a section's title is found by its id", () => {
+    assert.equal(homeSectionTitle("dj"), "DJ");
+    assert.equal(homeSectionTitle("dj", catalogueOf("pt-BR")), "DJ");
     assert.equal(homeSectionTitle("in-your-orbit"), "In your orbit");
     assert.equal(homeSectionTitle("in-your-orbit", catalogueOf("pt-BR")), "Na sua órbita");
     assert.equal(homeSectionTitle("from-your-library"), "From your library");
@@ -137,6 +141,7 @@ describe("Home's arrangement", () => {
       hidden: [
         "new-releases",
         "upcoming-shows",
+        "dj",
         "recently-played",
         "most-played-albums",
         "discover",
@@ -177,6 +182,7 @@ describe("Home's arrangement", () => {
         arranged(["favorites", "artist-mixes", "recently-added", "magic-queue"]),
       ),
       [
+        "dj",
         "discover",
         "in-your-orbit",
         "from-your-library",
@@ -186,6 +192,7 @@ describe("Home's arrangement", () => {
       ],
     );
     assert.deepEqual(parseHomeArrangement(arranged(["stats", "favorites"])), [
+      "dj",
       "discover",
       "in-your-orbit",
       "from-your-library",
@@ -194,6 +201,7 @@ describe("Home's arrangement", () => {
       "favorites",
     ]);
     assert.deepEqual(parseHomeArrangement(arranged(["recently-added", "genre-mixes"])), [
+      "dj",
       "discover",
       "in-your-orbit",
       "from-your-library",
@@ -216,6 +224,7 @@ describe("Home's arrangement", () => {
       ],
     });
     assert.deepEqual(parseHomeArrangement(stored), [
+      "dj",
       "discover",
       "in-your-orbit",
       "from-your-library",
@@ -459,7 +468,7 @@ describe("what Home lists", () => {
 
   test("with nothing played, the line asking for a play comes before the first section plays fill", () => {
     assert.deepEqual(homeItems(TODAYS_HOME as HomeArrangement, { nothingPlayed: true }), [
-      ...sections("new-releases", "upcoming-shows", "discover"),
+      ...sections("new-releases", "upcoming-shows", "dj", "discover"),
       "play-hint",
       ...sections(
         "in-your-orbit",
@@ -484,7 +493,7 @@ describe("what Home lists", () => {
     const empty = { nothingPlayed: true, empty: true };
     assert.deepEqual(
       homeItems(TODAYS_HOME as HomeArrangement, empty),
-      sections("new-releases", "upcoming-shows", "discover", "community-playlists"),
+      sections("new-releases", "upcoming-shows", "dj", "discover", "community-playlists"),
     );
     assert.deepEqual(homeItems(["favorites", "stats"], empty), []);
     assert.deepEqual(homeItems([], empty), []);
@@ -521,6 +530,7 @@ describe("Home's editor", () => {
     assert.deepEqual(hiddenHomeSections(["stats", "favorites", "recently-added", "most-played"]), [
       "new-releases",
       "upcoming-shows",
+      "dj",
       "discover",
       "in-your-orbit",
       "from-your-library",
@@ -576,6 +586,7 @@ describe("merging Home's Stats and Listening overview", () => {
     const hidden = [
       "new-releases",
       "upcoming-shows",
+      "dj",
       "discover",
       "in-your-orbit",
       "from-your-library",
@@ -724,6 +735,7 @@ test("Upcoming Shows joins an existing Home after New releases, and can be moved
       (s) => !["favorites", "new-releases", "stats", "upcoming-shows"].includes(s.id),
     ).map((s) => s.id),
   });
+
   assert.deepEqual(parseHomeArrangement(old), [
     "favorites",
     "new-releases",
@@ -739,6 +751,39 @@ test("Upcoming Shows joins an existing Home after New releases, and can be moved
     "discover",
     "upcoming-shows",
   ]);
+});
+
+test("DJ joins saved Homes immediately before Discover, even when Discover was hidden", () => {
+  const old = JSON.stringify({
+    shown: ["favorites", "discover", "stats"],
+    hidden: HOME_SECTIONS.filter(
+      (section) => section.id !== "dj" && !["favorites", "discover", "stats"].includes(section.id),
+    ).map((section) => section.id),
+  });
+  assert.deepEqual(parseHomeArrangement(old), ["favorites", "dj", "discover", "stats"]);
+
+  const discoverHidden = JSON.stringify({
+    shown: ["favorites", "stats"],
+    hidden: HOME_SECTIONS.filter(
+      (section) => section.id !== "dj" && !["favorites", "stats"].includes(section.id),
+    ).map((section) => section.id),
+  });
+  assert.deepEqual(parseHomeArrangement(discoverHidden), ["dj", "favorites", "stats"]);
+});
+
+test("DJ can be removed, restored at the bottom, and moved independently of Discover", () => {
+  const original = parseArrangement(null);
+  const removed = editArrangement(original, { remove: "dj" });
+  assert.equal(removed.sections.includes("dj"), false);
+  assert.equal(hiddenSections(removed).includes("dj"), true);
+
+  const restored = editArrangement(removed, { add: "dj" });
+  assert.equal(restored.sections.at(-1), "dj");
+  const moved = editArrangement(restored, {
+    move: { from: restored.sections.length - 1, to: 1 },
+  });
+  assert.deepEqual(moved.sections.slice(0, 3), ["new-releases", "dj", "upcoming-shows"]);
+  assert.deepEqual(moved.discoverRows, original.discoverRows);
 });
 
 test("Upcoming Shows needs no Library: an empty Library still lists it when arranged", () => {

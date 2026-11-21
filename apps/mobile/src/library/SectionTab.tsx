@@ -1,6 +1,7 @@
 import { timingStackListeners } from "@/lib/timing";
 import type { LibrarySectionSlug } from "@wave/core";
-import { Stack } from "expo-router";
+import { Stack, useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 import { View } from "react-native";
 
 import { findSection } from "@/catalog/sections";
@@ -10,6 +11,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import { SectionList } from "./SectionList";
 import { sectionTitleLongPress } from "./sectionTitleLongPress";
+import { openArmedAnchoredMenu } from "@/motion/menuRequest";
 
 /**
  * A section tab's own stack (each section tab's `_layout`): what its list
@@ -32,6 +34,11 @@ export function SectionTabStack() {
  * keeps your place while you're on another one.
  */
 export function SectionTabScreen({ slug }: { slug: LibrarySectionSlug }) {
+  useFocusEffect(
+    useCallback(() => {
+      if (slug === "playlists") openArmedAnchoredMenu("layout-playlists");
+    }, [slug]),
+  );
   const top = useLargeTitleTop();
   const { strings } = useLocalisation();
   const section = findSection(slug);
