@@ -1672,29 +1672,30 @@ const make = Effect.gen(function* () {
     },
     catch: (cause) => new LibraryStoreError({ operation: "watch the taste sources", cause }),
   });
-  // What used to run while the first `appRuntime` use built this layer, on the JS thread before
-  // the first screen (#1359): a startup job runs it once the first screen settles
-  // (`app/_layout.tsx`, "libraryUpkeep"). Migrations stay in the connection's opening.
+  // After the upgrade that brought credits in, the Library is re-filed under each credited
+  // artist from the tags already stored (no rescan); after the one that brought Wave accounts
+  // in, every song (and its plays) gets its recording key and its titles. All three stay in the
+  // opening: matching a song and recovering downloads read them, and once done they cost under
+  // 3 ms together (the first title pass after its update is the one slow run).
+  yield* Effect.try({
+    try: () => relinkCreditsIfUnlinked(db, splits),
+    catch: (cause) => new LibraryStoreError({ operation: "split artist credits", cause }),
+  });
+  yield* Effect.try({
+    try: () => keyRecordings(db),
+    catch: (cause) => new LibraryStoreError({ operation: "key the Library's songs", cause }),
+  });
+  yield* Effect.tryPromise({
+    try: () => backfillRecordingTitles(db),
+    catch: (cause) => new LibraryStoreError({ operation: "key recording titles", cause }),
+  });
+  // The taste sources' write stamp used to be made while the first `appRuntime` use built this
+  // layer, on the JS thread before the first screen (#1359): a startup job makes it once the
+  // first screen settles (`app/_layout.tsx`, "libraryUpkeep"), or the first taste read does.
   let upkept = false;
   const startupUpkeep = Effect.gen(function* () {
     if (upkept) return;
     upkept = true;
-    // After the upgrade that brought credits in, the Library is re-filed under
-    // each credited artist from the tags already stored (no rescan).
-    yield* Effect.try({
-      try: () => relinkCreditsIfUnlinked(db, splits),
-      catch: (cause) => new LibraryStoreError({ operation: "split artist credits", cause }),
-    });
-    // After the upgrade that brought Wave accounts in, every song (and its
-    // plays) gets its recording key from the tags already stored (no rescan).
-    yield* Effect.try({
-      try: () => keyRecordings(db),
-      catch: (cause) => new LibraryStoreError({ operation: "key the Library's songs", cause }),
-    });
-    yield* Effect.tryPromise({
-      try: () => backfillRecordingTitles(db),
-      catch: (cause) => new LibraryStoreError({ operation: "key recording titles", cause }),
-    });
     yield* watchTaste;
   });
 

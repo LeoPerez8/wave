@@ -72,8 +72,10 @@ Library query registry's settle, and the client's read replay passes ("Library r
 block over 50 ms during them is now put down to that name instead of "no background work".
 
 The Library's startup upkeep (relinking credits, keying recordings, backfilling recording titles,
-watching taste sources) ran while its layer was built, before the first screen. It now runs as
-"Library upkeep" after the first screen settles (`runLibraryUpkeep`, from `app/_layout.tsx`).
+watching taste sources) ran while its layer was built, before the first screen. Only the taste
+watch moved: it runs as "Library upkeep" after the first screen settles (`runLibraryUpkeep`, from
+`app/_layout.tsx`), or on the first taste read. Relinking, keys and titles stay in the opening,
+because matching a song and recovering downloads read them.
 Measured on the desktop (Node 24 with sql.js, not the phone), with
 `pnpm --filter @wave/mobile bench:startup-upkeep`:
 
@@ -83,11 +85,10 @@ Measured on the desktop (Node 24 with sql.js, not the phone), with
 | 12,000 | 2.38                | 2.84              | 1,416                          |
 | 50,000 | 10.29               | 10.77             | 5,925                          |
 
-At steady state keys take about 0.2 ms, titles 0.07 ms and taste 0.2 ms at every size. The
-first-pass backfill runs once, after the update that adds titles; it is the cost that used to sit
-before the first screen. Each of its 128-row batches is about 15 ms, over the 8 ms slice, as it
-was before this change. Until the upkeep runs, an upgrade's first screen may show credits not yet
-relinked for a moment.
+At steady state keys take about 0.2 ms, titles 0.07 ms and taste 0.2 ms at every size, so what
+stays in the opening costs under 3 ms at 12,000 songs. The first-pass title backfill runs once,
+after the update that adds titles, and still sits before the first screen on that one start; each
+of its 128-row batches is about 15 ms.
 
 ## Phone run: pending
 
