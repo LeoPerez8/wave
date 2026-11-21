@@ -43,6 +43,8 @@ import {
   unstarredDownload,
   writeStarDownloads,
   writeSyncedStars,
+  ytAlbumDownload,
+  ytAlbumDownloadButton,
   ytDownloadAwaitsAnswer,
   ytDownloadProgress,
   ytDownloadsFromJournal,
@@ -62,6 +64,8 @@ import {
   type YtDownloadJournalJob,
   type YtSong,
   type YtDownloadStatus,
+  type YtAlbumDownloadAction,
+  type YtSongsDownloadAction,
   type YtThrottle,
 } from "@wave/core";
 
@@ -74,6 +78,7 @@ import type {
   FailedReasonAction,
   MissingSongsList,
   MissingSongsView,
+  YtListDownloadView,
 } from "../../shared/downloads.ts";
 import type { KotlinDownloadMethod, KotlinMethods, SoulseekSession } from "../kotlin/protocol.ts";
 import type { DownloadClaim } from "./decisions.ts";
@@ -115,6 +120,16 @@ export interface DownloadsDeps {
   readonly renewMs?: number;
 }
 
+/**
+ * A YT Music list's songs as its page read them, whether the Library has each one, and the source
+ * its downloads group under: an album's page (`YtSongsList`).
+ */
+export interface YtListSongs {
+  readonly songs: readonly YtSong[];
+  readonly inLibrary: (song: YtSong) => boolean;
+  readonly origin: DownloadOrigin;
+}
+
 export interface DownloadsShape {
   /** Reads the journal and starts it when online; call once the JVM is up (and after a restart). */
   readonly start: (online: boolean) => Promise<void>;
@@ -139,6 +154,13 @@ export interface DownloadsShape {
   readonly failedReason: (reason: string, action: FailedReasonAction) => Promise<void>;
   /** A page's missing songs and their downloads; null for no such page. */
   readonly listView: (list: MissingSongsList) => MissingSongsView | null;
+  /** A YT Music list's download button and head line (Core's `ytAlbumDownloadButton`). */
+  readonly ytListView: (list: YtListSongs) => YtListDownloadView;
+  /**
+   * Its button's click: Download queues the songs the Library lacks, in list order, Retry Failed
+   * the failed ones, both under the list; Cancel stops the ones not yet saving.
+   */
+  readonly ytListAction: (action: YtSongsDownloadAction, list: YtListSongs) => Promise<void>;
   /**
    * Downloads YT Music songs a search found. With [by] `star`, a star asked rather than the
    * owner, so [unstarred] takes the download back.
@@ -192,6 +214,13 @@ interface JobRequest {
 }
 
 /** What the journal holds of missing song [job]: a YT Music song named after its Track. */
+/** The generic entry each of an album's download entries stands for. */
+const ALBUM_ACTIONS: { readonly [A in YtAlbumDownloadAction]: YtSongsDownloadAction } = {
+  downloadAlbum: "download",
+  retryFailed: "retryFailed",
+  cancelAlbumDownload: "cancel",
+};
+
 const journalSong = (job: MissingSongJob): YtSong & { readonly albumId: null } => ({
   videoId: job.videoId,
   title: job.title,
@@ -629,6 +658,43 @@ export const createDownloads = (deps: DownloadsDeps): DownloadsShape => {
       const found = deps.list(list);
       return found === null ? null : missingView(missingJobs(found.ids));
     },
+    ytListView: ({ songs, inLibrary }) => {
+      const download = ytAlbumDownload(songs, { inLibrary, jobs: followed, language: language() });
+      const button = ytAlbumDownloadButton(download, language());
+      return {
+        button:
+          button === null
+            ? null
+            : {
+                action:
+                  button.action === "downloaded" ? "downloaded" : ALBUM_ACTIONS[button.action],
+                label: button.label,
+              },
+        line: download.line,
+      };
+    },
+    ytListAction: (action, { songs, inLibrary, origin }) =>
+      queued(async () => {
+        await refresh();
+        const download = ytAlbumDownload(songs, { inLibrary, jobs: followed });
+        if (action === "cancel") {
+          for (const id of download.toCancel) await deps.call("downloads.cancel", { id });
+          await refresh();
+          return;
+        }
+        const current = await session();
+        if (action === "download") ownerAsked(songs.map((song) => song.videoId));
+        const asked = action === "download" ? download.toDownload : download.toRetry;
+        await enqueue(
+          asked.map(({ song, sharedJob }) => ({
+            song,
+            recording: soulseekRecording(song),
+            equivalentId: sharedJob,
+            source: sourceFor(current),
+            origin,
+          })),
+        );
+      }),
     yt: (videoIds, by) =>
       queued(async () => {
         const current = await session();

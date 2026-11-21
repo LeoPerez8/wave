@@ -2,7 +2,13 @@
  * Main's side of the bridge for YouTube Music's pages, Discover and the Magic Queue
  * (`YtFeatures`): each call's arguments are checked before use, and songs go back as rows.
  */
-import { discoverMixCaption, isSliderStep, ytTrackId, type YtAlbumSong } from "@wave/core";
+import {
+  discoverMixCaption,
+  isSliderStep,
+  ytTrackId,
+  type YtAlbumSong,
+  type YtArtistAlbum,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import type { BridgeCall, BridgeContract, Page } from "../../shared/bridge.ts";
@@ -80,8 +86,17 @@ export const createYtFeatureHandlers = (
       : refuse("yt.search", "invalid query"),
   "yt.artist": ([id]) =>
     browseId(id)
-      ? featuresCall(async ({ pages }) => {
+      ? featuresCall(async ({ pages, libraryReleases }) => {
           const { status, page } = await pages.artist(id);
+          const inLibrary =
+            page === null
+              ? new Map<string, number>()
+              : libraryReleases(page.name, [...page.albums, ...page.singles]);
+          const released = (releases: readonly YtArtistAlbum[]) =>
+            releases.map((release) => ({
+              ...release,
+              libraryId: inLibrary.get(release.browseId) ?? null,
+            }));
           return {
             status,
             page:
@@ -91,8 +106,8 @@ export const createYtFeatureHandlers = (
                     name: page.name,
                     artworkUrl: page.artworkUrl ?? null,
                     songs: rows(page.songs),
-                    albums: page.albums,
-                    singles: page.singles,
+                    albums: released(page.albums),
+                    singles: released(page.singles),
                     similar: page.similar ?? [],
                   },
           };

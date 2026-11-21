@@ -622,7 +622,7 @@ export const playbackLayer = Layer.effect(
           );
         return streams ? yt.withSongs(streams, play) : play();
       },
-      startYt: async (videoIds, index) => {
+      startYt: async (videoIds, index, shuffle) => {
         pending = undefined;
         error = null;
         if (videoIds.some((videoId) => yt.song(videoId) === undefined))
@@ -630,8 +630,10 @@ export const playbackLayer = Layer.effect(
         const playing = session.dispatch({
           type: "play",
           trackIds: videoIds.map(ytTrackId),
-          startIndex: index,
+          // Shuffle starts anywhere among them, as a Library list's does.
+          startIndex: shuffle === true ? undefined : index,
           context: { kind: "search", id: null },
+          ...(shuffle === true ? { shuffle } : {}),
         });
         await moved(playing, true);
       },

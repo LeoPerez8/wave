@@ -68,8 +68,15 @@ export type PlayStart =
 
 /** The transport calls main's playback and the window's bridge share. */
 export interface PlaybackTransport {
-  /** Plays YouTube Music songs a search found, from [index], as a new queue. */
-  readonly startYt: (videoIds: readonly string[], index: number) => Promise<void>;
+  /**
+   * Plays YouTube Music songs a page brought, from [index], as a new queue; with [shuffle], all
+   * of them shuffled, as a list's Shuffle does.
+   */
+  readonly startYt: (
+    videoIds: readonly string[],
+    index: number,
+    shuffle?: boolean,
+  ) => Promise<void>;
   /** A queue command: Next, Previous, shuffle, repeat, and the Queue's edits. */
   readonly command: (command: PlaybackCommand) => Promise<void>;
   readonly play: () => Promise<void>;
