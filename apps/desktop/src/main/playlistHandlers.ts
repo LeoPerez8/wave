@@ -1,5 +1,11 @@
 /** Main's side of `window.wave.playlists`: each call's arguments come from the window, checked here. */
-import type { ImageFraming } from "@wave/core";
+import {
+  DESKTOP_PLAYLIST_LAYOUTS,
+  PLAYLIST_SORTS,
+  type ImageFraming,
+  type PlaylistLayout,
+  type PlaylistSort,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 import type { BridgeContract } from "../shared/bridge.ts";
 import type { ImportAnswer, PLAYLIST_CALLS } from "../shared/playlists.ts";
@@ -135,4 +141,17 @@ export const playlistHandlers = (
     id(playlistId) && typeof large === "boolean"
       ? playlistsCall((p) => p.image(playlistId, large))
       : refuse("playlists.image", "invalid playlist"),
+  "playlists.listView": () => playlistsCall((p) => p.listView()),
+  "playlists.sortList": ([sort]) =>
+    PLAYLIST_SORTS.some((choice) => choice.sort === sort)
+      ? playlistsCall((p) => p.sortList(sort as PlaylistSort))
+      : refuse("playlists.sortList", "invalid sort"),
+  "playlists.showListAs": ([layout]) =>
+    DESKTOP_PLAYLIST_LAYOUTS.includes(layout as PlaylistLayout)
+      ? playlistsCall((p) => p.showListAs(layout as PlaylistLayout))
+      : refuse("playlists.showListAs", "invalid layout"),
+  "playlists.moveInList": ([playlistId, to]) =>
+    id(playlistId) && typeof to === "number" && Number.isSafeInteger(to)
+      ? playlistsCall((p) => p.moveInList(playlistId, to))
+      : refuse("playlists.moveInList", "invalid playlist or place"),
 });

@@ -3,7 +3,13 @@
  * the playlist's image, Move Up and Move Down, Undo of a removal, the Graveyard and the M3U
  * import. Main does the work; the window asks and shows.
  */
-import type { ImageFraming, M3uImportOutcome, PlaylistNameCheck } from "@wave/core";
+import type {
+  ImageFraming,
+  M3uImportOutcome,
+  PlaylistLayout,
+  PlaylistNameCheck,
+  PlaylistSort,
+} from "@wave/core";
 import type { BridgeContract, Invoke, Page } from "./bridge.ts";
 import type { BrowseRow } from "./browse.ts";
 import type { SongTarget } from "./songActions.ts";
@@ -51,6 +57,15 @@ export interface ImageEdit {
 }
 
 export type MoveDirection = "up" | "down";
+
+/** How the Playlists list shows and orders playlists (the page and the sidebar alike). */
+export interface PlaylistListView {
+  readonly sort: PlaylistSort;
+  /** The page's table (`list`) or its grid of covers. */
+  readonly layout: PlaylistLayout;
+  /** Every playlist's id, in the order the list shows them. */
+  readonly ids: readonly number[];
+}
 
 export interface PlaylistContract {
   /** Whether [name] can name a playlist (the one named [playlistId] keeps its own). */
@@ -135,6 +150,21 @@ export interface PlaylistContract {
     readonly args: readonly [playlistId: number, large: boolean];
     readonly result: string | null;
   };
+  readonly "playlists.listView": { readonly args: readonly []; readonly result: PlaylistListView };
+  /** Sorts the Playlists list; Custom brings back the order arranged before. */
+  readonly "playlists.sortList": {
+    readonly args: readonly [sort: PlaylistSort];
+    readonly result: void;
+  };
+  readonly "playlists.showListAs": {
+    readonly args: readonly [layout: PlaylistLayout];
+    readonly result: void;
+  };
+  /** In Custom, moves a playlist to place [to] (from 0) of the list; false when nothing moved. */
+  readonly "playlists.moveInList": {
+    readonly args: readonly [playlistId: number, to: number];
+    readonly result: boolean;
+  };
 }
 
 export const PLAYLIST_CALLS = [
@@ -157,6 +187,10 @@ export const PLAYLIST_CALLS = [
   "playlists.cancelImage",
   "playlists.removeImage",
   "playlists.image",
+  "playlists.listView",
+  "playlists.sortList",
+  "playlists.showListAs",
+  "playlists.moveInList",
 ] as const satisfies readonly (keyof PlaylistContract)[];
 
 type Call<C extends keyof PlaylistContract> = (
@@ -184,6 +218,10 @@ export interface PlaylistBridge {
   readonly cancelImage: Call<"playlists.cancelImage">;
   readonly removeImage: Call<"playlists.removeImage">;
   readonly image: Call<"playlists.image">;
+  readonly listView: Call<"playlists.listView">;
+  readonly sortList: Call<"playlists.sortList">;
+  readonly showListAs: Call<"playlists.showListAs">;
+  readonly moveInList: Call<"playlists.moveInList">;
 }
 
 export const playlistBridge = (invoke: Invoke): PlaylistBridge => ({
@@ -208,4 +246,8 @@ export const playlistBridge = (invoke: Invoke): PlaylistBridge => ({
   cancelImage: () => invoke("playlists.cancelImage"),
   removeImage: (playlistId) => invoke("playlists.removeImage", playlistId),
   image: (playlistId, large) => invoke("playlists.image", playlistId, large),
+  listView: () => invoke("playlists.listView"),
+  sortList: (sort) => invoke("playlists.sortList", sort),
+  showListAs: (layout) => invoke("playlists.showListAs", layout),
+  moveInList: (playlistId, to) => invoke("playlists.moveInList", playlistId, to),
 });

@@ -1,5 +1,5 @@
 import type { Page } from "./bridge.ts";
-import type { PlaylistSongSort, SongSort } from "@wave/core";
+import type { PlaylistSongSort, PlaylistSort, SongSort } from "@wave/core";
 
 export const MAX_ROW_IDS_PAGE = 1000;
 
@@ -68,4 +68,6 @@ export interface BrowsePage extends Page<BrowseRow> {
   readonly hero?: BrowseRow;
   /** The order shown: the list's sort, or on a playlist's page that playlist's own. */
   readonly sort?: SongSort | PlaylistSongSort;
+  /** On the Playlists list, its sort. */
+  readonly listSort?: PlaylistSort;
 }

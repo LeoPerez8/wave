@@ -27,6 +27,12 @@ import {
 } from "@wave/client/db/playlists";
 import { playlistSongSort } from "./browseSort.ts";
 import {
+  movePlaylistInList,
+  playlistListView,
+  showPlaylistListAs,
+  sortPlaylistList,
+} from "./playlistList.ts";
+import {
   removePlaylistImage,
   selectPlaylistImageOriginal,
   setPlaylistImage,
@@ -53,7 +59,9 @@ import {
   type ImageSize,
   type M3uImport,
   type M3uImportOutcome,
+  type PlaylistLayout,
   type PlaylistNameCheck,
+  type PlaylistSort,
 } from "@wave/core";
 import { sql } from "drizzle-orm";
 import * as Context from "effect/Context";
@@ -427,6 +435,20 @@ export const createPlaylists = (options: PlaylistOptions) => {
       } catch {
         return null;
       }
+    },
+    listView: () => playlistListView(db),
+    sortList: (sort: PlaylistSort): void => {
+      sortPlaylistList(db, sort);
+      changed();
+    },
+    showListAs: (layout: PlaylistLayout): void => {
+      showPlaylistListAs(db, layout);
+      changed();
+    },
+    moveInList: (playlistId: number, to: number): boolean => {
+      const moved = movePlaylistInList(db, playlistId, to);
+      if (moved) changed();
+      return moved;
     },
   };
 };
