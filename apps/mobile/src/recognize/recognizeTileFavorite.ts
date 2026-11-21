@@ -10,7 +10,11 @@ import {
 /** The match notification's star button, native's half (`recognize/RecognizeFavoriteService.kt`). */
 export interface RecognizeTileFavoriteNative {
   /** Takes the tap waiting for JS, if one is: its id, the kept match, and the star it asks for. */
-  readonly take: () => { readonly tap: number; readonly match: string; readonly on: boolean } | null;
+  readonly take: () => {
+    readonly tap: number;
+    readonly match: string;
+    readonly on: boolean;
+  } | null;
   /** A tap is waiting; returns the unsubscribe. */
   readonly onRequested: (listener: () => void) => () => void;
   /**
