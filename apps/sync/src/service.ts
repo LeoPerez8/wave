@@ -51,7 +51,14 @@ import {
   proxiedAnswer,
 } from "./proxy.ts";
 import { SESSION_UNUSED_MS } from "./sessions.ts";
-import { type PushBatch, deleteAccount, pullRows, pushRows } from "./store.ts";
+import {
+  type PushBatch,
+  deleteAccount,
+  pullPlaylistRows,
+  pullRows,
+  pushPlaylistRows,
+  pushRows,
+} from "./store.ts";
 import { type IncomingRow, type SyncTable, InvalidRow, SYNC_TABLES, parseRow } from "./tables.ts";
 
 /**
@@ -678,6 +685,39 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     return settled(await removeMember(db, playlistAsked(url), session.accountId, memberId, now()));
   });
 
+  /** A member's push of one collaborative playlist's row and entries (`pushPlaylistRows`). */
+  const pushPlaylist = withSession(async ({ request, url }, session) => {
+    const playlistId = playlistAsked(url);
+    const result = await pushPlaylistRows(
+      db,
+      playlistId,
+      session.accountId,
+      parsePush(await readJson(request)),
+      limits,
+      now(),
+    );
+    if ("invalid" in result) throw invalid(result.invalid);
+    if ("refused" in result) throw failure(403, result.refused);
+    if ("overLimit" in result) throw overLimit(result.overLimit);
+    return json({ accepted: result.accepted, corrected: result.corrected });
+  });
+
+  /** A member's pull of one collaborative playlist, after the cursor the last one gave. */
+  const pullPlaylist = withSession(async ({ url }, session) => {
+    const playlistId = playlistAsked(url);
+    const since = url.searchParams.get("since") ?? "0";
+    if (!/^\d{1,15}$/.test(since)) throw failure(400, "bad_request");
+    const page = await pullPlaylistRows(
+      db,
+      playlistId,
+      session.accountId,
+      Number(since),
+      pullPageSize,
+    );
+    if (page === null) throw failure(403, "not_member");
+    return json({ ...page.rows, cursor: String(page.cursor), more: page.more });
+  });
+
   const leaveCollaborative = withSession(async ({ url }, session) =>
     settled(await leaveCollaboration(db, playlistAsked(url), session.accountId, now())),
   );
@@ -969,6 +1009,8 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     "POST /v1/invite": lookUpInvite,
     "POST /v1/invite/join": joinWithInvite,
     "GET /invite": async ({ request }) => invitePage(request.headers.get("accept-language")),
+    "POST /v1/collaboration/push": pushPlaylist,
+    "GET /v1/collaboration/pull": pullPlaylist,
     "PUT /v1/soulseek": putSoulseek,
     "GET /v1/soulseek": getSoulseek,
     "GET /v1/genius/search": genius,

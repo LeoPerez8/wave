@@ -326,6 +326,22 @@ const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX collaboration_invites_owner_idx ON collaboration_invites (owner_id)`,
     ],
   },
+  {
+    // A collaborative playlist's entries (Core's `SyncPlaylistEntry`): a Library song's own
+    // fields, which other members match their Tracks by, and the account that added it. The
+    // index serves a member's pull of one playlist.
+    id: "0018_collaborative_entries",
+    statements: [
+      "ALTER TABLE playlist_entries ADD COLUMN title TEXT",
+      "ALTER TABLE playlist_entries ADD COLUMN credit TEXT",
+      "ALTER TABLE playlist_entries ADD COLUMN album TEXT",
+      "ALTER TABLE playlist_entries ADD COLUMN duration_ms INTEGER",
+      "ALTER TABLE playlist_entries ADD COLUMN video_id TEXT",
+      "ALTER TABLE playlist_entries ADD COLUMN added_by TEXT",
+      `CREATE INDEX playlist_entries_playlist_idx
+        ON playlist_entries (account_id, playlist_id, change_no)`,
+    ],
+  },
 ];
 
 /**

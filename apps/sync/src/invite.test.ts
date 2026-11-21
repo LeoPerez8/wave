@@ -499,10 +499,16 @@ describe("the migration", () => {
     const before = await harness({}, db);
     const ana = await before.signIn({ name: "Ana Souza" });
     await push(before, ana, { playlists: [playlist("list-1")] });
-    await before.request("POST", "/v1/collaboration", {
-      session: ana,
-      json: { playlistId: "list-1" },
-    });
+    // The collaboration as that database held it: today's route needs the later migrations.
+    await db.batch(
+      [
+        `INSERT INTO collaborations (playlist_id, owner_id, created_at)
+         SELECT 'list-1', id, 1 FROM accounts`,
+        `INSERT INTO collaboration_members (playlist_id, account_id, joined_at)
+         SELECT 'list-1', id, 1 FROM accounts`,
+      ],
+      "write",
+    );
     const schema = async () =>
       (await db.execute("SELECT name, sql FROM sqlite_master ORDER BY name")).rows.map((row) => [
         row.name,
