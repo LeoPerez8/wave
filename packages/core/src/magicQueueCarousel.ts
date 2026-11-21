@@ -7,6 +7,7 @@
  */
 
 import { en, type Catalogue } from "./catalogueEn.ts";
+import type { MagicQueueSeed } from "./magicQueueRow.ts";
 import { MAGIC_QUEUE_PICKS } from "./magicQueueSection.ts";
 import { recentWindowStart } from "./recentWindow.ts";
 import { rankSongPlays, type SongPlayTotals, type StatsWindow } from "./stats.ts";
@@ -62,10 +63,48 @@ export const mostListenedRecently = (totals: readonly SongPlayTotals[]): TrackRe
 /** How many recently played songs In your orbit needs to show. */
 export const IN_YOUR_ORBIT_SONGS = 9;
 
-/** The nine most listened songs for Home's In your orbit, or none until nine rank. */
-export const inYourOrbitSongs = (totals: readonly SongPlayTotals[]): TrackRef[] => {
-  const ranked = mostListenedRecently(totals);
-  return ranked.length < IN_YOUR_ORBIT_SONGS ? [] : ranked.slice(0, IN_YOUR_ORBIT_SONGS);
+/**
+ * Home's In your orbit, given the recently most listened [songs] that can
+ * show, in their order (`mostListenedRecently`, those that can't show passed
+ * over): the first nine, or none while fewer than nine can (the section is
+ * left out).
+ */
+export const inYourOrbitSongs = <T>(songs: readonly T[]): T[] =>
+  songs.length < IN_YOUR_ORBIT_SONGS ? [] : songs.slice(0, IN_YOUR_ORBIT_SONGS);
+
+/** What a tap on an In your orbit tile does (`inYourOrbitTap`). */
+export type InYourOrbitTap<T> =
+  /** Starts a Magic Queue seeded by the tapped song. */
+  | { readonly kind: "magicQueue"; readonly seed: MagicQueueSeed<T> }
+  /** Plays these Library songs in their order, from the one at [start]. */
+  | { readonly kind: "play"; readonly songs: readonly T[]; readonly start: number }
+  | { readonly kind: "none" };
+
+/**
+ * Whether In your orbit's [tile] shows unavailable: a streamed song can't
+ * play with YT Music off ([ytMusic]), as other streamed songs can't.
+ */
+export const inYourOrbitTileUnavailable = <T>(tile: MagicQueueSeed<T>, ytMusic: boolean): boolean =>
+  tile.source === "stream" && !ytMusic;
+
+/**
+ * What a tap on the In your orbit tile at [index] of [tiles] does: with YT
+ * Music on ([ytMusic]), it starts a Magic Queue from the song. With YT Music
+ * off a Magic Queue can't start, so it plays the grid's Library songs in their
+ * order from the tapped one; a streamed tile can't play then, and its tap
+ * does nothing.
+ */
+export const inYourOrbitTap = <T>(
+  tiles: readonly MagicQueueSeed<T>[],
+  index: number,
+  ytMusic: boolean,
+): InYourOrbitTap<T> => {
+  const tapped = tiles[index];
+  if (tapped === undefined || inYourOrbitTileUnavailable(tapped, ytMusic)) return { kind: "none" };
+  if (ytMusic) return { kind: "magicQueue", seed: tapped };
+  const own = (from: readonly MagicQueueSeed<T>[]): T[] =>
+    from.flatMap((tile) => (tile.source === "library" ? [tile.song] : []));
+  return { kind: "play", songs: own(tiles), start: own(tiles.slice(0, index)).length };
 };
 
 /**
