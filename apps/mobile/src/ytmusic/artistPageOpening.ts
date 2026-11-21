@@ -34,7 +34,15 @@ export const useArtistPageOpening = <S extends YtSong, L, A>(
       librarySong,
       libraryAlbum,
     });
-    return { ...work, view: artistPageOpening({ online, enabled }).view ?? work.view };
+    const offline = artistPageOpening({ online, enabled }).view;
+    // Offline, the similar artists and the About saved with a page seen before stay over the line.
+    return {
+      ...work,
+      view:
+        offline === null
+          ? work.view
+          : { ...offline, similar: work.view.similar, about: work.view.about },
+    };
   }, [state, enabled, now, settled, online, retry, librarySong, libraryAlbum]);
 
 /** Offline is already drawable; neither saved data nor Library identity gates that message. */
@@ -54,6 +62,8 @@ export const artistPageOpening = (options: {
           artworkUrl: null,
           songs: [],
           shelves: [],
+          similar: [],
+          about: null,
           note: options.enabled ? "offline" : "off",
           retry: options.enabled,
         },

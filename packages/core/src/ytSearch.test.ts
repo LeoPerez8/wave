@@ -23,6 +23,7 @@ import type {
   YtArtistAlbum,
   YtArtistCandidate,
   YtArtistSaved,
+  YtCommunityPlaylist,
   YtSearchArtistsEvent,
   YtSearchArtistsKnown,
   YtSection,
@@ -55,8 +56,8 @@ const album = (title: string, ...artists: string[]): YtArtistAlbum => ({
   artworkUrl: null,
 });
 
-/** No artists or albums: what YT Music found is only songs. */
-const NONE = { artists: [], albums: [] } as const;
+/** No artists, albums or community playlists: what YT Music found is only songs. */
+const NONE = { artists: [], albums: [], playlists: [] } as const;
 
 /** Typing [query]; by default the Library has nothing for it, so YT Music is asked on its own. */
 const typed = (
@@ -84,10 +85,10 @@ const results = (
   artists: YtArtistCandidate[] = [],
   albums: YtArtistAlbum[] = [],
   query = "q",
-): YtSection => ({ status: "results", query, songs, artists, albums, by: "user" });
+): YtSection => ({ status: "results", query, songs, artists, albums, playlists: [], by: "user" });
 
 /** Nothing shown: what a section with no results of its own shows. */
-const EMPTY = { songs: [], artists: [], albums: [], top: null };
+const EMPTY = { songs: [], artists: [], albums: [], playlists: [], top: null };
 
 describe("ytSectionView", () => {
   test("shows the songs that aren't in the Library, in YT Music's order", () => {
@@ -383,6 +384,7 @@ describe("stepYtSection", () => {
       songs: [song("a")],
       artists: [artist("Daft Punk")],
       albums: [album("Discovery", "Daft Punk")],
+      playlists: [],
       by: "auto",
     });
     assert.deepEqual(typed(found, "daft p"), {
@@ -765,5 +767,118 @@ describe("what Search knows of its top-hit artists' online pages during a visit"
     const { allSongs: _every, ...pageOnly } = ANSWER.page;
     assert.equal(ytArtistSavedStands({ ...ANSWER, page: pageOnly }, NOW), false);
     assert.equal(ytArtistSavedStands(null, NOW), false);
+  });
+});
+
+describe("community playlists in Search", () => {
+  const playlist = (playlistId: string): YtCommunityPlaylist => ({
+    playlistId,
+    title: `Playlist ${playlistId}`,
+    author: "Someone",
+    artworkUrl: null,
+  });
+
+  /** YT Music answered "lofi" with [playlists] and nothing else. */
+  const found = (playlists: YtCommunityPlaylist[]): YtSection =>
+    stepYtSection(stepYtSection(typed(YT_SECTION_HIDDEN, "lofi"), ONLINE), {
+      type: "found",
+      query: "lofi",
+      songs: [],
+      ...NONE,
+      playlists,
+    });
+
+  test("the ones YT Music found show in its order", () => {
+    const view = ytSectionView(found([playlist("b"), playlist("a")]), library);
+    assert.deepEqual(view?.playlists, [playlist("b"), playlist("a")]);
+  });
+
+  test("an answer that is only community playlists isn't one with no matches, and has no top result", () => {
+    const view = ytSectionView(found([playlist("a")]), library);
+    assert.equal(view?.note, null);
+    assert.equal(view?.top, null);
+    assert.equal(ytSectionView(found([]), library)?.note, "noMatches");
+  });
+
+  test("songs the Library already has still get their line when a community playlist is found", () => {
+    const section = stepYtSection(stepYtSection(typed(YT_SECTION_HIDDEN, "lofi"), ONLINE), {
+      type: "found",
+      query: "lofi",
+      songs: [song("mine")],
+      artists: [artist("Mine")],
+      albums: [album("Mine")],
+      playlists: [playlist("a")],
+    });
+    const view = ytSectionView(section, library);
+    assert.equal(view?.note, "allInLibrary");
+    assert.deepEqual(view?.playlists, [playlist("a")]);
+  });
+
+  test("Online again for the same query shows them again without asking", () => {
+    const section = found([playlist("a")]);
+    const library_ = stepYtSection(section, { type: "picked", pick: "library" });
+    assert.deepEqual(ytSectionView(library_, library)?.playlists, []);
+    const again = stepYtSection(library_, ONLINE);
+    assert.equal(again.status, "results");
+    assert.deepEqual(ytSectionView(again, library)?.playlists, [playlist("a")]);
+  });
+
+  describe("arriving after the songs, artists and albums", () => {
+    /** "lofi" asked with Online, and answered with one song and no shelf yet. */
+    const asked = stepYtSection(typed(YT_SECTION_HIDDEN, "lofi"), ONLINE);
+    const answered = stepYtSection(asked, {
+      type: "found",
+      query: "lofi",
+      songs: [song("a")],
+      artists: [],
+      albums: [],
+    });
+    const shelf = (query: string, ...ids: string[]) =>
+      ({ type: "playlistsFound", query, playlists: ids.map(playlist) }) as const;
+
+    test("the songs show without them, and they join when they arrive", () => {
+      const before = ytSectionView(answered, library);
+      assert.deepEqual(before?.songs, [song("a")]);
+      assert.deepEqual(before?.playlists, []);
+      assert.equal(before?.loading, false);
+      const after = ytSectionView(stepYtSection(answered, shelf("lofi", "a", "b")), library);
+      assert.deepEqual(after?.songs, [song("a")]);
+      assert.deepEqual(after?.playlists, [playlist("a"), playlist("b")]);
+    });
+
+    test("ones found for an older query never join a newer query's results", () => {
+      const newer = stepYtSection(typed(answered, "lofi beats"), {
+        type: "found",
+        query: "lofi beats",
+        songs: [song("b")],
+        artists: [],
+        albums: [],
+      });
+      assert.equal(stepYtSection(newer, shelf("lofi", "a")), newer);
+      const loading = typed(answered, "lofi beats");
+      assert.equal(stepYtSection(loading, shelf("lofi", "a")), loading);
+    });
+
+    test("they don't stand in for an answer that hasn't come or that failed", () => {
+      assert.equal(stepYtSection(asked, shelf("lofi", "a")), asked);
+      const failed = stepYtSection(asked, { type: "failed", query: "lofi", reason: "failed" });
+      assert.equal(stepYtSection(failed, shelf("lofi", "a")), failed);
+      assert.equal(ytSectionView(failed, library)?.note, "failed");
+    });
+
+    test("arriving while Library shows, they are there when Online shows the answer again", () => {
+      const hidden = stepYtSection(answered, { type: "picked", pick: "library" });
+      const late = stepYtSection(hidden, shelf("lofi", "a"));
+      assert.deepEqual(ytSectionView(late, library)?.playlists, []);
+      const again = stepYtSection(late, ONLINE);
+      assert.equal(again.status, "results");
+      assert.deepEqual(ytSectionView(again, library)?.playlists, [playlist("a")]);
+      // Kept for another query, the answer is left alone.
+      assert.equal(stepYtSection(hidden, shelf("other", "a")), hidden);
+    });
+
+    test("none found changes nothing", () => {
+      assert.equal(stepYtSection(answered, shelf("lofi")), answered);
+    });
   });
 });

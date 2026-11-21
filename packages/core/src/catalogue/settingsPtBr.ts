@@ -143,7 +143,7 @@ export const settingsPtBr: typeof settingsEn = {
   tint: "Tonalidade",
   rim: "Borda",
   howTheTabBarMiniPlayerMenus:
-    "Como a barra de abas, o miniplayer, os menus e os diálogos mostram o que está atrás. O desfoque suaviza, a refração curva as bordas, a tonalidade mantém o texto legível e a borda dá brilho ao contorno. Desativar a refração mantém os outros efeitos. A amostra mostra cada alteração; o vidro do app muda quando você sai de Aparência.",
+    "Como a barra de abas, o miniplayer, os menus e os diálogos mostram o que está atrás. O desfoque suaviza, a refração curva as bordas, a tonalidade mantém o texto legível e a borda dá brilho ao contorno. Desativar a refração mantém os outros efeitos; desativar a borda remove o contorno. A amostra mostra cada alteração; o vidro do app muda quando você sai de Aparência.",
   resetToDefaults: "Restaurar padrões",
   sampleSong: "Música de exemplo",
   sampleSongRow: "Linha de música de exemplo",
@@ -420,7 +420,7 @@ export const settingsPtBr: typeof settingsEn = {
     "Uma seção do Início, mostrada abaixo das linhas da Biblioteca quando há conteúdo.",
   everyShuffleUsesItALongPress:
     "Vale para todos os botões Aleatório. Mantenha um botão pressionado para escolher; em uma posição de Tocando Agora, isso altera o botão.",
-  pressBackAgainWithin2SecondsTo: "Pressione Voltar novamente em até 2 segundos para sair",
+  backAgainToExit: "Voltar de novo para sair",
   dismisses: "Fecha",
   close: "Fechar",
   selectionActions: "Ações de seleção",

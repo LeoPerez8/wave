@@ -2,6 +2,7 @@ import type {
   DiscoverRadioSong,
   HostNetworkUse,
   YtArtistAlbum,
+  YtCommunityPlaylist,
   YtArtistCandidate,
   YtArtistPage,
   YtPlaylist,
@@ -141,6 +142,8 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
   searchArtists(query: string, meter?: string): Promise<readonly YtArtistCandidate[]>;
   /** Albums, singles and EPs on YT Music for [query] (YouTube Music's "Albums" filter), in its order. */
   searchAlbums(query: string): Promise<readonly YtArtistAlbum[]>;
+  /** Community playlists on YT Music for [query] (YouTube Music's "Community playlists" filter), in its order. */
+  searchCommunityPlaylists(query: string): Promise<readonly YtCommunityPlaylist[]>;
   /** The artist page [browseId] (`UC…`): their top songs, albums, singles and songs playlist. */
   artist(browseId: string, meter?: string): Promise<NativeYtArtistPage>;
   /**
