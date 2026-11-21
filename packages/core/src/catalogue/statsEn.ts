@@ -28,6 +28,8 @@ export const statsEn = {
     share < 0.01 ? "<1%" : `${formatNumber("en", Math.round(share * 1000) / 10)}%`,
   genreBarLabel: (rank: number, name: string, percent: string) => `#${rank}, ${name}, ${percent}`,
   recaps: "Recaps",
+  loadingListeningStats: "Loading listening stats",
+  loadingRanking: "Loading ranking",
   /** Each ranking's title, on Stats and its See all page. */
   rankings: {
     songs: "Top songs",
