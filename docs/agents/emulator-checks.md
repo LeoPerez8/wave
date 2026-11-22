@@ -62,8 +62,8 @@ the first artist on Artists is `Amber Ainsley` and the first playlist on Playlis
 (the biggest), which `scripts/perf/fixture.json` names for `perf.ts`. `--stale` gives the database
 other modified times than the files', so the scan at launch reads all 3,000 files again. Library
 holds 3,000 songs, 900 artists and 1,500 albums throughout, with no duplicates, but that scan is
-slow: on `wave-marquee` it saved about 100 files a minute, so give it half an hour before you
-measure. Without `--stale` the scan at launch finds nothing changed and is through in seconds.
+slow: on `wave-marquee` it saved about 50 files a minute, so it takes about an hour. Measure
+after it. Without `--stale` the scan at launch finds nothing changed and is through in seconds.
 `--local <dir>` writes the files and the database to `<dir>` and touches no device.
 
 Wave opens on Home with the "Open song links in Wave" dialog, as on any first launch; dismiss it
