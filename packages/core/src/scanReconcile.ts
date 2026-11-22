@@ -117,6 +117,7 @@ export interface ScanTimings {
   readonly slice: number;
 }
 
+// not UI text: the app log's line
 const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
 
 /**
@@ -124,6 +125,7 @@ const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
  * went to saving, to telling the app, and to waiting for free turns (the rest:
  * reading files, reconciling, other work ahead of it). Holds no path or title.
  */
+// not UI text: the app log's line
 export const scanTimingsLogLine = (t: ScanTimings): string =>
   `Scan done (${t.kind}): ${t.found} found, ${t.read} read, ${t.saved} saved in ${t.batches} batches, ` +
   `${seconds(t.ms)}; saves ${seconds(t.savingMs)} (longest ${Math.round(t.longestSaveMs)} ms, ` +
