@@ -57,8 +57,9 @@ export const homeRecommendationSnapshot = shareRecommendationSnapshot({
   }).pipe(namedWork("Home mix catalog")),
   graph: {
     store: Effect.service(LibraryStore),
-    start: homeTurnOf(settledTurnEffect),
-    between: homeTurn,
+    // The graph's turns are named, so its work between them isn't logged as unnamed (#1437).
+    start: homeTurnOf(settledTurnEffect).pipe(namedWork("Home artist graph")),
+    between: homeTurn.pipe(namedWork("Home artist graph")),
   },
   versions: () => versions,
 });

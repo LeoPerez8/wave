@@ -2817,7 +2817,7 @@ export { lostTapLine } from "./lostTap.ts";
 export type { LostLinkTap, LostTapReason } from "./lostTap.ts";
 export { createArtistGraphBuild, type ArtistGraphCatalogEntry } from "./artistGraphBuild.ts";
 export { mixKnownSongsSteps } from "./mixKnownSongs.ts";
-export { genreMixSeedsSteps } from "./genreMixes.ts";
+export { genreMixDjCandidatesSteps, genreMixSeedsSteps } from "./genreMixes.ts";
 export { mapSteps, sortSteps, finishSteps, filterSteps } from "./buildSteps.ts";
 export { libraryMixProfilesSteps } from "./genreAffinity.ts";
 export { rankPlaysSteps } from "./stats.ts";
@@ -3324,6 +3324,7 @@ export {
   djCanStart,
   djGrid,
   djGridCandidates,
+  djGridCandidatesSteps,
   djGridLoadMore,
   djGridPage,
   djGridRefresh,
@@ -3390,7 +3391,8 @@ export type {
 export { djOpeningGrid, djOpeningWork } from "./djOpening.ts";
 export type { DjOpeningGrid, DjOpeningSources } from "./djOpening.ts";
 export { DJ_GRID_SETTING, readDjGridMemory, storedDjGridMemory } from "./djGridMemory.ts";
-export { djRestoredGrid } from "./djRemembered.ts";
+export { djReopenedSteps, djRestoredGrid } from "./djRemembered.ts";
+export type { DjReopenedSources } from "./djRemembered.ts";
 export { DJ_OPENED_TILES, djCells, djPageRead, djPagesNeeded } from "./dj.ts";
 export { djAlbumTile, djTileArtist } from "./dj.ts";
 export type { DjAlbum, DjAlbumTile, DjGenreTile } from "./dj.ts";
