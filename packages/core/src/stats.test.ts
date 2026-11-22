@@ -7,7 +7,10 @@ import {
   STATS_SEE_ALL,
   STATS_TOP,
   albumPlayTotals,
+  albumPlayTotalsSteps,
   artistPlayTotals,
+  artistPlayTotalsSteps,
+  finishSteps,
   rankEntityPlays,
   rankEntityPlaysSteps,
   rankPlays,
@@ -384,5 +387,26 @@ describe("album and artist rankings", () => {
   test("nothing played, nothing ranked", () => {
     assert.deepEqual(albumPlayTotals([]), []);
     assert.deepEqual(artistPlayTotals([]), []);
+  });
+
+  test("in steps, albums and artists sum as the whole sums do, a step per credited row", () => {
+    const positions = { id: 3, sort: "positions" };
+    const other = { id: 4, sort: "other" };
+    const ariana = { id: 20, sort: "grande, ariana" };
+    const doja = { id: 21, sort: "doja cat" };
+    const credits = [
+      credit(positions, ariana, { countedPlays: 3, listenedMs: 540_000, latestPlayAt: 7_000 }),
+      credit(positions, doja, { primary: false, countedPlays: 2, latestPlayAt: 7_000 }),
+      credit(other, doja, { countedPlays: 5, listenedMs: 9, latestPlayAt: 9_000 }),
+    ];
+    const count = (steps: Generator<void, unknown>) => {
+      let n = 0;
+      while (!steps.next().done) n++;
+      return n;
+    };
+    assert.deepEqual(finishSteps(albumPlayTotalsSteps(credits)), albumPlayTotals(credits));
+    assert.deepEqual(finishSteps(artistPlayTotalsSteps(credits)), artistPlayTotals(credits));
+    assert.ok(count(albumPlayTotalsSteps(credits)) >= credits.length);
+    assert.ok(count(artistPlayTotalsSteps(credits)) >= credits.length);
   });
 });

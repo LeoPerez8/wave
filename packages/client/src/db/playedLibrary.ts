@@ -8,14 +8,16 @@ import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 import { albumArtistIds } from "./tracks.ts";
 
-const libraryCredits = (db: LibraryDatabase): string[] =>
-  db
-    .all<{ credit: string; stored: string | null }>(
-      sql`
+/** Each distinct credit of the Library's tracks and albums as stored, for `readCredits` to read. */
+export const libraryCreditRows = (db: LibraryDatabase) =>
+  db.all<{ credit: string; stored: string | null }>(
+    sql`
     SELECT DISTINCT artist_credit AS credit, artist_credits AS stored FROM tracks
     UNION SELECT album_artist_credit, album_artist_credits FROM albums`,
-    )
-    .flatMap(({ credit, stored }) => readCredits(credit, stored));
+  );
+
+const libraryCredits = (db: LibraryDatabase): string[] =>
+  libraryCreditRows(db).flatMap(({ credit, stored }) => readCredits(credit, stored));
 
 /** What Core's credit resolver matches streamed songs against: the Library's artists, albums and credits. */
 export const playedLibraryRows = (db: LibraryDatabase, withAlbums = true) => ({

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
+import { runTestPromise, runTestSync } from "../../lib/steppedTesting.ts";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import { deleteTracksById } from "@wave/client/db/tracks";
@@ -117,23 +118,23 @@ test("graph pages bound returned work, seek an index, and preserve the complete 
       fixture.db.run(
         sql`INSERT INTO yt_artists (artist_key,outcome,checked_at) VALUES (${`empty-${n}`},'unmatched',0)`,
       );
-    const names = new Map(Effect.runSync(store.listArtists).map((a) => [a.id, a.name]));
+    const names = new Map(runTestSync(store.listArtists).map((a) => [a.id, a.name]));
     const songs = new Map(
-      Effect.runSync(store.listSongs).map((s) => [
+      runTestSync(store.listSongs).map((s) => [
         String(s.id),
         s.artistIds.flatMap((id) => names.get(id) ?? []),
       ]),
     );
     const expected = artistGraph({
-      catalog: Effect.runSync(store.candidateCatalog),
-      pages: Effect.runSync(store.ytArtistSimilar),
-      plays: Effect.runSync(store.tasteHistory).plays.flatMap((p) =>
+      catalog: runTestSync(store.candidateCatalog),
+      pages: runTestSync(store.ytArtistSimilar),
+      plays: runTestSync(store.tasteHistory).plays.flatMap((p) =>
         songs.has(p.trackId) ? [{ ...p, artists: songs.get(p.trackId)! }] : [],
       ),
     });
     let yields = 0;
     const traced = traceQueries(fixture.db, () =>
-      Effect.runSync(
+      runTestSync(
         readArtistGraph(
           store,
           Effect.sync(() => {
@@ -194,22 +195,22 @@ test("cold playlist and Magic Queue share real graph work; warm reads are free a
       Effect.void,
       { versions: () => versions },
     );
-    const playlist = Effect.runPromise(shared.get),
-      magicQueue = Effect.runPromise(shared.get);
+    const playlist = runTestPromise(shared.get),
+      magicQueue = runTestPromise(shared.get);
     assert.equal(pages, 0);
     release!();
     const [a, b] = await Promise.all([playlist, magicQueue]);
     assert.equal(a, b);
     assert.equal(pages, 1, "the plays are one read");
     const before = pages;
-    assert.equal(await Effect.runPromise(shared.get), a);
+    assert.equal(await runTestPromise(shared.get), a);
     assert.equal(pages, before);
     versions = snapshotVersionsAfter(versions, "plays");
-    const waiting = Effect.runPromise(shared.get);
+    const waiting = runTestPromise(shared.get);
     const rejected = assert.rejects(waiting);
     shared.dispose();
     await rejected;
-    await assert.rejects(Effect.runPromise(shared.get));
+    await assert.rejects(runTestPromise(shared.get));
     assert.equal(cancelled, 1);
   } finally {
     fixture.close();
@@ -242,19 +243,19 @@ test("a song ending mid-build doesn't rebuild the graph for its waiters; the ask
     );
     // Background snapshot warming reads the graph this way.
     const graphNow = shared.get.pipe(Effect.orElseSucceed(() => null));
-    const magicQueue = Effect.runPromise(graphNow),
-      playlist = Effect.runPromise(graphNow);
+    const magicQueue = runTestPromise(graphNow),
+      playlist = runTestPromise(graphNow);
     await changed.promise;
     versions = snapshotVersionsAfter(versions, "plays"); // a song ended while the cold graph builds
     const [a, b] = await Promise.all([magicQueue, playlist]);
     assert.notEqual(a, null);
     assert.equal(a, b);
     assert.equal(builds, 1, "the build under way isn't restarted");
-    const next = await Effect.runPromise(graphNow);
+    const next = await runTestPromise(graphNow);
     assert.notEqual(next, a);
     assert.equal(builds, 2, "the ask after the song reads it");
-    assert.deepEqual(next, Effect.runSync(readArtistGraph(store, Effect.void)));
-    assert.equal(await Effect.runPromise(graphNow), next);
+    assert.deepEqual(next, runTestSync(readArtistGraph(store, Effect.void)));
+    assert.equal(await runTestPromise(graphNow), next);
     shared.dispose();
   } finally {
     fixture.close();
@@ -266,8 +267,8 @@ test("equal-timestamp history pages seek beyond the prior id instead of rescanni
   try {
     fixture.db.run(sql`UPDATE play_events SET started_at = 100`);
     const store = await loadLibraryStore(root, fixture.db);
-    const first = Effect.runSync(store.graphPlayPage([100, 0]));
-    const next = traceQueries(fixture.db, () => Effect.runSync(store.graphPlayPage(first.next!)));
+    const first = runTestSync(store.graphPlayPage([100, 0]));
+    const next = traceQueries(fixture.db, () => runTestSync(store.graphPlayPage(first.next!)));
     assert.equal(first.rows.length, 128);
     assert.equal(next.result.rows.length, 128);
     assert.ok(
@@ -309,29 +310,29 @@ test("empty decoded pages advance every source cursor and attach radios by their
         sql`INSERT INTO yt_artists (artist_key,outcome,checked_at,page) VALUES ('z-valid','found',0,${JSON.stringify({ name: "Kode9", similar: [{ name: "Burial", browseId: "b", audience: null }] })})`,
       );
     });
-    const firstCatalog = Effect.runSync(store.graphCatalogPage(0));
+    const firstCatalog = runTestSync(store.graphCatalogPage(0));
     assert.equal(firstCatalog.rows.length, 0);
     assert.notEqual(firstCatalog.next, null);
-    const firstSimilar = Effect.runSync(store.graphSimilarPage(null));
+    const firstSimilar = runTestSync(store.graphSimilarPage(null));
     assert.equal(firstSimilar.rows.length, 0);
     assert.equal(firstSimilar.next, "0-unmatched-127");
-    const catalog = Effect.runSync(store.candidateCatalog);
-    assert.deepEqual(Effect.runSync(readMixCatalog(store, Effect.void)), catalog);
-    const names = new Map(Effect.runSync(store.listArtists).map((a) => [a.id, a.name]));
+    const catalog = runTestSync(store.candidateCatalog);
+    assert.deepEqual(runTestSync(readMixCatalog(store, Effect.void)), catalog);
+    const names = new Map(runTestSync(store.listArtists).map((a) => [a.id, a.name]));
     const songs = new Map(
-      Effect.runSync(store.listSongs).map((s) => [
+      runTestSync(store.listSongs).map((s) => [
         String(s.id),
         s.artistIds.flatMap((id) => names.get(id) ?? []),
       ]),
     );
     const expected = artistGraph({
       catalog,
-      pages: Effect.runSync(store.ytArtistSimilar),
-      plays: Effect.runSync(store.tasteHistory).plays.flatMap((p) =>
+      pages: runTestSync(store.ytArtistSimilar),
+      plays: runTestSync(store.tasteHistory).plays.flatMap((p) =>
         songs.has(p.trackId) ? [{ ...p, artists: songs.get(p.trackId)! }] : [],
       ),
     });
-    const traced = traceQueries(fixture.db, () => Effect.runSync(readArtistGraph(store)));
+    const traced = traceQueries(fixture.db, () => runTestSync(readArtistGraph(store)));
     assert.deepEqual([...traced.result.names], [...expected.names]);
     assert.deepEqual(
       [...traced.result.edges].map(([key, edges]) => [key, [...edges]]),
@@ -362,24 +363,20 @@ test("pages of deleted plays advance without skipping the surviving graph and ta
   try {
     const store = await loadLibraryStore(root, fixture.db);
     fixture.db.run(sql`UPDATE play_events SET track_id = -1, started_at = 100 WHERE id <= 256`);
-    const first = Effect.runSync(store.graphPlayPage([-Number.MAX_VALUE, 0]));
+    const first = runTestSync(store.graphPlayPage([-Number.MAX_VALUE, 0]));
     assert.deepEqual(first, { rows: [], next: [100, 128] });
-    const second = Effect.runSync(store.graphPlayPage(first.next!));
+    const second = runTestSync(store.graphPlayPage(first.next!));
     assert.deepEqual(second, { rows: [], next: [100, 256] });
-    const resumed = traceQueries(fixture.db, () =>
-      Effect.runSync(store.graphPlayPage(second.next!)),
-    );
+    const resumed = traceQueries(fixture.db, () => runTestSync(store.graphPlayPage(second.next!)));
     assert.equal(resumed.result.rows.length, 128);
     assert.ok(resumed.queries.every((query) => query.rows <= 128));
-    const tasteFirst = Effect.runSync(store.tastePlaysPage([-Number.MAX_VALUE, 0]));
+    const tasteFirst = runTestSync(store.tastePlaysPage([-Number.MAX_VALUE, 0]));
     assert.deepEqual(tasteFirst, first);
-    const tasteSecond = Effect.runSync(store.tastePlaysPage(tasteFirst.next!));
+    const tasteSecond = runTestSync(store.tastePlaysPage(tasteFirst.next!));
     assert.deepEqual(tasteSecond, second);
-    const names = new Map(
-      Effect.runSync(store.listArtists).map((artist) => [artist.id, artist.name]),
-    );
+    const names = new Map(runTestSync(store.listArtists).map((artist) => [artist.id, artist.name]));
     const artists = new Map(
-      Effect.runSync(store.listSongs).map((song) => [
+      runTestSync(store.listSongs).map((song) => [
         String(song.id),
         song.artistIds.map((id) => names.get(id)!),
       ]),
@@ -387,12 +384,12 @@ test("pages of deleted plays advance without skipping the surviving graph and ta
     const expected = artistGraph({
       catalog: [],
       pages: [],
-      plays: Effect.runSync(store.tasteHistory).plays.map((play) => ({
+      plays: runTestSync(store.tasteHistory).plays.map((play) => ({
         ...play,
         artists: artists.get(play.trackId)!,
       })),
     });
-    const graph = Effect.runSync(readArtistGraph(store));
+    const graph = runTestSync(readArtistGraph(store));
     assert.deepEqual([...graph.names], [...expected.names]);
     assert.deepEqual(
       [...graph.edges].map(([key, edges]) => [key, [...edges]]),
@@ -460,7 +457,7 @@ test("streamed plays join the owner's sessions with their credited artists", asy
     onlineSong("v-archangel", ["Someone Else"]),
   );
 
-  const graph = Effect.runSync(readArtistGraph(store));
+  const graph = runTestSync(readArtistGraph(store));
 
   assert.deepEqual(
     graph,

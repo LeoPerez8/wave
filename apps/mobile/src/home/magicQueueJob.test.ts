@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
+import { runTestPromise, runTestSync } from "../lib/steppedTesting.ts";
 import { sql } from "drizzle-orm";
 import { localDay, magicQueuePicks, seededRandom, type MagicQueuePicks } from "@wave/core";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
@@ -15,7 +16,7 @@ test("due picks retry their shared Library after a write before profile scoring"
   try {
     const store = await loadLibraryStore(root, fixture.db);
     let reads = 0;
-    const picked = Effect.runSync(
+    const picked = runTestSync(
       buildHomeMagicQueue(store, null, {
         now: fixture.now,
         random: seededRandom("write"),
@@ -27,8 +28,8 @@ test("due picks retry their shared Library after a write before profile scoring"
           }),
       }),
     );
-    const library = Effect.runSync(readTasteLibrary(store, Effect.void));
-    const taste = Effect.runSync(deriveTaste(store, Effect.void, fixture.now, library));
+    const library = runTestSync(readTasteLibrary(store, Effect.void));
+    const taste = runTestSync(deriveTaste(store, Effect.void, fixture.now, library));
     assert.deepEqual(
       picked,
       magicQueuePicks(null, library.playable, {
@@ -91,7 +92,7 @@ test("due Home preserves yesterday's picks through scheduler waits, cancels with
       false,
     );
     const controller = new AbortController();
-    const first = Effect.runPromise(job(), { signal: controller.signal });
+    const first = runTestPromise(job(), { signal: controller.signal });
     assert.equal(queue.length, 1);
     assert.equal(saved, old);
     queue.shift()!();
@@ -102,7 +103,7 @@ test("due Home preserves yesterday's picks through scheduler waits, cancels with
     assert.equal(saved, old);
     assert.equal(queue.length, 0);
     assert.equal(cancelled, 1);
-    const second = Effect.runPromise(job());
+    const second = runTestPromise(job());
     let finished = false;
     void second.then(() => {
       finished = true;
@@ -113,8 +114,8 @@ test("due Home preserves yesterday's picks through scheduler waits, cancels with
       await new Promise((resolve) => setImmediate(resolve));
     }
     assert.equal(finished, true, "the build finishes within bounded scheduler turns");
-    const library = Effect.runSync(readTasteLibrary(store, Effect.void));
-    const taste = Effect.runSync(deriveTaste(store, Effect.void, fixture.now, library));
+    const library = runTestSync(readTasteLibrary(store, Effect.void));
+    const taste = runTestSync(deriveTaste(store, Effect.void, fixture.now, library));
     assert.deepEqual(
       saved,
       magicQueuePicks(old, library.playable, {

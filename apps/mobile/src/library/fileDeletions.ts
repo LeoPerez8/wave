@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { runSteps } from "@/lib/stepped";
+import { runSteps, type Turn } from "@/lib/stepped";
 
 import { appLog } from "@/log/appLog";
 import { WaveNative, type FileDeleteOutcome } from "@/native/waveNative";
@@ -47,7 +47,7 @@ export const finishFileDeletions = (
     scanWith = null,
     own = null,
     between,
-  }: { scanWith?: string | null; own?: string | null; between?: Effect.Effect<void> } = {},
+  }: { scanWith?: string | null; own?: string | null; between?: Turn } = {},
 ) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;

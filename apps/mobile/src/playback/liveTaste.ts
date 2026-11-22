@@ -12,11 +12,11 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
-import { runSteps } from "../lib/stepped.ts";
+import { runSteps, type Turn } from "../lib/stepped.ts";
 
 /** How a live taste profile reads what it's derived from and the songs its signals are. */
 export interface LiveTasteDeps<R> {
-  readonly between?: Effect.Effect<void>;
+  readonly between?: Turn;
   /** Derives the profile from the history, favorites and downloads (Core's `tasteProfile`). */
   readonly derive: Effect.Effect<TasteProfile, unknown, R>;
   /**

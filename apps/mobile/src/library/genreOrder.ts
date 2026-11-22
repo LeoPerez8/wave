@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import type { GenreOrderSlice } from "@wave/client/db/genrePages";
 import type { LibraryStore, LibraryStoreError } from "./LibraryStore.ts";
 import type { SongOrder, SongRow } from "@wave/client";
+import type { BackgroundWorkName, Turn } from "../lib/stepped.ts";
 
 type Slices = Pick<LibraryStore["Service"], "genreOrderSlice">;
 
@@ -17,8 +18,8 @@ type Slices = Pick<LibraryStore["Service"], "genreOrderSlice">;
 export const readGenreSongs = (
   store: Pick<LibraryStore["Service"], "songsWithIds">,
   ids: readonly number[],
-  turn: Effect.Effect<void>,
-): Effect.Effect<readonly SongRow[], LibraryStoreError> =>
+  turn: Turn,
+): Effect.Effect<readonly SongRow[], LibraryStoreError, BackgroundWorkName> =>
   Effect.gen(function* () {
     const rows: SongRow[] = [];
     for (let start = 0; start < ids.length; start += PAGED_ROWS_LIMITS.pageSize) {
@@ -41,8 +42,8 @@ export const readGenreOrder = (
   genreId: number,
   sort: LibrarySongSort,
   first: GenreOrderSlice,
-  turn: Effect.Effect<void>,
-): Effect.Effect<SongOrder, LibraryStoreError> =>
+  turn: Turn,
+): Effect.Effect<SongOrder, LibraryStoreError, BackgroundWorkName> =>
   Effect.gen(function* () {
     let slice = first;
     const ids: number[] = [];
@@ -142,7 +143,7 @@ export const createGenreOrderActions = (): GenreOrderActions => {
  */
 export const createGenreOrderLoad = <R>(options: {
   readonly read: Effect.Effect<SongOrder, LibraryStoreError, R>;
-  readonly settled: Effect.Effect<void>;
+  readonly settled: Effect.Effect<void, never, R>;
   readonly run: (
     effect: Effect.Effect<SongOrder, LibraryStoreError, R>,
     signal: AbortSignal,

@@ -25,7 +25,7 @@ import { Text, useWindowDimensions, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
 import { freeTurnEffect } from "@/lib/backgroundWork";
-import { runSteps } from "@/lib/stepped";
+import { namedWork, runSteps } from "@/lib/stepped";
 import { useLocalisation } from "@/localisation/localisation";
 import { SearchField } from "@/search/SearchField";
 import { useKeepFindVisible } from "@/settings/keepFindVisible";
@@ -135,7 +135,9 @@ export function useFindInList<T>(
   useEffect(() => {
     const preparing = new AbortController();
     appRuntime
-      .runPromise(runSteps(list.prepare(), freeTurnEffect), { signal: preparing.signal })
+      .runPromise(runSteps(list.prepare(), freeTurnEffect).pipe(namedWork("Find in list")), {
+        signal: preparing.signal,
+      })
       .catch(() => {});
     return () => preparing.abort();
   }, [list]);

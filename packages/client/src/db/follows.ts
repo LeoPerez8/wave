@@ -35,9 +35,9 @@ export const selectFollows = (db: LibraryDatabase): FollowedArtist[] =>
     .select(followFields)
     .from(follows)
     .where(live)
-    .all()
-    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
-    .sort((a, b) => a.key.localeCompare(b.key));
+    // In SQLite, by the primary key: a JS sort by localeCompare cost each comparison a trip to ICU.
+    .orderBy(follows.key)
+    .all();
 /**
  * Follows [target] at [level]. Equivalent names merge ids and keep the first
  * name and date; a change waits to sync, saving what's there already doesn't

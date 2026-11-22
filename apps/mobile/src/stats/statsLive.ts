@@ -10,7 +10,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import { runSteps } from "@/lib/stepped";
+import { type BackgroundWorkName, namedWork, runSteps, type Turn } from "@/lib/stepped";
 import { LibraryStore, type LibraryStoreError } from "@/library/LibraryStore";
 
 import type { LoadedRecap, Stats } from "./Stats";
@@ -20,7 +20,7 @@ const loadRecap = (
   store: LibraryStore["Service"],
   period: RecapPeriod,
   now: number,
-): Effect.Effect<LoadedRecap | null, LibraryStoreError> =>
+): Effect.Effect<LoadedRecap | null, LibraryStoreError, BackgroundWorkName> =>
   Effect.gen(function* () {
     const listening = yield* readRecapListening(store, period, Effect.yieldNow);
     const id = recapId(period);
@@ -38,8 +38,8 @@ const loadRecap = (
 const readRecapListening = (
   store: LibraryStore["Service"],
   period: RecapPeriod,
-  between: Effect.Effect<void>,
-): Effect.Effect<readonly CountedListening[], LibraryStoreError> =>
+  between: Turn,
+): Effect.Effect<readonly CountedListening[], LibraryStoreError, BackgroundWorkName> =>
   Effect.gen(function* () {
     const window = recapWindow(period);
     const quarters = new Map<number, number>();
@@ -61,9 +61,9 @@ const readRecapListening = (
 /** Sole bounded listening source seam; no calendar policy is passed to SQLite. */
 const readListeningPages = (
   store: LibraryStore["Service"],
-  between: Effect.Effect<void>,
+  between: Turn,
   add: (entry: CountedListening) => void,
-): Effect.Effect<void, LibraryStoreError> =>
+): Effect.Effect<void, LibraryStoreError, BackgroundWorkName> =>
   Effect.gen(function* () {
     let after = 0;
     for (;;) {
@@ -79,8 +79,8 @@ const readListeningPages = (
 const readRecapAvailability = (
   store: LibraryStore["Service"],
   now: number,
-  between: Effect.Effect<void>,
-): Effect.Effect<readonly RecapPeriod[], LibraryStoreError> =>
+  between: Turn,
+): Effect.Effect<readonly RecapPeriod[], LibraryStoreError, BackgroundWorkName> =>
   Effect.gen(function* () {
     const build = createRecapAvailability();
     yield* readListeningPages(store, between, build.add);
@@ -99,9 +99,11 @@ export const make = Effect.gen(function* () {
       }),
     ),
     artist: (artistId, strings) => artistListeningStats(store, artistId, strings),
-    recaps: (now, between) => readRecapAvailability(store, now, between),
+    recaps: (now, between) =>
+      readRecapAvailability(store, now, between).pipe(namedWork("Recap availability")),
     recapHistoryVersion: store.listeningHistoryVersion,
-    recap: (period) => Effect.suspend(() => loadRecap(store, period, Date.now())),
+    recap: (period) =>
+      Effect.suspend(() => loadRecap(store, period, Date.now())).pipe(namedWork("Recap load")),
   };
   return stats;
 });

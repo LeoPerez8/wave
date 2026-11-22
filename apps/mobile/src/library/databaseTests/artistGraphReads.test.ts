@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
+import { runTestSync } from "../../lib/steppedTesting.ts";
 import {
   createArtistGraphBuild,
   creditSplitter,
@@ -155,12 +156,12 @@ const measure = async (size: FastAgainSize) => {
   try {
     seed(fixture);
     const raw = await loadLibraryStore(root, fixture.db);
-    const catalog = Effect.runSync(readMixCatalog(raw, Effect.void));
+    const catalog = runTestSync(readMixCatalog(raw, Effect.void));
     const { store, reads } = counting(raw);
     const traced = traceQueries(fixture.db, () =>
-      Effect.runSync(readArtistGraph(store, Effect.void, catalog)),
+      runTestSync(readArtistGraph(store, Effect.void, catalog)),
     );
-    const paged = Effect.runSync(pagedArtistGraph(raw, catalog));
+    const paged = runTestSync(pagedArtistGraph(raw, catalog));
     return {
       reads,
       statements: traced.queries.length,

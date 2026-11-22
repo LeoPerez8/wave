@@ -1,5 +1,6 @@
 /** #596 characterization only: selected worktree modules, no production changes. */
 import * as Effect from "effect/Effect";
+import { runTestPromise, runTestSync } from "../../../src/lib/steppedTesting.ts";
 import { createHash } from "node:crypto";
 
 import { measureCooperative } from "../cooperative.ts";
@@ -21,7 +22,7 @@ export const bench: FastAgainBench = {
       "apps/mobile/src/library/LibraryStore.ts",
     );
     const core = await loadModule<typeof import("@wave/core")>("packages/core/src/index.ts");
-    const stats = await Effect.runPromise(
+    const stats = await runTestPromise(
       Effect.gen(function* () {
         return yield* statsModule.Stats;
       }).pipe(
@@ -53,7 +54,7 @@ export const bench: FastAgainBench = {
       } else {
         const historical = stats.recaps as Effect.Effect<readonly unknown[], unknown>;
         measurements.push(
-          measure("homeRecapAvailability", () => Effect.runSync(historical), {
+          measure("homeRecapAvailability", () => runTestSync(historical), {
             resultKey: hash,
             details: {
               source:
@@ -75,11 +76,11 @@ export const bench: FastAgainBench = {
             reason: "Playlist recommendations did not exist",
           });
       } else {
-        const input = Effect.runSync(store.playlistRecommendationInput(fixture.playlistId));
+        const input = runTestSync(store.playlistRecommendationInput(fixture.playlistId));
         measurements.push(
           measure(
             "playlistRecommendationInput",
-            () => Effect.runSync(store.playlistRecommendationInput(fixture.playlistId)),
+            () => runTestSync(store.playlistRecommendationInput(fixture.playlistId)),
             {
               resultKey: (value) =>
                 hash({
@@ -117,7 +118,7 @@ export const bench: FastAgainBench = {
           "apps/mobile/src/home/artistGraph.ts",
         );
         measurements.push(
-          measure("playlistGraphCold", () => Effect.runSync(graphModule.readArtistGraph(store)), {
+          measure("playlistGraphCold", () => runTestSync(graphModule.readArtistGraph(store)), {
             resultKey: (value) => hash([...value.edges].map(([key, edges]) => [key, [...edges]])),
             details: {
               source: "actual readArtistGraph, default no-op between steps",
@@ -143,7 +144,7 @@ export const bench: FastAgainBench = {
         ["songRows50", store.songsWithIds(fixture.songIds.slice(0, 50))],
       ] as const) {
         measurements.push(
-          measure(read, () => Effect.runSync(effect as Effect.Effect<unknown, unknown>), {
+          measure(read, () => runTestSync(effect as Effect.Effect<unknown, unknown>), {
             details: { source: "actual LibraryStore control; no route/frame simulation" },
           }),
         );

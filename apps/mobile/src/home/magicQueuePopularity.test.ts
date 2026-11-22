@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { CatalogSong, YtAlbumSong } from "@wave/core";
 import * as Effect from "effect/Effect";
+import { runTestPromise } from "../lib/steppedTesting.ts";
 
 import { magicQueuePopularity } from "./magicQueuePopularity.ts";
 
@@ -36,11 +37,11 @@ test("a song added to the Library later weighs as the hit it is", async () => {
     catalog: Effect.succeed(catalog),
     between: Effect.void,
   });
-  const before = await Effect.runPromise(popularity);
+  const before = await runTestPromise(popularity);
   assert.equal(before(7), 0);
   // The Library gains the song as track 7; the catalog stays the same object.
   library = libraryWith(new Map([["hit", 7]]));
-  const after = await Effect.runPromise(popularity);
+  const after = await runTestPromise(popularity);
   assert.equal(after(7), 0.75);
 });
 
@@ -58,8 +59,8 @@ test("the same Library and catalog read the catalog once", async () => {
     catalog: Effect.succeed(catalog),
     between: Effect.void,
   });
-  const first = await Effect.runPromise(popularity);
-  const second = await Effect.runPromise(popularity);
+  const first = await runTestPromise(popularity);
+  const second = await runTestPromise(popularity);
   assert.equal(second, first);
   assert.equal(walks, 1);
 });
@@ -70,6 +71,6 @@ test("every song is a deep cut when the snapshot can't be read", async () => {
     catalog: Effect.succeed([hit]),
     between: Effect.void,
   });
-  const lookup = await Effect.runPromise(popularity);
+  const lookup = await runTestPromise(popularity);
   assert.equal(lookup("hit"), 0);
 });

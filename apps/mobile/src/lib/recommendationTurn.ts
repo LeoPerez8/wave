@@ -2,7 +2,13 @@
 import { recommendationFrameBudget } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { checkRadioDeadlines } from "./radioDeadline.ts";
-import { GENTLE_STEPS, pacedSteps, type StepPace } from "./stepped.ts";
+import {
+  BackgroundWorkName,
+  GENTLE_STEPS,
+  pacedSteps,
+  type StepPace,
+  type Turn,
+} from "./stepped.ts";
 
 /** Awaited steps: the frame budget alone stops them, checked often enough not to overrun it far. */
 const AWAITED_STEPS: Omit<StepPace, "between"> = {
@@ -19,6 +25,11 @@ export const createRecommendationWork = (host: {
     readonly inFlight: () => boolean;
     readonly after: (run: () => void) => () => void;
   };
+  /**
+   * [name] got its turn (the block log's `turnTaken`, #1447): the pages it reads next run
+   * outside any slice, so without the mark a long one logs as no background work.
+   */
+  readonly turnTaken?: (name: string) => void;
 }) => {
   const budget = recommendationFrameBudget(host);
   const waiters = new Set<() => void>();
@@ -48,28 +59,37 @@ export const createRecommendationWork = (host: {
         }
       });
     });
-  const turn: Effect.Effect<void> = Effect.suspend(() => {
+  const frameTurn: Effect.Effect<void> = Effect.suspend(() => {
     checkRadioDeadlines();
     const transition = host.transition;
     if (transition?.inFlight() === true)
       return Effect.callback<void>((resume) => {
-        const cancel = transition.after(() => resume(turn));
+        const cancel = transition.after(() => resume(frameTurn));
         return Effect.sync(cancel);
       });
     if (awaitedWork > 0)
       return Effect.callback<void>((resume) => {
-        const ready = () => resume(turn);
+        const ready = () => resume(frameTurn);
         paused.add(ready);
         return Effect.sync(() => {
           paused.delete(ready);
         });
       });
-    return budget.due() ? nextFrame(() => turn) : Effect.void;
+    return budget.due() ? nextFrame(() => frameTurn) : Effect.void;
   });
-  const awaitedTurn: Effect.Effect<void> = Effect.suspend(() => {
+  /** [inner], then the mark that what runs next is the waiting work's. */
+  const marked = (inner: Effect.Effect<void>): Turn =>
+    Effect.gen(function* () {
+      const name = yield* BackgroundWorkName;
+      yield* inner;
+      host.turnTaken?.(name);
+    });
+  const turn = marked(frameTurn);
+  const awaitedFrameTurn: Effect.Effect<void> = Effect.suspend(() => {
     checkRadioDeadlines();
-    return budget.dueAwaited() ? nextFrame(() => awaitedTurn) : Effect.void;
+    return budget.dueAwaited() ? nextFrame(() => awaitedFrameTurn) : Effect.void;
   });
+  const awaitedTurn = marked(awaitedFrameTurn);
   return {
     /** Between background pages and slices: the frame's turn, after any work someone waits for. */
     turn,
@@ -79,7 +99,10 @@ export const createRecommendationWork = (host: {
      * they wait for depends on those, so the pause can't hold itself up. Otherwise, they run
      * as any background work does.
      */
-    steps: <A>(steps: Generator<void, A>, awaited: () => boolean): Effect.Effect<A> =>
+    steps: <A>(
+      steps: Generator<void, A>,
+      awaited: () => boolean,
+    ): Effect.Effect<A, never, BackgroundWorkName> =>
       Effect.suspend(() => {
         let holding = false;
         const hold = (wanted: boolean) => {

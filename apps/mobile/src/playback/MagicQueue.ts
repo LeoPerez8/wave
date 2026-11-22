@@ -64,7 +64,7 @@ import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
 import { makeExternalStore, subscribeAll } from "@wave/client/externalStore";
 import { oneAtATime } from "@/lib/oneAtATime";
 import { freeTurnEffect } from "@/lib/backgroundWork";
-import { namedWork, runSteps } from "@/lib/stepped";
+import { type BackgroundWorkName, namedWork, runSteps } from "@/lib/stepped";
 import { dislikedSongsNow, onDislikesChanged } from "@/library/dislikes";
 import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
@@ -436,7 +436,7 @@ export const startMagicQueue = (
     if (first === undefined) return;
     startingLibrary = { songs: playable, artists };
     yield* begin(started.session, startedAt, toQueueTrack(first));
-  });
+  }).pipe(namedWork("Magic Queue start"));
 
 /**
  * Starts a Magic Queue from a streamed YT Music [song] (its long-press menu
@@ -471,7 +471,7 @@ export const startStreamedMagicQueue = (
         : yield* ytQueueTrack(song);
     yield* begin(session, startedAt, track);
     yield* cacheYtCoversInBackground(track.thumbPath === null ? [song] : []);
-  });
+  }).pipe(namedWork("Magic Queue start"));
 
 /**
  * Plays [session]'s first song, [track], as its queue, with the first batch
@@ -835,7 +835,10 @@ export const startDjMagicQueue = (
  * Runs [effect] on its own; the Magic Queue is best effort and never disturbs
  * playback. Its turns are logged as [name] unless the work names itself (#1437).
  */
-const fork = (effect: Effect.Effect<void, unknown>, name = "Magic Queue"): void => {
+const fork = (
+  effect: Effect.Effect<void, unknown, BackgroundWorkName>,
+  name = "Magic Queue",
+): void => {
   Effect.runFork(Effect.ignore(effect).pipe(namedWork(name)));
 };
 

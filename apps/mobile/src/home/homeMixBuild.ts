@@ -2,11 +2,11 @@ import type { MixRowId } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 /** One input read per attempt; row failures don't discard the other row's mixes. */
-export const buildHomeMixes = <I, A, E, R, EI, RI>(
+export const buildHomeMixes = <I, A, E, R, EI, RI, RS = never>(
   rows: readonly MixRowId[],
   inputs: Effect.Effect<I, EI, RI>,
   build: (id: MixRowId, input: I) => Effect.Effect<A, E, R>,
-  start: Effect.Effect<void> = Effect.void,
+  start: Effect.Effect<void, never, RS> = Effect.void as Effect.Effect<void, never, RS>,
 ) =>
   Effect.gen(function* () {
     yield* start;
