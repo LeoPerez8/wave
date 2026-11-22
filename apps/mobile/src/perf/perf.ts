@@ -2,6 +2,8 @@ import { createPerfRecorder, type PerfMeta, type PerfTiming } from "@wave/core";
 import { useEffect } from "react";
 import type { GestureResponderEvent } from "react-native";
 
+import { reactCompilerOn } from "../../plugins/reactCompiler.ts";
+
 /**
  * Performance instrumentation for the release runner (docs/performance/README.md).
  *
@@ -24,8 +26,8 @@ export const PERF_ENABLED = process.env.EXPO_PUBLIC_WAVE_PERF === "1";
 /** The app commit a perf build was made from, when the build said (`EXPO_PUBLIC_WAVE_COMMIT`). */
 const COMMIT = process.env.EXPO_PUBLIC_WAVE_COMMIT ?? null;
 
-/** Whether the bundle was built with the React Compiler (`app.config.ts`, #728). */
-const REACT_COMPILER = process.env.EXPO_PUBLIC_WAVE_REACT_COMPILER === "1";
+/** Whether the bundle was built with the React Compiler (`app.config.ts`, #728, #1433). */
+const REACT_COMPILER = reactCompilerOn(process.env.EXPO_PUBLIC_WAVE_REACT_COMPILER);
 
 type MetaSource = () => PerfMeta | Promise<PerfMeta>;
 

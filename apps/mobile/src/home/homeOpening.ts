@@ -56,6 +56,44 @@ export const homeSectionWaiting = (id: HomeSectionId, home: HomeContent): boolea
   }
 };
 
+/**
+ * The part of Home's lists the section [id] draws from: its own slice, or for
+ * Discover only whether the Library is empty and anything was played. The
+ * other sections read their own queries, so none of Home.
+ */
+const homeSectionReads = (id: HomeSectionId, home: HomeContent): readonly unknown[] => {
+  switch (id) {
+    case "recently-added":
+      return [home.recentlyAdded];
+    case "recently-played":
+      return [home.recentlyPlayed];
+    case "most-played":
+      return [home.mostPlayed];
+    case "favorites":
+      return [home.favorites];
+    case "discover": {
+      const { empty, played } = homeOpeningState(home);
+      return [empty, played];
+    }
+    default:
+      return [];
+  }
+};
+
+/**
+ * Whether the section [id] draws the same from [before] and [after], so a
+ * change to another section's slice leaves it alone (#1440).
+ */
+export const sameHomeSection = (
+  id: HomeSectionId,
+  before: HomeContent,
+  after: HomeContent,
+): boolean => {
+  const was = homeSectionReads(id, before);
+  const is = homeSectionReads(id, after);
+  return was.every((value, index) => Object.is(value, is[index]));
+};
+
 /** The room a playlist card's sleeves take above its cover (`SLEEVE_ROOM` in `PlaylistCard`). */
 const PLAYLIST_SLEEVE_ROOM = 10;
 
@@ -145,8 +183,11 @@ export const homeStatsRowLayout = (fontScale: number) => {
   };
 };
 
-/** Shared by the Magic Queue's tiles and placeholders, including large-text breakpoints. */
-export const magicQueueGrid = (available: number, fontScale: number) => {
+/**
+ * Shared by the Magic Queue's tiles and placeholders, including large-text breakpoints.
+ * [height] is that of [count] tiles, nine unless given.
+ */
+export const magicQueueGrid = (available: number, fontScale: number, count = 9) => {
   const columns = Math.max(
     1,
     Math.min(
@@ -155,7 +196,7 @@ export const magicQueueGrid = (available: number, fontScale: number) => {
     ),
   );
   const size = Math.max(CELL * 6, (available - CELL * (columns - 1)) / columns);
-  const rows = Math.ceil(9 / columns);
+  const rows = Math.ceil(count / columns);
   return {
     available,
     columns,

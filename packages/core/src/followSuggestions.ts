@@ -4,7 +4,7 @@
  * and doesn't follow, recent listening first.
  */
 import { en, type Catalogue } from "./catalogueEn.ts";
-import { artistPhotoQuery } from "./artistPhoto.ts";
+import { namesAnArtist } from "./artistPhoto.ts";
 import { followArtistKey } from "./followedArtists.ts";
 import { compareStrings, sortKey } from "./library.ts";
 import type { StatsWindow } from "./stats.ts";
@@ -64,13 +64,41 @@ export const followSuggestionsWindow = (now: number): StatsWindow => ({
   to: now,
 });
 
-/** "Various Artists", "Unknown Artist" and names without letters aren't anyone to follow. */
-const suggestible = (name: string): boolean =>
-  artistPhotoQuery(name) !== null && /\p{L}/u.test(name);
+/**
+ * Each name's follow key, or null for "Various Artists", "Unknown Artist" and
+ * names without letters, which aren't anyone to follow. Keyed once per name
+ * however many lists name it: on a phone, keying a name is the costly part.
+ */
+const followKeys = (): ((name: string) => string | null) => {
+  const keys = new Map<string, string | null>();
+  return (name) => {
+    let key = keys.get(name);
+    if (key === undefined) {
+      const compared = followArtistKey(name);
+      key = namesAnArtist(compared) && /\p{L}/u.test(name) ? compared : null;
+      keys.set(name, key);
+    }
+    return key;
+  };
+};
 
-/** Ties go by name, as the Library sorts names. */
-const byName = (a: { readonly name: string }, b: { readonly name: string }): number =>
-  compareStrings(sortKey(a.name), sortKey(b.name)) || compareStrings(a.name, b.name);
+/**
+ * Sorts [items] by [compare], ties by name as the Library sorts names, each
+ * name's sort key worked out once rather than at every comparison.
+ */
+const sortedByName = <T extends { readonly name: string }>(
+  items: readonly T[],
+  compare: (a: T, b: T) => number,
+): T[] =>
+  items
+    .map((item) => ({ item, key: sortKey(item.name) }))
+    .sort(
+      (a, b) =>
+        compare(a.item, b.item) ||
+        compareStrings(a.key, b.key) ||
+        compareStrings(a.item.name, b.item.name),
+    )
+    .map(({ item }) => item);
 
 /**
  * Whether the owner is a light listener: their most played artist, as Stats
@@ -102,12 +130,12 @@ const fromKept = <A>(
   kept: KeptSongs<A>,
   taken: ReadonlySet<string>,
   strings: Catalogue,
+  keyOf: (name: string) => string | null,
 ): FollowSuggestion<A>[] => {
   const artists = new Map<string, KeptArtist<A>>();
   const artistOf = (artist: KeptSongArtist<A>): KeptArtist<A> | undefined => {
-    if (!suggestible(artist.name)) return undefined;
-    const key = followArtistKey(artist.name);
-    if (taken.has(key)) return undefined;
+    const key = keyOf(artist.name);
+    if (key === null || taken.has(key)) return undefined;
     const known = artists.get(key);
     if (known !== undefined) return known;
     const added: KeptArtist<A> = {
@@ -148,19 +176,19 @@ const fromKept = <A>(
   credit(kept.library, (artist) => artist.library++);
   for (const playlist of kept.playlists) credit(playlist, (artist) => artist.playlists++);
   const score = (artist: KeptArtist<A>) => artist.library + artist.playlists;
-  return [...artists.values()]
-    .filter((artist) => score(artist) > 0 || artist.countedPlays > 0)
-    .sort((a, b) => score(b) - score(a) || b.countedPlays - a.countedPlays || byName(a, b))
-    .map((artist) => ({
-      key: artist.key,
-      name: artist.name,
-      item: artist.item,
-      countedPlays: artist.countedPlays,
-      line:
-        score(artist) > 0
-          ? strings.shows.keptSongs(artist.library, artist.playlists)
-          : strings.shows.allTimePlays(artist.countedPlays),
-    }));
+  return sortedByName(
+    [...artists.values()].filter((artist) => score(artist) > 0 || artist.countedPlays > 0),
+    (a, b) => score(b) - score(a) || b.countedPlays - a.countedPlays,
+  ).map((artist) => ({
+    key: artist.key,
+    name: artist.name,
+    item: artist.item,
+    countedPlays: artist.countedPlays,
+    line:
+      score(artist) > 0
+        ? strings.shows.keptSongs(artist.library, artist.playlists)
+        : strings.shows.allTimePlays(artist.countedPlays),
+  }));
 };
 
 /**
@@ -187,6 +215,7 @@ export const followSuggestions = <A>(input: {
   readonly strings?: Catalogue;
 }): { readonly suggestions: readonly FollowSuggestion<A>[]; readonly more: boolean } => {
   const strings = input.strings ?? en;
+  const keyOf = followKeys();
   const taken = new Set(input.excluded);
   for (const key of input.dismissed ?? []) taken.add(key);
   const ranked = (
@@ -196,9 +225,9 @@ export const followSuggestions = <A>(input: {
     // Namesakes share a follow: their plays add up under the most played one's name.
     const byKey = new Map<string, { lead: FollowSuggestionPlays<A>; countedPlays: number }>();
     for (const artist of artists) {
-      if (artist.countedPlays <= 0 || !suggestible(artist.name)) continue;
-      const key = followArtistKey(artist.name);
-      if (taken.has(key)) continue;
+      if (artist.countedPlays <= 0) continue;
+      const key = keyOf(artist.name);
+      if (key === null || taken.has(key)) continue;
       const same = byKey.get(key);
       byKey.set(key, {
         lead:
@@ -206,15 +235,16 @@ export const followSuggestions = <A>(input: {
         countedPlays: (same?.countedPlays ?? 0) + artist.countedPlays,
       });
     }
-    return [...byKey]
-      .map(([key, { lead, countedPlays }]) => ({
+    return sortedByName(
+      [...byKey].map(([key, { lead, countedPlays }]) => ({
         key,
         name: lead.name,
         item: lead.item,
         countedPlays,
         line: line(countedPlays),
-      }))
-      .sort((a, b) => b.countedPlays - a.countedPlays || byName(a, b));
+      })),
+      (a, b) => b.countedPlays - a.countedPlays,
+    );
   };
   const usual = () => {
     const recent = ranked(input.recent, strings.shows.playsInLast90Days);
@@ -222,7 +252,7 @@ export const followSuggestions = <A>(input: {
     return [...recent, ...ranked(input.allTime, strings.shows.allTimePlays)];
   };
   const suggestions = lightListener(input.allTime)
-    ? fromKept(input.allTime, input.kept ?? { library: [], playlists: [] }, taken, strings)
+    ? fromKept(input.allTime, input.kept ?? { library: [], playlists: [] }, taken, strings, keyOf)
     : usual();
   return {
     suggestions: suggestions.slice(0, input.shown),

@@ -1052,7 +1052,7 @@ export const OWN_PRESS: Record<string, Exception> = {
   },
   "stats/StatsViews.tsx#RecapCard": { reason: "A Recap's card on Stats opens that Recap." },
   "stats/StatsViews.tsx#RecapsRow": { reason: "The row of Recap cards on Stats, each a target." },
-  "chrome/TabBar.tsx#Tab": {
+  "chrome/TabBar.tsx#TabFace": {
     reason: "A tab bar control: selected state and the long press that edits the tab bar.",
   },
   "nowPlaying/CoverPress.tsx#CoverPress": {

@@ -59,7 +59,9 @@ const builds = await reactCompilerBuilds<Snapshot>(
 const draw = <K extends keyof HomeSnapshotSections>(snapshot: Snapshot, name: K) => {
   let value: HomeSnapshotSections[K] | undefined;
   let shown: HomeSnapshotSections[K] | undefined;
+  let renders = 0;
   function Section({ read }: { read: HomeSnapshotSections[K] | undefined }) {
+    renders++;
     shown = snapshot.useSnapshotted(name, read);
     return null;
   }
@@ -69,6 +71,7 @@ const draw = <K extends keyof HomeSnapshotSections>(snapshot: Snapshot, name: K)
   });
   return {
     shown: () => shown,
+    renders: () => renders,
     answer: (read: HomeSnapshotSections[K]) => {
       value = read;
       act(() => renderer!.update(createElement(Section, { read: value })));
@@ -119,6 +122,26 @@ for (const [build, snapshot] of Object.entries(builds)) {
       assert.deepEqual(playlists.shown(), read);
     } finally {
       playlists.close();
+      act(() => harness.finger.ended());
+    }
+  });
+
+  // A touch goes down and lifts on every tap and scroll: a section whose
+  // finger hold changes nothing it draws isn't drawn again for it (#1439).
+  test(`${build}: a finger going down or lifting redraws no section it can't change`, () => {
+    const albums = draw(snapshot, "mostPlayed");
+    try {
+      const waiting = albums.renders();
+      act(() => harness.finger.started());
+      act(() => harness.finger.ended());
+      assert.equal(albums.renders(), waiting, "a section waiting for its first read");
+      albums.answer({ albums: [], artists: [] } as never);
+      const answered = albums.renders();
+      act(() => harness.finger.started());
+      act(() => harness.finger.ended());
+      assert.equal(albums.renders(), answered, "a section showing its read");
+    } finally {
+      albums.close();
       act(() => harness.finger.ended());
     }
   });
