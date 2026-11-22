@@ -280,6 +280,11 @@ type QueueRowActions = {
 
 type RowProps = {
   shown: SongRowPresentation;
+  /**
+   * Its place in Up Next as it mounts or renders. A song played or removed moves every row
+   * after it; the drag moves them on the UI thread (`placeRow`), so a new index alone
+   * doesn't render a row again (#1441).
+   */
   index: number;
   /** Removing it says the song's title. */
   title: string;
@@ -292,11 +297,25 @@ type RowProps = {
   actions: QueueRowActions;
 };
 
+/** Two Up Next rows show the same, whatever their index (`RowProps.index`). */
+function sameUpNextRow(before: RowProps, after: RowProps): boolean {
+  return (
+    before.shown === after.shown &&
+    before.title === after.title &&
+    before.up === after.up &&
+    before.down === after.down &&
+    before.lifted === after.lifted &&
+    before.drag === after.drag &&
+    before.actions === after.actions
+  );
+}
+
 /**
  * Up Next's song row with its remove button and drag handle. Memoized:
  * Legend List renders every visible row again when the queue's tracks change
- * (a batch of covers landing) or it grows, and only the rows whose song or
- * place changed need to.
+ * (a batch of covers landing) or it grows, or a song plays, and only the rows
+ * whose song, title, first or last place, or drag changed need to; a new index
+ * alone reaches the row through its drag (`sameUpNextRow`).
  */
 const UpNextRow = memo(function UpNextRow({
   shown,
@@ -351,7 +370,7 @@ const UpNextRow = memo(function UpNextRow({
       />
     </Animated.View>
   );
-});
+}, sameUpNextRow);
 
 /**
  * A History row: an Up Next row's song, its cover and title faded, with no X

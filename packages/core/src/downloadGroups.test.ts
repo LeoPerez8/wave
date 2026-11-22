@@ -4,11 +4,15 @@ import { describe, test } from "node:test";
 import {
   albumDownloadOrigin,
   applyJournalChanges,
+  catalogueOf,
   downloadingList,
   moveDownloadGroup,
   moveDownloadInGroup,
   moveQueuedJobs,
   playlistDownloadOrigin,
+  queuedDownloadLines,
+  sameDownloadingList,
+  sameQueuedDownload,
 } from "./index.ts";
 import type { DownloadOrigin, YtDownloadJournalJob, YtSong } from "./index.ts";
 
@@ -300,5 +304,69 @@ describe("Downloading groups in Portuguese", () => {
         ["Melhoria de qualidade", "1 música restante"],
       ],
     );
+  });
+});
+
+describe("The Downloading list's membership, apart from each song's progress (#1441)", () => {
+  const ticking = (received: number) => [
+    job("a", { origin: roadTrip, phase: "transferring", received, total: 100 }),
+    job("b", { origin: roadTrip }),
+    job("c", { origin: focus }),
+  ];
+
+  test("a progress tick leaves the list the same, its songs' lines aside", () => {
+    // The ticking job comes fresh from the journal each time, its song too.
+    const before = downloadingList(ticking(10));
+    const after = downloadingList(ticking(42));
+    assert.notEqual(before.downloading[0]?.line, after.downloading[0]?.line);
+    assert.equal(sameDownloadingList(before, after), true);
+    assert.equal(sameQueuedDownload(before.downloading[0]!, after.downloading[0]!), true);
+  });
+
+  test("a song joining, leaving, starting or turning to saving changes the list", () => {
+    const before = downloadingList(ticking(10));
+    const joined = downloadingList([...ticking(10), job("d", { origin: focus })]);
+    const left = downloadingList(ticking(10).slice(0, 2));
+    const started = downloadingList(
+      ticking(10).map((each) =>
+        each.id === "b" ? { ...each, phase: "preparing" as const } : each,
+      ),
+    );
+    const saving = downloadingList(
+      ticking(10).map((each) => (each.id === "a" ? { ...each, phase: "tagging" as const } : each)),
+    );
+    for (const after of [joined, left, started, saving]) {
+      assert.equal(sameDownloadingList(before, after), false);
+    }
+    // Saving to the Library, a song can no longer be cancelled: its row changes.
+    assert.equal(sameQueuedDownload(before.downloading[0]!, saving.downloading[0]!), false);
+  });
+
+  test("a group renamed, or moved, changes the list", () => {
+    const before = downloadingList(ticking(10));
+    const renamed = downloadingList(
+      ticking(10).map((each) =>
+        each.id === "c" ? { ...each, origin: { ...focus, name: "Deep Focus" } } : each,
+      ),
+    );
+    const moved = downloadingList(moveQueuedJobs(ticking(10), ["c", "b"]));
+    assert.equal(sameDownloadingList(before, renamed), false);
+    assert.equal(sameDownloadingList(before, moved), false);
+  });
+
+  test("each song on its way has its own line, read without building the list", () => {
+    const lines = queuedDownloadLines([
+      ...ticking(42),
+      job("lost", { phase: "failed", reason: "failed" }),
+    ]);
+    assert.deepEqual(
+      [...lines],
+      [
+        ["a", "Downloading · 42%"],
+        ["b", "Waiting to download"],
+        ["c", "Waiting to download"],
+      ],
+    );
+    assert.equal(queuedDownloadLines(ticking(42), catalogueOf("pt-BR")).get("a"), "Baixando · 42%");
   });
 });
