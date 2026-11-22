@@ -13,7 +13,6 @@
  */
 import { finishSteps, statsWindow } from "@wave/core";
 import assert from "node:assert/strict";
-import { performance } from "node:perf_hooks";
 
 import type { LibraryDatabase } from "@wave/client/db/database";
 import { keptTotalsSettled } from "@wave/client/db/keptPlayTotals";
@@ -23,10 +22,10 @@ import {
   playedTotalsRead,
   playedTotalsSteps,
 } from "@wave/client/db/playedEntities";
-import { asyncReadClient } from "@wave/client/testing";
 import { addStreamedPlays, createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
 import { sql } from "drizzle-orm";
 import { median, printMeta } from "./measure.ts";
+import { timedReplays } from "./replaySteps.ts";
 
 const quick = process.argv.includes("--quick");
 const runs = quick ? 3 : 7;
@@ -41,18 +40,7 @@ db.run(sql`UPDATE played_songs SET state = 1`);
 assert.equal(keptTotalsSettled(db), false, "the kept totals still settle");
 const window = statsWindow("all", fixture.now);
 
-// Every replay step (a pass, a step of mapping rows or a slice of steps) is timed.
-let steps: number[] = [];
-offThread.runReplayPassesWith((run) => {
-  const start = performance.now();
-  try {
-    return run();
-  } finally {
-    steps.push(performance.now() - start);
-  }
-});
-const connection = offThread.readConnections(async () => asyncReadClient(db));
-const now = () => performance.now();
+const { steps, connection, now } = timedReplays(db);
 
 const expected = playedEntityTotals(db, window);
 const read = (d: LibraryDatabase) => playedTotalsRead(d, window, true);
@@ -88,7 +76,7 @@ for (const [way, run] of Object.entries(ways)) {
   const longest: number[] = [];
   let count = 0;
   for (let index = 0; index < runs; index++) {
-    steps = [];
+    steps.length = 0;
     const { value, heldMs } = await run();
     assert.deepEqual(value, expected, `${way}: the same totals`);
     held.push(heldMs);

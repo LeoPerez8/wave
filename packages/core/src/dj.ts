@@ -350,7 +350,7 @@ export function* djGenreTilesSteps(
   // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
   scored.sort((a, b) => b.score - a.score);
   if (scored.length === 0) return [];
-  const library = yield* libraryTilesSteps(artists);
+  const library = yield* djLibraryArtistTilesSteps(artists);
   const records = yield* albumTilesSteps(albums);
   const known = (name: string): DjArtistTile | null => {
     const tile = djArtistTile(name);
@@ -395,8 +395,8 @@ export function* djGenreTilesSteps(
   return tiles;
 }
 
-/** The Library's artists as tiles, by key; the first artist of a key keeps it. */
-function* libraryTilesSteps(
+/** The Library's artists as tiles, by key; the first artist of a key keeps it. A step per artist. */
+export function* djLibraryArtistTilesSteps(
   artists: DjGridSources["artists"],
 ): Generator<void, Map<string, DjArtistTile>> {
   const library = new Map<string, DjArtistTile>();
@@ -445,7 +445,7 @@ export function* djGridCandidatesSteps(
   { artists, taste, played = [], graph, albums = [], genreLibrary, genreCandidates }: DjGridSources,
   enough = Infinity,
 ): Generator<void, DjTile[]> {
-  const library = yield* libraryTilesSteps(artists);
+  const library = yield* djLibraryArtistTilesSteps(artists);
   const known = (name: string | undefined): DjArtistTile | null => {
     const tile = name === undefined ? null : djArtistTile(name);
     return tile === null ? null : (library.get(tile.key) ?? tile);

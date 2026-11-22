@@ -8,6 +8,7 @@ import {
   djAlbumTile,
   djArtistTile,
   djGenreTilesSteps,
+  djLibraryArtistTilesSteps,
   djGenreTile,
   djOpened,
   type DjAlbum,
@@ -142,12 +143,7 @@ export function* djReopenedSteps({
 }: DjReopenedSources): Generator<void, DjState> {
   if (remembered.length === 0) return { ...djOpened([...grid]), selected: [] };
   const fresh = new Set(grid.map((tile) => tile.key));
-  const library = new Map<DjTileKey, DjTile>();
-  for (const artist of artists) {
-    const tile = djArtistTile(artist.name, artist.id);
-    if (tile !== null && !library.has(tile.key)) library.set(tile.key, tile);
-    yield;
-  }
+  const library: Map<string, DjTile> = yield* djLibraryArtistTilesSteps(artists);
   for (const album of albums) {
     const tile = djAlbumTile(album);
     if (tile !== null && !library.has(tile.key)) library.set(tile.key, tile);

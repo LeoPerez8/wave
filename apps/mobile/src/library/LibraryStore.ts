@@ -1688,6 +1688,24 @@ const make = Effect.gen(function* () {
     return worked.value;
   };
 
+  // A read on this connection ([here]) in the tests, the desktop benches and the reads that
+  // must finish in their task (`SyncLibraryReads`), else replayed off the thread ([offThread]).
+  const readBoundary = <A>(
+    operation: string,
+    here: () => A,
+    offThread: (replay: NonNullable<typeof replays>) => Promise<A>,
+  ): Effect.Effect<A, LibraryStoreError> =>
+    Effect.flatMap(Effect.service(SyncLibraryReads), (sync) =>
+      sync || replays === undefined
+        ? Effect.try({
+            try: here,
+            catch: (cause) => new LibraryStoreError({ operation, cause }),
+          })
+        : Effect.tryPromise({
+            try: () => offThread(replays),
+            catch: (cause) => new LibraryStoreError({ operation, cause }),
+          }),
+    );
   // Every read shares this boundary: [run] reads through the database it's handed, which
   // each read names `db` too, so the main connection is out of its reach.
   // Row counts are inspected only on the slow path; named bundles count the rows
@@ -1697,16 +1715,10 @@ const make = Effect.gen(function* () {
     run: (db: LibraryDatabase) => A,
     rows?: (result: A) => number,
   ): Effect.Effect<A, LibraryStoreError> =>
-    Effect.flatMap(Effect.service(SyncLibraryReads), (here) =>
-      here || replays === undefined
-        ? Effect.try({
-            try: () => readHere(operation, run, rows),
-            catch: (cause) => new LibraryStoreError({ operation, cause }),
-          })
-        : Effect.tryPromise({
-            try: () => readOffThread(replays, operation, run, rows),
-            catch: (cause) => new LibraryStoreError({ operation, cause }),
-          }),
+    readBoundary(
+      operation,
+      () => readHere(operation, run, rows),
+      (replay) => readOffThread(replay, operation, run, rows),
     );
   // `attempt` for a read whose working out runs in steps (`readSteppedOffThread`).
   const attemptStepped = <R, A>(
@@ -1716,16 +1728,10 @@ const make = Effect.gen(function* () {
     steps: (read: R) => Generator<void, A>,
     rows?: (result: A) => number,
   ): Effect.Effect<A, LibraryStoreError> =>
-    Effect.flatMap(Effect.service(SyncLibraryReads), (here) =>
-      here || replays === undefined
-        ? Effect.try({
-            try: () => readHere(operation, (d) => finishSteps(steps(read(d))), rows),
-            catch: (cause) => new LibraryStoreError({ operation, cause }),
-          })
-        : Effect.tryPromise({
-            try: () => readSteppedOffThread(replays, operation, slice, read, steps, rows),
-            catch: (cause) => new LibraryStoreError({ operation, cause }),
-          }),
+    readBoundary(
+      operation,
+      () => readHere(operation, (d) => finishSteps(steps(read(d))), rows),
+      (replay) => readSteppedOffThread(replay, operation, slice, read, steps, rows),
     );
   // The Library's credits and their splitter, kept between saves.
   const splits = creditSplits();

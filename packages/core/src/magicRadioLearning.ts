@@ -83,13 +83,8 @@ export function* magicRadioExclusionsSteps(
 /**
  * The liked radios' songs a batch may take beside [seed]'s: a recording the
  * original radio brought belongs to its majority, even if a liked radio has it too.
+ * A step per candidate.
  */
-export const magicLearnedExtras = <S extends Pick<RankedRadioSong, "trackId" | "song">>(
-  seed: readonly S[],
-  liked: readonly S[],
-): S[] => finishSteps(magicLearnedExtrasSteps(seed, liked));
-
-/** `magicLearnedExtras`, a step per candidate. */
 export function* magicLearnedExtrasSteps<S extends Pick<RankedRadioSong, "trackId" | "song">>(
   seed: readonly S[],
   liked: readonly S[],
@@ -127,13 +122,10 @@ export function* magicLearnedExtrasSteps<S extends Pick<RankedRadioSong, "trackI
   });
 }
 
-/** Whether a batch of [session] may take a song of [candidates]: one it hasn't played or learned from. */
-export const magicRadioEligible = <S extends Pick<RankedRadioSong, "trackId" | "song">>(
-  session: MagicSession,
-  candidates: readonly S[],
-): ((song: S) => boolean) => finishSteps(magicRadioEligibleSteps(session, candidates));
-
-/** `magicRadioEligible`, a step per candidate. */
+/**
+ * Whether a batch of [session] may take a song of [candidates]: one it hasn't played or
+ * learned from. A step per candidate.
+ */
 export function* magicRadioEligibleSteps<S extends Pick<RankedRadioSong, "trackId" | "song">>(
   session: MagicSession,
   candidates: Iterable<S>,

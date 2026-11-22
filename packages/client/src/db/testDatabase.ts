@@ -6,21 +6,19 @@
  */
 import { albumKey as coreAlbumKey, identityKey } from "@wave/core";
 import { eq, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/sql-js";
 import { migrateDatabase } from "../database.ts";
-import initSqlJs from "sql.js";
 
-import { configureConnection } from "./connection.ts";
 import type { AsyncSqlite } from "./offThreadReads.ts";
 import { creditSplits, relinkCreditsIfUnlinked } from "./credits.ts";
 import migrations from "./migrations.ts";
 import { setFavorites, writeFavorites, type MostPlayedRow } from "./playHistory.ts";
 import * as schema from "./schema.ts";
+import { openSqlJsDatabase } from "./sqlJsDatabase.ts";
 import { keyRecordings } from "./sync.ts";
 
 export type TestDatabase = Awaited<ReturnType<typeof openTestDatabase>>;
 
-type SqlJsClient = InstanceType<Awaited<ReturnType<typeof initSqlJs>>["Database"]>;
+type SqlJsClient = Awaited<ReturnType<typeof openSqlJsDatabase>>["client"];
 type SqlJsStatement = ReturnType<SqlJsClient["prepare"]>;
 
 /** Each test database's sql.js client, for `traceQueries`. */
@@ -86,11 +84,7 @@ const takeBackLaterColumns = (db: TestDatabase): void => {
  * then upgrades it as an app update does.
  */
 export const openTestDatabase = async (options: { readonly through?: string } = {}) => {
-  const SQL = await initSqlJs();
-  const client = new SQL.Database();
-  // As on the phone (cascades only happen with foreign keys on).
-  configureConnection((statements) => client.exec(statements));
-  const db = drizzle(client, { schema });
+  const { client, db } = await openSqlJsDatabase();
   clients.set(db, client);
   migrateDatabase(
     db,
@@ -107,10 +101,7 @@ export const reopenTestDatabase = async (db: TestDatabase): Promise<TestDatabase
   takeBackLaterColumns(db);
   const image = client.export();
   client.close();
-  const SQL = await initSqlJs();
-  const reopened = new SQL.Database(image);
-  configureConnection((statements) => reopened.exec(statements));
-  const next = drizzle(reopened, { schema });
+  const { client: reopened, db: next } = await openSqlJsDatabase(image);
   clients.set(next, reopened);
   migrateDatabase(next, migrations);
   return next;

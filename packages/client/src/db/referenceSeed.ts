@@ -17,12 +17,9 @@ import {
   type PlaylistSong,
   type YtAlbumSong,
 } from "@wave/core";
-import { drizzle } from "drizzle-orm/sql-js";
-import initSqlJs from "sql.js";
 
 import { migrateDatabase } from "../database.ts";
 import type { IndexedTrack } from "../types.ts";
-import { configureConnection } from "./connection.ts";
 import { creditSplits } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
 import { saveFollow } from "./follows.ts";
@@ -33,6 +30,7 @@ import { endPlay, recordPlay, setFavorites } from "./playHistory.ts";
 import { createPlaylist } from "./playlists.ts";
 import { saveBatch } from "./save.ts";
 import * as schema from "./schema.ts";
+import { openSqlJsDatabase } from "./sqlJsDatabase.ts";
 
 /** How much the seed holds. */
 export interface ReferenceSize {
@@ -679,10 +677,8 @@ export const buildReferenceDatabase = async (
   catalogue: ReferenceCatalogue,
   options: SeedOptions,
 ): Promise<Uint8Array> => {
-  const SQL = await initSqlJs();
-  const client = new SQL.Database();
-  configureConnection((statements) => client.exec(statements));
-  const db = drizzle(client, { schema }) as unknown as LibraryDatabase;
+  const { client, db: opened } = await openSqlJsDatabase();
+  const db = opened as unknown as LibraryDatabase;
   migrateDatabase(db, migrations);
   seedReferenceLibrary(db, catalogue, options);
   const bytes = client.export();

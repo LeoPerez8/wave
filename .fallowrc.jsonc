@@ -22,6 +22,11 @@
     "scripts/release-lookup/sample.ts",
     // #608's tap bench runs by path (docs/verification/602-608.md).
     "apps/mobile/bench/playlistRecommendationTap.ts",
+    // #1432's benches and emulator seed run by path (docs/performance/1436-scan-js.md,
+    // docs/agents/emulator-checks.md).
+    "apps/mobile/bench/replayReads.ts",
+    "apps/mobile/bench/scanEnd.ts",
+    "scripts/perf/seed.ts",
     "scripts/**/*.test.ts",
     // electron-vite builds the desktop from these: main, the audio process, the preload and the window.
     "apps/desktop/src/main/index.ts",
