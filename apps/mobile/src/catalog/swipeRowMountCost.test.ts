@@ -59,7 +59,7 @@ const rowViews = (renderer: ReactTestRenderer) =>
 const labels = (renderer: ReactTestRenderer) =>
   renderer.root.findAll((node) => node.type === "text" && node.props.numberOfLines === 1);
 const icons = (renderer: ReactTestRenderer) =>
-  renderer.root.findAll((node) => node.type === "ActionIcon");
+  renderer.root.findAll((node) => (node.type as unknown) === "ActionIcon");
 
 test(`mounting ${ROWS} swipeable rows draws only a static backdrop until one is touched`, async () => {
   resetAnimationCounts();

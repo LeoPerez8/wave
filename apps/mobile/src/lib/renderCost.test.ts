@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Activity, createElement, type ReactNode } from "react";
+import { Activity, createElement, type ComponentProps, type ReactNode } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
 import { loadWithStubs, nativeStubs, stubModule } from "../perf/renderHarness.ts";
@@ -34,7 +34,7 @@ function Measured() {
 
 const measured = createElement(Measured);
 const shell = (mode: "visible" | "hidden", children: ReactNode = measured) =>
-  createElement(Activity, { mode }, children);
+  createElement(Activity, { mode } as ComponentProps<typeof Activity>, children);
 
 test("a render is reported once, from its own commit", async () => {
   spans().length = 0;
