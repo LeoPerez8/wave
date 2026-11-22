@@ -31,12 +31,12 @@ last second (`TURN_WORK_MS`). Both registrations' awaited work ran in that secon
 ## Numbers (Node, the Core pieces alone)
 
 Node runs these several times faster than Hermes on the emulator; the ratio is what carries
-over. Slices are the app's: 6 ms or 512 steps.
+over. Slices are the app's: 6 ms or 512 steps. Two runs on the shared host, the range of both.
 
 | Piece                                     | Before (one task) | After (longest slice) |
 | ----------------------------------------- | ----------------- | --------------------- |
-| Library finder, 3,000 songs               | 21.3 ms           | 4.7 ms (6 slices)     |
-| Fill index, 3,000 songs in 6 playlists    | 2.1 ms            | 1.3 ms (6 slices)     |
+| Library finder, 3,000 songs               | 21 to 38 ms       | 4.7 to 7.2 ms (6-10)  |
+| Fill index, 3,000 songs in 6 playlists    | 2.1 to 4.1 ms     | 1.3 to 5.1 ms (6)     |
 | `nextFillStep`, 3,000 songs, one failed   | 0.20 ms           | under 0.01 ms         |
 
 ## Not measured
