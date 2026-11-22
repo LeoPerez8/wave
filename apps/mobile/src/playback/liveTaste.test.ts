@@ -11,6 +11,7 @@ import {
   type TasteHistory,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
+import { runTestPromise } from "../lib/steppedTesting.ts";
 
 import { makeLiveTaste } from "./liveTaste.ts";
 
@@ -52,7 +53,7 @@ const liveTaste = (history: () => TasteHistory = () => NO_HISTORY) => {
 };
 
 const songScore = async (live: ReturnType<typeof makeLiveTaste<never>>, trackId: string) =>
-  (await Effect.runPromise(live.profile))?.songs.get(trackId) ?? 0;
+  (await runTestPromise(live.profile))?.songs.get(trackId) ?? 0;
 
 const playedThrough = (trackId: string) => ({
   trackId,
@@ -64,10 +65,10 @@ const playedThrough = (trackId: string) => ({
 describe("The live taste profile", () => {
   test("learns a play end, a streamed song's as a Library song's", async () => {
     const { live } = liveTaste();
-    await Effect.runPromise(live.profile);
+    await runTestPromise(live.profile);
     const streamed = ytTrackId("abc");
-    await Effect.runPromise(live.played(playedThrough("7")));
-    await Effect.runPromise(live.played(playedThrough(streamed)));
+    await runTestPromise(live.played(playedThrough("7")));
+    await runTestPromise(live.played(playedThrough(streamed)));
     assert.equal(await songScore(live, "7"), 1);
     assert.equal(await songScore(live, streamed), 1);
   });
@@ -76,34 +77,34 @@ describe("The live taste profile", () => {
     const streamed = ytTrackId("abc");
     let history = NO_HISTORY;
     const { live, holdDerivation } = liveTaste(() => history);
-    await Effect.runPromise(live.profile);
-    await Effect.runPromise(live.played(playedThrough(streamed)));
+    await runTestPromise(live.profile);
+    await runTestPromise(live.played(playedThrough(streamed)));
     history = { ...NO_HISTORY, plays: [playedThrough(streamed)] };
     live.invalidate();
     assert.equal(await songScore(live, streamed), 1);
     // One that comes while a derivation reads a history that has it counts once too.
     live.invalidate();
     const release = holdDerivation();
-    const again = Effect.runPromise(live.profile);
+    const again = runTestPromise(live.profile);
     const later = { ...playedThrough(streamed), startedAt: NOW + 1 };
     history = { ...NO_HISTORY, plays: [playedThrough(streamed), later] };
-    await Effect.runPromise(live.played(later));
+    await runTestPromise(live.played(later));
     release();
     assert.equal((await again)?.songs.get(streamed), 2);
   });
 
   test("a streamed play before the profile was first asked for is left to the history", async () => {
     const { live } = liveTaste();
-    await Effect.runPromise(live.played(playedThrough(ytTrackId("abc"))));
+    await runTestPromise(live.played(playedThrough(ytTrackId("abc"))));
     assert.equal(await songScore(live, ytTrackId("abc")), 0);
   });
 
   test("a signal that comes while the profile is being derived counts once it is", async () => {
     const { live, holdDerivation } = liveTaste();
     const release = holdDerivation();
-    const first = Effect.runPromise(live.profile);
-    await Effect.runPromise(live.played(playedThrough("7")));
-    await Effect.runPromise(live.marked("favorite", ["8"], NOW));
+    const first = runTestPromise(live.profile);
+    await runTestPromise(live.played(playedThrough("7")));
+    await runTestPromise(live.marked("favorite", ["8"], NOW));
     release();
     assert.equal((await first)?.songs.get("7"), 1);
     assert.equal(await songScore(live, "8"), 3);
@@ -111,7 +112,7 @@ describe("The live taste profile", () => {
 
   test("a signal before the profile was first asked for is left to the history", async () => {
     const { live } = liveTaste();
-    await Effect.runPromise(live.played(playedThrough("7")));
+    await runTestPromise(live.played(playedThrough("7")));
     assert.equal(await songScore(live, "7"), 0);
   });
 
@@ -128,7 +129,7 @@ describe("The live taste profile", () => {
     let history: TasteHistory = { ...NO_HISTORY, favorites: [{ trackId: "7", changedAt: NOW }] };
     const { live, holdDerivation } = liveTaste(() => history);
     const release = holdDerivation();
-    const first = Effect.runPromise(live.profile);
+    const first = runTestPromise(live.profile);
     history = NO_HISTORY;
     live.unstarred();
     release();
@@ -138,10 +139,10 @@ describe("The live taste profile", () => {
 
   test("keeps a YT Music song's star and download", async () => {
     const { live } = liveTaste();
-    await Effect.runPromise(live.profile);
+    await runTestPromise(live.profile);
     const streamed = ytTrackId("abc");
-    await Effect.runPromise(live.marked("favorite", [streamed], NOW));
-    await Effect.runPromise(live.marked("download", [streamed], NOW));
+    await runTestPromise(live.marked("favorite", [streamed], NOW));
+    await runTestPromise(live.marked("download", [streamed], NOW));
     assert.equal(await songScore(live, streamed), 5);
   });
 });
@@ -153,11 +154,11 @@ test("cancelling a cold profile preserves streamed signals for the next shared r
   });
   const live = makeLiveTaste({ derive: read, songsOf: (ids) => Effect.succeed(ids.map(songOf)) });
   const controller = new AbortController();
-  const first = Effect.runPromise(live.profile, { signal: controller.signal });
-  await Effect.runPromise(live.marked("favorite", [ytTrackId("held")], NOW));
+  const first = runTestPromise(live.profile, { signal: controller.signal });
+  await runTestPromise(live.marked("favorite", [ytTrackId("held")], NOW));
   controller.abort();
   await assert.rejects(first);
-  const second = Effect.runPromise(live.profile);
+  const second = runTestPromise(live.profile);
   finish!();
   assert.equal((await second)?.songs.get(ytTrackId("held")), 3);
 });
@@ -171,9 +172,9 @@ test("pending streamed and Library signals retain their arrival order in the com
     }),
     songsOf: (ids) => Effect.succeed(ids.map(songOf)),
   });
-  const request = Effect.runPromise(live.profile);
+  const request = runTestPromise(live.profile);
   const ids = [ytTrackId("first"), "7", ytTrackId("last")];
-  for (const id of ids) await Effect.runPromise(live.marked("favorite", [id], NOW));
+  for (const id of ids) await runTestPromise(live.marked("favorite", [id], NOW));
   finish!();
   const expected = ids.reduce(
     (profile, id) => tasteLearned(profile, { kind: "favorite", song: songOf(id), at: NOW }),
@@ -207,9 +208,9 @@ test("cold live-profile snapshot reconciliation yields over history even with pe
       turns++;
     }),
   });
-  const first = Effect.runPromise(live.profile);
-  await Effect.runPromise(live.played(playedThrough("7")));
-  await Effect.runPromise(live.marked("favorite", [ytTrackId("new")], NOW));
+  const first = runTestPromise(live.profile);
+  await runTestPromise(live.played(playedThrough("7")));
+  await runTestPromise(live.marked("favorite", [ytTrackId("new")], NOW));
   finish!();
   assert.equal((await first)?.songs.get("7"), 2000);
   assert.ok(turns >= 4, "history membership work must pause at the canonical operation cap");
@@ -218,7 +219,7 @@ test("cold live-profile snapshot reconciliation yields over history even with pe
 test("streamed signals during Home's Library walk and across metadata invalidation remain learned", async () => {
   const { live } = liveTaste();
   const id = ytTrackId("during-library-mapping");
-  await Effect.runPromise(live.marked("favorite", [id], NOW));
+  await runTestPromise(live.marked("favorite", [id], NOW));
   assert.equal(await songScore(live, id), 3);
   live.invalidate();
   assert.equal(await songScore(live, id), 3);
@@ -244,18 +245,18 @@ test("due Home and mixes keep one live profile; a later history snapshot counts 
     deriveWithSnapshot: read,
     songsOf: (ids) => Effect.succeed(ids.map(songOf)),
   });
-  const first = Effect.runPromise(live.profileUsing(read));
+  const first = runTestPromise(live.profileUsing(read));
   // Came while the derivation waited for its turn, and are in the history it then reads.
   history = {
     ...NO_HISTORY,
     plays: [playedThrough("8")],
     favorites: [{ trackId: "7", changedAt: NOW }],
   };
-  await Effect.runPromise(live.marked("favorite", ["7"], NOW));
-  await Effect.runPromise(live.played(playedThrough("8")));
+  await runTestPromise(live.marked("favorite", ["7"], NOW));
+  await runTestPromise(live.played(playedThrough("8")));
   // A star announced before its write landed: not in the history read.
-  await Effect.runPromise(live.marked("favorite", ["9"], NOW));
-  await Effect.runPromise(live.marked("favorite", [ytTrackId("streamed")], NOW));
+  await runTestPromise(live.marked("favorite", ["9"], NOW));
+  await runTestPromise(live.marked("favorite", [ytTrackId("streamed")], NOW));
   takeSnapshot!();
   const firstProfile = await first;
   assert.equal(firstProfile?.songs.get("7"), 3);
@@ -263,11 +264,11 @@ test("due Home and mixes keep one live profile; a later history snapshot counts 
   assert.equal(firstProfile?.songs.get("9"), 3);
   assert.equal(firstProfile?.songs.get(ytTrackId("streamed")), 3);
   // After the snapshot, a signal is learned on top of it.
-  const second = await Effect.runPromise(live.profile);
+  const second = await runTestPromise(live.profile);
   assert.equal(second?.songs.get("7"), 3);
   assert.equal(reads, 1);
-  await Effect.runPromise(live.marked("download", ["7"], NOW));
-  assert.equal((await Effect.runPromise(live.profileUsing(read)))?.songs.get("7"), 5);
+  await runTestPromise(live.marked("download", ["7"], NOW));
+  assert.equal((await runTestPromise(live.profileUsing(read)))?.songs.get("7"), 5);
   assert.equal(reads, 1);
 });
 
@@ -283,19 +284,18 @@ test("metadata changing during every derivation can't keep the profile from comi
     }),
     songsOf: (ids) => Effect.succeed(ids.map(songOf)),
   });
-  assert.notEqual(await Effect.runPromise(live.profile), null);
+  assert.notEqual(await runTestPromise(live.profile), null);
   assert.equal(derivations, 3, "bounded, not one more per change");
   // An answer changed meanwhile isn't the shared one: the next ask derives again.
-  await Effect.runPromise(live.profile);
+  await runTestPromise(live.profile);
   assert.equal(derivations, 4);
-  await Effect.runPromise(live.profile);
+  await runTestPromise(live.profile);
   assert.equal(derivations, 4);
 });
 
 describe("A dislike in the live taste profile", () => {
   const artistScore = async (live: ReturnType<typeof makeLiveTaste<never>>, trackId: string) =>
-    (await Effect.runPromise(live.profile))?.artists.get(magicArtistKey(`artist of ${trackId}`)) ??
-    0;
+    (await runTestPromise(live.profile))?.artists.get(magicArtistKey(`artist of ${trackId}`)) ?? 0;
   const dislikedAt = (trackId: string): TasteHistory => ({
     ...NO_HISTORY,
     dislikes: [{ trackId, dislikedAt: NOW }],
@@ -303,9 +303,9 @@ describe("A dislike in the live taste profile", () => {
 
   test("counts against the song's artists the moment it's set, a streamed song's too", async () => {
     const { live } = liveTaste();
-    await Effect.runPromise(live.profile);
+    await runTestPromise(live.profile);
     const streamed = ytTrackId("abc");
-    await Effect.runPromise(live.disliked([songOf("7"), songOf(streamed)], NOW));
+    await runTestPromise(live.disliked([songOf("7"), songOf(streamed)], NOW));
     assert.equal(await artistScore(live, "7"), -3);
     assert.equal(await artistScore(live, streamed), -3);
   });
@@ -314,8 +314,8 @@ describe("A dislike in the live taste profile", () => {
     const streamed = ytTrackId("abc");
     let history = NO_HISTORY;
     const { live } = liveTaste(() => history);
-    await Effect.runPromise(live.profile);
-    await Effect.runPromise(live.disliked([songOf(streamed)], NOW));
+    await runTestPromise(live.profile);
+    await runTestPromise(live.disliked([songOf(streamed)], NOW));
     history = dislikedAt(streamed);
     live.invalidate();
     assert.equal(await artistScore(live, streamed), -3);
@@ -337,8 +337,8 @@ describe("A dislike in the live taste profile", () => {
         deriveWithSnapshot: read,
         songsOf: (ids) => Effect.succeed(ids.map(songOf)),
       });
-      const first = Effect.runPromise(live.profile);
-      await Effect.runPromise(live.disliked([songOf("7")], NOW));
+      const first = runTestPromise(live.profile);
+      await runTestPromise(live.disliked([songOf("7")], NOW));
       takeSnapshot!();
       await first;
       assert.equal(await artistScore(live, "7"), -3, String(landed));
@@ -347,7 +347,7 @@ describe("A dislike in the live taste profile", () => {
 
   test("set before the profile was first asked for is left to the history", async () => {
     const { live } = liveTaste(() => dislikedAt("7"));
-    await Effect.runPromise(live.disliked([songOf("7")], NOW));
+    await runTestPromise(live.disliked([songOf("7")], NOW));
     assert.equal(await artistScore(live, "7"), -3);
   });
 
@@ -363,8 +363,8 @@ describe("A dislike in the live taste profile", () => {
   test("removed while the profile is being derived, it isn't learned after all", async () => {
     const { live, holdDerivation } = liveTaste();
     const release = holdDerivation();
-    const first = Effect.runPromise(live.profile);
-    await Effect.runPromise(live.disliked([songOf("7"), songOf("8")], NOW));
+    const first = runTestPromise(live.profile);
+    await runTestPromise(live.disliked([songOf("7"), songOf("8")], NOW));
     live.undisliked(["7"]);
     release();
     await first;

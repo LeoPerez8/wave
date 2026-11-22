@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
+import { runTestSync } from "../../lib/steppedTesting.ts";
 import { fileURLToPath } from "node:url";
 import { mixKnownSongs, artistPlayTotals, rankPlays, statsWindow } from "@wave/core";
 import { loadLibraryStore } from "../../../bench/fastAgain/store.ts";
@@ -21,7 +22,7 @@ const collect = <A>(
   const rows: A[] = [];
   let after = 0;
   for (;;) {
-    const page = Effect.runSync(read(after));
+    const page = runTestSync(read(after));
     rows.push(...page.rows);
     if (page.next === null) return rows;
     after = page.next;
@@ -50,7 +51,7 @@ test("mix, graph and taste pages seek past a cursor with indexed projection look
     ] as const;
     for (const [name, cursor, table] of pages) {
       const page: Effect.Effect<unknown, unknown> = store[name](cursor);
-      const { queries } = traceQueries(fixture.db, () => Effect.runSync(page));
+      const { queries } = traceQueries(fixture.db, () => runTestSync(page));
       assert.ok(queries.length > 0, `${name} ran no SQL`);
       for (const query of queries) {
         assert.ok(query.rows <= 128, `${name} returned ${query.rows} rows`);
@@ -85,17 +86,17 @@ test("mix, graph and taste pages seek past a cursor with indexed projection look
       if (name === "tasteArtistsPage") {
         assert.equal(queries.length, 1);
         assert.doesNotMatch(queries[0]!.sql, /count\(|JOIN|EXISTS|artwork/i);
-        for (const artist of Effect.runSync(store.tasteArtistsPage(0)))
+        for (const artist of runTestSync(store.tasteArtistsPage(0)))
           assert.deepEqual(Object.keys(artist), ["id", "name"]);
       }
     }
-    const similar = traceQueries(fixture.db, () => Effect.runSync(store.graphSimilarPage("a")));
+    const similar = traceQueries(fixture.db, () => runTestSync(store.graphSimilarPage("a")));
     assert.equal(similar.queries.length, 1);
     assert.ok(similar.queries[0]!.rows <= 128);
     assert.match(similar.queries[0]!.plan[0]!, /^SEARCH yt_artists.*\(artist_key>\?\)/);
     for (const name of ["graphPlayPage", "tastePlaysPage"] as const) {
       const page: Effect.Effect<unknown, unknown> = store[name]([100, 128]);
-      const { queries } = traceQueries(fixture.db, () => Effect.runSync(page));
+      const { queries } = traceQueries(fixture.db, () => runTestSync(page));
       assert.equal(queries.length, 2);
       assert.ok(queries.reduce((rows, query) => rows + query.rows, 0) <= 128);
       assert.match(
@@ -122,17 +123,17 @@ test("daily mix reads preserve complete Library order/credits/genres and all-tim
     );
     fixture.db.run(sql`UPDATE play_events SET started_at = ${fixture.now + 1000} WHERE id = 2`);
     deleteTracksById(fixture.db, [fixture.songIds[3]!]);
-    const genres = new Map(Effect.runSync(store.listSongGenres).map((row) => [row.id, row.genres]));
+    const genres = new Map(runTestSync(store.listSongGenres).map((row) => [row.id, row.genres]));
     const expected = {
-      songs: Effect.runSync(store.listSongs).map((song) => {
+      songs: runTestSync(store.listSongs).map((song) => {
         const values = genres.get(song.id);
         return values === undefined ? song : { ...song, genres: values };
       }),
-      artists: Effect.runSync(store.listArtists),
-      plays: Effect.runSync(store.trackPlayTotals(statsWindow("all", fixture.now))),
+      artists: runTestSync(store.listArtists),
+      plays: runTestSync(store.trackPlayTotals(statsWindow("all", fixture.now))),
     };
     const ranks = rankPlays(
-      artistPlayTotals(Effect.runSync(store.creditedPlayTotals(statsWindow("all", fixture.now)))),
+      artistPlayTotals(runTestSync(store.creditedPlayTotals(statsWindow("all", fixture.now)))),
       20,
     );
     const artistRows = new Map(expected.artists.map((artist) => [artist.id, artist]));
@@ -144,7 +145,7 @@ test("daily mix reads preserve complete Library order/credits/genres and all-tim
     });
     let turns = 0;
     const traced = traceQueries(fixture.db, () =>
-      Effect.runSync(
+      runTestSync(
         readMixInputs(
           store,
           Effect.sync(() => {
@@ -160,9 +161,9 @@ test("daily mix reads preserve complete Library order/credits/genres and all-tim
     assert.deepEqual(traced.result.topArtists, top);
     const known = mixKnownSongs({
       library: expected.songs,
-      playedRecordingKeys: Effect.runSync(store.playedRecordingKeys),
-      streamed: Effect.runSync(store.streamedSongs),
-      playlisted: Effect.runSync(store.playlistedSongs),
+      playedRecordingKeys: runTestSync(store.playedRecordingKeys),
+      streamed: runTestSync(store.streamedSongs),
+      playlisted: runTestSync(store.playlistedSongs),
     });
     assert.deepEqual(traced.result.known.nonD, known.nonD);
     for (const song of expected.songs) {
@@ -195,12 +196,12 @@ test("taste paging preserves ti history order, end reasons, favorites/downloads 
     fixture.db.run(
       sql`UPDATE tracks SET genres = '["Rock","Metal"]' WHERE id = ${fixture.songIds[1]!}`,
     );
-    const expected = Effect.runSync(store.tasteHistory);
+    const expected = runTestSync(store.tasteHistory);
     const traced = traceQueries(fixture.db, () => {
       const plays: import("@wave/core").TasteHistory["plays"][number][] = [];
       let cursor: readonly [number, number] = [-Number.MAX_VALUE, 0];
       for (;;) {
-        const page = Effect.runSync(store.tastePlaysPage(cursor));
+        const page = runTestSync(store.tastePlaysPage(cursor));
         plays.push(...page.rows);
         if (page.next === null) break;
         cursor = page.next;
@@ -217,8 +218,8 @@ test("taste paging preserves ti history order, end reasons, favorites/downloads 
         query.plan.some((step) => /started_at=\? AND rowid>\?/.test(step)),
       ),
     );
-    const page = Effect.runSync(store.mixSongsPage(0, { genres: false }));
-    const original = new Map(Effect.runSync(store.listSongs).map((song) => [song.id, song]));
+    const page = runTestSync(store.mixSongsPage(0, { genres: false }));
+    const original = new Map(runTestSync(store.listSongs).map((song) => [song.id, song]));
     for (const song of page) assert.deepEqual(song, original.get(song.id));
   } finally {
     fixture.close();
@@ -263,7 +264,7 @@ test("streamed plays seed the mixes as Stats ranks them and make their songs kno
   recordPlay(db, counted("yt:v-duet", 8_000), false, duet);
   const now = 10_000;
 
-  const inputs = Effect.runSync(readMixInputs(store, Effect.void, now));
+  const inputs = runTestSync(readMixInputs(store, Effect.void, now));
 
   const stats = playedEntityTotals(db, { from: null, to: now }).artists.slice(0, 20);
   assert.deepEqual(
@@ -286,7 +287,7 @@ test("streamed plays seed the mixes as Stats ranks them and make their songs kno
     ],
   );
   // A cold build reads the same song plays from the kept totals.
-  assert.deepEqual(Effect.runSync(store.streamedLibraryPlays), new Map([[downloaded, 2]]));
+  assert.deepEqual(runTestSync(store.streamedLibraryPlays), new Map([[downloaded, 2]]));
   assert.equal(inputs.known.known(circle), true);
   // Another video of a streamed recording, which the Library finder can't match by length.
   assert.equal(

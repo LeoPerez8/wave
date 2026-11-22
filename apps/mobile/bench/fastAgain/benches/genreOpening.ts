@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { type LibrarySongSort } from "@wave/core";
 import { sql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
+import { runTestSync } from "../../../src/lib/steppedTesting.ts";
 import { toSongSummary } from "@wave/client/db/songOrder";
 import { traceQueries } from "@wave/client/testing";
 import type { SongRow, SongSummary } from "@wave/client";
@@ -46,7 +47,7 @@ export const bench: FastAgainBench = {
         )
       : null;
     const legacy = (sort: LibrarySongSort) => {
-      const detail = Effect.runSync(store.getGenre(fixture.genreId))!;
+      const detail = runTestSync(store.getGenre(fixture.genreId))!;
       return { genre: detail.genre, songs: core.sortSongs(detail.songs, sort).map(summary) };
     };
     const results: BenchMeasurement[] = [];
@@ -67,7 +68,7 @@ export const bench: FastAgainBench = {
           const detail = legacy(sort);
           return { genre: detail.genre, songs: detail.songs.slice(0, 50) };
         }
-        const opening = Effect.runSync(store.openGenre(fixture.genreId, sort))!;
+        const opening = runTestSync(store.openGenre(fixture.genreId, sort))!;
         return { genre: opening.genre, songs: opening.songs };
       };
       const expected = legacy(sort);
@@ -112,7 +113,7 @@ export const bench: FastAgainBench = {
           }
           return { genre: opening!.genre, songs };
         });
-      const traced = traceQueries(fixture.db, () => Effect.runSync(traversal(Effect.void)));
+      const traced = traceQueries(fixture.db, () => runTestSync(traversal(Effect.void)));
       assert.deepEqual(traced.result, expected, `${label}: every complete summary must match`);
       const later = traced.queries.filter((query) => query.sql.includes("FROM genre_order o"));
       const measurement = await measureCooperative(
@@ -143,7 +144,7 @@ export const bench: FastAgainBench = {
       fixture.db.run(sql`UPDATE tracks SET genre_id = NULL WHERE id = ${ids[75]!}`);
       const expected = legacy(title);
       const read = () =>
-        paged ? Effect.runSync(store.openGenre(fixture.genreId, title))! : legacy(title);
+        paged ? runTestSync(store.openGenre(fixture.genreId, title))! : legacy(title);
       const first = () => {
         const detail = read();
         return { genre: detail.genre, songs: detail.songs.slice(0, 50) };

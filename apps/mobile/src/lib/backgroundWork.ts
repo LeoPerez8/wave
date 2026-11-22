@@ -156,9 +156,15 @@ if (Observer?.supportedEntryTypes?.includes("longtask")) {
   }
 }
 
+/**
+ * Marks that [name] got its turn now: what runs next, and its awaited continuations, are its work
+ * in the block log. The scheduler's free turns mark themselves; frame-paced ones call it (#1447).
+ */
+export const workTurnTaken = (name: string): void => blocks.turnTaken(name, performance.now());
+
 /** Gives [name] its free turn, marked for the block log (what runs on it may be awaited code). */
 const named = (name: string, run: () => void) => (): void => {
-  blocks.turnTaken(name, performance.now());
+  workTurnTaken(name);
   run();
 };
 
@@ -238,7 +244,7 @@ export const freeTurn = (name: string): Promise<void> =>
   new Promise((resolve) => whenFree(resolve, name));
 
 /** Waits for the next free turn, for the fiber's `BackgroundWorkName`; interrupted, it gives the turn up. */
-export const freeTurnEffect: Effect.Effect<void> = Effect.flatMap(
+export const freeTurnEffect: Effect.Effect<void, never, BackgroundWorkName> = Effect.flatMap(
   Effect.service(BackgroundWorkName),
   (name) =>
     Effect.callback<void>((resume) => {
@@ -248,9 +254,9 @@ export const freeTurnEffect: Effect.Effect<void> = Effect.flatMap(
 );
 
 /** Startup jobs recheck global settlement/quietness at every resumable boundary. */
-export const startupTurn = (name = "startup work"): Promise<void> =>
+export const startupTurn = (name: string): Promise<void> =>
   new Promise((resolve) => startupWork.whenFree(named(name, resolve)));
-export const startupTurnEffect: Effect.Effect<void> = Effect.flatMap(
+export const startupTurnEffect: Effect.Effect<void, never, BackgroundWorkName> = Effect.flatMap(
   Effect.service(BackgroundWorkName),
   (name) =>
     Effect.callback<void>((resume) => {

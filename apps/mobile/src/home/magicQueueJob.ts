@@ -7,7 +7,7 @@ import {
   type RandomSource,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { runSteps } from "../lib/stepped.ts";
+import { runSteps, type Turn } from "../lib/stepped.ts";
 import type { LibraryStore } from "../library/LibraryStore.ts";
 
 import {
@@ -38,7 +38,7 @@ export const buildHomeMagicQueue = <R, E>(
   options: {
     readonly now: number;
     readonly random: RandomSource;
-    readonly turn: Effect.Effect<void>;
+    readonly turn: Turn;
     readonly taste: (library: TasteLibrary) => Effect.Effect<TasteProfile | null, E, R>;
     readonly refresh?: boolean;
   },

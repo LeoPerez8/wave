@@ -27,7 +27,7 @@ import {
 import { readMixInputs } from "../home/mixInputs.ts";
 import { sharedRead } from "../lib/sharedRead.ts";
 import { snapshotRead } from "../lib/snapshotRead.ts";
-import { runSteps } from "../lib/stepped.ts";
+import { type BackgroundWorkName, runSteps, type Turn } from "../lib/stepped.ts";
 
 type RecommendationSong = SongRow & { readonly genres?: readonly string[] };
 
@@ -49,7 +49,7 @@ export interface RecommendationFavorites {
 const collect = <A, E, C = number>(
   page: (after: C) => Effect.Effect<readonly A[], E>,
   cursor: (row: A) => C,
-  between: Effect.Effect<void>,
+  between: Turn,
   initial: C = 0 as C,
 ) =>
   Effect.gen(function* () {
@@ -67,7 +67,7 @@ const collect = <A, E, C = number>(
 /** The stars part's read, as the recommendation snapshot keeps it. */
 export const readRecommendationFavorites = (
   store: Pick<LibraryStore["Service"], "recommendationFlagsPage" | "recommendationPendingPage">,
-  between: Effect.Effect<void>,
+  between: Turn,
 ) =>
   Effect.gen(function* () {
     const flags = yield* collect(store.recommendationFlagsPage, (row) => row.id, between);
@@ -90,7 +90,7 @@ const libraryTracks = (
     artists,
   }: { readonly songs: readonly RecommendationSong[]; readonly artists: readonly ArtistRow[] },
   { flags }: RecommendationFavorites,
-  between: Effect.Effect<void>,
+  between: Turn,
 ) =>
   Effect.gen(function* () {
     const names = new Map<number, string>();
@@ -172,7 +172,7 @@ export const sharePlaylistRecommendationInputs = <R>(
       readonly favorites: RecommendationFavorites | null;
     };
   },
-  between: Effect.Effect<void>,
+  between: Turn,
 ) => {
   // The latest derivation, kept while the snapshot hands back the same parts;
   // background readers keep the last completed tracks while a new mapping runs.
@@ -180,7 +180,11 @@ export const sharePlaylistRecommendationInputs = <R>(
     | {
         readonly library: object;
         readonly favorites: object;
-        readonly tracks: Effect.Effect<Effect.Success<ReturnType<typeof libraryTracks>>, unknown>;
+        readonly tracks: Effect.Effect<
+          Effect.Success<ReturnType<typeof libraryTracks>>,
+          unknown,
+          BackgroundWorkName
+        >;
       }
     | undefined;
   let completed: Effect.Success<ReturnType<typeof libraryTracks>> | null = null;
@@ -308,7 +312,7 @@ export const observePlaylistRecommendationInputs = (
   store: Parameters<typeof readMixInputs>[0] &
     Parameters<typeof readRecommendationFavorites>[0] &
     RecommendationReads,
-  between: Effect.Effect<void>,
+  between: Turn,
   subscribe: (listener: (change: LibraryChange) => void) => () => void,
   now = Date.now,
 ) => {

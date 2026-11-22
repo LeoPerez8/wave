@@ -62,3 +62,53 @@ test("each background job the ticket names takes its turns from the scheduler", 
     );
   }
 });
+
+test("every stepped work runs under a name (#1447)", () => {
+  // The name is a service with no default: stepped work no caller names doesn't typecheck,
+  // and so never logs its blocks as unnamed.
+  const stepped = sources["lib/stepped.ts"]!;
+  assert.match(stepped, /class BackgroundWorkName extends Context\.Service</);
+  assert.doesNotMatch(stepped, /Context\.Reference/);
+  const fallbacks = Object.entries(sources)
+    .filter(([, text]) => text.includes("unnamed background work"))
+    .map(([path]) => path);
+  assert.deepEqual(fallbacks, [], "name the work instead of giving it a fallback");
+  // Names come only through `namedWork`; tests' runners stay out of the app.
+  const providers = Object.entries(sources)
+    .filter(([, text]) => /provideService\(\s*BackgroundWorkName\b/.test(text))
+    .map(([path]) => path)
+    .sort();
+  assert.deepEqual(providers, ["lib/stepped.ts", "lib/steppedTesting.ts"]);
+  const testRunners = Object.entries(sources)
+    .filter(([, text]) => /\bsteppedTesting\b/.test(text))
+    .map(([path]) => path);
+  assert.deepEqual(testRunners, [], "lib/steppedTesting.ts is for tests and benches only");
+});
+
+test("turns and slices taken outside an Effect carry a name at each call site (#1447)", () => {
+  const scheduler = sources["lib/backgroundWork.ts"]!;
+  for (const helper of ["inSlice", "namedAsyncWork", "whenFree", "freeTurn", "startupTurn"]) {
+    const signature = new RegExp(`export const ${helper} = [^\n]*`).exec(scheduler)?.[0];
+    assert.ok(signature !== undefined, `lib/backgroundWork.ts no longer exports ${helper}`);
+    assert.match(signature, /\bname: string\b/, `${helper} takes the work's name`);
+    assert.doesNotMatch(
+      signature,
+      /\bname\??\s*(?::\s*string\s*)?=|\bname\?:/,
+      `${helper}'s name has no default`,
+    );
+  }
+  // A host's own `freeTurn` method (the client's playlist visit) gets its name where the app
+  // supplies it, so only the app's helpers count here.
+  const bare = Object.entries(sources)
+    .filter(([, text]) =>
+      /(?<![.\w])(?:freeTurn|startupTurn)\(\s*\)|\bnamedWork\(\s*(?:""|'')\s*\)/.test(text),
+    )
+    .map(([path]) => path);
+  assert.deepEqual(bare, []);
+});
+
+test("the sliced work #1448 and #1453 added runs under its own name", () => {
+  assert.match(sources["library/backgroundFill.ts"]!, /namedWork\(FILL_WORK\)/);
+  assert.match(sources["ytmusic/YtDownloads.ts"]!, /freeTurn\(RESUME_WORK\)/);
+  assert.match(sources["playback/MagicQueue.ts"]!, /namedWork\("Magic Queue batch"\)/);
+});

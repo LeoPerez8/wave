@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { setImmediate } from "node:timers/promises";
 import * as Effect from "effect/Effect";
+import type { BackgroundWorkName } from "../../../src/lib/stepped.ts";
+import { runTestPromise, runTestSync } from "../../../src/lib/steppedTesting.ts";
 import { sql } from "drizzle-orm";
 import { traceQueries } from "@wave/client/testing";
 import { loadLibraryStore } from "../store.ts";
@@ -38,7 +40,7 @@ export const bench: FastAgainBench = {
           "apps/mobile/src/lib/stepped.ts",
         )
       : null;
-    const top = Effect.runSync(stats.topAlbumsAndArtists(store, "all", 0, 20)).artists;
+    const top = runTestSync(stats.topAlbumsAndArtists(store, "all", 0, 20)).artists;
     // Populate identical phone cache outside measurement; no network, seeding or module loading is timed.
     context.fixture.db.transaction((tx) => {
       for (let i = 0; i < 1200; i++) {
@@ -73,7 +75,7 @@ export const bench: FastAgainBench = {
         for (const [name, value] of Object.entries(store)) {
           const measured = <A>(effect: Effect.Effect<A, unknown>) =>
             Effect.sync(() => {
-              const result = traceQueries(context.fixture.db, () => Effect.runSync(effect));
+              const result = traceQueries(context.fixture.db, () => runTestSync(effect));
               for (const query of result.queries) {
                 rows += query.rows;
                 statements++;
@@ -94,7 +96,7 @@ export const bench: FastAgainBench = {
         yield* Effect.promise(() => setImmediate());
         start = performance.now();
       });
-      const step = <A>(work: Generator<void, A>): Effect.Effect<A> =>
+      const step = <A>(work: Generator<void, A>): Effect.Effect<A, never, BackgroundWorkName> =>
         stepsModule === null
           ? Effect.sync(() => {
               for (;;) {
@@ -103,7 +105,7 @@ export const bench: FastAgainBench = {
               }
             })
           : stepsModule.runSteps(work, between);
-      const result = await Effect.runPromise(
+      const result = await runTestPromise(
         Effect.gen(function* () {
           const seeded = core.seededRandom("594-daily-sections");
           const draws: number[] = [];

@@ -1,5 +1,7 @@
 /** Benchmark adapter for the app's injected free turns. No native scheduler/paint claim. */
 import * as Effect from "effect/Effect";
+import type { BackgroundWorkName } from "../../src/lib/stepped.ts";
+import { runTestPromise, runTestSync } from "../../src/lib/steppedTesting.ts";
 import { performance } from "node:perf_hooks";
 import { setImmediate } from "node:timers/promises";
 import { percentiles } from "./measure.ts";
@@ -40,10 +42,10 @@ export const measureCooperative = async <A>(
   db: TestDatabase,
   read: string,
   runs: number,
-  run: (turn: Effect.Effect<void>) => Effect.Effect<A, unknown>,
+  run: (turn: Effect.Effect<void>) => Effect.Effect<A, unknown, BackgroundWorkName>,
   resultKey: (result: A) => string,
 ) => {
-  const traced = traceQueries(db, () => Effect.runSync(run(Effect.void)));
+  const traced = traceQueries(db, () => runTestSync(run(Effect.void)));
   const expected = resultKey(traced.result);
   const totals: number[] = [];
   const elapsed: number[] = [];
@@ -79,7 +81,7 @@ export const measureCooperative = async <A>(
     });
     let result: A;
     try {
-      result = await Effect.runPromise(run(turn));
+      result = await runTestPromise(run(turn));
     } finally {
       stopSql();
     }

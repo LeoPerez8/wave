@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import * as Effect from "effect/Effect";
+import { runTestPromise } from "./steppedTesting.ts";
 import { createRecommendationWork } from "./recommendationTurn.ts";
 
 /** A clock each step moves on, 120 Hz frames run by hand. */
@@ -39,7 +39,7 @@ const paced = (stepMs: number) => {
 const stepsInASecondFrame = async (awaited: boolean) => {
   const { work, steps, frame, settled } = paced(0.001);
   let done = 0;
-  const result = Effect.runPromise(
+  const result = runTestPromise(
     work.steps(
       steps(40_000, () => done++),
       () => awaited,
@@ -84,7 +84,7 @@ test("the same steps give the same answer whoever waits", async () => {
     }
   for (const awaited of [true, false]) {
     const { work, frame, settled } = paced(0);
-    const result = Effect.runPromise(work.steps(sum(), () => awaited));
+    const result = runTestPromise(work.steps(sum(), () => awaited));
     await settled();
     await frame();
     assert.equal(await result, plain);
@@ -93,11 +93,11 @@ test("the same steps give the same answer whoever waits", async () => {
 
 test("background turns pause while a ranking is awaited and carry on once it ends", async () => {
   const { work, steps, frame, settled } = paced(0.01);
-  const ranking = Effect.runPromise(work.steps(steps(40_000), () => true));
+  const ranking = runTestPromise(work.steps(steps(40_000), () => true));
   await settled();
   await frame();
   let background = false;
-  void Effect.runPromise(work.turn).then(() => {
+  void runTestPromise(work.turn).then(() => {
     background = true;
   });
   await frame();
@@ -110,7 +110,7 @@ test("background turns pause while a ranking is awaited and carry on once it end
 test("a ranking no one waits for leaves background turns running, until someone does", async () => {
   const { host, work, steps, frame, settled } = paced(0.01);
   let awaited = false;
-  const ranking = Effect.runPromise(work.steps(steps(60_000), () => awaited));
+  const ranking = runTestPromise(work.steps(steps(60_000), () => awaited));
   await settled();
   await frame();
   /** With the budget out of the way, whether a background turn goes on or is paused. */
@@ -118,7 +118,7 @@ test("a ranking no one waits for leaves background turns running, until someone 
     host.intervalMs = 1e9;
     let went = false;
     const abort = new AbortController();
-    const asked = Effect.runPromise(work.turn, { signal: abort.signal }).then(
+    const asked = runTestPromise(work.turn, { signal: abort.signal }).then(
       () => {
         went = true;
       },
@@ -155,7 +155,7 @@ test("cancelling an awaited ranking closes its steps and lets the background go"
     }
   })();
   const abort = new AbortController();
-  const ranking = Effect.runPromise(
+  const ranking = runTestPromise(
     work.steps(endless, () => true),
     { signal: abort.signal },
   );
@@ -163,7 +163,7 @@ test("cancelling an awaited ranking closes its steps and lets the background go"
   await settled();
   await frame();
   let background = false;
-  void Effect.runPromise(work.turn).then(() => {
+  void runTestPromise(work.turn).then(() => {
     background = true;
   });
   await settled();
@@ -179,11 +179,11 @@ test("cancelling an awaited ranking closes its steps and lets the background go"
 test("a background turn cancelled while paused isn't woken", async () => {
   const { work, steps, frame, settled } = paced(0.01);
   // Long enough to still run after the first frame, so the turn below is paused behind it.
-  const ranking = Effect.runPromise(work.steps(steps(4000), () => true));
+  const ranking = runTestPromise(work.steps(steps(4000), () => true));
   await settled();
   await frame();
   const abort = new AbortController();
-  const paused = Effect.runPromise(work.turn, { signal: abort.signal });
+  const paused = runTestPromise(work.turn, { signal: abort.signal });
   const stopped = assert.rejects(paused);
   await settled();
   abort.abort();
