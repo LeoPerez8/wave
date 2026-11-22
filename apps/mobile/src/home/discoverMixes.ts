@@ -40,7 +40,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
-import { runSteps } from "@/lib/stepped";
+import { namedWork, runSteps } from "@/lib/stepped";
 import { settledTurnEffect as settledTurn } from "@/lib/backgroundWork";
 import { recommendationTurnEffect as recommendationTurn } from "@/lib/recommendationWork";
 import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
@@ -215,7 +215,12 @@ const rerank = (id: MixSectionId): void => {
   if (saved === null || sameSliders(mixSection.rankedWith, discoverSlidersNow())) return;
   mixSection.reranking = true;
   void appRuntime
-    .runPromise(settledTurnEffect.pipe(Effect.andThen(Effect.result(rerankedOf(saved)))))
+    .runPromise(
+      settledTurnEffect.pipe(
+        Effect.andThen(Effect.result(rerankedOf(saved))),
+        namedWork("Home mixes rerank"),
+      ),
+    )
     .then((result) => {
       if (!Result.isSuccess(result)) return;
       // A build, a refresh or an Undo saved others meanwhile: they say what they're ranked at.
