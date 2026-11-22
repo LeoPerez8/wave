@@ -30,11 +30,12 @@ const NOT_AN_ARTIST = new Set([
  * The name to search a photo for, or null when the name isn't an artist's
  * ("Various Artists", "Unknown Artist", no letters): those are never looked up.
  */
-export const artistPhotoQuery = (name: string): string | null => {
-  const compared = artistPhotoName(name);
-  if (compared === "" || NOT_AN_ARTIST.has(compared)) return null;
-  return name.replace(/\s+/g, " ").trim();
-};
+export const artistPhotoQuery = (name: string): string | null =>
+  namesAnArtist(artistPhotoName(name)) ? name.replace(/\s+/g, " ").trim() : null;
+
+/** Whether [compared], a name as `artistPhotoName` reads it, is an artist's rather than a stand-in. */
+export const namesAnArtist = (compared: string): boolean =>
+  compared !== "" && !NOT_AN_ARTIST.has(compared);
 
 /** An artist an online search found. */
 export interface ArtistPhotoCandidate {

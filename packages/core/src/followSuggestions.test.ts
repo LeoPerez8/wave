@@ -8,6 +8,7 @@ import {
   followSuggestionsWindow,
   LIGHT_LISTENER_PLAYS,
   lightListener,
+  sortKey,
 } from "./index.ts";
 
 const played = (name: string, countedPlays: number) => ({ name, countedPlays, item: name });
@@ -371,4 +372,32 @@ test("the owner is a light listener while no artist has more than 10 counted pla
   assert.equal(lightListener([]), true);
   assert.equal(lightListener([played("Aurora", 10), played("Björk", 3)]), true);
   assert.equal(lightListener([played("Aurora", 11), played("Björk", 3)]), false);
+});
+
+test("an owner's whole listening ranks in about the time it takes to key each name once", () => {
+  // 2,000 played artists, most with as many plays as several others (ties go by name),
+  // 800 of them in the last 90 days and 300 followed: Settings › Followed Artists ranks
+  // them on the JS thread, where working a name's keys out is what costs.
+  const names = Array.from({ length: 2_000 }, (_, i) => `Ártist ${i} & The Band`);
+  const allTime = names.map((name, i) => played(name, 11 + (i % 40)));
+  const recent = allTime.slice(0, 800).map((artist, i) => played(artist.name, 1 + (i % 12)));
+  const excluded = names.slice(0, 300).map(followArtistKey);
+  const median = (run: () => void) => {
+    run();
+    const times: number[] = [];
+    for (let round = 0; round < 9; round++) {
+      const started = performance.now();
+      run();
+      times.push(performance.now() - started);
+    }
+    return times.sort((a, b) => a - b)[4]!;
+  };
+  const keying = median(() => {
+    for (const name of names) {
+      followArtistKey(name);
+      sortKey(name);
+    }
+  });
+  const ranking = median(() => followSuggestions({ recent, allTime, excluded, shown: 5 }));
+  assert.ok(ranking < keying * 3, `ranking took ${ranking} ms, keying every name once ${keying} ms`);
 });

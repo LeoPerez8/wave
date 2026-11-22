@@ -5,7 +5,7 @@ import {
   type FollowedArtist,
   type FollowSuggestion,
 } from "@wave/core";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Text, View } from "react-native";
 
 import type { PlayedArtist } from "@wave/client/db/playedEntities";
@@ -88,15 +88,22 @@ export function FollowSuggestions({
   const played = useFollowSuggestionPlayed(enabled);
   const followsRead = useFollowsRead();
   const dismissed = useDismissedFollowSuggestions();
-  if (!enabled || hidden || played === undefined || !followsRead || dismissed === undefined)
-    return null;
-  const { suggestions, more } = followSuggestions({
-    ...played,
-    excluded: follows.map((follow) => follow.key),
-    dismissed,
-    shown,
-    strings,
-  });
+  // Ranked again only when what it ranks changes, not on each render of the page (#1442).
+  const ranked = useMemo(
+    () =>
+      played === undefined || dismissed === undefined
+        ? null
+        : followSuggestions({
+            ...played,
+            excluded: follows.map((follow) => follow.key),
+            dismissed,
+            shown,
+            strings,
+          }),
+    [played, follows, dismissed, shown, strings],
+  );
+  if (!enabled || hidden || ranked === null || !followsRead) return null;
+  const { suggestions, more } = ranked;
   if (suggestions.length === 0) return null;
   return (
     <View className="pb-3">
