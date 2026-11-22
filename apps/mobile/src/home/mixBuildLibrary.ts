@@ -8,7 +8,7 @@ import {
 import * as Effect from "effect/Effect";
 import type { LibraryStore } from "../library/LibraryStore.ts";
 import type { ArtistRow, SongRow } from "@wave/client";
-import { runSteps } from "../lib/stepped.ts";
+import { type BackgroundWorkName, runSteps, type Turn } from "../lib/stepped.ts";
 import type { MixIndexes, MixSong } from "./mixKnown.ts";
 
 const radioSongKey = (song: Pick<YtSong, "title" | "artists" | "durationMs">): string =>
@@ -27,9 +27,9 @@ export const readMixBuildLibrary = (
     | "matchingSongs"
   > & {
     /** The videos the owner knows: the app shares one read of them (`sharedKnownVideos`). */
-    readonly knownVideos: Effect.Effect<readonly string[], unknown>;
+    readonly knownVideos: Effect.Effect<readonly string[], unknown, BackgroundWorkName>;
   },
-  between: Effect.Effect<void>,
+  between: Turn,
   find: ((song: YtSong) => SongRow | null) | null = null,
 ) =>
   Effect.gen(function* () {

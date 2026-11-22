@@ -10,6 +10,7 @@ import {
   type SnapshotVersions,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
+import { runTestPromise } from "../lib/steppedTesting.ts";
 
 import type { ArtistGraphReads } from "./artistGraph.ts";
 import { shareRecommendationSnapshot } from "./sharedRecommendationSnapshot.ts";
@@ -101,9 +102,9 @@ describe("the shared recommendation snapshot", () => {
   test("Background mix, Magic Queue and playlist warming read the Library, the catalog and the graph once", async () => {
     const { snapshot, reads } = fixture();
     const surfaces = await Promise.all(
-      ["mixes", "radio", "suggestions", "another radio"].map(() => Effect.runPromise(snapshot.get)),
+      ["mixes", "radio", "suggestions", "another radio"].map(() => runTestPromise(snapshot.get)),
     );
-    surfaces.push(await Effect.runPromise(snapshot.get));
+    surfaces.push(await runTestPromise(snapshot.get));
     assert.deepEqual(reads, { library: 1, catalog: 1, graphPlays: 1, graphCatalog: 0 });
     for (const surface of surfaces) {
       assert.equal(surface.library, surfaces[0]!.library);
@@ -121,11 +122,11 @@ describe("the shared recommendation snapshot", () => {
   test("a song finishing while the graph builds doesn't rebuild it; the next ask reads the plays again", async () => {
     const { snapshot, reads, write, hold, release } = fixture();
     hold();
-    const building = Effect.runPromise(snapshot.graph);
+    const building = runTestPromise(snapshot.graph);
     await turn();
     assert.equal(reads.graphPlays, 1);
     write("plays");
-    const radio = Effect.runPromise(snapshot.graph);
+    const radio = runTestPromise(snapshot.graph);
     await turn();
     assert.equal(reads.graphPlays, 1, "nothing rebuilds while the graph is built");
     release();
@@ -140,13 +141,13 @@ describe("the shared recommendation snapshot", () => {
   test("a radio page written while recommendations read doesn't restart them; the next ask reads the catalog and graph again", async () => {
     const { snapshot, reads, write, hold, release } = fixture();
     hold();
-    const mixes = Effect.runPromise(snapshot.get);
+    const mixes = runTestPromise(snapshot.get);
     await turn();
     write("catalog");
     release();
     const first = await mixes;
     assert.deepEqual(reads, { library: 1, catalog: 1, graphPlays: 1, graphCatalog: 0 });
-    const refreshed = await Effect.runPromise(snapshot.get);
+    const refreshed = await runTestPromise(snapshot.get);
     assert.equal(refreshed.library, first.library, "a catalog write doesn't reach the Library");
     assert.notEqual(refreshed.graph, first.graph);
     assert.deepEqual(reads, { library: 1, catalog: 2, graphPlays: 2, graphCatalog: 0 });
@@ -178,10 +179,10 @@ describe("the shared recommendation snapshot", () => {
       catalog: read.catalog.map((entry) => entry.song.artists[0]),
       graph: artistNeighbourhood(read.graph, ["Massive Attack"]).map(({ name }) => name),
     });
-    const mixes = await Effect.runPromise(snapshot.get);
+    const mixes = await runTestPromise(snapshot.get);
     assert.deepEqual(neighbours(mixes), { catalog: ["Portishead"], graph: ["Portishead"] });
     assert.equal(catalogReads, 1, "the catalog is paged once for both");
-    const next = await Effect.runPromise(snapshot.get);
+    const next = await runTestPromise(snapshot.get);
     assert.deepEqual(neighbours(next), { catalog: ["Tricky"], graph: ["Tricky"] });
     assert.equal(catalogReads, 2, "the ask after the batch reads it");
     snapshot.dispose();
@@ -218,13 +219,13 @@ test("peek returns cold inputs immediately and retains the last completed values
   });
   assert.deepEqual(snapshot.peek(), { library: null, catalog: null, graph: null });
   assert.equal(reads, 0);
-  const reading = Effect.runPromise(snapshot.library);
+  const reading = runTestPromise(snapshot.library);
   assert.equal(snapshot.peek().library, null);
   finish("last index");
   await reading;
   assert.equal(snapshot.peek().library, "last index");
   versions = snapshotVersionsAfter(versions, "tracks");
-  const refreshed = Effect.runPromise(snapshot.library);
+  const refreshed = runTestPromise(snapshot.library);
   assert.equal(snapshot.peek().library, "last index");
   finish("next index");
   await refreshed;

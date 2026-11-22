@@ -13,6 +13,7 @@ import { askWaveService } from "@/sync/askWaveService";
 import { waveSignedIn } from "@/sync/waveSignedIn";
 import { currentLocalisation } from "@/localisation/localisation";
 import { settledTurnEffect } from "@/lib/backgroundWork";
+import { namedWork } from "@/lib/stepped";
 const savedListeners = new Set<() => void>();
 /** Runs [listener] each time a check saves an artist's shows; returns the unsubscribe. */
 export const subscribeFollowShows = (listener: () => void): (() => void) => {
@@ -33,7 +34,7 @@ const check = followShowsCheck({
   online,
   checksToday: showChecksToday,
   ask: askWaveService,
-  settle: settledTurnEffect,
+  settle: settledTurnEffect.pipe(namedWork("Follows shows check")),
   saved: () => {
     for (const listener of savedListeners) listener();
   },

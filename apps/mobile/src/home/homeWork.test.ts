@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { setImmediate } from "node:timers/promises";
 import * as Effect from "effect/Effect";
+import { runTestPromise } from "../lib/steppedTesting.ts";
 import type { ScreenSight } from "@wave/client/sight";
 
 import { pacedSteps } from "../lib/stepped.ts";
@@ -39,13 +40,13 @@ test("Home's work takes its turns while Home is in sight", async () => {
   const work = createHomeWork();
   const home = sightOf(true);
   work.follow(home.sight);
-  assert.equal(await Effect.runPromise(Effect.as(work.turn, "ran")), "ran");
+  assert.equal(await runTestPromise(Effect.as(work.turn, "ran")), "ran");
 });
 
 test("nothing runs before Home is first shown", async () => {
   const work = createHomeWork();
   let ran = false;
-  void Effect.runPromise(work.turn).then(() => (ran = true));
+  void runTestPromise(work.turn).then(() => (ran = true));
   await setImmediate();
   assert.equal(ran, false);
   const home = sightOf(true);
@@ -63,7 +64,7 @@ test("leaving Home stops a build after the slice that was running; coming back r
     work.turn,
     Effect.promise(() => setImmediate()),
   );
-  const built = Effect.runPromise(
+  const built = runTestPromise(
     Effect.suspend(() => runStepsOneAtATime(counted(count, 20), between)),
   );
   while (count.steps < 3) await setImmediate();
@@ -89,14 +90,14 @@ test("someone off Home waiting for the work lets it run while they wait", async 
     Effect.promise(() => setImmediate()),
   );
   // A Magic Queue started from Search waits for the snapshot Home's build reads.
-  const result = await Effect.runPromise(
+  const result = await runTestPromise(
     work.wanted(Effect.suspend(() => runStepsOneAtATime(counted(count, 5), between))),
   );
   assert.equal(result, "done");
   assert.equal(count.steps, 5);
   // Once nobody waits, Home's gate closes again.
   let ran = false;
-  void Effect.runPromise(work.turn).then(() => (ran = true));
+  void runTestPromise(work.turn).then(() => (ran = true));
   await setImmediate();
   assert.equal(ran, false);
 });
@@ -107,7 +108,7 @@ test("a Home screen that unmounts stops holding the gate open", async () => {
   const stop = work.follow(home.sight);
   stop();
   let ran = false;
-  void Effect.runPromise(work.turn).then(() => (ran = true));
+  void runTestPromise(work.turn).then(() => (ran = true));
   await setImmediate();
   assert.equal(ran, false);
 });

@@ -12,6 +12,7 @@ import { runSummarySwipe } from "@/playback/rowSwipe";
 import { grid } from "@/catalog/grid";
 import { useChromeInset } from "@/chrome/chrome";
 import { freeTurnEffect, settledTurnEffect } from "@/lib/backgroundWork";
+import { namedWork } from "@/lib/stepped";
 import { useListScrollable } from "@/motion/heldTouch";
 import { useRenderCount } from "@/perf/perf";
 import { playTrackIds } from "@/playback/actions";
@@ -91,8 +92,8 @@ const useWholeOrder = (
             // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
             read: LibraryStore.use((store) =>
               readGenreOrder(store, genreId, sort, opening.order, freeTurnEffect),
-            ),
-            settled: settledTurnEffect,
+            ).pipe(namedWork("Genre order")),
+            settled: settledTurnEffect.pipe(namedWork("Genre order")),
             run: runAborting,
           }),
     // The key holds the genre, the sort and the order's revision: a later opening
@@ -198,7 +199,9 @@ export function GenreSongList({
     rowReads.current.add(controller);
     runAborting(
       // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use is not a React Hook.
-      LibraryStore.use((store) => readGenreSongs(store, wanted, freeTurnEffect)),
+      LibraryStore.use((store) => readGenreSongs(store, wanted, freeTurnEffect)).pipe(
+        namedWork("Genre songs"),
+      ),
       controller.signal,
     ).then(
       (rows) => {

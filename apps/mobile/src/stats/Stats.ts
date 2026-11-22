@@ -10,6 +10,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 
 import { lazyService } from "@/lib/lazyService";
+import type { Turn } from "@/lib/stepped";
 import type { RecapHistoryVersion } from "./recapAvailability";
 
 import type { LibraryStoreError } from "@/library/LibraryStore";
@@ -66,7 +67,7 @@ export class Stats extends Context.Service<
     /** Every period with a Recap now, newest first (Core's `availableRecaps`). */
     readonly recaps: (
       now: number,
-      between: Effect.Effect<void>,
+      between: Turn,
     ) => Effect.Effect<readonly RecapPeriod[], LibraryStoreError>;
     readonly recapHistoryVersion: RecapHistoryVersion;
     /** `period`'s Recap, its slides' rows loaded; null when the period has no Recap now. */

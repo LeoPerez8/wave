@@ -74,6 +74,7 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
     return app.settle();
   });
   export const recommendationTurnEffect = Effect.void;
+  export const namedWork = () => (effect) => effect;
   export const recommendationTurn = async () => {};
   export const recommendationSteps = (steps, awaited) =>
     Effect.sync(() => {

@@ -12,6 +12,7 @@ import * as Effect from "effect/Effect";
 import { lookedUpProfileOf } from "@/home/artistGenres";
 import { afterPaint } from "@/lib/afterPaint";
 import { settledTurnEffect } from "@/lib/backgroundWork";
+import { namedWork } from "@/lib/stepped";
 import { recommendationSteps, recommendationTurn } from "@/lib/recommendationWork";
 import { appLog } from "@/log/appLog";
 import { online as phoneOnline } from "@/native/waveNative";
@@ -30,21 +31,28 @@ import { appRuntime } from "./runtime";
 /** How long loading waits for the screen to settle and a free turn, against the 3 s other work allows. */
 const SETTLE_WAIT_MS = 600;
 
+/** Every turn a visit's suggestions take is logged under this name (#1447). */
+const PLAYLIST_SUGGESTIONS = "Playlist suggestions";
+const named = namedWork(PLAYLIST_SUGGESTIONS);
+
 const phoneHost: PlaylistSuggestionsHost = {
   storage: phoneSuggestionStorage,
   online: phoneOnline,
   now: () => performance.now(),
   read: (playlistId, signal) =>
-    appRuntime.runPromise(playlistRecommendationInput(playlistId), {
+    appRuntime.runPromise(playlistRecommendationInput(playlistId).pipe(named), {
       signal,
     }) as Promise<PlaylistSuggestionsRead>,
-  graph: (signal) => appRuntime.runPromise(playlistRecommendationGraph, { signal }),
+  graph: (signal) => appRuntime.runPromise(playlistRecommendationGraph.pipe(named), { signal }),
   profileOf: lookedUpProfileOf,
   seeds: playlistSuggestionSeeds,
   radios: (visitId, seeds, when, signal) =>
     appRuntime.runPromise(playlistSuggestionRadios(visitId, seeds, when), { signal }),
   steps: (steps, awaited, signal) =>
-    appRuntime.runPromise(recommendationSteps(steps, awaited), signal ? { signal } : undefined),
+    appRuntime.runPromise(
+      recommendationSteps(steps, awaited).pipe(named),
+      signal ? { signal } : undefined,
+    ),
   dismiss: (playlistId, offer) =>
     appRuntime.runPromise(
       Effect.gen(function* () {
@@ -62,11 +70,14 @@ const phoneHost: PlaylistSuggestionsHost = {
   accepted: (playlistId) => playlistsChanged([playlistId]),
   log: (line) => appLog("info", "WaveTiming", line),
   afterPaint,
-  freeTurn: recommendationTurn,
+  freeTurn: () => recommendationTurn(PLAYLIST_SUGGESTIONS),
   settle: (signal) =>
-    appRuntime.runPromise(Effect.raceFirst(settledTurnEffect, Effect.sleep(SETTLE_WAIT_MS)), {
-      signal,
-    }),
+    appRuntime.runPromise(
+      Effect.raceFirst(settledTurnEffect, Effect.sleep(SETTLE_WAIT_MS)).pipe(named),
+      {
+        signal,
+      },
+    ),
   changes: onLibraryChange,
 };
 

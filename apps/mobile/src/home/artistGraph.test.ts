@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 
 import { artistNeighbourhood, type CatalogSong } from "@wave/core";
 import * as Effect from "effect/Effect";
+import { runTestSync } from "../lib/steppedTesting.ts";
 
 import { readArtistGraph, type ArtistGraphReads } from "./artistGraph.ts";
 
@@ -70,7 +71,7 @@ const store = (counts: { reads: number }, catalog: CatalogSong[] = []): ArtistGr
 
 describe("the artist graph the app derives", () => {
   test("joins the catalog's radios, the saved pages and the Library's play history", () => {
-    const graph = Effect.runSync(
+    const graph = runTestSync(
       readArtistGraph(store({ reads: 0 }, [radioSong("p1", "Portishead", "Massive Attack")])),
     );
     assert.deepEqual(

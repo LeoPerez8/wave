@@ -161,7 +161,9 @@ export const useInLibraryBetweenFrames = (
       return yield* playlistInLibrarySteps(entries, (song) => find(song) !== null);
     };
     appRuntime
-      .runPromise(runSteps(steps(), freeTurnEffect), { signal: working.signal })
+      .runPromise(runSteps(steps(), freeTurnEffect).pipe(namedWork("Playlist in Library")), {
+        signal: working.signal,
+      })
       .then((inLibrary) => setAnswer({ inLibrary, loaded: true }))
       .catch(() => {});
     return () => working.abort();

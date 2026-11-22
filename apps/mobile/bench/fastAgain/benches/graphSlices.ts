@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
 import type { ArtistGraph } from "@wave/core";
 import * as Effect from "effect/Effect";
+import { runTestPromise, runTestSync } from "../../../src/lib/steppedTesting.ts";
 import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { setImmediate } from "node:timers/promises";
@@ -80,7 +81,7 @@ export const bench: FastAgainBench = {
       if (trace) {
         const note = <A>(read: Effect.Effect<A, unknown>) =>
           Effect.sync(() => {
-            const traced = traceQueries(context.fixture.db, () => Effect.runSync(read));
+            const traced = traceQueries(context.fixture.db, () => runTestSync(read));
             rows[segment] =
               (rows[segment] ?? 0) + traced.queries.reduce((sum, query) => sum + query.rows, 0);
             statements[segment] = (statements[segment] ?? 0) + traced.queries.length;
@@ -107,7 +108,7 @@ export const bench: FastAgainBench = {
         yield* Effect.promise(() => setImmediate());
         start = performance.now();
       });
-      const result = await Effect.runPromise(
+      const result = await runTestPromise(
         Effect.gen(function* () {
           start = performance.now();
           const graph = yield* readArtistGraph(reads, between);

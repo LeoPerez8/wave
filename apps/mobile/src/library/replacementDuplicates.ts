@@ -12,7 +12,7 @@ import * as Effect from "effect/Effect";
 import { Storage } from "expo-sqlite/kv-store";
 
 import { startupTurn, startupTurnEffect } from "@/lib/backgroundWork";
-import { runSteps } from "@/lib/stepped";
+import { namedWork, runSteps } from "@/lib/stepped";
 import { checkDuplicateFiles } from "./startupJobs";
 
 import { appLog } from "@/log/appLog";
@@ -87,7 +87,9 @@ const tell = (event: DuplicateCheckEvent): void => {
 
 const run = async (when: DuplicateCheckWhen): Promise<void> => {
   try {
-    await appRuntime.runPromise(checkReplacementDuplicates(when));
+    await appRuntime.runPromise(
+      checkReplacementDuplicates(when).pipe(namedWork("Replacement duplicates")),
+    );
     tell({ kind: "ran", ok: true });
   } catch (error: unknown) {
     // Due still: the next launch tries again.

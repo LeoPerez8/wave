@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import type { LibraryStore, LibraryStoreError } from "@/library/LibraryStore";
 
 import { readCatalogInputs } from "./catalogInputs.ts";
-import { runSteps } from "../lib/stepped.ts";
+import { type BackgroundWorkName, runSteps, type Turn } from "../lib/stepped.ts";
 
 export type ArtistGraphReads = Pick<
   LibraryStore["Service"],
@@ -21,9 +21,9 @@ export type ArtistGraphReads = Pick<
  */
 export const readArtistGraph = (
   store: ArtistGraphReads,
-  between: Effect.Effect<void> = Effect.void,
+  between: Turn = Effect.void,
   catalog?: readonly ArtistGraphCatalogEntry[],
-): Effect.Effect<ArtistGraph, LibraryStoreError> =>
+): Effect.Effect<ArtistGraph, LibraryStoreError, BackgroundWorkName> =>
   Effect.gen(function* () {
     const build = createArtistGraphBuild();
     if (catalog === undefined)
