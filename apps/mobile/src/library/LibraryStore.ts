@@ -473,7 +473,7 @@ import {
   trackPlayTotals,
   type ArtistPlays,
 } from "@wave/client/db/stats";
-import { streamedSongsOf } from "@wave/client/db/streamedSongs";
+import { streamedSongsRead, streamedSongsSteps } from "@wave/client/db/streamedSongs";
 import { keyRecordings, stampPreference } from "@wave/client/db/sync";
 import {
   filesGone,
@@ -2296,7 +2296,12 @@ const make = Effect.gen(function* () {
     songPlayTotals: (window) => attempt("sum up song plays", (db) => songPlayTotals(db, window)),
 
     streamedSongsByIds: (videoIds) =>
-      attempt("read streamed songs", (db) => streamedSongsOf(db, videoIds)),
+      attemptStepped(
+        "read streamed songs",
+        LIBRARY_READ_REPLAY,
+        (db) => streamedSongsRead(db, videoIds),
+        ({ wanted, rows }) => streamedSongsSteps(wanted, rows),
+      ),
 
     // While the kept totals settle these sum the history: the summing runs in steps.
     playedEntityTotals: (window) =>

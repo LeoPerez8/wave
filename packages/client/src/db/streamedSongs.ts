@@ -105,6 +105,18 @@ export const streamedSongRows = (db: LibraryDatabase, videos: SQL) => ({
   snapshots: latestKept<PlaySnapshot>(db, videos, playEvents.snapshot),
 });
 
+/**
+ * What `streamedSongsOf` reads for [videoIds], statements only, for `streamedSongsSteps` to
+ * work out (#1452): a replayed read maps the rows once, in steps, and runs nothing per song.
+ */
+export const streamedSongsRead = (db: LibraryDatabase, videoIds: readonly string[]) => ({
+  wanted: videoIds.map((videoId) => ({ videoId })),
+  rows: streamedSongRows(
+    db,
+    sql`SELECT value FROM json_each(${JSON.stringify([...new Set(videoIds)])})`,
+  ),
+});
+
 /** What `streamedSongRows` read. */
 export type StreamedSongRows = ReturnType<typeof streamedSongRows>;
 
