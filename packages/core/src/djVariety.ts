@@ -11,7 +11,6 @@ import { magicArtistKey, type MagicSession } from "./magicQueue.ts";
 import { finishSteps, sortSteps } from "./buildSteps.ts";
 import {
   magicLearnedExtrasSteps,
-  magicRadioEligible,
   magicRadioEligibleSteps,
   magicRadioExclusions,
 } from "./magicRadioLearning.ts";

@@ -18,6 +18,9 @@ import {
   djVarietyCandidates,
   djVarietyCandidatesSteps,
   finishSteps,
+  libraryGenreProfiles,
+  libraryGenreProfilesSteps,
+  libraryMixProfilesSteps,
   magicArtistKey,
   magicRadioExclusions,
   magicRadioExclusionsSteps,
@@ -308,7 +311,10 @@ describe("the Magic Queue batch's ranking runs a few candidates per step", () =>
       djVarietyCandidatesSteps(dj, graph, { seed: countedSeed, liked: countedLiked }, 10),
       counter,
     );
-    assert.deepEqual(ids(value.seed), ids(djVarietyCandidates(dj, graph, { seed, liked }, 10).seed));
+    assert.deepEqual(
+      ids(value.seed),
+      ids(djVarietyCandidates(dj, graph, { seed, liked }, 10).seed),
+    );
     assert.ok(most <= MOST_READS_PER_STEP, `${most} reads in one step`);
   });
 
@@ -348,5 +354,39 @@ describe("the Magic Queue batch's ranking runs a few candidates per step", () =>
       finishSteps(completeMagicRadioBatchSteps(session, seed, liked)).trackIds,
       completeMagicRadioBatch(session, seed, liked).trackIds,
     );
+  });
+});
+
+describe("the Library's genre profiles a batch ranks with", () => {
+  const artists = Array.from({ length: 1200 }, (_, i) => ({ id: i, name: `Artist ${i}` }));
+  const songs = Array.from({ length: LIBRARY }, (_, i) => ({
+    artistIds: [i % 1200, (i * 7) % 1200],
+    genre: i % 3 === 0 ? "Rock; Indie" : i % 3 === 1 ? "Pop" : null,
+  }));
+  const names = [...artists.map((artist) => artist.name), "Nobody", "artist 7"];
+
+  test("are built a song or an artist per step, and give every artist the same profile", () => {
+    const counter = { reads: 0 };
+    const counting = <A extends object>(values: readonly A[]) =>
+      values.map(
+        (value) =>
+          new Proxy(value, {
+            get: (target, key, receiver) => {
+              counter.reads++;
+              return Reflect.get(target, key, receiver);
+            },
+          }),
+      );
+    const { value: profileOf, most } = mostReadsPerStep(
+      libraryGenreProfilesSteps({ artists: counting(artists), songs: counting(songs) }),
+      counter,
+    );
+    assert.ok(most <= MOST_READS_PER_STEP, `${most} reads in one step`);
+    const eager = finishSteps(libraryMixProfilesSteps({ artists, songs })).profileOf;
+    const plain = libraryGenreProfiles({ artists, songs });
+    for (const name of names) {
+      assert.deepEqual(profileOf(name), eager(name), name);
+      assert.deepEqual(plain(name), eager(name), name);
+    }
   });
 });

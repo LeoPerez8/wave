@@ -87,9 +87,8 @@ export function* djNewReleasesRankedSteps<S extends Pick<RankedRadioSong, "song"
       return artist !== null && titles.get(artist)?.has(title) === true;
     });
   };
-  const raised = yield* mapSteps(
-    ranked,
-    (song): S => (recent(song) ? { ...song, score: song.score + DJ_NEW_RELEASE_BOOST } : song),
+  const raised = yield* mapSteps(ranked, (song): S =>
+    recent(song) ? { ...song, score: song.score + DJ_NEW_RELEASE_BOOST } : song,
   );
   return yield* sortSteps(raised, (a, b) => b.score - a.score);
 }

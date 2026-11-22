@@ -58,7 +58,7 @@ import * as Layer from "effect/Layer";
 import { Storage } from "expo-sqlite/kv-store";
 import { useSyncExternalStore } from "react";
 
-import { magicProfileOf } from "@/home/artistGenres";
+import { magicProfileOf, magicProfileOfSteps } from "@/home/artistGenres";
 import { recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
 import { makeExternalStore, subscribeAll } from "@wave/client/externalStore";
@@ -933,7 +933,8 @@ export const layer = Layer.effectDiscard(
         const taste = latestTasteProfile();
         // A DJ session ranks with its own choices, whatever Discover's sliders say.
         const sliders = magicSessionSliders(wanted, discoverSliders.get());
-        const profileOf = magicProfileOf(library);
+        // Built over the whole Library, so in slices too (#1448).
+        const profileOf = yield* runSteps(magicProfileOfSteps(library), freeTurnEffect);
         // This batch's radios, drawn once for it and saved before they're read.
         const live = activeMagicSession();
         const drawn = magicBatchRadios(live?.id === wanted.id ? live : wanted, Math.random);

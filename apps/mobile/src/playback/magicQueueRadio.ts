@@ -12,6 +12,7 @@ import {
   identityKey,
   libraryFinderSteps,
   type MixKnownSongs,
+  magicLibraryMapperSteps,
   magicLibrarySongs,
   magicRadioExclusionsSteps,
   magicRadioReadPlan,
@@ -148,8 +149,9 @@ export const magicQueueYtCandidates = (
     );
     const artists = [...new Set(seeds.flatMap((seed) => seed.artists))];
     const readers = radioReaders(yt, context);
-    const playable = library.songs.filter(songHasFile);
-    const mapLibrary = magicLibrarySongs(library.artists);
+    // Every Library song and artist, so in slices (#1448).
+    const playable = yield* runSteps(filterSteps(library.songs, songHasFile), freeTurnEffect);
+    const mapLibrary = yield* runSteps(magicLibraryMapperSteps(library.artists), freeTurnEffect);
     // Mapped once, in slices: every original ranking weighs the whole playable Library.
     const playableMagic = yield* runSteps(mapSteps(playable, mapLibrary), freeTurnEffect);
     // The snapshot already indexed recordings. A cold session indexes its playable songs, in slices,
@@ -192,83 +194,83 @@ export const magicQueueYtCandidates = (
       faithfulFallback: boolean,
     ) =>
       Effect.gen(function* () {
-      const current = sessionNow?.() ?? session;
-      const read = readers.current(session.id, group);
-      // Old artist radios still provide an offline fallback until an ordered page is saved.
-      const familyAllowed = (id: string, songArtists: readonly string[]): boolean =>
-        djRadioSongAllowed(current, id, songArtists, profileOf, graph);
-      const radios = read.flatMap(({ seed, page }) => {
-        if (page === null) return [];
-        return [
-          {
-            id: seed.id,
-            artists: seed.artists,
-            songs: page.songs.filter((song) => familyAllowed(seed.id, song.artists)),
-          },
-        ];
-      });
-      // Only an offline batch with no radio page reads the catalog: it may hold thousands of songs.
-      if (original && radios.length === 0 && !connected) {
-        const fallback = yield* runSteps(
-          filterSteps(catalog, (entry) =>
-            entry.radios.some(
-              (radio) =>
-                artists.some((name) => catalogSeedKey(name) === radio.seed) &&
-                familyAllowed(`artist:${radio.seed}`, entry.song.artists),
+        const current = sessionNow?.() ?? session;
+        const read = readers.current(session.id, group);
+        // Old artist radios still provide an offline fallback until an ordered page is saved.
+        const familyAllowed = (id: string, songArtists: readonly string[]): boolean =>
+          djRadioSongAllowed(current, id, songArtists, profileOf, graph);
+        const radios = read.flatMap(({ seed, page }) => {
+          if (page === null) return [];
+          return [
+            {
+              id: seed.id,
+              artists: seed.artists,
+              songs: page.songs.filter((song) => familyAllowed(seed.id, song.artists)),
+            },
+          ];
+        });
+        // Only an offline batch with no radio page reads the catalog: it may hold thousands of songs.
+        if (original && radios.length === 0 && !connected) {
+          const fallback = yield* runSteps(
+            filterSteps(catalog, (entry) =>
+              entry.radios.some(
+                (radio) =>
+                  artists.some((name) => catalogSeedKey(name) === radio.seed) &&
+                  familyAllowed(`artist:${radio.seed}`, entry.song.artists),
+              ),
             ),
+            freeTurnEffect,
+          );
+          radios.push({ id: seeds[0]!.id, artists, songs: fallback.map((entry) => entry.song) });
+        }
+        const exclude = yield* runSteps(
+          magicRadioExclusionsSteps(
+            current,
+            radios.flatMap((radio) => radio.songs),
           ),
           freeTurnEffect,
         );
-        radios.push({ id: seeds[0]!.id, artists, songs: fallback.map((entry) => entry.song) });
-      }
-      const exclude = yield* runSteps(
-        magicRadioExclusionsSteps(
-          current,
-          radios.flatMap((radio) => radio.songs),
-        ),
-        freeTurnEffect,
-      );
-      // Ranked in background slices (#1350): a batch never holds the JS thread past 8 ms at a time.
-      const ranked = rankRadioSongsSteps(
-        {
-          artists,
-          profile: session.faithful
-            ? magicFaithfulGenreProfile(session, profileOf)
-            : magicSeedProfile(session, profileOf),
-        },
-        {
-          // Several radios interleave by position before ranking.
-          pages: radios.map((radio) => ({
-            ...radio,
-            songs: radio.songs.filter((song) => !("video" in song && song.video === true)),
-          })),
-          graph,
-          taste,
-          profileOf,
-          library: original ? playableMagic : [],
-          inLibrary: (song) => {
-            const local = find(song);
-            return local === null || !songHasFile(local) ? null : mapLibrary(local);
+        // Ranked in background slices (#1350): a batch never holds the JS thread past 8 ms at a time.
+        const ranked = rankRadioSongsSteps(
+          {
+            artists,
+            profile: session.faithful
+              ? magicFaithfulGenreProfile(session, profileOf)
+              : magicSeedProfile(session, profileOf),
           },
-          signals: current.radioSignals ?? [],
-          popularityOf: (id) => popularity.get(id) ?? 0,
-          // A disliked song never enters a batch, from the radios or the Library.
-          disliked: dislikedSongsNow(),
-        },
-        {
-          ...sliders,
-          faithfulness: current.faithful ? (faithfulFallback ? 2 : 1) : sliders.faithfulness,
-          popularity: current.faithful ? 3 : sliders.popularity,
-          excludeIncompatible: current.faithful && !faithfulFallback,
-          exclude,
-          libraryFallback: session.continuation === true && !connected,
-        },
-      );
-      return availableMagicSongs(current, yield* runSteps(ranked, freeTurnEffect), {
-        online: online(),
-        ytMusic: ytMusicEnabled(),
-        cachedVideos,
-      });
+          {
+            // Several radios interleave by position before ranking.
+            pages: radios.map((radio) => ({
+              ...radio,
+              songs: radio.songs.filter((song) => !("video" in song && song.video === true)),
+            })),
+            graph,
+            taste,
+            profileOf,
+            library: original ? playableMagic : [],
+            inLibrary: (song) => {
+              const local = find(song);
+              return local === null || !songHasFile(local) ? null : mapLibrary(local);
+            },
+            signals: current.radioSignals ?? [],
+            popularityOf: (id) => popularity.get(id) ?? 0,
+            // A disliked song never enters a batch, from the radios or the Library.
+            disliked: dislikedSongsNow(),
+          },
+          {
+            ...sliders,
+            faithfulness: current.faithful ? (faithfulFallback ? 2 : 1) : sliders.faithfulness,
+            popularity: current.faithful ? 3 : sliders.popularity,
+            excludeIncompatible: current.faithful && !faithfulFallback,
+            exclude,
+            libraryFallback: session.continuation === true && !connected,
+          },
+        );
+        return availableMagicSongs(current, yield* runSteps(ranked, freeTurnEffect), {
+          online: online(),
+          ytMusic: ytMusicEnabled(),
+          cachedVideos,
+        });
       });
     // A DJ session's Artist variety limits who a batch may hold; any other keeps every song.
     const allowed = (size: number) =>
@@ -276,7 +278,12 @@ export const magicQueueYtCandidates = (
         const seed = yield* rank(seeds, true);
         const likedRanked = yield* rank(liked, false);
         return yield* runSteps(
-          djVarietyCandidatesSteps(sessionNow?.() ?? session, graph, { seed, liked: likedRanked }, size),
+          djVarietyCandidatesSteps(
+            sessionNow?.() ?? session,
+            graph,
+            { seed, liked: likedRanked },
+            size,
+          ),
           freeTurnEffect,
         );
       });

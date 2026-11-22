@@ -2357,6 +2357,7 @@ export {
   genreAffinity,
   genreProfile,
   libraryGenreProfiles,
+  libraryGenreProfilesSteps,
 } from "./genreAffinity.ts";
 export type {
   ArtistProfiles,
@@ -3365,12 +3366,7 @@ export {
   djToggleMood,
 } from "./djSettings.ts";
 export type { DjFilter, DjMood } from "./djSettings.ts";
-export {
-  djMedianAudioFeatures,
-  djMoodRanked,
-  djMoodRankedSteps,
-  djMoodScore,
-} from "./djMood.ts";
+export { djMedianAudioFeatures, djMoodRanked, djMoodRankedSteps, djMoodScore } from "./djMood.ts";
 export type { DjAudioFeatures, DjMoodRankable } from "./djMood.ts";
 export { djAudioFeaturesByIsrc, isrcFromTag } from "./isrcTag.ts";
 export {
