@@ -10,7 +10,6 @@ interface Ports {
   readonly uiStart: (id: number, ageMs: number) => void;
   readonly uiStop: (id: number) => Promise<TimingFrames | null>;
   readonly report: (event: TimingTransition, lane: "JS" | "UI", frames: TimingFrames) => void;
-  readonly observe?: () => () => void;
 }
 
 export const createTransitionFrames = (ports: Ports) => {
@@ -20,7 +19,6 @@ export const createTransitionFrames = (ports: Ports) => {
     count: number;
     longestGapMs: number;
     frame: number;
-    unobserve?: () => void;
   } | null = null;
   let disposed = false;
   const waiting = new Set<Promise<void>>();
@@ -45,7 +43,6 @@ export const createTransitionFrames = (ports: Ports) => {
     const result = active;
     active = null;
     ports.cancel(result.frame);
-    result.unobserve?.();
     if (settled) ports.report(event, "JS", result);
     const task = ports
       .uiStop(event.id)
@@ -73,7 +70,6 @@ export const createTransitionFrames = (ports: Ports) => {
         count: 0,
         longestGapMs: 0,
         frame: ports.request(() => tick(event.id)),
-        unobserve: ports.observe?.(),
       };
     },
     flush: async () => {

@@ -138,6 +138,7 @@ test("Home's actual timing session releases due work only after content AND tran
       write: () => {},
       context: () => ({ background: [], offline: false }),
       build: () => ({ version: "test", commit: "test" }),
+      later: () => {},
     });
     const update = () => {
       if (homeMagicQueueDue(session.isSettled(), null, [], false, 0)) starts++;

@@ -3,7 +3,7 @@ import {
   TAB_PATH,
   TIMING_BUDGETS,
   tabOfPath,
-  slowTapLine,
+  createSlowTapLines,
   slowScreenLine,
   speedSummaryLine,
   type TimingKind,
@@ -25,6 +25,8 @@ interface Ports {
   readonly write: (line: string) => void;
   readonly context: () => { readonly background: readonly string[]; readonly offline: boolean };
   readonly build: () => { readonly version: string; readonly commit: string };
+  /** Runs [run] [ms] from now: a slow tap's line waits for its window's JS blocks (#1446). */
+  readonly later: (ms: number, run: () => void) => void;
 }
 interface Pending {
   id: number;
@@ -83,6 +85,7 @@ export const createTimingSession = (ports: Ports) => {
   const write = (line: string | null) => {
     if (line !== null) ports.write(line);
   };
+  const slowTaps = createSlowTapLines({ write: ports.write, later: ports.later });
   const context = (p: Pending) => {
     const current = ports.context();
     for (const name of current.background) p.background.add(name);
@@ -100,19 +103,20 @@ export const createTimingSession = (ports: Ports) => {
       return;
     context(p);
     if (p.tap) {
+      const settledAt = Math.max(p.content, p.end, p.frame);
       const sample: TimingTap = {
         kind: p.kind,
         from: p.from,
         to: p.to,
         responseMs: p.response - p.at,
         firstFrameMs: p.frame - p.at,
-        settledMs: Math.max(p.content, p.end, p.frame) - p.at,
+        settledMs: settledAt - p.at,
         background: [...p.background],
         offline: p.offline,
         longestJsBlockMs: p.block,
       };
       taps.push(sample);
-      write(slowTapLine(sample));
+      slowTaps.settled(sample, p.at, settledAt);
     }
     if (p.screen) {
       const screen = {
@@ -304,6 +308,7 @@ export const createTimingSession = (ports: Ports) => {
     jsBlock: (startTime: number, durationMs: number) => {
       if (pending !== null && startTime + durationMs >= pending.at)
         pending.block = Math.max(pending.block, durationMs);
+      slowTaps.block(startTime, durationMs);
     },
     backgroundChanged: () => {
       if (pending !== null) context(pending);
@@ -323,6 +328,7 @@ export const createTimingSession = (ports: Ports) => {
     },
     /** A short return doesn't discard samples. Only an actual summary advances the window. */
     leave: () => {
+      slowTaps.flush();
       const now = ports.wallNow();
       if (
         measurements.length === 0 ||
