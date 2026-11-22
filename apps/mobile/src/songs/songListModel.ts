@@ -55,6 +55,29 @@ const sameFields = (a: object | null | undefined, b: object | null | undefined):
   const keys = Object.keys(left);
   return keys.length === Object.keys(right).length && keys.every((key) => left[key] === right[key]);
 };
+/**
+ * Two row sources with the same fields, a plain object among them (a Queue row's entry, built
+ * afresh on every render) compared field by field too (#1441).
+ */
+const sameSource = (a: SongListRowSource, b: SongListRowSource): boolean => {
+  if (a === b) return true;
+  const left = a as unknown as Record<string, unknown>;
+  const right = b as unknown as Record<string, unknown>;
+  const keys = Object.keys(left);
+  return (
+    keys.length === Object.keys(right).length &&
+    keys.every((key) => {
+      const before = left[key];
+      const after = right[key];
+      return (
+        before === after ||
+        (isPlainObject(before) && isPlainObject(after) && sameFields(before, after))
+      );
+    })
+  );
+};
+const isPlainObject = (value: unknown): value is object =>
+  typeof value === "object" && value !== null && Object.getPrototypeOf(value) === Object.prototype;
 const sameState = (a: SongRowState, b: SongRowState): boolean =>
   sameFields(a.leading, b.leading) &&
   sameFields(a.download, b.download) &&
@@ -80,7 +103,7 @@ export const createSongListModel = (limit = 256) => {
       const previous = cache.get(cacheKey);
       if (
         previous !== undefined &&
-        sameFields(previous.source, source) &&
+        sameSource(previous.source, source) &&
         sameState(previous.state, state)
       )
         return previous.shown;

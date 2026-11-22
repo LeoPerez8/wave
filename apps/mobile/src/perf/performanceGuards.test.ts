@@ -401,6 +401,10 @@ test("planted offenders fail each shared-component guard, through the real APIs 
       queueState.get();
       return useFavoriteIds().has(id) ? 'starred' : null;
     }`,
+    "planted/DownloadingRow.tsx": `
+    import { useDownloadingList } from '@/ytmusic/downloadingRows';
+    export const DownloadingRow = ({ id }: { id: string }) =>
+      useDownloadingList().downloading.some((row) => row.id === id) ? 'downloading' : null;`,
     "planted/useRowPlaying.ts": `
     import { useCurrentPlayingIds } from '@/playback/hooks';
     export const useRowPlaying = (id: string) => useCurrentPlayingIds().has(id);`,
@@ -438,6 +442,7 @@ test("planted offenders fail each shared-component guard, through the real APIs 
   assert.deepEqual(found.songRowViews, ["planted/OwnSongs.tsx#OwnSongs"]);
   assert.deepEqual(found.retiredRows, ["planted/OwnSongs.tsx#YtSongRow"]);
   assert.deepEqual(found.rowSubscriptions, [
+    "planted/DownloadingRow.tsx#DownloadingRow > ytmusic/downloadingRows.ts#useDownloadingList",
     "planted/PlayingRow.tsx#PlayingRow > planted/useRowPlaying.ts#useRowPlaying > playback/hooks.ts#useCurrentPlayingIds",
     "planted/StarredRow.tsx#StarredRow > library/favorites.ts#useFavoriteIds",
     "planted/StarredRow.tsx#StarredRow > playback/Queue.ts#queueState",

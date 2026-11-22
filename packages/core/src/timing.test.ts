@@ -7,6 +7,8 @@ import {
   slowScreenLine,
   speedSummaryLine,
   type TimingTap,
+  TAP_BLOCKS_WAIT_MS,
+  createSlowTapLines,
 } from "./index.ts";
 
 const tap: TimingTap = {
@@ -191,4 +193,65 @@ test("timing durations use the log's rounding and switch units at one second", a
   assert.equal(timingDuration(999), "999 ms");
   assert.equal(timingDuration(1000), "1.0 s");
   assert.equal(timingDuration(1450), "1.5 s");
+});
+
+describe("a slow tap's line waits for the JS blocks of its window (#1446)", () => {
+  const slow: TimingTap = { ...tap, responseMs: 363, firstFrameMs: 400, settledMs: 500 };
+  const setup = () => {
+    const lines: string[] = [];
+    const timers: (() => void)[] = [];
+    const taps = createSlowTapLines({
+      write: (line) => lines.push(line),
+      later: (ms, run) => {
+        assert.equal(ms, TAP_BLOCKS_WAIT_MS);
+        timers.push(run);
+      },
+    });
+    const run = () => {
+      for (const timer of timers.splice(0)) timer();
+    };
+    return { taps, lines, run };
+  };
+
+  test("a block reported just after the tap settled is its longest", () => {
+    const { taps, lines, run } = setup();
+    // The tap began at 1000 and settled at 1500; the block it settled in is reported late.
+    taps.settled(slow, 1000, 1500);
+    assert.deepEqual(lines, []);
+    taps.block(1290, 237);
+    run();
+    assert.equal(lines.length, 1);
+    assert.match(lines[0]!, /longest JS block 237 ms$/);
+  });
+
+  test("blocks outside the window don't count, and the longest seen before settling stays", () => {
+    const { taps, lines, run } = setup();
+    taps.settled({ ...slow, longestJsBlockMs: 120 }, 1000, 1500);
+    taps.block(800, 150); // Ended before the tap began.
+    taps.block(1600, 400); // Began after it settled.
+    taps.block(1100, 90);
+    run();
+    assert.match(lines[0]!, /longest JS block 120 ms$/);
+  });
+
+  test("a tap within budget writes nothing", () => {
+    const { taps, lines, run } = setup();
+    taps.settled(tap, 1000, 1300);
+    taps.block(1100, 200);
+    run();
+    assert.deepEqual(lines, []);
+  });
+
+  test("leaving the screen writes the waiting lines at once, each once", () => {
+    const { taps, lines, run } = setup();
+    taps.settled(slow, 1000, 1500);
+    taps.settled({ ...slow, to: "/" }, 2000, 2500);
+    taps.block(2100, 300);
+    taps.flush();
+    assert.equal(lines.length, 2);
+    assert.match(lines[0]!, /longest JS block 0 ms$/);
+    assert.match(lines[1]!, /to \/ from .*longest JS block 300 ms$/);
+    run();
+    assert.equal(lines.length, 2);
+  });
 });

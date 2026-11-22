@@ -2,6 +2,7 @@
 import {
   artistProfilesKnown,
   libraryGenreProfiles,
+  libraryGenreProfilesSteps,
   parseArtistProfiles,
   storedArtistProfiles,
   type ArtistProfiles,
@@ -28,3 +29,11 @@ export const magicProfileOf = (library: GenreProfileLibrary): GenreProfileOf => 
   const ofLibrary = libraryGenreProfiles(library);
   return (artist) => ofLibrary(artist) ?? lookedUpProfileOf(artist);
 };
+
+/** `magicProfileOf`, a song or an artist per step, for a Magic Queue batch's slices (#1448). */
+export function* magicProfileOfSteps(
+  library: GenreProfileLibrary,
+): Generator<void, GenreProfileOf> {
+  const ofLibrary = yield* libraryGenreProfilesSteps(library);
+  return (artist) => ofLibrary(artist) ?? lookedUpProfileOf(artist);
+}

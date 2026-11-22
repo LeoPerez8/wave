@@ -230,6 +230,7 @@ test("the production visibility binding waits for real timing settlement and can
     write: () => {},
     context: () => ({ background: [], offline: true }),
     build: () => ({ version: "test", commit: "test" }),
+    later: () => {},
   });
   const version = makeExternalStore(0);
   const sight = makeExternalStore(true);

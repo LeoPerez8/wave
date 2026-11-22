@@ -1,7 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+    // seed.ts imports the client's store, which is checked without it (packages/client).
+    "exactOptionalPropertyTypes": false
   },
   "include": ["*.ts"]
 }

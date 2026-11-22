@@ -9,6 +9,18 @@ import { chunks } from "./chunks.ts";
 
 export const DJ_MOOD_MISS_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const DJ_MOOD_PAGE_SIZE = 40;
+/**
+ * How long a song whose lookup failed (a service error, an answer that doesn't
+ * read) waits before it is due again (#1437). Unsaved, it stayed due, and every
+ * pass the catalog started read and asked about it again.
+ */
+export const DJ_MOOD_RETRY_MS = 6 * 60 * 60 * 1000;
+/**
+ * How many lookups of a song may fail in a row before it is left (#1449): the last failure is
+ * kept as a miss, due again only when misses expire (`DJ_MOOD_MISS_TTL_MS`). A 6-hour wait that
+ * came round forever kept asking about a song no service could answer for.
+ */
+export const DJ_MOOD_MAX_FAILURES = 3;
 
 export interface DjMoodLookupSong {
   readonly videoId: string;
@@ -74,11 +86,18 @@ export interface DjMoodFeatureWrite {
   readonly isrc: string | null;
   readonly features: DjAudioFeatures | null;
   readonly checkedAt: number;
+  /**
+   * The lookup failed rather than missed: the song is due again after `DJ_MOOD_RETRY_MS`, or,
+   * at its `DJ_MOOD_MAX_FAILURES`th failure in a row, after `DJ_MOOD_MISS_TTL_MS` like a miss.
+   */
+  readonly failed?: boolean;
 }
 
 /**
- * Saves misses with their check time; a found feature row is kept forever. A song the catalog
- * pruned since its page was read is skipped, in the same transaction as the writes.
+ * Saves misses with their check time (a failed lookup as one due again after
+ * `DJ_MOOD_RETRY_MS`, until `DJ_MOOD_MAX_FAILURES` in a row leave it as a plain
+ * miss); a found feature row is kept forever. A song the catalog pruned since its
+ * page was read is skipped, in the same transaction as the writes.
  */
 export const keepDjMoodFeatures = (
   db: LibraryDatabase,
@@ -97,18 +116,24 @@ export const keepDjMoodFeatures = (
     for (const write of writes) {
       if (!present.has(write.videoId)) continue;
       const known = tx
-        .select({ energy: djMoodFeatures.energy })
+        .select({ energy: djMoodFeatures.energy, failures: djMoodFeatures.failures })
         .from(djMoodFeatures)
         .where(eq(djMoodFeatures.videoId, write.videoId))
         .get();
       if (known?.energy != null) continue;
+      const failures = write.failed ? (known?.failures ?? 0) + 1 : 0;
+      const retried = write.failed && failures < DJ_MOOD_MAX_FAILURES;
       const values = {
         isrc: write.isrc,
         energy: write.features?.energy ?? null,
         valence: write.features?.valence ?? null,
         acousticness: write.features?.acousticness ?? null,
         mode: write.features?.mode ?? null,
-        checkedAt: write.checkedAt,
+        // A failed lookup is kept as a miss that expires after the retry wait, not the miss TTL.
+        checkedAt: retried
+          ? write.checkedAt - DJ_MOOD_MISS_TTL_MS + DJ_MOOD_RETRY_MS
+          : write.checkedAt,
+        failures,
       };
       tx.insert(djMoodFeatures)
         .values({ videoId: write.videoId, ...values })

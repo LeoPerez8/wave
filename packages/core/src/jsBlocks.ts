@@ -3,9 +3,12 @@
  * (#1350, #1359), naming the work that held the thread: the slice the block
  * ran in, else the named work still running then (begun and not ended, or
  * a free turn's work shortly after its turn), else "startup" before the
- * first screen settled, else none. A screen or section rendering in the
+ * first screen settled, with the startup step under way (#1434), else none. A screen or section rendering in the
  * block (#1423) names it as "rendering <name>" when it held more of the
- * block than any slice did, and beats running work.
+ * block than any slice did, and beats running work. A block that spans Wave
+ * leaving the screen (#1446) is the phone pausing the process, not work: it is
+ * written apart, as "JS paused", so no total of blocks counts it. A block is named when it's
+ * judged, so a render whose commit is reported after the long task still names it (#1449).
  */
 import { timingDuration } from "./timing.ts";
 
@@ -24,10 +27,21 @@ const KEPT_RENDERS = 32;
  */
 export const TURN_WORK_MS = 1000;
 
+/**
+ * How long after a block ended JS may still hear that Wave left the screen during it: the app
+ * state change waits behind the block, so a block is judged only this long after it's reported.
+ */
+export const PAUSE_HEARD_MS = 250;
+
 export interface JsBlockLogPorts {
   readonly write: (line: string) => void;
   /** The screen shown, or null while none is (Wave in the background). */
   readonly screen: () => string | null;
+  /**
+   * Runs [run] [ms] from now. Without it a block is judged as it's reported, so a pause heard
+   * after its long task is missed.
+   */
+  readonly later?: (ms: number, run: () => void) => void;
 }
 
 export interface JsBlockLog {
@@ -35,9 +49,11 @@ export interface JsBlockLog {
   readonly sliceRan: (name: string, startedAt: number, durationMs: number) => void;
   /**
    * The scheduler gave [name] a free turn at [at]: what runs on it, and its awaited
-   * continuations, count as [name]'s work for `TURN_WORK_MS`, or until its next turn.
+   * continuations, count as [name]'s work for [forMs] (`TURN_WORK_MS`), or until its next turn.
+   * Work that names its continuations itself (as slices) passes 0: only the turn's own task is
+   * its, and a render or anything else that follows is not put down to it (#1449).
    */
-  readonly turnTaken: (name: string, at: number) => void;
+  readonly turnTaken: (name: string, at: number, forMs?: number) => void;
   /** [name]'s work began at [at]; the returned call says when it ended. */
   readonly workBegan: (name: string, at: number) => (endedAt: number) => void;
   /**
@@ -46,8 +62,17 @@ export interface JsBlockLog {
    * span may cover a yield, so only a long task the runtime reports says the thread was held.
    */
   readonly renderRan: (name: string, startedAt: number, durationMs: number) => void;
+  /**
+   * Startup reached [name] at [at] (#1434): a block before the first screen settles with no named
+   * work says the latest step begun before it ended, as "startup (<name>)".
+   */
+  readonly startupStep: (name: string, at: number) => void;
   /** The first screen settled at [at]: blocks before it with no named work are startup's. */
   readonly firstSettled: (at: number) => void;
+  /** JS heard at [at] that Wave left the screen (the app is no longer active). */
+  readonly left: (at: number) => void;
+  /** JS heard at [at] that Wave is on screen again. */
+  readonly returned: (at: number) => void;
   /** The runtime reported a long task (`PerformanceObserver`'s "longtask"), on the same clock. */
   readonly longTask: (startTime: number, durationMs: number) => void;
 }
@@ -62,6 +87,13 @@ export const jsBlockLine = (block: {
   readonly work: string | null;
 }): string =>
   `JS blocked ${timingDuration(block.durationMs)} on ${block.screen} by ${block.work ?? "no background work"}`;
+
+// not UI text: the app log's line
+export const jsPausedLine = (block: {
+  readonly durationMs: number;
+  readonly screen: string;
+}): string =>
+  `JS paused ${timingDuration(block.durationMs)} on ${block.screen} (Wave left the screen meanwhile); not a block`;
 
 interface Span {
   readonly name: string;
@@ -125,30 +157,57 @@ const renderWithin = (
   return { name: named.name, held };
 };
 
-export const createJsBlockLog = ({ write, screen }: JsBlockLogPorts): JsBlockLog => {
+export const createJsBlockLog = ({ write, screen, later }: JsBlockLogPorts): JsBlockLog => {
   const slices: Span[] = [];
   const renders: Span[] = [];
   const works: Span[] = [];
+  const steps: { readonly name: string; readonly at: number }[] = [];
+  /** The times Wave was off screen, as JS heard them; the last one open while it still is. */
+  const away: Span[] = [];
   let settledAt: number | null = null;
-  const log = (durationMs: number, work: string | null): boolean => {
+  /**
+   * Writes the block [from, from + durationMs] on the screen shown now, once a pause during it
+   * would have been heard. Whether a screen was shown is known at once; the work that held it
+   * ([work], or no line when it says false) is asked then too, so what JS heard meanwhile, a
+   * render's commit or a slice, counts.
+   */
+  const log = (from: number, durationMs: number, work: () => string | null | false): boolean => {
     const shown = screen();
     if (shown === null) return false;
-    write(jsBlockLine({ durationMs, screen: shown, work }));
+    const judge = () => {
+      const named = work();
+      if (named === false) return;
+      const to = from + durationMs;
+      const pausedMeanwhile = away.some((span) => within(span, from, to + PAUSE_HEARD_MS));
+      write(
+        pausedMeanwhile
+          ? jsPausedLine({ durationMs, screen: shown })
+          : jsBlockLine({ durationMs, screen: shown, work: named }),
+      );
+    };
+    if (later === undefined) judge();
+    else later(PAUSE_HEARD_MS, judge);
     return true;
   };
   const keep = (list: Span[], span: Span, kept = KEPT): void => {
     list.push(span);
     if (list.length > kept) list.shift();
   };
+  /** Startup's name for a block ending at [end]: with the latest step begun before it. */
+  const startup = (end: number): string => {
+    let step: string | undefined;
+    for (const { name, at } of steps) if (at < end) step = name;
+    return step === undefined ? STARTUP : `${STARTUP} (${step})`;
+  };
   return {
     sliceRan: (name, startedAt, durationMs) => {
-      const logged = durationMs > JS_BLOCK_MS && log(durationMs, name);
+      const logged = durationMs > JS_BLOCK_MS && log(startedAt, durationMs, () => name);
       keep(slices, { name, from: startedAt, to: startedAt + durationMs, logged });
     },
-    turnTaken: (name, at) => {
+    turnTaken: (name, at, forMs = TURN_WORK_MS) => {
       // The same work's previous turn ended where this one begins.
       for (const work of works) if (work.name === name && work.to > at) work.to = at;
-      keep(works, { name, from: at, to: at + TURN_WORK_MS, logged: false });
+      keep(works, { name, from: at, to: at + forMs, logged: false });
     },
     workBegan: (name, at) => {
       const work: Span = { name, from: at, to: Number.POSITIVE_INFINITY, logged: false };
@@ -164,27 +223,40 @@ export const createJsBlockLog = ({ write, screen }: JsBlockLogPorts): JsBlockLog
         KEPT_RENDERS,
       );
     },
+    startupStep: (name, at) => {
+      if (settledAt === null && steps.length < KEPT) steps.push({ name, at });
+    },
     firstSettled: (at) => {
       settledAt ??= at;
+    },
+    left: (at) => {
+      if (away.at(-1)?.to !== Number.POSITIVE_INFINITY)
+        keep(away, { name: "away", from: at, to: Number.POSITIVE_INFINITY, logged: false });
+    },
+    returned: (at) => {
+      const last = away.at(-1);
+      if (last?.to === Number.POSITIVE_INFINITY) last.to = at;
     },
     longTask: (startTime, durationMs) => {
       if (durationMs <= JS_BLOCK_MS) return;
       const end = startTime + durationMs;
-      // A slice inside the task beats the work running around it: the one that held most of it.
-      const slice = mostWithin(slices, startTime, end);
-      if (slice?.logged === true) return;
-      const render = renderWithin(renders, startTime, end);
-      const rendering =
-        render !== undefined &&
-        (slice === undefined || render.held > overlap(slice, startTime, end))
-          ? `rendering ${render.name}`
-          : undefined;
-      const name =
-        rendering ??
-        slice?.name ??
-        latestWithin(works, startTime, end)?.name ??
-        (settledAt === null || startTime < settledAt ? STARTUP : null);
-      log(durationMs, name);
+      log(startTime, durationMs, () => {
+        // A slice inside the task beats the work running around it: the one that held most of it.
+        const slice = mostWithin(slices, startTime, end);
+        if (slice?.logged === true) return false;
+        const render = renderWithin(renders, startTime, end);
+        const rendering =
+          render !== undefined &&
+          (slice === undefined || render.held > overlap(slice, startTime, end))
+            ? `rendering ${render.name}`
+            : undefined;
+        return (
+          rendering ??
+          slice?.name ??
+          latestWithin(works, startTime, end)?.name ??
+          (settledAt === null || startTime < settledAt ? startup(end) : null)
+        );
+      });
     },
   };
 };
