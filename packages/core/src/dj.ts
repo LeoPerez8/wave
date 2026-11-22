@@ -4,7 +4,8 @@
  * the selected tiles into a Magic Queue session with a DJ seed.
  */
 import type { PlayedSeedArtist } from "./artistMixes.ts";
-import { artistNeighbours, type ArtistGraph } from "./artistGraph.ts";
+import { artistNeighbourhoodSteps, artistNeighbours, type ArtistGraph } from "./artistGraph.ts";
+import { finishSteps } from "./buildSteps.ts";
 import { catalogSeedKey } from "./candidateCatalog.ts";
 import { DEFAULT_DJ_SETTINGS, djNewMusicShare, type DjSettings } from "./djSettings.ts";
 import { magicArtistKey, type MagicSeedSong, type MagicSession } from "./magicQueue.ts";
@@ -15,7 +16,8 @@ import { releaseTitle, YT_ARTIST_FRESH_MS } from "./ytArtist.ts";
 import {
   genreFamily,
   genreFamilyOfArtist,
-  genreMixDjCandidates,
+  genreMixDjCandidatesSteps,
+  type GenreFamily,
   type GenreMixDjCandidate,
   type GenreMixLibrary,
 } from "./genreMixes.ts";
@@ -314,6 +316,15 @@ export const DJ_GENRE_TILES = 4;
 
 /** The families DJ can seed, ranked by taste; remembered families may include unscored candidates. */
 export const djGenreTiles = (
+  sources: Pick<DjGridSources, "artists" | "taste" | "albums" | "genreLibrary" | "genreCandidates">,
+  options: { readonly includeUnscored?: boolean } = {},
+): DjGenreTile[] => finishSteps(djGenreTilesSteps(sources, options));
+
+/**
+ * `djGenreTiles` in steps (#1437): each family is scored first, and only the
+ * first [limit] in that order work out the tiles they open.
+ */
+export function* djGenreTilesSteps(
   {
     artists,
     taste,
@@ -322,66 +333,94 @@ export const djGenreTiles = (
     genreCandidates,
   }: Pick<DjGridSources, "artists" | "taste" | "albums" | "genreLibrary" | "genreCandidates">,
   { includeUnscored = false }: { readonly includeUnscored?: boolean } = {},
-): DjGenreTile[] => {
+  limit = Infinity,
+): Generator<void, DjGenreTile[]> {
   const candidates =
-    genreCandidates ?? (genreLibrary == null ? null : genreMixDjCandidates(genreLibrary));
+    genreCandidates ??
+    (genreLibrary == null ? null : yield* genreMixDjCandidatesSteps(genreLibrary));
   if (candidates === null) return [];
-  const library = new Map<string, DjArtistTile>();
-  for (const artist of artists) {
-    const tile = djArtistTile(artist.name, artist.id);
-    if (tile !== null && !library.has(tile.key)) library.set(tile.key, tile);
+  const scored: { readonly score: number; readonly family: GenreFamily; readonly at: number }[] =
+    [];
+  for (const [at, { seed }] of candidates.entries()) {
+    const family = genreFamily(seed.genre ?? seed.name);
+    const score = taste?.genres.get(family?.key ?? "") ?? 0;
+    if (family !== null && (includeUnscored || score > 0)) scored.push({ score, family, at });
+    yield;
   }
-  const records = new Map<string, DjAlbumTile>();
-  for (const album of albums) {
-    if (album.compilation === true) continue;
-    const by = djArtistTile(album.artist)?.key;
-    const tile = djAlbumTile(album);
-    if (by !== undefined && tile !== null && !records.has(by)) records.set(by, tile);
-  }
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  scored.sort((a, b) => b.score - a.score);
+  if (scored.length === 0) return [];
+  const library = yield* libraryTilesSteps(artists);
+  const records = yield* albumTilesSteps(albums);
   const known = (name: string): DjArtistTile | null => {
     const tile = djArtistTile(name);
     return tile === null ? null : (library.get(tile.key) ?? tile);
   };
-  return candidates
-    .flatMap(({ seed, artists: members }) => {
-      const family = genreFamily(seed.genre ?? seed.name);
-      const score = taste?.genres.get(family?.key ?? "") ?? 0;
-      if (family === null || (!includeUnscored && score <= 0)) return [];
-      const seedArtists = seed.artists ?? [];
-      const opens = members
-        .map((artist) => ({
-          artist,
-          score: taste?.artists.get(magicArtistKey(artist.name)) ?? 0,
-        }))
-        .sort((a, b) => b.score - a.score)
-        .flatMap(({ artist }) => {
-          const tile = known(artist.name);
-          if (tile === null) return [];
-          const album = records.get(tile.key);
-          return album === undefined ? [tile] : [tile, album];
-        })
-        .filter(
-          (tile, index, all) => all.findIndex((candidate) => candidate.key === tile.key) === index,
-        )
-        .slice(0, DJ_GRID_TILES + DJ_OPENED_TILES);
-      return [
-        {
-          score,
-          tile: {
-            kind: "genre",
-            key: `genre:${family.key}` as DjTileKey,
-            libraryId: null,
-            name: family.name,
-            family: family.key,
-            artists: seedArtists,
-            opens,
-          } satisfies DjGenreTile,
-        },
-      ];
-    })
-    .sort((a, b) => b.score - a.score)
-    .map(({ tile }) => tile);
-};
+  const tiles: DjGenreTile[] = [];
+  for (const { family, at } of scored.slice(0, limit)) {
+    const { seed, artists: members } = candidates[at]!;
+    const ranked: { readonly artist: DiscoverSeedArtist; readonly score: number }[] = [];
+    for (const artist of members) {
+      ranked.push({ artist, score: taste?.artists.get(magicArtistKey(artist.name)) ?? 0 });
+      yield;
+    }
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+    ranked.sort((a, b) => b.score - a.score);
+    const opens: DjTile[] = [];
+    const opened = new Set<string>();
+    const open = (tile: DjTile): void => {
+      if (opens.length >= DJ_GRID_TILES + DJ_OPENED_TILES || opened.has(tile.key)) return;
+      opened.add(tile.key);
+      opens.push(tile);
+    };
+    for (const { artist } of ranked) {
+      if (opens.length >= DJ_GRID_TILES + DJ_OPENED_TILES) break;
+      yield;
+      const tile = known(artist.name);
+      if (tile === null) continue;
+      open(tile);
+      const album = records.get(tile.key);
+      if (album !== undefined) open(album);
+    }
+    tiles.push({
+      kind: "genre",
+      key: `genre:${family.key}` as DjTileKey,
+      libraryId: null,
+      name: family.name,
+      family: family.key,
+      artists: seed.artists ?? [],
+      opens,
+    });
+  }
+  return tiles;
+}
+
+/** The Library's artists as tiles, by key; the first artist of a key keeps it. */
+function* libraryTilesSteps(
+  artists: DjGridSources["artists"],
+): Generator<void, Map<string, DjArtistTile>> {
+  const library = new Map<string, DjArtistTile>();
+  for (const artist of artists) {
+    const tile = djArtistTile(artist.name, artist.id);
+    if (tile !== null && !library.has(tile.key)) library.set(tile.key, tile);
+    yield;
+  }
+  return library;
+}
+
+/** Each artist's first album that isn't a compilation, as a tile, by the artist's key. */
+function* albumTilesSteps(albums: readonly DjAlbum[]): Generator<void, Map<string, DjAlbumTile>> {
+  const records = new Map<string, DjAlbumTile>();
+  for (const album of albums) {
+    yield;
+    if (album.compilation === true) continue;
+    const by = djArtistTile(album.artist)?.key;
+    if (by === undefined || records.has(by)) continue;
+    const tile = djAlbumTile(album);
+    if (tile !== null) records.set(by, tile);
+  }
+  return records;
+}
 
 /**
  * DJ's grid, built without the network or a derivation: the taste profile's
@@ -394,49 +433,57 @@ export const djGenreTiles = (
  * appears twice. This is the complete ordered candidate list; `djGrid` is
  * its opening page. It's empty with no taste signal and no plays.
  */
-export const djGridCandidates = ({
-  artists,
-  taste,
-  played = [],
-  graph,
-  albums = [],
-  genreLibrary,
-  genreCandidates,
-}: DjGridSources): DjTile[] => {
-  const library = new Map<string, DjArtistTile>();
-  for (const artist of artists) {
-    const tile = djArtistTile(artist.name, artist.id);
-    if (tile !== null && !library.has(tile.key)) library.set(tile.key, tile);
-  }
+export const djGridCandidates = (sources: DjGridSources): DjTile[] =>
+  finishSteps(djGridCandidatesSteps(sources));
+
+/**
+ * `djGridCandidates` in steps (#1437), for the app's background slices. With
+ * [enough], it stops once it has that many tiles: the list it gives then
+ * starts as the complete one does.
+ */
+export function* djGridCandidatesSteps(
+  { artists, taste, played = [], graph, albums = [], genreLibrary, genreCandidates }: DjGridSources,
+  enough = Infinity,
+): Generator<void, DjTile[]> {
+  const library = yield* libraryTilesSteps(artists);
   const known = (name: string | undefined): DjArtistTile | null => {
     const tile = name === undefined ? null : djArtistTile(name);
     return tile === null ? null : (library.get(tile.key) ?? tile);
   };
-  const names = new Map(played.map((artist) => [catalogSeedKey(artist.name), artist.name]));
-  const scored = [...(taste?.artists ?? [])].filter(([, score]) => score > 0);
+  const names = new Map<string | null, string>();
+  for (const artist of played) {
+    names.set(catalogSeedKey(artist.name), artist.name);
+    yield;
+  }
+  const scored: [string, number][] = [];
+  for (const entry of taste?.artists ?? []) {
+    if (entry[1] > 0) scored.push(entry);
+    yield;
+  }
   // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
   scored.sort((a, b) => b[1] - a[1]);
-  const favourites =
+  const favourites: Iterable<DjArtistTile | null> =
     taste === null
-      ? played.filter((artist) => artist.countedPlays > 0).map((artist) => known(artist.name))
-      : scored.map(
-          ([key]) => library.get(`artist:${key}`) ?? known(names.get(key) ?? graph?.names.get(key)),
-        );
-  const records = new Map<string, DjAlbumTile>();
-  for (const album of albums) {
-    if (album.compilation === true) continue;
-    const by = djArtistTile(album.artist)?.key;
-    const tile = djAlbumTile(album);
-    if (by !== undefined && tile !== null && !records.has(by)) records.set(by, tile);
-  }
+      ? (function* () {
+          for (const artist of played) if (artist.countedPlays > 0) yield known(artist.name);
+        })()
+      : (function* () {
+          for (const [key] of scored)
+            yield library.get(`artist:${key}`) ?? known(names.get(key) ?? graph?.names.get(key));
+        })();
+  const records = yield* albumTilesSteps(albums);
   const grid = new Map<string, DjTile>();
-  const genreTiles = djGenreTiles({
-    artists,
-    taste,
-    albums,
-    genreLibrary: genreLibrary ?? null,
-    genreCandidates: genreCandidates ?? null,
-  }).slice(0, DJ_GENRE_TILES);
+  const genreTiles = yield* djGenreTilesSteps(
+    {
+      artists,
+      taste,
+      albums,
+      genreLibrary: genreLibrary ?? null,
+      genreCandidates: genreCandidates ?? null,
+    },
+    {},
+    DJ_GENRE_TILES,
+  );
   let nextGenre = 0;
   /** Shows [artist], then the first album of theirs when one is known. */
   const show = (artist: DjArtistTile): void => {
@@ -445,10 +492,15 @@ export const djGridCandidates = ({
     if (record !== undefined) grid.set(record.key, record);
   };
   for (const favourite of favourites) {
+    // Tiles only ever join the end, so the grid so far is how the complete one starts.
+    if (grid.size >= enough) return [...grid.values()];
+    yield;
     if (favourite === null || grid.has(favourite.key)) continue;
     show(favourite);
     if (graph !== null) {
-      for (const neighbour of artistNeighbours(graph, favourite.name)) {
+      for (const neighbour of yield* artistNeighbourhoodSteps(graph, [favourite.name], {
+        hops: 1,
+      })) {
         const tile = djArtistTile(neighbour.name);
         if (tile === null || library.has(tile.key) || grid.has(tile.key)) continue;
         show(tile);
@@ -466,11 +518,11 @@ export const djGridCandidates = ({
     grid.set(genre.key, genre);
   }
   return [...grid.values()];
-};
+}
 
 /** DJ's opening page of the complete grid candidate list. */
 export const djGrid = (sources: DjGridSources): DjTile[] =>
-  djGridCandidates(sources).slice(0, DJ_GRID_TILES);
+  finishSteps(djGridCandidatesSteps(sources, DJ_GRID_TILES)).slice(0, DJ_GRID_TILES);
 
 /** The next [limit] candidates not already shown in this DJ visit. */
 export const djGridPage = (

@@ -196,9 +196,13 @@ const useDjGrid = () => {
     if (library === null) return null;
     if (library === "failed") return { kind: "nothing" };
     if (ready === null) return null;
+    // The grid was ranked in background steps with the opening (#1437).
     return djOpeningGrid({
       ...gridSources(ready.library, ready.families),
+      taste: ready.taste,
+      graph: ready.graph,
       albums: ready.albums,
+      grid: ready.grid,
       artistMixes,
     });
   }, [keptGrid, library, ready, artistMixes]);
@@ -211,9 +215,7 @@ const useDjGrid = () => {
           const currentLibrary =
             recommendationSnapshot.peek().library ??
             (await appRuntime.runPromise(recommendationSnapshot.library));
-          openingRead =
-            preparedDjOpening(currentLibrary) ??
-            (await inSlice("DJ grid candidates", () => readDjOpening(currentLibrary)));
+          openingRead = preparedDjOpening(currentLibrary) ?? (await readDjOpening(currentLibrary));
         }
         const full = await readDjGridCandidates(openingRead);
         if (full.length > 0) return full;
@@ -223,6 +225,8 @@ const useDjGrid = () => {
             djOpeningGrid({
               ...gridSources(openingRead.library, openingRead.families),
               albums: openingRead.albums,
+              // No candidates: the taste grid, their first page, is empty too.
+              grid: [],
               artistMixes,
             }),
           );
@@ -234,14 +238,23 @@ const useDjGrid = () => {
   if (state === null && opening !== null && opening.kind !== "skeleton") {
     // The tiles the last DJ was started from are selected, and in the grid
     // even when it has nothing else to show.
-    const reopened = djReopened({
-      grid: opening.kind === "tiles" ? opening.tiles : [],
-      remembered: djRemembered.get().tiles,
-      artists: libraryArtists,
-      albums: ready?.albums ?? [],
-      genreCandidates: ready?.families ?? null,
-      taste: latestTasteProfile(),
-    });
+    const grid = opening.kind === "tiles" ? opening.tiles : [];
+    const remembered = djRemembered.get().tiles;
+    // Reopened in background steps with the opening (#1437) when the grid is its grid; the
+    // chart artists' grid, small, reopens here.
+    const reopened =
+      ready !== null &&
+      ready.remembered === remembered &&
+      (grid === ready.grid || (grid.length === 0 && ready.grid.length === 0))
+        ? ready.reopened
+        : djReopened({
+            grid,
+            remembered,
+            artists: libraryArtists,
+            albums: ready?.albums ?? [],
+            genreCandidates: ready?.families ?? null,
+            taste: latestTasteProfile(),
+          });
     if (reopened.tiles.length > 0) setState(reopened);
   }
   const skipInitialGridWrite = useRef(keptGrid !== null);
