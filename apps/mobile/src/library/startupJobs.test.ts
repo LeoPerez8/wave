@@ -433,8 +433,16 @@ test("a slow scan save makes the next slice smaller, so each stays near Core's s
         pace,
       ),
     );
-    assert.deepEqual(sizes, [20, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]);
-    assert.equal(pace.size(), 4);
+    // 20 files take 150 ms: the next slice is the 4 the budget holds, then it keeps within a
+    // file of the budget (a 5-file slice takes 37.5 ms, a 4-file one exactly the budget).
+    assert.equal(sizes[0], 20);
+    assert.equal(sizes[1], 4);
+    assert.ok(sizes.slice(1).every((size) => size === 4 || size === 5), `${sizes}`);
+    assert.equal(
+      sizes.reduce((sum, size) => sum + size, 0),
+      60,
+    );
+    assert.ok(pace.size() === 4 || pace.size() === 5);
   } finally {
     fixture.close();
   }

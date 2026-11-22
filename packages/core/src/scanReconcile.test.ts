@@ -4,8 +4,10 @@ import { describe, test } from "node:test";
 import {
   SCAN_SAVE_SLICE,
   SCAN_SLICE_BUDGET_MS,
+  SCAN_ANNOUNCE_MS,
   nextScanSaveSlice,
   reconcileScan,
+  scanAnnounceDue,
   scanEnd,
   scanSaveSliceSteps,
   scanSaveSlices,
@@ -230,6 +232,26 @@ describe("nextScanSaveSlice when the phone is fast", () => {
   });
 });
 
+describe("nextScanSaveSlice when each save costs the same however few files it holds", () => {
+  test("a slice under the budget is followed by a bigger one, though halving it wouldn't halve its time", () => {
+    // 17 ms of a transaction's own cost and 0.5 ms a file: one file's 17.5 ms fits the budget.
+    assert.equal(nextScanSaveSlice({ files: 1, ms: 17.5 }), 2);
+  });
+
+  test("slices grow file by file to the budget, then keep within a file of it", () => {
+    const fixedCost = (files: number) => 17 + files * 3;
+    const sizes: number[] = [];
+    let files = 1;
+    for (let slice = 0; slice < 40; slice++) {
+      files = nextScanSaveSlice({ files, ms: fixedCost(files) });
+      sizes.push(files);
+    }
+    // 4 files take 29 ms, 5 take 32: no slice goes over the budget by more than a file's cost.
+    assert.deepEqual(sizes.slice(0, 4), [2, 3, 4, 5]);
+    assert.deepEqual([...new Set(sizes.slice(3))].sort(), [4, 5]);
+  });
+});
+
 test("however slow one file is to save, the next slice still saves one", () => {
   assert.equal(nextScanSaveSlice({ files: 1, ms: 400 }), 1);
 });
@@ -288,5 +310,19 @@ describe("scanTimingsLogLine", () => {
         "saves 0.0 s (longest 0 ms, slice now 25), Library changes 0.0 s (longest 0 ms), " +
         "waiting 0.3 s",
     );
+  });
+});
+
+describe("scanAnnounceDue", () => {
+  test("a scan's first saved batch is announced at once", () => {
+    assert.equal(scanAnnounceDue({ lastAt: undefined, now: 5 }), true);
+  });
+
+  test("a batch saved soon after an announcement waits for the next one", () => {
+    assert.equal(scanAnnounceDue({ lastAt: 1000, now: 1000 + SCAN_ANNOUNCE_MS - 1 }), false);
+  });
+
+  test("a batch saved once the pause is over is announced, with the ones that waited", () => {
+    assert.equal(scanAnnounceDue({ lastAt: 1000, now: 1000 + SCAN_ANNOUNCE_MS }), true);
   });
 });

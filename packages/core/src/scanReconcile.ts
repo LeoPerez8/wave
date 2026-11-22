@@ -146,17 +146,47 @@ export const SCAN_SLICE_BUDGET_MS = 30;
 
 /**
  * The files the next save slice takes, after one that saved `files` in
- * `ms`: as many as fit the budget at that pace, growing at most twofold
- * (one quick slice can be luck), never past `SCAN_SAVE_SLICE` and never
- * under one file, so a slow phone still gets through.
+ * `ms`. Over the budget it shrinks to what fits at that pace, never under one
+ * file, so a slow phone still gets through. Under it, it grows: twofold when
+ * the slice took half the budget or less (one quick slice can be luck), else
+ * by one file, since each save has a cost of its own whatever its files
+ * (about 17 ms on the emulator, #1436) and a pace measured per file would
+ * never let a one-file slice grow. Never past `SCAN_SAVE_SLICE`.
  */
 export const nextScanSaveSlice = (last: {
   readonly files: number;
   readonly ms: number;
 }): number => {
-  const fit = last.ms > 0 ? Math.floor((last.files * SCAN_SLICE_BUDGET_MS) / last.ms) : Infinity;
-  return Math.max(1, Math.min(fit, last.files * 2, SCAN_SAVE_SLICE));
+  const next =
+    last.ms > SCAN_SLICE_BUDGET_MS
+      ? Math.floor((last.files * SCAN_SLICE_BUDGET_MS) / last.ms)
+      : last.ms * 2 <= SCAN_SLICE_BUDGET_MS
+        ? last.files * 2
+        : last.files + 1;
+  return Math.max(1, Math.min(next, SCAN_SAVE_SLICE));
 };
+
+/**
+ * A scan's saved batches are told to the app at most this often (#1436,
+ * #1457): each Library change has every screen in sight read again and the
+ * kept play totals settle again, about 50 s of JS on the emulator, and a
+ * scan that announced each batch of 100 waited that long for each. The
+ * scan's end names every song it saved, so none waits longer than the scan.
+ */
+export const SCAN_ANNOUNCE_MS = 15_000;
+
+/**
+ * Whether a scan announces the songs it saved so far (with any that waited)
+ * at `now`, the last announcement having been at `lastAt` (none yet:
+ * undefined, so a first scan's first songs show at once).
+ */
+export const scanAnnounceDue = ({
+  lastAt,
+  now,
+}: {
+  readonly lastAt: number | undefined;
+  readonly now: number;
+}): boolean => lastAt === undefined || now - lastAt >= SCAN_ANNOUNCE_MS;
 
 /** One transaction's worth of a scan batch: its files, and the moves to them. */
 export interface ScanSaveSlice<T> {

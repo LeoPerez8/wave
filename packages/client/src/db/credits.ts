@@ -8,7 +8,7 @@
  * `album_artist_id` hold the primary (first) one. Kept free of Expo so the
  * store tests run it against a real SQLite.
  */
-import { creditSplitter, identityKey, respreadDeletedSongs, sortKey } from "@wave/core";
+import { creditSplitter, creditSplitterSteps, identityKey, respreadDeletedSongs, sortKey } from "@wave/core";
 import { sql } from "drizzle-orm";
 
 import { refreshArtistImages } from "./artists.ts";
@@ -88,6 +88,26 @@ const unread: Splitter = () => {
 export const creditSplits = (
   build: (knownCredits: Iterable<string>) => Splitter = creditSplitter,
 ): CreditSplits => ({ known: null, split: unread, stale: true, build });
+
+/** The Library's whole credits, as a scan's first save would read them (`warmCreditSplitsSteps`). */
+export const readLibraryCredits = (db: LibraryDatabase): Set<string> => libraryCredits(db);
+
+/**
+ * Builds [splits]' splitter from the Library's [credits] (`readLibraryCredits`)
+ * a known credit per step, so a scan's first save doesn't build it in one
+ * hold. Leaves [splits] as it is when a save read the credits first.
+ */
+export function* warmCreditSplitsSteps(
+  splits: CreditSplits,
+  credits: Set<string>,
+): Generator<void, void> {
+  if (splits.known !== null) return;
+  const split =
+    splits.build === creditSplitter ? yield* creditSplitterSteps(credits) : splits.build(credits);
+  if (splits.known !== null) return;
+  splits.known = credits;
+  splits.split = split;
+}
 
 /** The splitter for [credits]: the Library's whole credits and theirs. */
 const splitterFor = (db: LibraryDatabase, splits: CreditSplits, credits: Credits): Splitter => {

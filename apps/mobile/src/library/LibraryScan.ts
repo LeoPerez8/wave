@@ -9,12 +9,14 @@ import {
   planAddRoot,
   planExclusion,
   scanEnd,
+  scanAnnounceDue,
   scanTimingsLogLine,
   type IndexedFile,
   type LibraryChange,
 } from "@wave/core";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import { refreshDownloadPolicy } from "./downloadPolicy";
 import { finishFileDeletions } from "./fileDeletions";
 import * as Stream from "effect/Stream";
@@ -228,6 +230,9 @@ const scanFolders = (roots: readonly string[]) =>
     // Music folders shows a folder no scan finished yet without its song count.
     yield* startupTurnEffect;
     const firstScan = yield* store.hasUnscannedRoot(roots);
+    // The first save would otherwise read and build the credit splitter in one hold.
+    yield* startupTurnEffect;
+    yield* store.warmCreditSplits;
 
     // Indexed files the scan didn't find that no batch has matched yet.
     let missing: readonly IndexedFile[] = [];
@@ -247,6 +252,20 @@ const scanFolders = (roots: readonly string[]) =>
       longestAnnounceMs: 0,
     };
     const scanStart = performance.now();
+    // Saved songs not yet told to the app, and when it last was: batches are told together at
+    // Core's pace (`scanAnnounceDue`), and the scan's end names every song it saved.
+    let unannounced: number[] = [];
+    let announcedAt: number | undefined;
+    const announceSaved = () => {
+      announcedAt = Date.now();
+      if (unannounced.length === 0) return;
+      const announcing = performance.now();
+      bumpLibraryVersion(scanBatchChange(unannounced));
+      unannounced = [];
+      const ms = performance.now() - announcing;
+      timings.announcingMs += ms;
+      timings.longestAnnounceMs = Math.max(timings.longestAnnounceMs, ms);
+    };
     scanState.set({
       status: "scanning",
       kind,
@@ -373,11 +392,8 @@ const scanFolders = (roots: readonly string[]) =>
               startupTurnEffect,
             );
             if (count > 0) {
-              const announcing = performance.now();
-              bumpLibraryVersion(scanBatchChange(batchTrackIds));
-              const ms = performance.now() - announcing;
-              timings.announcingMs += ms;
-              timings.longestAnnounceMs = Math.max(timings.longestAnnounceMs, ms);
+              unannounced.push(...batchTrackIds);
+              if (scanAnnounceDue({ lastAt: announcedAt, now: Date.now() })) announceSaved();
             }
             return;
           }
@@ -394,6 +410,8 @@ const scanFolders = (roots: readonly string[]) =>
         if (event._tag === "Complete") completed = event;
         return handleEvent(event);
       }),
+      // A scan that fails or is stopped still has its saved songs shown.
+      Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : Effect.sync(announceSaved))),
     );
 
     const finished = completed !== undefined && !completed.cancelled;
@@ -412,6 +430,7 @@ const scanFolders = (roots: readonly string[]) =>
       linkedAtRevision = yield* store.playlistEntriesRevision;
     }
     if (completed === undefined || completed.cancelled) {
+      announceSaved();
       if (linked > 0) bumpLibraryVersion(ENTRIES_LINKED);
       scanState.set({ status: "idle" });
       return;

@@ -14,7 +14,12 @@ import { sql } from "drizzle-orm";
 import type { IndexedTrack } from "../types.ts";
 import { selectArtistDetail, selectArtists } from "./artists.ts";
 import { libraryCounts } from "./counts.ts";
-import { creditSplits, type CreditSplits } from "./credits.ts";
+import {
+  creditSplits,
+  readLibraryCredits,
+  warmCreditSplitsSteps,
+  type CreditSplits,
+} from "./credits.ts";
 import { selectLinkRows } from "./links.ts";
 import { removeTracks, saveBatch } from "./save.ts";
 import * as schema from "./schema.ts";
@@ -300,6 +305,39 @@ describe("credits", () => {
     // Nothing deleted: the Library's credits are as they were.
     removeTracks(db, splits, []);
     assert.equal(count.splits, 1);
+  });
+
+  test("credits read and built ahead in steps leave a scan's first save nothing to build", () => {
+    scan(...ariana);
+    let builds = 0;
+    splits = creditSplits((known) => {
+      builds += 1;
+      return creditSplitter(known);
+    });
+    const warming = warmCreditSplitsSteps(splits, readLibraryCredits(db));
+    while (warming.next().done !== true);
+    assert.equal(builds, 1);
+    scanBatches(ariana.slice(1));
+    assert.equal(builds, 1);
+    assert.deepEqual(
+      selectArtists(db, {}).map((row) => row.name),
+      ["Ariana Grande", "Doja Cat", "Social House"],
+    );
+  });
+
+  test("Core's splitter is built a known credit per step, and not again once a save built it", () => {
+    scan(...ariana);
+    splits = creditSplits();
+    const warming = warmCreditSplitsSteps(splits, readLibraryCredits(db));
+    let steps = 0;
+    while (warming.next().done !== true) steps++;
+    assert.ok(steps >= 3);
+    const split = splits.split;
+    scanBatches(ariana.slice(0, 1));
+    assert.equal(splits.split, split);
+    const late = warmCreditSplitsSteps(splits, new Set(["Someone Else"]));
+    while (late.next().done !== true);
+    assert.equal(splits.split, split);
   });
 
   test("the Library's artist count and an artist's link row count collaborations", () => {

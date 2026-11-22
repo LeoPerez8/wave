@@ -1,8 +1,8 @@
 /**
  * How songs landing in the Library during a download run reach Wave's lists
  * (docs/spec.md, YT Music, Downloads): gathered, and announced together as a
- * burst at most every `LANDING_BURST_MS`, as a scan's batches are; a
- * downloaded song and its fill-in as one change.
+ * burst at most every `LANDING_BURST_MS` (a scan's batches at their own
+ * pace, `scanAnnounceDue`); a downloaded song and its fill-in as one change.
  */
 import type { LibraryChange } from "./libraryQueries.ts";
 
