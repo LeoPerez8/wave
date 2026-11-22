@@ -55,7 +55,9 @@ const [{ default: TabsLayout }] = await loadWithStubs<[typeof import("../app/(ta
       `export const BACKDROP = { tabs: "tabs" };
        export const ChromeProvider = ({ children }) => children;`,
     ),
-    "@/chrome/TabBar": stubModule(`export const TabBar = () => { ${t}.chromeRenders++; return null; };`),
+    "@/chrome/TabBar": stubModule(
+      `export const TabBar = () => { ${t}.chromeRenders++; return null; };`,
+    ),
     "@/chrome/tabEntry": stubModule(
       `const entry = { style: {}, enter: () => {} };
        export const useTabEntry = () => entry;`,

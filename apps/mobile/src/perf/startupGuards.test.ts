@@ -97,5 +97,8 @@ test("Search's screen is built hidden in idle time, so its first tap shows a kep
   const body = layout.slice(start, layout.indexOf("\n", layout.indexOf(");", start)));
   assert.match(body, /startTransition\(\(\) => warmTabScreen\("search"\)\)/);
   // Before the scan, so the build doesn't share the thread with it.
-  assert.ok(start < layout.indexOf('afterFirstSettled(\n        "scan"'), "warm Search before the scan");
+  assert.ok(
+    start < layout.indexOf('afterFirstSettled(\n        "scan"'),
+    "warm Search before the scan",
+  );
 });

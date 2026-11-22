@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import {
-  describeTabScreens,
-  keepTabs,
-  parseTabScreens,
-  sameKeptTabs,
-  warmTab,
-} from "./index.ts";
+import { describeTabScreens, keepTabs, parseTabScreens, sameKeptTabs, warmTab } from "./index.ts";
 
 type Tab = "index" | "library" | "songs" | "albums" | "search";
 const bar: Tab[] = ["index", "library", "songs", "search"];
@@ -49,7 +43,11 @@ describe("tabs kept mounted", () => {
 
 describe("a tab warmed before its first visit (#1438)", () => {
   test("joins the kept tabs, after them, so the next to go is it", () => {
-    assert.deepEqual(warmTab(["library", "index"], "search", bar, 5), ["library", "index", "search"]);
+    assert.deepEqual(warmTab(["library", "index"], "search", bar, 5), [
+      "library",
+      "index",
+      "search",
+    ]);
   });
 
   test("a tab already kept, off the bar, or past the limit changes nothing", () => {
@@ -73,7 +71,11 @@ describe("the kept tabs as the tab navigator sees them (#1438)", () => {
 
   test("a tab joining or leaving gives the new list", () => {
     const shown: readonly Tab[] = ["index", "library"];
-    assert.deepEqual(sameKeptTabs(shown, ["search", "index", "library"]), ["search", "index", "library"]);
+    assert.deepEqual(sameKeptTabs(shown, ["search", "index", "library"]), [
+      "search",
+      "index",
+      "library",
+    ]);
     assert.deepEqual(sameKeptTabs(shown, ["library"]), ["library"]);
     assert.deepEqual(sameKeptTabs(shown, ["songs", "library"]), ["songs", "library"]);
   });
