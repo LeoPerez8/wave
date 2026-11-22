@@ -10,7 +10,7 @@ import {
   type RowWindow,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { usePanGesture } from "react-native-gesture-handler";
 import Animated, {
@@ -82,8 +82,14 @@ export interface DragHandlers {
   readonly onDrop: (canceled: boolean) => void;
 }
 
-export interface ListDrag extends DragHandlers {
+export interface ListDrag {
+  /** The same object for the list's life, so memoised cells skip a list's re-render. */
   readonly drag: DragState;
+  /**
+   * The same object while the cells keep their shape: a re-render of the list (the
+   * window moving, a stage of its first mount) re-renders no cell already there.
+   */
+  readonly handlers: DragHandlers;
   /** The list's scroll view. */
   readonly scrollRef: AnimatedRef<Animated.ScrollView>;
   /** The scroll view's own layout and content size. */
@@ -94,6 +100,28 @@ export interface ListDrag extends DragHandlers {
   /** The items to mount: the rows around the screen, and the dragged item's row. */
   readonly indices: readonly number[];
 }
+
+/** Where an item dragged from [start] by (dx, dy) lands: the same choice on the UI thread and in JS. */
+const dropTarget = (
+  { columns, width, height }: DragCells,
+  start: number,
+  dx: number,
+  dy: number,
+  count: number,
+): number => {
+  "worklet";
+  return columns === 1
+    ? reorderTarget({ from: start, distance: dy, rowHeight: height, count })
+    : reorderGridTarget({
+        from: start,
+        dx,
+        dy,
+        cellWidth: width,
+        cellHeight: height,
+        columns,
+        count,
+      });
+};
 
 /**
  * The drag machinery of a list of [count] items laid out in [cells]: [move]
@@ -116,7 +144,7 @@ export const useListDrag = ({
   move: (from: number, to: number) => boolean;
   perFrame?: number;
 }): ListDrag => {
-  const { columns } = cells;
+  const { columns, width: cellWidth } = cells;
   const rowHeight = cells.height;
   const rowCount = Math.ceil(count / columns);
   const countRef = useRef(count);
@@ -131,16 +159,19 @@ export const useListDrag = ({
   });
 
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
-  const drag: DragState = {
-    active: useSharedValue(-1),
-    hover: useSharedValue(-1),
-    dragX: useSharedValue(0),
-    dragY: useSharedValue(0),
-    translation: useSharedValue(0),
-    fingerY: useSharedValue(0),
-    startScroll: useSharedValue(0),
-    scroll: useSharedValue(0),
-  };
+  const active = useSharedValue(-1);
+  const hover = useSharedValue(-1);
+  const dragX = useSharedValue(0);
+  const dragY = useSharedValue(0);
+  const translation = useSharedValue(0);
+  const fingerY = useSharedValue(0);
+  const startScroll = useSharedValue(0);
+  const scrolled = useSharedValue(0);
+  // Shared values keep their identity, so this is made once.
+  const drag: DragState = useMemo(
+    () => ({ active, hover, dragX, dragY, translation, fingerY, startScroll, scroll: scrolled }),
+    [active, hover, dragX, dragY, translation, fingerY, startScroll, scrolled],
+  );
   useScrollOffset(scrollRef, drag.scroll);
   const contentHeight = useSharedValue(0);
 
@@ -208,39 +239,34 @@ export const useListDrag = ({
     endDrag();
   });
 
-  // Where an item dragged from [start] by (dx, dy) lands: the same choice on the UI thread and here.
-  const targetOf = (start: number, dx: number, dy: number, count: number): number => {
-    "worklet";
-    return columns === 1
-      ? reorderTarget({ from: start, distance: dy, rowHeight, count })
-      : reorderGridTarget({
-          from: start,
-          dx,
-          dy,
-          cellWidth: cells.width,
-          cellHeight: rowHeight,
-          columns,
-          count,
-        });
-  };
-
   const landOn = (dx: number, dy: number) => {
     if (from.current < 0) return;
-    const next = targetOf(from.current, dx, dy, countRef.current);
+    const next = dropTarget(cells, from.current, dx, dy, countRef.current);
     if (next === target.current) return;
     target.current = next;
     drag.hover.set(next);
     void Haptics.selectionAsync();
   };
-  const onDragMove = (dx: number, dy: number) => {
-    "worklet";
-    const start = drag.active.get();
-    if (start === -1) return;
-    const next = targetOf(start, dx, dy, itemCount.get());
-    if (next === (told.get() === -1 ? start : told.get())) return;
-    told.set(next);
-    scheduleOnRN(landOn, dx, dy);
-  };
+  // The handlers call the latest render's functions through a ref (set below), so they keep
+  // their identity, and memoised cells their gestures, until the cells change shape.
+  const handlers: DragHandlers = useMemo(() => {
+    const shape: DragCells = { columns, width: cellWidth, height: rowHeight };
+    const landOnLatest = (dx: number, dy: number) => latest.current.landOn(dx, dy);
+    return {
+      onDragBegin: (index) => latest.current.onDragBegin(index),
+      onDrop: (canceled) => latest.current.onDrop(canceled),
+      onDragMove: (dx, dy) => {
+        "worklet";
+        const start = active.get();
+        if (start === -1) return;
+        const next = dropTarget(shape, start, dx, dy, itemCount.get());
+        if (next === (told.get() === -1 ? start : told.get())) return;
+        told.set(next);
+        scheduleOnRN(landOnLatest, dx, dy);
+      },
+    };
+  }, [columns, cellWidth, rowHeight, active, itemCount, told]);
+  const { onDragMove } = handlers;
 
   // Near the top or bottom edge, the dragged item scrolls the list, faster the
   // closer the finger gets. It runs only while an item is dragged.
@@ -282,6 +308,12 @@ export const useListDrag = ({
     else endDrag();
   };
 
+  // This render's functions, which the handlers above call.
+  const latest = useRef({ landOn, onDragBegin, onDrop });
+  useLayoutEffect(() => {
+    latest.current = { landOn, onDragBegin, onDrop };
+  });
+
   // The dragged item's row stays mounted however far auto-scroll takes the list.
   const indices = windowRows(rows, shown.keep, staged).flatMap((row) =>
     Array.from({ length: columns }, (_, column) => row * columns + column),
@@ -294,9 +326,7 @@ export const useListDrag = ({
     onContentSizeChange: (_, height) => contentHeight.set(height),
     onHeaderLayout: (event) => setTop(event.nativeEvent.layout.height),
     indices,
-    onDragBegin,
-    onDragMove,
-    onDrop,
+    handlers,
   };
 };
 
