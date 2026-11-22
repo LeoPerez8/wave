@@ -211,6 +211,18 @@ describe("What's New", () => {
     assert.equal(app.asked.length, 2);
   });
 
+  it("names why the fetch failed, past Effect's wrapper", async () => {
+    const app = launch({
+      seen: { value: "0.46.2" },
+      answer: Effect.tryPromise(() => Promise.reject(new TypeError("Network request failed"))),
+    });
+    app.runner.reconsider();
+    await settle();
+    assert.deepEqual(app.logged, [
+      "The release notes fetch failed: TypeError: Network request failed",
+    ]);
+  });
+
   it("stops holding back what waits for it once a fetch fails, and still shows a later retry's notes", async () => {
     const seen = { value: "0.46.2" };
     const app = launch({ seen, answer: Effect.fail(new Error("offline")) });
