@@ -192,7 +192,11 @@ test("a Recap plays its stories over the window, with its music, and a story sav
     await page.keyboard.press("Escape");
     await expect(viewer).toHaveCount(0);
     await expect.poll(playing).toMatchObject({ title: null, length: 0 });
-    await expect(page.locator(".player-title")).toHaveText(en.desktopLayout.nothingPlaying);
+    // The bar shows a song's title twice (its credit twin), so name the one in Now Playing's button:
+    // a locator matching both fails at once instead of waiting for the bar to catch up.
+    await expect(page.locator(".player-now .player-title")).toHaveText(
+      en.desktopLayout.nothingPlaying,
+    );
     await expect(card).toHaveCount(0);
 
     // Stats lists every Recap, newest first, and a tile opens its stories.
