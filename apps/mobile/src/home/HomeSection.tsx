@@ -9,6 +9,7 @@ import {
   discoverRowTitle,
   homeSectionTitle,
   inYourOrbitTileUnavailable,
+  listMounts,
   MAGIC_QUEUE_PICKS,
   magicQueueCarouselPage,
   magicQueueCarouselPageLabel,
@@ -21,6 +22,7 @@ import {
   type YtAlbumSong,
 } from "@wave/core";
 import { router } from "@/lib/timingRouter";
+import { useStagedCount } from "@/lib/stagedCount";
 import { memo, useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { AccessibilityInfo, Text, View, useWindowDimensions } from "react-native";
 import { IconRefresh } from "@tabler/icons-react-native";
@@ -86,6 +88,7 @@ import { noteCarouselPage, snapshotCarouselPage } from "./homeSnapshot";
 import {
   homeOpeningState,
   homeSectionWaiting,
+  sameHomeSection,
   magicQueueGrid,
   SECTION_GAP,
   type HomeContent,
@@ -569,10 +572,20 @@ function MagicQueueRow({
   );
 }
 
-/** The Magic Queue row's wrapping grid, [width] wide. */
-function MagicQueueGrid({ width, children }: { width: number; children: ReactNode }) {
+/** The Magic Queue row's wrapping grid, [width] wide and at least [minHeight] tall. */
+function MagicQueueGrid({
+  width,
+  minHeight,
+  children,
+}: {
+  width: number;
+  minHeight?: number;
+  children: ReactNode;
+}) {
   return (
-    <View style={{ width, flexDirection: "row", flexWrap: "wrap", gap: CELL }}>{children}</View>
+    <View style={{ width, minHeight, flexDirection: "row", flexWrap: "wrap", gap: CELL }}>
+      {children}
+    </View>
   );
 }
 
@@ -737,20 +750,25 @@ function OrbitTile({
   );
 }
 
-/** Home's nine most played recent songs as a grid laid out as the Magic Queue's is. */
+/**
+ * Home's nine most played recent songs as a grid laid out as the Magic Queue's
+ * is. Its tiles mount a row a frame (#1440), in a grid held as tall as all of them meanwhile.
+ */
 function InYourOrbit({ title, selection }: SectionProps) {
   const songs = useInYourOrbit();
   const ytMusic = useYtMusicEnabled();
   const { width, fontScale } = useWindowDimensions();
   const [available, setAvailable] = useState(width - grid.margin * 2);
+  const count = songs?.length ?? 0;
+  const { size, columns, height } = magicQueueGrid(available, fontScale, count);
+  const shown = useStagedCount(listMounts({ count, perFrame: columns, screen: count }));
   if (songs === undefined) return <HomeSectionSpace id="in-your-orbit" />;
   if (songs.length === 0) return null;
-  const { size } = magicQueueGrid(available, fontScale);
   return (
     <TitledSection title={title} selecting={selection.selecting}>
       <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
-        <MagicQueueGrid width={available}>
-          {songs.map((seed, index) => {
+        <MagicQueueGrid width={available} minHeight={shown < count ? height : undefined}>
+          {songs.slice(0, shown).map((seed, index) => {
             const key =
               seed.source === "library" ? String(seed.song.id) : ytTrackId(seed.song.videoId);
             return (
@@ -785,7 +803,7 @@ function FromYourLibrary({ title, selection }: SectionProps) {
   if (playlists.length === 0) return null;
   return (
     <TitledSection title={title} selecting={selection.selecting}>
-      <CoverRow>
+      <CoverRow staged>
         {playlists.map((playlist, place) =>
           (() => {
             const item = items[place]!;
@@ -868,7 +886,7 @@ function CommunityPlaylists({ title, selection }: SectionProps) {
   if (playlists.length === 0) return null;
   return (
     <TitledSection title={title} selecting={selection.selecting}>
-      <CoverRow>
+      <CoverRow staged>
         {playlists.map((playlist, place) => {
           const author = playlist.author ?? "";
           const item = items[place]!;
@@ -983,7 +1001,8 @@ const INERT_HOME_SELECTION: HomeSelection = {
  * nothing to show. Every section leaves `SECTION_GAP` above itself, so it can
  * sit under any screen's content (Home, or the Library under its rows).
  * [home] is `useHome`'s answer. Memoized: a Home render (its arrangement, the
- * window, the opening state) leaves a section whose props kept their identity alone.
+ * window, the opening state) leaves a section whose props kept their identity alone,
+ * and a new [home] redraws only the sections whose slice of it changed (`sameHomeSection`).
  */
 function HomeSectionShown({
   id,
@@ -1012,4 +1031,10 @@ function HomeSectionShown({
 }
 
 // A declaration wrapped apart: the compiler can't build a memo's function that names itself.
-export const HomeSection = memo(HomeSectionShown);
+export const HomeSection = memo(
+  HomeSectionShown,
+  (before, after) =>
+    before.id === after.id &&
+    before.selection === after.selection &&
+    sameHomeSection(after.id, before.home, after.home),
+);

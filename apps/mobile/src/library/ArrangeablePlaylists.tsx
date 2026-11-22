@@ -2,7 +2,9 @@ import { IconGripVertical } from "@tabler/icons-react-native";
 import { playlistFindText, type PlaylistFindText, type PlaylistLayout } from "@wave/core";
 import { useScrollToTop } from "expo-router";
 import {
+  memo,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactElement,
@@ -35,6 +37,12 @@ import { moveShownPlaylist } from "./playlistOrder";
 const GRIP_TARGET = grid.stateCell + CELL * 2;
 /** Room a tile's name leaves at its end for the handle drawn over it. */
 export const TILE_GRIP_INSET = CELL * 4;
+/**
+ * Playlists the list's first mount draws in a frame (#1440), whole rows: the
+ * first frame shows the head and the first of them, and the rest of the first
+ * window follows a few a frame.
+ */
+const PLAYLISTS_PER_FRAME = 2;
 
 /** Where the playlists sit: a cell per playlist, [columns] to a row. */
 interface Cells extends DragCells {
@@ -49,24 +57,29 @@ type CellProps = {
   drag: DragState;
   /** Whether the playlist can be dragged: not while selecting, nor while Find narrows the list. */
   arrangeable: boolean;
-  children: ReactNode;
+  playlist: PlaylistRow;
+  renderPlaylist: Props["renderPlaylist"];
   handlers: DragHandlers;
 };
 
 /**
  * A playlist in its cell, with a handle to drag it elsewhere: at the row's
  * end in the list, over the end of the name's line on a tile. Other
- * playlists step aside, back or on one place, as it passes them.
+ * playlists step aside, back or on one place, as it passes them. Memoised on
+ * props that keep their identity, so a re-render of the list (its window
+ * moving, a stage of its first mount) draws only the cells it adds (#1440).
  */
-function ArrangeableCell({
+const ArrangeableCell = memo(function ArrangeableCell({
   index,
   cells,
   layout,
   drag,
   arrangeable,
-  children,
+  playlist,
+  renderPlaylist,
   handlers,
 }: CellProps) {
+  const children = renderPlaylist(playlist, index, arrangeable);
   const fill = useThemeColor("fill");
   const secondary = useThemeColor("secondary");
   const { fontScale } = useWindowDimensions();
@@ -135,7 +148,7 @@ function ArrangeableCell({
       )}
     </Animated.View>
   );
-}
+});
 
 type Props = {
   /** In the order the list shows them. */
@@ -190,12 +203,15 @@ export function ArrangeablePlaylists({
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const columns = layout === "grid" ? 2 : 1;
-  const cells: Cells = {
-    columns,
-    width: tile + grid.gutter,
-    height: rowHeight,
-    tile: layout === "list" ? undefined : tile,
-  };
+  const cells: Cells = useMemo(
+    () => ({
+      columns,
+      width: tile + grid.gutter,
+      height: rowHeight,
+      tile: layout === "list" ? undefined : tile,
+    }),
+    [columns, tile, rowHeight, layout],
+  );
   // The scroll handles Find keeps the list's place with, once the drag machinery has them.
   const scrolling = useRef<ListDrag | null>(null);
   const find = useFindInList(
@@ -218,6 +234,7 @@ export function ArrangeablePlaylists({
     cells,
     bottomInset,
     move: (from, to) => moveShownPlaylist(idsRef.current, from, to),
+    perFrame: PLAYLISTS_PER_FRAME,
   });
   useLayoutEffect(() => {
     scrolling.current = listDrag;
@@ -237,10 +254,10 @@ export function ArrangeablePlaylists({
         layout={layout}
         drag={listDrag.drag}
         arrangeable={arrangeable}
-        handlers={listDrag}
-      >
-        {renderPlaylist(playlist, index, arrangeable)}
-      </ArrangeableCell>
+        playlist={playlist}
+        renderPlaylist={renderPlaylist}
+        handlers={listDrag.handlers}
+      />
     );
   };
 
