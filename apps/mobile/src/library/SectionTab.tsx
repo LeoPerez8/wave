@@ -1,5 +1,6 @@
 import { useStackScreenOptions } from "@/chrome/tabScreens";
 import { timingStackListeners } from "@/lib/timing";
+import { screenCostLayout } from "@/lib/renderCost";
 import type { LibrarySectionSlug } from "@wave/core";
 import { Stack, useFocusEffect } from "expo-router";
 import { useCallback } from "react";
@@ -20,7 +21,13 @@ import { openArmedAnchoredMenu } from "@/motion/menuRequest";
  */
 export function SectionTabStack() {
   const screenOptions = useStackScreenOptions();
-  return <Stack screenListeners={timingStackListeners} screenOptions={screenOptions} />;
+  return (
+    <Stack
+      screenListeners={timingStackListeners}
+      screenLayout={screenCostLayout}
+      screenOptions={screenOptions}
+    />
+  );
 }
 
 /**

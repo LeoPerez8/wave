@@ -1,3 +1,4 @@
+import { useRenderCost } from "@/lib/renderCost";
 import { useScreenContent } from "@/lib/screenTiming";
 import { useFocusEffect } from "expo-router";
 import { useCallback } from "react";
@@ -39,6 +40,7 @@ export default function LibraryScreen() {
   useFocusEffect(useCallback(() => openArmedAnchoredMenu("layout-library"), []));
   useScreenContent(true);
   useRenderCount("LibraryScreen");
+  useRenderCost("LibraryScreen");
   const { strings } = useLocalisation();
   const scanStatus = useScanStatus();
   const trackCount = useTrackCount();

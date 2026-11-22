@@ -18,6 +18,7 @@ import {
 import { StyleSheet } from "react-native";
 import { Screen } from "react-native-screens";
 
+import { RenderCost } from "@/lib/renderCost";
 import { PERF_ENABLED, perfMark, registerPerfMeta } from "@/perf/perf";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -121,13 +122,15 @@ export const renderTabScreens =
             : undefined
         }
       >
-        {PERF_ENABLED ? (
-          <TabCommitMark name={name} focused={isFocused}>
-            {descriptor.render()}
-          </TabCommitMark>
-        ) : (
-          descriptor.render()
-        )}
+        <RenderCost name={`tab:${name}`}>
+          {PERF_ENABLED ? (
+            <TabCommitMark name={name} focused={isFocused}>
+              {descriptor.render()}
+            </TabCommitMark>
+          ) : (
+            descriptor.render()
+          )}
+        </RenderCost>
       </Screen>
     );
   };

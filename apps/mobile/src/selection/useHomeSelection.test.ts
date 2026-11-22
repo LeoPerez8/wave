@@ -81,3 +81,48 @@ test("Home's selection takes the tiles Home shows now, each as last drawn", () =
     act(() => endSelection());
   }
 });
+
+// Home hands one selection to every section (#1423): a Home render that changes nothing
+// selected must hand them the same one, or every section renders again with it.
+test("Home's selection keeps its identity across a render that selects nothing", () => {
+  const seen: HomeSelection[] = [];
+  function Home() {
+    const home = useHomeSelection();
+    useLayoutEffect(() => {
+      seen.push(home);
+    });
+    return null;
+  }
+  let renderer: ReactTestRenderer | undefined;
+  act(() => {
+    renderer = create(createElement(Home));
+  });
+  act(() => renderer?.update(createElement(Home)));
+  assert.equal(seen.length, 2);
+  assert.equal(seen[1], seen[0]);
+  act(() => renderer?.unmount());
+});
+
+test("Home's selection changes when a tile is selected", () => {
+  const seen: HomeSelection[] = [];
+  function Home() {
+    const home = useHomeSelection();
+    useLayoutEffect(() => {
+      seen.push(home);
+    });
+    return null;
+  }
+  let renderer: ReactTestRenderer | undefined;
+  try {
+    act(() => {
+      renderer = create(createElement(Home));
+    });
+    act(() => seen[0]!.start(playlist(1, "First")));
+    const last = seen.at(-1)!;
+    assert.notEqual(last, seen[0]);
+    assert.equal(last.selecting, true);
+  } finally {
+    act(() => renderer?.unmount());
+    act(() => endSelection());
+  }
+});

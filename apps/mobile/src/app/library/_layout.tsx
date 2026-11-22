@@ -1,5 +1,6 @@
 import { useStackScreenOptions } from "@/chrome/tabScreens";
 import { timingStackListeners } from "@/lib/timing";
+import { screenCostLayout } from "@/lib/renderCost";
 import { Stack } from "expo-router";
 import { View } from "react-native";
 
@@ -19,7 +20,11 @@ export default function LibraryLayout() {
   return (
     <View className="flex-1 bg-background">
       <View nativeID={BACKDROP.library} collapsable={false} className="flex-1">
-        <Stack screenListeners={timingStackListeners} screenOptions={screenOptions} />
+        <Stack
+          screenListeners={timingStackListeners}
+          screenLayout={screenCostLayout}
+          screenOptions={screenOptions}
+        />
       </View>
       {/* A list selecting swaps the mini player for its selection bar. */}
       {selecting ? (

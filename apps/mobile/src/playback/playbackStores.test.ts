@@ -199,3 +199,13 @@ test("the player's trouble follows the wait, the retry and the timeout", () => {
     errorCode: "ytOffline",
   });
 });
+
+test("a report of the same song keeps its item, so what shows it doesn't render again (#1423)", () => {
+  const stores = makePlaybackStores(() => {});
+  stores.reportState(playing);
+  const first = stores.playbackState.get().item;
+  stores.reportState({ ...playing, item: { ...playing.item! }, positionMs: 2_000, at: 11_000 });
+  assert.equal(stores.playbackState.get().item, first);
+  stores.reportState({ ...playing, item: { ...playing.item!, title: "A (live)" } });
+  assert.equal(stores.playbackState.get().item?.title, "A (live)");
+});

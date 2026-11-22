@@ -265,4 +265,30 @@ for (const [build, hooks] of Object.entries(builds)) {
       row.close();
     }
   });
+
+  for (const [kind, pool, mixes] of [
+    ["pool pages", true, NO_MIXES],
+    ["mixes' songs", false, MIXES],
+  ] as const)
+    test(`${build}: a render with nothing new keeps the row's section (${kind}, #1423)`, () => {
+      harness.pool = pool;
+      harness.answers.clear();
+      const seen: ReturnType<Section["useMagicQueueSection"]>[] = [];
+      function Row() {
+        seen.push(hooks.useMagicQueueSection(true, mixes));
+        return null;
+      }
+      let renderer: ReactTestRenderer | undefined;
+      act(() => {
+        renderer = create(createElement(Row));
+      });
+      try {
+        const before = seen.at(-1);
+        act(() => renderer?.update(createElement(Row)));
+        assert.equal(seen.at(-1), before, "the row's section, so its rows don't render again");
+      } finally {
+        act(() => renderer?.unmount());
+        harness.pool = true;
+      }
+    });
 }

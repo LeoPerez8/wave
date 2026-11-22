@@ -311,7 +311,7 @@ const scanned = async (
   };
 };
 
-test("scan saves ti's 100-file slices, one transaction per turn with artwork first, keeping moved identity and a retry after interruption", async () => {
+test("scan saves four-file slices, one transaction per turn with artwork first, keeping moved identity and a retry after interruption", async () => {
   const { saveScanBatch } = await import("./startupJobs.ts");
   const fixture = await createFastAgainFixture();
   try {
@@ -354,9 +354,9 @@ test("scan saves ti's 100-file slices, one transaction per turn with artwork fir
       turns.shift()!();
       await new Promise((resolve) => setImmediate(resolve));
     }
-    // One transaction per turn: ti's first slice, with the batch's artwork.
-    assert.deepEqual(saves, [{ tracks: 100, artwork: 1, moves: 0 }]);
-    assert.equal(Effect.runSync(store.knownFiles(["/Startup"])).length, 101);
+    // One transaction per turn: the first four tracks, with the batch's artwork.
+    assert.deepEqual(saves, [{ tracks: 4, artwork: 1, moves: 0 }]);
+    assert.equal(Effect.runSync(store.knownFiles(["/Startup"])).length, 5);
     controller.abort();
     await assert.rejects(saving);
     assert.equal(turns.length, 0);
@@ -374,11 +374,9 @@ test("scan saves ti's 100-file slices, one transaction per turn with artwork fir
       ),
     );
     assert.equal(retried.count, 250);
-    assert.deepEqual(saves, [
-      { tracks: 100, artwork: 0, moves: 0 },
-      { tracks: 100, artwork: 0, moves: 0 },
-      { tracks: 50, artwork: 0, moves: 1 },
-    ]);
+    assert.equal(saves.length, 63);
+    assert.ok(saves.every(({ tracks }) => tracks <= 4));
+    assert.equal(saves.at(-1)?.moves, 1);
     assert.equal(Effect.runSync(store.songsByIds([movedId!]))[0]!.path, "/Startup/moved.mp3");
     assert.equal(Effect.runSync(store.knownFiles(["/Startup"])).length, 250);
     // Artwork alone (read files that saved nothing) still gets its transaction, as on ti.

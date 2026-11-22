@@ -363,6 +363,11 @@ test("no row follows a whole set or a whole store (#715, #716)", () => {
   );
 });
 
+test("Home's sections render again only when their own props change (#1423)", () => {
+  // Home renders on every push, pop and tab switch; each section is a heavy subtree.
+  assert.match(sources["home/HomeSection.tsx"] ?? "", /export const HomeSection = memo\(/);
+});
+
 test("artwork URIs come from the one helper (#726)", () => {
   assert.deepEqual(shared.fileUriCallers, listed(ARTWORK_URI_BUILDERS));
   assert.deepEqual(

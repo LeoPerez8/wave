@@ -50,6 +50,10 @@ export const useRenderCount: (component: string) => void =
 export const perfCount: (name: string) => void =
   recorder === null ? noop : (name) => recorder.render(`js:${name}`);
 
+/** Counts a React commit under the profiler [id] (`lib/renderCost.tsx`), as `commit:<id>`. */
+export const perfCommitCount: (id: string) => void =
+  recorder === null ? noop : (id) => recorder.render(`commit:${id}`);
+
 /** A platform timing (long task, event timing), from the observers `PerfProbe` starts. */
 export const perfTiming: (entry: PerfTiming) => void =
   recorder === null ? noop : (entry) => recorder.timing(entry);

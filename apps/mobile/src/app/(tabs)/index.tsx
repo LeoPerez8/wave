@@ -1,3 +1,4 @@
+import { useRenderCost } from "@/lib/renderCost";
 import { HomeFollowProvider } from "@/home/useHomeFollow";
 import { useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
@@ -69,6 +70,7 @@ export default function HomeScreen() {
     }, []),
   );
   useRenderCount("HomeScreen");
+  useRenderCost("HomeScreen");
   // Home's mixes and sections build only while Home is in sight (#1351).
   useHomeWorkSight();
   const [painted, setPainted] = useState(false);
@@ -105,6 +107,7 @@ export default function HomeScreen() {
 
 function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
   const { strings } = useLocalisation();
+  useRenderCost("HomeContent");
   const home = useHomeScreenContent();
   const selection = useHomeSelection();
   const endSelection = selection.end;
