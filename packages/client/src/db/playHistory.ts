@@ -20,7 +20,7 @@ import {
 import { and, desc, eq, gt, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
 
 import type { AlbumRow, SongRow } from "../types.ts";
-import { settlePlayWrite } from "./keptPlayTotals.ts";
+import { keptTotalsSettled, settlePlayWrite } from "./keptPlayTotals.ts";
 import type { LibraryDatabase } from "./database.ts";
 import { removeDislikes } from "./dislikes.ts";
 import * as schema from "./schema.ts";
@@ -29,7 +29,10 @@ import { selectAlbums } from "./albums.ts";
 import { streamedSongsOf } from "./streamedSongs.ts";
 import {
   recentlyPlayedEntities,
+  recentlyPlayedEntitiesFromRows,
   streamedListeningTotals,
+  streamedShelfRows,
+  type StreamedShelfRows,
   type StreamedListeningTotal,
   type PlayedAlbum,
 } from "./playedEntities.ts";
@@ -247,6 +250,12 @@ const recentlyPlayedShelf = (
   streamed: readonly StreamedListeningTotal[],
   limit = SHELF,
 ): PlayedAlbum[] => {
+  const local = recentlyPlayedLocal(db, scope, limit);
+  return scope === "files" ? local : recentlyPlayedEntities(db, local, limit, streamed);
+};
+
+/** Recently Played's Library albums, before the streamed songs are merged in. */
+const recentlyPlayedLocal = (db: LibraryDatabase, scope: TrackScope, limit: number): AlbumRow[] => {
   const { playTotals, tracks } = schema;
   for (let page = Math.min(limit, SHELF) * PAGE_GROWTH; ; page *= PAGE_GROWTH) {
     const songs = db
@@ -257,10 +266,7 @@ const recentlyPlayedShelf = (
       .limit(page)
       .all();
     const ids = recentlyPlayedAlbums(songs, limit, songs.length < page);
-    if (ids !== null) {
-      const local = albumsInOrder(db, ids, scope);
-      return scope === "files" ? local : recentlyPlayedEntities(db, local, limit, streamed);
-    }
+    if (ids !== null) return albumsInOrder(db, ids, scope);
   }
 };
 
@@ -521,6 +527,46 @@ export const homePlays = (db: LibraryDatabase, scope: TrackScope = "library"): H
     mostPlayed: mostPlayedSongs(db, scope, streamed),
   };
 };
+
+/**
+ * What Home's plays (`homePlays`) are read from in a replayed read (#1452): the sections
+ * themselves when nothing is left to merge or the kept totals settle the streamed songs'
+ * albums, else Most Played with what `homePlaysSteps` merges the streamed songs into
+ * Recently Played from, so the Library-wide credit resolver is built in steps, not in every
+ * pass.
+ */
+export type HomePlaysRead =
+  | { readonly plays: HomePlays }
+  | {
+      readonly mostPlayed: MostPlayedRow[];
+      readonly local: readonly AlbumRow[];
+      readonly shelf: StreamedShelfRows;
+    };
+
+/** What `homePlays` reads in [scope], for `homePlaysSteps`. */
+export const homePlaysRead = (
+  db: LibraryDatabase,
+  scope: TrackScope = "library",
+): HomePlaysRead => {
+  const streamed = streamedListeningTotals(db);
+  if (scope === "files" || streamed.length === 0 || keptTotalsSettled(db))
+    return { plays: homePlays(db, scope) };
+  const local = recentlyPlayedLocal(db, scope, SHELF);
+  return {
+    mostPlayed: mostPlayedSongs(db, scope, streamed),
+    local,
+    shelf: streamedShelfRows(db, local, streamed),
+  };
+};
+
+/** `homePlays` from what `homePlaysRead` read, a step at a time. [read] is left as it is. */
+export function* homePlaysSteps(read: HomePlaysRead): Generator<void, HomePlays> {
+  if ("plays" in read) return read.plays;
+  return {
+    recentlyPlayed: yield* recentlyPlayedEntitiesFromRows(read.local, SHELF, read.shelf),
+    mostPlayed: read.mostPlayed,
+  };
+}
 
 /** How many albums a Home shelf's See all lists. */
 const SEE_ALL = 1_000;

@@ -112,7 +112,8 @@ import type { ListDownloadsScope } from "@wave/core";
 import {
   playedTotalsRead,
   playedTotalsSteps,
-  playedArtistSongs,
+  playedArtistSongsRead,
+  playedArtistSongsSteps,
   keptArtistSongs,
   streamedLibraryPlays,
   recapPlays,
@@ -318,7 +319,8 @@ import { selectLinkRows, type LinkIds, type LinkRows } from "@wave/client/db/lin
 import {
   homeAdded,
   homeFavorites,
-  homePlays,
+  homePlaysRead,
+  homePlaysSteps,
   homeSections,
   latestPlay,
   listFavorites,
@@ -367,7 +369,9 @@ import {
   renamePlaylist,
   replacePlaylistSongs,
   selectInPlaylists,
-  selectPlaylist,
+  finishPlaylistOpening,
+  playlistOpeningSteps,
+  readPlaylistOpening,
   selectPlaylistEntries,
   selectPlaylistGraveyard,
   selectPlaylistEntriesRevision,
@@ -377,7 +381,7 @@ import {
   writePlaylistLinks,
   selectPlaylistEntrySongs,
   selectPlaylistEntryVideoIdsPage,
-  selectPlaylistEntryVideoIds,
+  playlistEntryVideoIdRows,
   selectPlaylists,
   selectPlaylistPlays,
   selectPlaylistsLastPlayed,
@@ -446,12 +450,12 @@ import {
 } from "@wave/client/db/lyricsSearchIndex";
 import {
   type KnownVideosCursor,
-  selectKnownVideos,
+  knownVideoRows,
   selectKnownVideosPage,
   selectPlaylistedSongs,
   selectStreamedSongs,
 } from "@wave/client/db/mixKnown";
-import type { VideoPage } from "@wave/client/db/videoPages";
+import { uniqueVideosSteps, type VideoPage } from "@wave/client/db/videoPages";
 import { addCandidates, selectCandidateCatalog } from "@wave/client/db/candidateCatalog";
 import { hasUnscannedRoot, saveBatch, type SavedBatch } from "@wave/client/db/save";
 
@@ -479,7 +483,7 @@ import {
   trackPlayTotals,
   type ArtistPlays,
 } from "@wave/client/db/stats";
-import { streamedSongsOf } from "@wave/client/db/streamedSongs";
+import { streamedSongsRead, streamedSongsSteps } from "@wave/client/db/streamedSongs";
 import { keyRecordings, stampPreference } from "@wave/client/db/sync";
 import {
   filesGone,
@@ -1612,6 +1616,10 @@ export class LibraryStore extends Context.Service<
  * takes under 8 ms (`bench/keptPlayTotals.ts`).
  */
 const KEPT_TOTALS_STEP = { songs: 2, plays: 250, days: 24 };
+/** The block log's name for the steps that sum the play history while the kept totals settle. */
+const PLAY_TOTALS_FALLBACK = "play totals fallback";
+/** The block log's name for a read's own steps: its replay's (`backgroundWork.ts`). */
+const LIBRARY_READ_REPLAY = "Library read replay";
 
 /** A synchronous write on the JS thread, named for the block log (`runLibraryWrite`). */
 const writeAttempt = <A>(operation: string, run: () => A): Effect.Effect<A, LibraryStoreError> =>
@@ -1657,11 +1665,13 @@ const make = Effect.gen(function* () {
   };
 
   // A read whose working out is Core's steps (#1451): off the thread, the statements
-  // replay, then the steps run in replay slices, so the work holds the thread no longer
-  // than its rows' mapping. On this connection, the read and its steps run whole.
+  // replay, then the steps run in replay slices named [slice] in the block log, so the work
+  // holds the thread no longer than its rows' mapping. On this connection, the read and its
+  // steps run whole.
   const readSteppedOffThread = async <R, A>(
     replay: NonNullable<typeof replays>,
     operation: string,
+    slice: string,
     read: (db: LibraryDatabase) => R,
     steps: (read: R) => Generator<void, A>,
     rows?: (result: A) => number,
@@ -1673,7 +1683,7 @@ const make = Effect.gen(function* () {
       if (cause instanceof NotReplayable) readsHere(operation, cause);
       return readHere(operation, (here) => finishSteps(steps(read(here))), rows);
     }
-    const worked = await finishReplaySteps(steps(replayed.value), now);
+    const worked = await finishReplaySteps(steps(replayed.value), now, slice);
     heldLibraryRead(operation, replayed.heldMs + worked.heldMs, worked.value, rows);
     return worked.value;
   };
@@ -1701,6 +1711,7 @@ const make = Effect.gen(function* () {
   // `attempt` for a read whose working out runs in steps (`readSteppedOffThread`).
   const attemptStepped = <R, A>(
     operation: string,
+    slice: string,
     read: (db: LibraryDatabase) => R,
     steps: (read: R) => Generator<void, A>,
     rows?: (result: A) => number,
@@ -1712,7 +1723,7 @@ const make = Effect.gen(function* () {
             catch: (cause) => new LibraryStoreError({ operation, cause }),
           })
         : Effect.tryPromise({
-            try: () => readSteppedOffThread(replays, operation, read, steps, rows),
+            try: () => readSteppedOffThread(replays, operation, slice, read, steps, rows),
             catch: (cause) => new LibraryStoreError({ operation, cause }),
           }),
     );
@@ -1836,6 +1847,7 @@ const make = Effect.gen(function* () {
       );
       const found = yield* attemptStepped(
         "read playlist entries to link",
+        LIBRARY_READ_REPLAY,
         (db) => readPlaylistLinks(db),
         playlistLinkSteps,
         ({ links, drops }) => links.length + drops.length,
@@ -1858,6 +1870,7 @@ const make = Effect.gen(function* () {
         ? Effect.void
         : attemptStepped(
             "read the Library's credits",
+            LIBRARY_READ_REPLAY,
             (db) => readLibraryCredits(db),
             (credits) => warmCreditSplitsSteps(splits, credits),
           ),
@@ -2046,8 +2059,12 @@ const make = Effect.gen(function* () {
       attempt("read a page of Home's playlist seed ids", (db) =>
         selectPlaylistEntryVideoIdsPage(db, after),
       ),
-    playlistEntryVideoIds: attempt("read Home's playlist seed ids", (db) =>
-      selectPlaylistEntryVideoIds(db),
+    // Their rows' ids gathered in steps, not in the read's passes (#1452).
+    playlistEntryVideoIds: attemptStepped(
+      "read Home's playlist seed ids",
+      LIBRARY_READ_REPLAY,
+      (db) => playlistEntryVideoIdRows(db),
+      uniqueVideosSteps,
     ),
     playlistEntrySongs: (videoIds) =>
       attempt("read Home's playlist seeds", (db) => selectPlaylistEntrySongs(db, videoIds)),
@@ -2121,11 +2138,22 @@ const make = Effect.gen(function* () {
     playlistGraveyard: (id) =>
       attempt("read the playlist graveyard", (db) => selectPlaylistGraveyard(db, id)),
 
+    // Its entries are worked out in steps, then its summary read (#1452): a playlist of
+    // thousands never holds the JS thread for all of them at once.
     getPlaylist: (id, scope) =>
-      attempt(
-        "open the playlist",
-        (db) => selectPlaylist(db, id, scope),
-        (result) => (result === null ? 0 : 1 + result.items.length),
+      Effect.flatMap(
+        attemptStepped(
+          "open the playlist",
+          LIBRARY_READ_REPLAY,
+          (db) => readPlaylistOpening(db, id, scope),
+          playlistOpeningSteps,
+        ),
+        (opened) =>
+          attempt(
+            "open the playlist",
+            (db) => finishPlaylistOpening(db, opened),
+            (result) => (result === null ? 0 : 1 + result.items.length),
+          ),
       ),
 
     createPlaylist: (name, songs) =>
@@ -2290,9 +2318,12 @@ const make = Effect.gen(function* () {
       (db) => homeAdded(db),
       (result) => result.recentlyAdded.length,
     ),
-    homePlays: attempt(
+    // While the kept totals settle, Recently Played's streamed songs resolve in steps.
+    homePlays: attemptStepped(
       "read Home's plays",
-      (db) => homePlays(db),
+      PLAY_TOTALS_FALLBACK,
+      (db) => homePlaysRead(db),
+      homePlaysSteps,
       (result) => result.recentlyPlayed.length + result.mostPlayed.length,
     ),
     homeFavorites: attempt(
@@ -2315,12 +2346,18 @@ const make = Effect.gen(function* () {
     songPlayTotals: (window) => attempt("sum up song plays", (db) => songPlayTotals(db, window)),
 
     streamedSongsByIds: (videoIds) =>
-      attempt("read streamed songs", (db) => streamedSongsOf(db, videoIds)),
+      attemptStepped(
+        "read streamed songs",
+        LIBRARY_READ_REPLAY,
+        (db) => streamedSongsRead(db, videoIds),
+        ({ wanted, rows }) => streamedSongsSteps(wanted, rows),
+      ),
 
     // While the kept totals settle these sum the history: the summing runs in steps.
     playedEntityTotals: (window) =>
       attemptStepped(
         "sum up played albums and artists",
+        PLAY_TOTALS_FALLBACK,
         (db) => playedTotalsRead(db, window, true),
         playedTotalsSteps,
       ),
@@ -2328,6 +2365,7 @@ const make = Effect.gen(function* () {
       Effect.map(
         attemptStepped(
           "sum up played artists",
+          PLAY_TOTALS_FALLBACK,
           (db) => playedTotalsRead(db, window, false),
           playedTotalsSteps,
         ),
@@ -2338,7 +2376,12 @@ const make = Effect.gen(function* () {
       streamedLibraryPlays(db),
     ),
     playedArtistSongs: (artistId, now) =>
-      attempt("read the artist listening", (db) => playedArtistSongs(db, artistId, now)),
+      attemptStepped(
+        "read the artist listening",
+        LIBRARY_READ_REPLAY,
+        (db) => playedArtistSongsRead(db, artistId, now),
+        (read) => playedArtistSongsSteps(read, artistId, now),
+      ),
     recapPlays: (window, includeStreamedGenres = true) =>
       attempt("sum up a Recap's plays", (db) => recapPlays(db, window, includeStreamedGenres)),
     creditedPlayTotals: (window) =>
@@ -2518,7 +2561,12 @@ const make = Effect.gen(function* () {
 
     playlistedSongs: attempt("read the playlists' songs", (db) => selectPlaylistedSongs(db)),
 
-    knownVideos: attempt("read the videos the owner knows", (db) => selectKnownVideos(db)),
+    knownVideos: attemptStepped(
+      "read the videos the owner knows",
+      LIBRARY_READ_REPLAY,
+      (db) => knownVideoRows(db),
+      uniqueVideosSteps,
+    ),
     knownVideosPage: (cursor) =>
       attempt("read a page of the videos the owner knows", (db) =>
         selectKnownVideosPage(db, cursor),

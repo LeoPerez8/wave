@@ -1,7 +1,7 @@
 /** Shared radio ranking for Magic Queue, mixes and playlist suggestions. */
 import { artistNeighbourhood, type ArtistGraph } from "./artistGraph.ts";
 import { finishSteps, sortSteps } from "./buildSteps.ts";
-import { NO_DISLIKES, withoutDisliked, type DislikedSongs } from "./dislikes.ts";
+import { isDisliked, NO_DISLIKES, type DislikedSongs } from "./dislikes.ts";
 import {
   GENRE_AFFINITY_THRESHOLD,
   genreAffinity,
@@ -157,18 +157,20 @@ export function* rankRadioSongsSteps(
     yield;
   }
   // Stable, as Array.sort: equal scores keep their input order.
-  const sorted = withoutDisliked(
-    yield* sortSteps([...ranked.values()], (a, b) => b.score - a.score),
-    sources.disliked ?? NO_DISLIKES,
-    (candidate) => ({
-      id: candidate.source === "library" ? candidate.trackId : null,
-      videoId: candidate.song?.videoId,
-    }),
-  );
+  const sorted = yield* sortSteps([...ranked.values()], (a, b) => b.score - a.score);
+  const disliked = sources.disliked ?? NO_DISLIKES;
   const recordings = new Map<string, YtAlbumSong[]>();
   const kept: RankedRadioSong[] = [];
   for (const candidate of sorted) {
     yield;
+    // The disliked are left out a candidate per step, not all at once after the sort (#1448).
+    if (
+      isDisliked(disliked, {
+        id: candidate.source === "library" ? candidate.trackId : null,
+        videoId: candidate.song?.videoId,
+      })
+    )
+      continue;
     if (candidate.song === null) {
       kept.push(candidate);
       continue;

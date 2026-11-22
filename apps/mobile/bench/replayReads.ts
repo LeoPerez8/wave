@@ -3,7 +3,8 @@
  * reference phone's row counts: 26,730 playlist entries and 20,538 known videos. For
  * each read: the JS it holds and its passes the first time it runs, the next time it
  * runs, and when a mix build asks for it three times at once. Also the longest step
- * (a pass, or a step of mapping rows), which the app names "Library read replay".
+ * (a pass, or a step of mapping rows), which the app names "Library read replay". The first
+ * playlist is the phone's Archive: 3,858 of the entries, opened whole.
  *
  * Desktop numbers: Node with sql.js (SQLite compiled to WebAssembly), not the phone's
  * SQLite or Hermes. SQLite's own time isn't counted: it runs off the JS thread on the
@@ -11,16 +12,17 @@
  *
  *   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON apps/mobile/bench/replayReads.ts [--quick]
  */
-import { writePlaylistYtSong } from "@wave/core";
+import { finishSteps, writePlaylistYtSong } from "@wave/core";
 import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
 
 import type { LibraryDatabase } from "@wave/client/db/database";
 import { mixPlaylisted } from "@wave/client/db/mixInputs";
-import { selectKnownVideos } from "@wave/client/db/mixKnown";
+import { knownVideoRows } from "@wave/client/db/mixKnown";
 import * as offThread from "@wave/client/db/offThreadReads";
-import { selectPlaylistEntryVideoIds } from "@wave/client/db/playlists";
+import { playlistEntryVideoIdRows, readPlaylistOpening } from "@wave/client/db/playlists";
 import * as schema from "@wave/client/db/schema";
+import { uniqueVideosSteps } from "@wave/client/db/videoPages";
 import { addLibrary, asyncReadClient, openTestDatabase } from "@wave/client/testing";
 import { median, printMeta } from "./measure.ts";
 
@@ -35,6 +37,8 @@ const KNOWN = 20_538;
 const ENTRY_VIDEOS = 15_000;
 const STREAMED_SONGS = 2_000;
 const STREAMED_TOTALS = KNOWN - ENTRY_VIDEOS - STREAMED_SONGS;
+/** The Archive playlist's entries: the first ones. */
+const ARCHIVE = 3_858;
 
 const video = (n: number) => `v${n.toString(36).padStart(10, "0")}`;
 const song = (n: number) =>
@@ -62,7 +66,8 @@ const seed = async () => {
     const items = [];
     for (let n = start; n < Math.min(ENTRIES, start + 500); n++)
       items.push({
-        playlistId: playlists[n % playlists.length]!.id,
+        playlistId:
+          n < ARCHIVE ? playlists[0]!.id : playlists[1 + (n % (playlists.length - 1))]!.id,
         ytSong: song(n % ENTRY_VIDEOS),
         orderKey: `k${n.toString(36).padStart(6, "0")}`,
         addedAt: 1_700_000_000_000 + n,
@@ -96,17 +101,28 @@ const seed = async () => {
       });
     db.insert(schema.streamedTotals).values(rows).run();
   }
-  return db;
+  return { db, archive: playlists[0]!.id };
 };
 
-const db = await seed();
-const reads: readonly [string, (d: LibraryDatabase) => unknown, number][] = [
-  ["read Home's mix playlist entries", (d) => mixPlaylisted(d), ENTRIES],
-  ["read the videos the owner knows", (d) => selectKnownVideos(d), KNOWN],
-  ["read Home's playlist seed ids", (d) => selectPlaylistEntryVideoIds(d), ENTRY_VIDEOS],
+const { db, archive } = await seed();
+const count = (rows: unknown) => (rows as unknown[]).length;
+/** A read's videos, as the app gathers them from its rows in steps after it (#1452). */
+const videos = (rows: unknown) =>
+  finishSteps(uniqueVideosSteps(rows as Parameters<typeof uniqueVideosSteps>[0])).length;
+const reads: readonly [
+  string,
+  (d: LibraryDatabase) => unknown,
+  number,
+  (read: unknown) => number,
+][] = [
+  ["read Home's mix playlist entries", (d) => mixPlaylisted(d), ENTRIES, count],
+  ["read the videos the owner knows", (d) => knownVideoRows(d), KNOWN, videos],
+  ["read Home's playlist seed ids", (d) => playlistEntryVideoIdRows(d), ENTRY_VIDEOS, videos],
+  // Its read: the app works its rows into entries in steps after (`playlistOpeningSteps`).
+  ["open the playlist", (d) => readPlaylistOpening(d, archive)?.items, ARCHIVE, count],
 ];
-for (const [, read, rows] of reads)
-  assert.equal((read(db) as unknown[]).length, rows, "the seed has the phone's row counts");
+for (const [, read, rows, made] of reads)
+  assert.equal(made(read(db)), rows, "the seed has the phone's row counts");
 
 // Every replay step (a pass, or a step of mapping rows) is timed, as the app's block log names it.
 let steps: number[] = [];

@@ -3265,7 +3265,11 @@ export type {
 } from "./firstRun.ts";
 export { queueContinuation, continueMagicQueue } from "./queueContinuation.ts";
 export { readContinueQueue, writeContinueQueue } from "./queueContinuationSetting.ts";
-export { availableMagicSongs } from "./magicRadioLearning.ts";
+export {
+  availableMagicSongs,
+  availableMagicSongsSteps,
+  type MagicSongsWhere,
+} from "./magicRadioLearning.ts";
 export type { QueueContinuationSeed } from "./queueContinuation.ts";
 export { queueLengthsToRead, songsWithinBuffer } from "./queueContinuation.ts";
 export type { QueueTimeAhead } from "./queueContinuation.ts";

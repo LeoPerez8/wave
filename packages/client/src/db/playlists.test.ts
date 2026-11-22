@@ -22,6 +22,7 @@ import { eq, sql } from "drizzle-orm";
 
 import type { IndexedTrack } from "../types.ts";
 import { libraryCounts, sectionSongCounts } from "./counts.ts";
+import { finishReplaySteps, readConnections, replayRead } from "./offThreadReads.ts";
 import { creditSplits } from "./credits.ts";
 import { recordPlay } from "./playHistory.ts";
 import {
@@ -29,10 +30,13 @@ import {
   appendPlaylistSongs,
   createPlaylist,
   deletePlaylist,
+  finishPlaylistOpening,
   linkPlaylistEntries,
   movePlaylistItem,
   playlistLinkSteps,
+  playlistOpeningSteps,
   readPlaylistLinks,
+  readPlaylistOpening,
   writePlaylistLinks,
   removePlaylistItems,
   restorePlaylistItems,
@@ -59,6 +63,7 @@ import { selectChangesSince, selectPhoneId } from "./sync.ts";
 import { applyPulledPage, selectUnpushed } from "./syncRows.ts";
 import {
   addTrack,
+  asyncReadClient,
   closeTestDatabase,
   migrateTestDatabase,
   openTestDatabase,
@@ -1514,4 +1519,77 @@ test("a removed YT Music song leaves the Graveyard when its Library recording is
   assert.equal(selectPlaylistGraveyard(db, playlistId).length, 1);
   appendPlaylistSongs(db, playlistId, [library("Airbag")], 300);
   assert.deepEqual(selectPlaylistGraveyard(db, playlistId), []);
+});
+
+describe("opening a playlist off the JS thread (#1452)", () => {
+  /** Playlist [id] as the app opens it: read, worked out in steps, then its summary read. */
+  const opened = async (id: number, scope?: "library" | "files") => {
+    const reads = readConnections(async () => asyncReadClient(db));
+    const read = await replayRead(
+      reads,
+      (d) => readPlaylistOpening(d, id, scope),
+      () => 0,
+    );
+    const worked = await finishReplaySteps(playlistOpeningSteps(read.value), () => 0);
+    return (
+      await replayRead(
+        reads,
+        (d) => finishPlaylistOpening(d, worked.value),
+        () => 0,
+      )
+    ).value;
+  };
+
+  test("gives what selectPlaylist gives, in either scope", async () => {
+    appendPlaylistSongs(
+      db,
+      playlistId,
+      [
+        stream(yt("a")),
+        unavailable("Within"),
+        stream(yt("b", { durationMs: null })),
+        library("Bloom"),
+      ],
+      0,
+    );
+    // A collaborative entry, a stored song that can't be read, and a song with no file.
+    db.run(sql`UPDATE playlist_items SET added_by = 'friend' WHERE track_id = ${ids["Creep"]!}`);
+    db.insert(schema.playlistItems)
+      .values({ playlistId, ytSong: "{", orderKey: "z", addedAt: 0, changedAt: 0 })
+      .run();
+    db.run(sql`UPDATE tracks SET path = NULL WHERE id = ${ids["Bloom"]!}`);
+    for (const scope of ["library", "files"] as const)
+      assert.deepEqual(
+        await opened(playlistId, scope),
+        selectPlaylist(db, playlistId, scope),
+        scope,
+      );
+    assert.equal(await opened(newPlaylist("Empty")).then((detail) => detail?.items.length), 0);
+    deletePlaylist(db, playlistId, 1);
+    assert.equal(await opened(playlistId), null);
+  });
+
+  test("reads each kind of row once however many entries, and works them out an entry per step", () => {
+    const statements = () =>
+      traceQueries(db, () => readPlaylistOpening(db, playlistId)).queries.length;
+    const few = statements();
+    appendPlaylistSongs(
+      db,
+      playlistId,
+      Array.from({ length: 400 }, (_, n) => stream(yt(`v${n}`))),
+      0,
+    );
+    assert.equal(statements(), few);
+    const opening = readPlaylistOpening(db, playlistId);
+    const steps = playlistOpeningSteps(opening);
+    let count = 0;
+    let step = steps.next();
+    while (!step.done) {
+      count++;
+      step = steps.next();
+    }
+    // A step per stored song, per Library track, per entry and per entry counted.
+    assert.equal(count, 400 + 4 + 404 * 2);
+    assert.equal(step.value?.items.length, 404);
+  });
 });

@@ -139,10 +139,12 @@ interface MappedRows {
   readonly ahead?: boolean;
 }
 
-/** How a statement's rows were mapped into values: what maps them again ahead of a pass. */
+/**
+ * How a statement's rows were mapped into values (Drizzle's fields, or a read's own decoder,
+ * `decodedRows`): what maps them again ahead of a pass.
+ */
 interface Mapping {
-  readonly fields: Fields;
-  readonly joins: Record<string, boolean> | undefined;
+  readonly map: (row: unknown) => unknown;
   readonly print: Print;
 }
 
@@ -164,6 +166,9 @@ interface Pass {
 
 /** The pass running now. Passes are synchronous, so one at a time. */
 let current: Pass | null = null;
+
+/** The decoder `decodedRows` hands the raw statement it runs next, in a pass. */
+let decoding: ((row: never) => unknown) | null = null;
 
 const answer = (sql: string, params: readonly ReadParam[], mode: ReadMode) => {
   if (current === null) throw new NotReplayable("a replayed statement ran outside its pass");
@@ -224,24 +229,37 @@ const samePrint = (a: Print, b: Print): boolean =>
 /** A statement's rows, too many to map inside a pass: the replay maps them in steps. */
 class Unmapped {
   readonly key: string;
-  readonly rows: readonly unknown[][];
-  readonly fields: Fields;
-  readonly joins: Record<string, boolean> | undefined;
-  readonly print: Print;
-  constructor(
-    key: string,
-    rows: readonly unknown[][],
-    fields: Fields,
-    joins: Record<string, boolean> | undefined,
-    print: Print,
-  ) {
+  readonly rows: readonly unknown[];
+  readonly mapping: Mapping;
+  constructor(key: string, rows: readonly unknown[], mapping: Mapping) {
     this.key = key;
     this.rows = rows;
-    this.fields = fields;
-    this.joins = joins;
-    this.print = print;
+    this.mapping = mapping;
   }
 }
+
+/**
+ * [key]'s rows ([raw]) as [mapping] makes them, for the pass running now: mapped once per read
+ * and kept for the passes after it, and when there are many, mapped in steps between passes.
+ */
+const mappedRows = (key: string, raw: readonly unknown[], mapping: Mapping): unknown[] => {
+  const pass = current!;
+  pass.asked.get(key)!.mapping ??= mapping;
+  let kept = pass.mapped.get(key);
+  // Rows mapped ahead another way than this read maps them now are mapped again, as if new.
+  if (kept?.ahead === true && !samePrint(kept.print, mapping.print)) {
+    pass.mapped.delete(key);
+    kept = undefined;
+  }
+  const fresh = !pass.handed.has(key);
+  pass.handed.add(key);
+  if (kept !== undefined && fresh && samePrint(kept.print, mapping.print)) return [...kept.rows];
+  // Rows asked for again in one pass, or with another mapping, are mapped here and not kept.
+  if (kept === undefined && raw.length > MAPPED_IN_PASS) throw new Unmapped(key, raw, mapping);
+  const mapped = raw.map((row) => mapping.map(row));
+  if (kept === undefined) pass.mapped.set(key, { print: mapping.print, rows: mapped });
+  return [...mapped];
+};
 
 class ReplayPreparedQuery extends SQLitePreparedQuery<{
   type: "sync";
@@ -285,30 +303,20 @@ class ReplayPreparedQuery extends SQLitePreparedQuery<{
 
   override all(placeholderValues?: Record<string, unknown>): unknown {
     const { fields, customResultMapper } = this;
-    if (!fields && !customResultMapper)
-      return [...answer(this.query.sql, this.params(placeholderValues), "objects").rows];
+    if (!fields && !customResultMapper) {
+      const decode = decoding;
+      decoding = null;
+      const { key, rows } = answer(this.query.sql, this.params(placeholderValues), "objects");
+      if (decode === null) return [...rows];
+      return mappedRows(key, rows, { map: decode as (row: unknown) => unknown, print: [decode] });
+    }
     if (customResultMapper) return customResultMapper(this.values(placeholderValues));
     const { key, rows } = answer(this.query.sql, this.params(placeholderValues), "values");
-    const pass = current!;
     const joins = this.joins();
-    const print = printOf(fields, joins);
-    pass.asked.get(key)!.mapping ??= { fields, joins, print };
-    let kept = pass.mapped.get(key);
-    // Rows mapped ahead another way than this read maps them now are mapped again, as if new.
-    if (kept?.ahead === true && !samePrint(kept.print, print)) {
-      pass.mapped.delete(key);
-      kept = undefined;
-    }
-    const fresh = !pass.handed.has(key);
-    pass.handed.add(key);
-    if (kept !== undefined && fresh && samePrint(kept.print, print)) return [...kept.rows];
-    const raw = rows as readonly unknown[][];
-    // Rows asked for again in one pass, or with another mapping, are mapped here and not kept.
-    if (kept === undefined && raw.length > MAPPED_IN_PASS)
-      throw new Unmapped(key, raw, fields, joins, print);
-    const mapped = raw.map((row) => mapResultRow(fields, row, joins));
-    if (kept === undefined) pass.mapped.set(key, { print, rows: mapped });
-    return [...mapped];
+    return mappedRows(key, rows, {
+      map: (row) => mapResultRow(fields, row as unknown[], joins),
+      print: printOf(fields, joins),
+    });
   }
 
   override get(placeholderValues?: Record<string, unknown>): unknown {
@@ -409,15 +417,42 @@ export interface ReplayedRead<A> {
   readonly statements: number;
 }
 
-/** Runs a replay step: as it is, unless the app names it (`runReplayPassesWith`). */
-let replayPass: <B>(run: () => B) => B = (run) => run();
+/**
+ * Runs a replay step: as it is, unless the app names it (`runReplayPassesWith`). [name] is the
+ * step's own name, if its caller gave one (`finishReplaySteps`).
+ */
+type ReplayRunner = <B>(run: () => B, name?: string) => B;
+let replayPass: ReplayRunner = (run) => run();
 
 /**
- * Runs each replay step (a pass, or a step of mapping rows) through [runner], which the app
- * uses to name the JS thread's block after the read's last answer arrives (#1359).
+ * Runs each replay step (a pass, a step of mapping rows, or a slice of a read's working out)
+ * through [runner], which the app uses to name the JS thread's block after the read's last
+ * answer arrives (#1359): with the name the step's caller gave, if any (#1451).
  */
-export const runReplayPassesWith = (runner: <B>(run: () => B) => B): void => {
+export const runReplayPassesWith = (runner: ReplayRunner): void => {
   replayPass = runner;
+};
+
+/**
+ * [query]'s rows (a raw statement, `db.all`), each as [decode] makes it. A replayed read
+ * decodes a statement's rows once and keeps them for its passes after, as it keeps mapped
+ * rows, and decodes many in steps between passes (#1452): pass a function made once (a
+ * module's), not one made per call, so a read run again decodes ahead what it decoded last
+ * time. [decode] mustn't change what it's given, and its caller mustn't change what it gets:
+ * the values are shared by every pass of the read.
+ */
+export const decodedRows = <Row, A>(
+  db: LibraryDatabase,
+  query: SQL,
+  decode: (row: Row) => A,
+): A[] => {
+  if (current === null) return db.all<Row>(query).map((row) => decode(row));
+  decoding = decode;
+  try {
+    return db.all<A>(query);
+  } finally {
+    decoding = null;
+  }
 };
 
 /** Gives the JS thread up between steps of mapping rows: a new task, so frames and touches go first. */
@@ -429,17 +464,13 @@ export const yieldReplaysWith = (yielder: () => Promise<void>): void => {
 };
 
 /** Maps [rows] in steps of `REPLAY_STEP_MS` at most, yielding between them. */
-const mapInSteps = async (
-  rows: readonly unknown[][],
-  { fields, joins }: Pick<Mapping, "fields" | "joins">,
-  now: () => number,
-) => {
+const mapInSteps = async (rows: readonly unknown[], { map }: Mapping, now: () => number) => {
   const out: unknown[] = [];
   let heldMs = 0;
   while (out.length < rows.length) {
     const start = now();
     replayPass(() => {
-      do out.push(mapResultRow(fields, rows[out.length]!, joins));
+      do out.push(map(rows[out.length]));
       while (out.length < rows.length && now() - start < REPLAY_STEP_MS);
     });
     heldMs += now() - start;
@@ -457,6 +488,7 @@ const mapInSteps = async (
 export const finishReplaySteps = async <A>(
   steps: Generator<void, A>,
   now: () => number,
+  name?: string,
 ): Promise<{ readonly value: A; readonly heldMs: number }> => {
   let heldMs = 0;
   for (;;) {
@@ -465,10 +497,11 @@ export const finishReplaySteps = async <A>(
       let step = steps.next();
       while (!step.done && now() - start < REPLAY_STEP_MS) step = steps.next();
       return step;
-    });
+    }, name);
     heldMs += now() - start;
-    if (next.done) return { value: next.value, heldMs };
+    // The caller's work after it starts a task of its own, not one the last slice is blamed for.
     await yieldReplay();
+    if (next.done) return { value: next.value, heldMs };
   }
 };
 
@@ -508,7 +541,7 @@ export const replayRead = <A>(
       if (fetched === null) continue;
       rows.set(key, fetched);
       if (mapping === undefined || fetched.length <= MAPPED_IN_PASS) continue;
-      const done = await mapInSteps(fetched as readonly unknown[][], mapping, now);
+      const done = await mapInSteps(fetched, mapping, now);
       heldMs += done.heldMs;
       mapped.set(key, { print: mapping.print, rows: done.rows, ahead: true });
     }
@@ -532,9 +565,9 @@ export const replayRead = <A>(
       }
       if (stopped instanceof Miss) rows.set(stopped.key, await query(stopped.statement));
       else {
-        const done = await mapInSteps(stopped.rows, stopped, now);
+        const done = await mapInSteps(stopped.rows, stopped.mapping, now);
         heldMs += done.heldMs;
-        mapped.set(stopped.key, { print: stopped.print, rows: done.rows });
+        mapped.set(stopped.key, { print: stopped.mapping.print, rows: done.rows });
       }
     }
     throw new NotReplayable(`a read didn't settle in ${MAX_PASSES} passes`);
