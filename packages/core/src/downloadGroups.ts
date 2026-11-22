@@ -11,6 +11,7 @@ import { moveItem } from "./playlists.ts";
 import {
   queuedDownloadCounts,
   queuedDownloads,
+  sameQueuedDownload,
   type QueuedDownload,
   type QueuedDownloadCounts,
 } from "./queuedDownloads.ts";
@@ -151,6 +152,43 @@ export const downloadingList = <S extends YtSong>(
     })),
   };
 };
+
+const sameRows = <S extends YtSong>(
+  a: readonly QueuedDownload<S>[],
+  b: readonly QueuedDownload<S>[],
+): boolean =>
+  a === b || (a.length === b.length && a.every((row, index) => sameQueuedDownload(row, b[index]!)));
+
+const sameOrigin = (a: DownloadOrigin | null, b: DownloadOrigin | null): boolean =>
+  a === b || (a !== null && b !== null && a.kind === b.kind && a.id === b.id && a.name === b.name);
+
+/**
+ * Two Downloading lists hold the same songs, groups and counts, in the same
+ * order, whatever their songs' lines say (#1441). A progress tick changes only
+ * a line, which each row follows on its own (`queuedDownloadLines`), so the
+ * list itself needn't render again for it.
+ */
+export const sameDownloadingList = <S extends YtSong>(
+  a: DownloadingList<S>,
+  b: DownloadingList<S>,
+): boolean =>
+  a === b ||
+  (a.counts.downloading === b.counts.downloading &&
+    a.counts.saving === b.counts.saving &&
+    a.counts.waiting === b.counts.waiting &&
+    sameRows(a.downloading, b.downloading) &&
+    a.groups.length === b.groups.length &&
+    a.groups.every((group, index) => {
+      const other = b.groups[index]!;
+      return (
+        group.key === other.key &&
+        group.name === other.name &&
+        group.left === other.left &&
+        group.line === other.line &&
+        sameOrigin(group.origin, other.origin) &&
+        sameRows(group.queued, other.queued)
+      );
+    }));
 
 /**
  * The waiting jobs in their new order once the group at [from] in [list]'s

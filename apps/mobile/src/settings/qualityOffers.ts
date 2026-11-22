@@ -19,7 +19,7 @@ import {
   type QualityOffer,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@wave/client/externalStore";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
@@ -27,14 +27,12 @@ import { LibraryStore } from "@/library/LibraryStore";
 
 import { appRuntime } from "@/library/runtime";
 import { libraryQuery, useLibraryQuery } from "@/library/sharedQueries";
+import { equalToDepth, useStoreSelector } from "@/lib/storeSelector";
 import { onMobileData } from "@/native/waveNative";
+import type { NativeDownloadJob } from "@/native/waveSoulseek";
 import { confirmAction } from "@/overlay/alert";
-import {
-  downloadJournal,
-  onNoBetterCopies,
-  runQualityReplacements,
-  useDownloadJournal,
-} from "@/ytmusic/YtDownloads";
+import { downloadJournal, onNoBetterCopies, runQualityReplacements } from "@/ytmusic/YtDownloads";
+import { journal } from "@/ytmusic/downloadJournal";
 
 import { ytMusicEnabled, useYtMusicEnabled } from "./ytMusic";
 
@@ -122,13 +120,17 @@ export const useQualityOffer = (direction: QualityDirection | null): QualityOffe
   useEffect(() => {
     if (asked !== null) reloadNoBetterCopy();
   }, [asked]);
-  const jobs = useDownloadJournal();
   const { language } = useLocalisation();
-  return useMemo(
-    () =>
+  // Followed through the offer it makes: a download's progress leaves it the same (#1441).
+  const select = useCallback(
+    (jobs: readonly NativeDownloadJob[]) =>
       asked === null || files === null || remembered === null
         ? null
         : offerFor(asked, files, { noBetterCopy: remembered[asked], jobs }, false, language),
-    [asked, files, remembered, jobs, language],
+    [asked, files, remembered, language],
   );
+  return useStoreSelector(journal, select, sameOffer);
 };
+
+/** Two offers say the same: the offer, its card and its songs, compared by value. */
+const sameOffer = equalToDepth(3) as (a: QualityOffer | null, b: QualityOffer | null) => boolean;

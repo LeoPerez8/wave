@@ -925,13 +925,10 @@ export const WHOLE_SET_HOOKS = [
     "usePendingFavoriteVideos",
     "useLivePendingFavoriteVideos",
   ].map((name) => `library/favorites.ts#${name}`),
-  ...[
-    "useSongListDownloads",
-    "useDownloadJournal",
-    "useMissingSongDownloadStatuses",
-    "useDownloadingList",
-    "useFailedDownloads",
-  ].map((name) => `ytmusic/YtDownloads.ts#${name}`),
+  ...["useSongListDownloads", "useMissingSongDownloadStatuses", "useFailedDownloads"].map(
+    (name) => `ytmusic/YtDownloads.ts#${name}`,
+  ),
+  "ytmusic/downloadingRows.ts#useDownloadingList",
   "library/hooks.ts#useScanProgress",
 ];
 /** Whole stores a row may not name itself (a narrow hook may read them for it). */
