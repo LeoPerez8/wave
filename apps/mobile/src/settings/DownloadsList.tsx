@@ -7,6 +7,7 @@ import {
   failedDownloadRows,
   queuedDownloadsSummary,
   reorderShift,
+  sameQueuedDownload,
   type DownloadGroup,
   type DownloadHeaderRow,
   type DownloadListRow,
@@ -53,11 +54,8 @@ import {
 } from "@/settings/FailedDownloadsSection";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { useDownloadRun } from "@/ytmusic/downloadRun";
-import {
-  cancelQueuedDownload,
-  useDownloadingList,
-  useFailedDownloads,
-} from "@/ytmusic/YtDownloads";
+import { useDownloadingList, useQueuedDownloadLine } from "@/ytmusic/downloadingRows";
+import { cancelQueuedDownload, useFailedDownloads } from "@/ytmusic/YtDownloads";
 import { useYoutubePauseNotice } from "@/ytmusic/youtubeThrottle";
 
 type Grip = ReturnType<typeof usePanGesture>;
@@ -93,10 +91,6 @@ function HandleSlot({ handle }: { handle: Handle }) {
   return <ReorderHandle gesture={handle === "drawn" ? undefined : handle} />;
 }
 
-/** Two songs on their way show the same: the song, its progress line and its Cancel. */
-const sameQueued = (a: QueuedDownload<NativeYtSong>, b: QueuedDownload<NativeYtSong>) =>
-  a.song === b.song && a.line === b.line && a.cancel?.join() === b.cancel?.join();
-
 /** Two group headers show the same name and line. */
 const sameGroupLine = (a: DownloadGroup<NativeYtSong>, b: DownloadGroup<NativeYtSong>) =>
   a.name === b.name && a.line === b.line;
@@ -115,7 +109,8 @@ const sameRunCounts = (a: DownloadRunCounts | undefined, b: DownloadRunCounts | 
  * One song on its way: its artwork, title and artists, the progress line its row shows
  * elsewhere, Cancel until it's saving to the Library, and a waiting song's drag handle (one
  * downloading now has room for it instead, so the Cancels line up). A row only renders again
- * when what it shows changed (its progress line, say), not on every journal change.
+ * when its song, place or Cancel changed, or its own progress line (which it follows itself,
+`useQueuedDownloadLine`), not on another song's progress tick (#1441).
  */
 const QueuedDownloadRow = memo(
   function QueuedDownloadRow({
@@ -135,7 +130,8 @@ const QueuedDownloadRow = memo(
     onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
   }) {
     const { strings } = useLocalisation();
-    const { song, line, cancel } = queued;
+    const { song, cancel } = queued;
+    const line = useQueuedDownloadLine(queued);
     return (
       <DownloadSongRow
         song={song}
@@ -157,7 +153,7 @@ const QueuedDownloadRow = memo(
   },
   (before, after) =>
     before.covers === after.covers &&
-    sameQueued(before.queued, after.queued) &&
+    sameQueuedDownload(before.queued, after.queued) &&
     before.handle === after.handle &&
     before.index === after.index &&
     before.count === after.count &&
@@ -324,7 +320,7 @@ const WaitingDownloadRow = memo(
     before.row.groupKey === after.row.groupKey &&
     before.row.index === after.row.index &&
     before.row.count === after.row.count &&
-    sameQueued(before.row.queued, after.row.queued),
+    sameQueuedDownload(before.row.queued, after.row.queued),
 );
 
 /**

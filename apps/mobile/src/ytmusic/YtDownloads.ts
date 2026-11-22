@@ -33,7 +33,6 @@ import {
   missingSongTags,
   missingSongVideo,
   missingSongsDownload,
-  downloadingList,
   failedReplacementFiles,
   moveQueuedJobs,
   NO_BETTER_COPY_FOUND,
@@ -72,7 +71,6 @@ import {
   type DownloadFailurePlan,
   type DownloadOrigin,
   type DownloadSource,
-  type DownloadingList,
   type FailedDownload,
   type FailedDownloadsInput,
   type MissingSongJob,
@@ -1820,10 +1818,6 @@ export const cancelQualityReplacements = (direction: QualityDirection): void => 
     .catch(() => undefined);
 };
 
-/** The download journal as JS last followed it, following it (Core's `qualityUpgradeSongs` reads it). */
-export const useDownloadJournal = (): readonly NativeDownloadJob[] =>
-  useSyncExternalStore(journal.subscribe, journal.get);
-
 /** The download journal as JS last followed it. */
 export const downloadJournal = (): readonly NativeDownloadJob[] => journal.get();
 
@@ -1837,16 +1831,6 @@ export const useMissingSongsDownload = (): MissingSongsDownload<MissingSongJob> 
     [songs, strings],
   );
   return useStoreSelector(journal, select, sameListDownload);
-};
-
-/**
- * Settings › Downloads' Downloading list (Core's `downloadingList`), following the journal: the
- * songs downloading now, then the waiting ones grouped by the playlist, album or mix they're from.
- */
-export const useDownloadingList = (): DownloadingList<NativeYtSong> => {
-  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
-  const { language } = useLocalisation();
-  return useMemo(() => downloadingList(jobs, language), [jobs, language]);
 };
 
 /** Whether any download is queued or downloading (Core's `queuedDownloads`), as the journal last said. */

@@ -1441,8 +1441,10 @@ export {
 export { ytDownloadsToForget } from "./forgottenDownloads.ts";
 export {
   queuedDownloadCounts,
+  queuedDownloadLines,
   queuedDownloads,
   queuedDownloadsSummary,
+  sameQueuedDownload,
 } from "./queuedDownloads.ts";
 export type { QueuedDownload, QueuedDownloadCounts } from "./queuedDownloads.ts";
 export {
@@ -1454,6 +1456,7 @@ export {
   moveQueuedJobs,
   playlistDownloadOrigin,
   albumDownloadOrigin,
+  sameDownloadingList,
 } from "./downloadGroups.ts";
 export type { DownloadGroup, DownloadingList, DownloadOrigin } from "./downloadGroups.ts";
 export {
