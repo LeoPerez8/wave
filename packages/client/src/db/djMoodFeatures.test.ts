@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { addCandidates } from "./candidateCatalog.ts";
 import {
   DJ_MOOD_MISS_TTL_MS,
+  DJ_MOOD_RETRY_MS,
   keepDjMoodFeatures,
   pendingDjMoodSongs,
   selectDjMoodFeatures,
@@ -51,6 +52,32 @@ test("candidate mood misses expire after 30 days while matches stay cached by vi
     acousticness: 0.1,
     mode: 1,
   });
+});
+
+test("a lookup that failed waits to be retried instead of coming due on the next pass (#1437)", async () => {
+  const db = await openTestDatabase();
+  addCandidates(db, { songs: [song("a"), song("b")], seed: "Artist" }, 10);
+  keepDjMoodFeatures(db, [
+    { videoId: "a", isrc: null, features: null, checkedAt: 20, failed: true },
+  ]);
+  const due = (now: number) => pendingDjMoodSongs(db, "", now).songs.map((entry) => entry.videoId);
+  assert.deepEqual(due(20), ["b"]);
+  assert.deepEqual(due(20 + DJ_MOOD_RETRY_MS - 1), ["b"]);
+  assert.deepEqual(due(20 + DJ_MOOD_RETRY_MS), ["a", "b"]);
+  assert.ok(DJ_MOOD_RETRY_MS < DJ_MOOD_MISS_TTL_MS);
+  // A failed retry leaves a feature match alone, like any miss.
+  keepDjMoodFeatures(db, [
+    {
+      videoId: "b",
+      isrc: "USABC0000002",
+      features: { energy: 0.9, valence: 0.8, acousticness: 0.1, mode: 1 },
+      checkedAt: 30,
+    },
+  ]);
+  keepDjMoodFeatures(db, [
+    { videoId: "b", isrc: null, features: null, checkedAt: 40, failed: true },
+  ]);
+  assert.equal(selectDjMoodFeatures(db, ["b"]).get("b")?.energy, 0.9);
 });
 
 test("a later miss cannot replace a feature match", async () => {

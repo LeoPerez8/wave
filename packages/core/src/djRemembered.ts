@@ -7,7 +7,7 @@ import {
   DJ_MAX_SELECTED,
   djAlbumTile,
   djArtistTile,
-  djGenreTiles,
+  djGenreTilesSteps,
   djGenreTile,
   djOpened,
   type DjAlbum,
@@ -15,6 +15,7 @@ import {
   type DjTile,
   type DjTileKey,
 } from "./dj.ts";
+import { finishSteps } from "./buildSteps.ts";
 import type { GenreMixDjCandidate, GenreMixLibrary } from "./genreMixes.ts";
 import { DEFAULT_DJ_SETTINGS, parseDjSettings, type DjSettings } from "./djSettings.ts";
 import { isRecord, readStoredRecord } from "./storedJson.ts";
@@ -113,15 +114,11 @@ export const readDjRemembered = (stored: string | null): DjRemembered => {
  * are selected than a DJ seed holds. Nothing remembered is the grid as it
  * opens (`djOpened`).
  */
-export const djReopened = ({
-  grid,
-  remembered,
-  artists = [],
-  albums = [],
-  genreLibrary,
-  genreCandidates,
-  taste = null,
-}: {
+export const djReopened = (sources: DjReopenedSources): DjState =>
+  finishSteps(djReopenedSteps(sources));
+
+/** What `djReopened` reopens DJ from. */
+export interface DjReopenedSources {
   readonly grid: readonly DjTile[];
   readonly remembered: readonly DjTile[];
   readonly artists?: readonly { readonly id: number; readonly name: string }[];
@@ -131,19 +128,34 @@ export const djReopened = ({
   /** Genre mixes' families worked out once (`genreMixDjCandidates`), used in place of [genreLibrary]. */
   readonly genreCandidates?: readonly GenreMixDjCandidate[] | null;
   readonly taste?: TasteProfile | null;
-}): DjState => {
+}
+
+/** `djReopened` in steps, for the app's background slices (#1437). */
+export function* djReopenedSteps({
+  grid,
+  remembered,
+  artists = [],
+  albums = [],
+  genreLibrary,
+  genreCandidates,
+  taste = null,
+}: DjReopenedSources): Generator<void, DjState> {
+  if (remembered.length === 0) return { ...djOpened([...grid]), selected: [] };
   const fresh = new Set(grid.map((tile) => tile.key));
   const library = new Map<DjTileKey, DjTile>();
   for (const artist of artists) {
     const tile = djArtistTile(artist.name, artist.id);
     if (tile !== null && !library.has(tile.key)) library.set(tile.key, tile);
+    yield;
   }
   for (const album of albums) {
     const tile = djAlbumTile(album);
     if (tile !== null && !library.has(tile.key)) library.set(tile.key, tile);
+    yield;
   }
-  const genres = new Map(
-    djGenreTiles(
+  const genres = new Map<DjTileKey, DjTile>();
+  if (remembered.some((tile) => tile.kind === "genre"))
+    for (const tile of yield* djGenreTilesSteps(
       {
         artists,
         albums,
@@ -152,8 +164,8 @@ export const djReopened = ({
         genreCandidates: genreCandidates ?? null,
       },
       { includeUnscored: true },
-    ).map((tile) => [tile.key, tile]),
-  );
+    ))
+      genres.set(tile.key, tile);
   const selected = new Map<DjTileKey, DjTile>();
   for (const tile of remembered) {
     if (selected.size >= DJ_MAX_SELECTED) break;
@@ -165,7 +177,7 @@ export const djReopened = ({
   }
   const added = [...selected.values()].filter((tile) => !fresh.has(tile.key));
   return { ...djOpened([...added, ...grid]), selected: [...selected.keys()] };
-};
+}
 
 /** Reopens an already kept grid with a remembered selection, without rebuilding tiles or opening rows. */
 export const djRestoredGrid = (grid: readonly DjTile[], remembered: readonly DjTile[]): DjState => {
