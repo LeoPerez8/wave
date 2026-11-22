@@ -110,6 +110,84 @@ test("search matches a Library seed, and no match falls back to its main artist 
     );
   }
 });
+/** A music video's radio, as YouTube Music answers one: every entry another music video. */
+const videos: SongRadioPage = {
+  songs: ["o1", "o2", "o3"].map((videoId) => ({ ...song, videoId, video: true })),
+  continuation: "more videos",
+};
+test("a seed whose radio brings only videos reads the radio of its audio track", async () => {
+  const reads: string[] = [];
+  const audio = { ...song, videoId: "audio" };
+  // A music video's title can carry its note; the audio track's doesn't.
+  const session = createSongRadioSession(
+    { ...seed, title: "Seed (Official Audio)" },
+    {
+      cached: null,
+      radio: (id) =>
+        Effect.sync(() => {
+          reads.push(`song:${id}`);
+          return id === "seed" ? videos : page;
+        }),
+      search: (query) =>
+        Effect.sync(() => {
+          reads.push(query);
+          return [audio];
+        }),
+      artist: () => Effect.die("the audio track has a radio"),
+      more: () => Effect.die("not low"),
+      save: () => Effect.void,
+      fallback: () => assert.fail("the audio track has a radio"),
+    },
+  );
+  const read = await Effect.runPromise(session.read({ online: true, low: false }));
+  assert.deepEqual(reads, ["song:seed", "Seed (Official Audio) Seed artist", "song:audio"]);
+  assert.deepEqual(
+    read?.songs.map((s) => s.videoId),
+    ["v"],
+  );
+});
+test("a seed whose radio brings only videos and whose audio track isn't found reads its main artist's radio", async () => {
+  const reads: string[] = [];
+  const session = createSongRadioSession(seed, {
+    cached: null,
+    radio: (id) =>
+      Effect.sync(() => {
+        reads.push(`song:${id}`);
+        return videos;
+      }),
+    search: () => Effect.succeed([]),
+    artist: (name) =>
+      Effect.sync(() => {
+        reads.push(`artist:${name}`);
+        return page;
+      }),
+    more: () => Effect.die("not low"),
+    save: () => Effect.void,
+    fallback: (name) => reads.push(`fallback:${name}`),
+  });
+  const read = await Effect.runPromise(session.read({ online: true, low: false }));
+  assert.deepEqual(reads, ["song:seed", "fallback:Seed artist", "artist:Seed artist"]);
+  assert.deepEqual(
+    read?.songs.map((s) => s.videoId),
+    ["v"],
+  );
+});
+test("a cached page of videos alone isn't a first batch: the first read waits for the live radio", async () => {
+  const session = createSongRadioSession(seed, {
+    cached: videos,
+    radio: (id) => Effect.succeed(id === "seed" ? videos : page),
+    search: () => Effect.succeed([{ ...song, videoId: "audio" }]),
+    artist: () => Effect.die("the audio track has a radio"),
+    more: () => Effect.die("not low"),
+    save: () => Effect.void,
+    fallback: () => {},
+  });
+  const read = await Effect.runPromise(session.read({ online: true, low: false }));
+  assert.deepEqual(
+    read?.songs.map((s) => s.videoId),
+    ["v"],
+  );
+});
 test("offline uses the cached radio without any network read", async () => {
   const session = createSongRadioSession(seed, {
     cached: page,

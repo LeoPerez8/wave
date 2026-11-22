@@ -98,7 +98,14 @@ import { ListeningHistory } from "./ListeningHistory.tsx";
 import type { HistoryRoute } from "../../shared/history.ts";
 import { isYtRoute, YtPage, type YtRoute } from "./YtPages.tsx";
 import { Recognize } from "./Recognize.tsx";
-import { AlbumArtistLink, ArtistPage, ArtistToggle, useArtistSection } from "./ArtistPage.tsx";
+import {
+  AlbumArtistLink,
+  ArtistPage,
+  ArtistSongs,
+  ArtistToggle,
+  useArtistSection,
+  type ArtistSongsRoute,
+} from "./ArtistPage.tsx";
 import { AlbumPage, useAlbumSection } from "./AlbumSection.tsx";
 import { YtListDownloadButton } from "./YtListDownloadButton.tsx";
 import {
@@ -117,6 +124,7 @@ type Route =
   | StatsRoute
   | HistoryRoute
   | HomeSeeAllRoute
+  | ArtistSongsRoute
   | YtRoute;
 const defaultStats: StatsRoute = { kind: "stats", period: "month" };
 const sections = ["playlists", "artists", "albums", "songs", "genres", "favorites"] as const;
@@ -211,7 +219,8 @@ export function App() {
   }>();
   /** What the page's Find field holds, for the page it was typed on. */
   const [finding, setFinding] = useState<{ readonly route: Route; readonly text: string }>();
-  const findList = findableList(route.kind);
+  // An artist's Songs view finds in the artist, as their page does.
+  const findList = findableList(route.kind === "artistSongs" ? "artist" : route.kind);
   const findText = finding?.route === route ? finding.text : "";
   // The table reads again once typing pauses, as Listening History's Find does.
   const [found, setFound] = useState(finding);
@@ -428,9 +437,16 @@ export function App() {
       route.kind === "homeSeeAll" ||
       isYtRoute(route)
         ? { kind: "songs" }
-        : activeFind === undefined
-          ? route
-          : { ...route, find: activeFind },
+        : route.kind === "artistSongs"
+          ? // The Songs view lists the artist's songs, as their page's table does.
+            {
+              kind: "artist",
+              id: route.id,
+              ...(activeFind === undefined ? {} : { find: activeFind }),
+            }
+          : activeFind === undefined
+            ? route
+            : { ...route, find: activeFind },
     [route, activeFind],
   );
   const focusList = () => content.current?.querySelector<HTMLElement>("[role=grid]")?.focus();
@@ -704,7 +720,14 @@ export function App() {
     const started =
       // With a Find, the page plays the Library songs it finds.
       target === scope && scope.kind === "artist" && scope.id !== undefined && !scope.find
-        ? window.wave.artistPage.play(scope.id, artistSection.pick, null, shuffle)
+        ? // The artist page plays its Popular list whatever the sort; the Songs view, its sort.
+          window.wave.artistPage.play(
+            scope.id,
+            artistSection.pick,
+            null,
+            shuffle,
+            route.kind === "artist",
+          )
         : target === scope && scope.kind === "album" && scope.id !== undefined && albumTracklist
           ? window.wave.artistPage.albumPlay(scope.id, albumSection.pick, null, shuffle)
           : window.wave.playback.start(target, undefined, shuffle);
@@ -828,10 +851,15 @@ export function App() {
           ? text.settings.pages.history
           : route.kind === "homeSeeAll"
             ? homeSectionTitle(route.section, text)
-            : ((hero && tagTitle(hero.title, route.kind)) ??
-              (route.kind in labels
-                ? (labels[route.kind as keyof typeof labels] as string)
-                : labels.library));
+            : route.kind === "artistSongs"
+              ? // The Songs view's title is the artist's name, once its table has read it.
+                hero
+                ? tagTitle(hero.title, "artist")
+                : labels.songs
+              : ((hero && tagTitle(hero.title, route.kind)) ??
+                (route.kind in labels
+                  ? (labels[route.kind as keyof typeof labels] as string)
+                  : labels.library));
   const playlistId = route.kind === "playlist" ? route.id : undefined;
   const scanning = scan?.status === "scanning";
   // A playlist's image is an edit none of the three counts, and its page shows it.
@@ -840,12 +868,26 @@ export function App() {
     (playback.view?.revision ?? 0) +
     (account?.revision ?? 0) +
     playlistEdits.edits;
+  // One section for the artist's page and their Songs view: Library | Online shows on both.
   const artistSection = useArtistSection(
-    route.kind === "artist" ? route.id : undefined,
+    route.kind === "artist" || route.kind === "artistSongs" ? route.id : undefined,
     ytMusic,
     revision,
     failed,
   );
+  /** The artist page's hero, read here while the page shows its songs without the table. */
+  const artistPageId = route.kind === "artist" && activeFind === undefined ? route.id : undefined;
+  useEffect(() => {
+    if (artistPageId === undefined) return;
+    let current = true;
+    void window.wave.library
+      .browse({ kind: "artist", id: artistPageId }, 0, 1)
+      .then((page) => current && setHero(page.hero))
+      .catch(failed);
+    return () => {
+      current = false;
+    };
+  }, [artistPageId, revision, failed]);
   /** A songs table in its page: a playlist's, with its Recommended songs below, or an artist's. */
   const listPage = (table: ReactNode) =>
     playlistId !== undefined && ytMusic ? (
@@ -890,11 +932,24 @@ export function App() {
         onAlbum={(id) => go({ kind: "album", id })}
         onAlbumMenu={(row, at) => openCollectionMenu({ kind: "album", id: row.id }, row.title, at)}
         onYtAlbum={(id) => go({ kind: "ytAlbum", id })}
+        finding={activeFind !== undefined}
+        onPlay={(index) =>
+          playback.run(
+            window.wave.artistPage.play(
+              route.id!,
+              artistSection.pick,
+              { popular: index },
+              false,
+              true,
+            ),
+          )
+        }
         onPlayStreamed={(index) =>
           playback.run(
             window.wave.artistPage.play(route.id!, artistSection.pick, { streamed: index }, false),
           )
         }
+        onSeeMore={() => go({ kind: "artistSongs", id: route.id! })}
         onSongMenu={ytSongMenu}
         onStatsPlay={(row) => playback.run(window.wave.stats.artistPlay(route.id!, row.key))}
         onStatsMenu={(row, at, element) =>
@@ -910,6 +965,20 @@ export function App() {
       >
         {table}
       </ArtistPage>
+    ) : route.kind === "artistSongs" ? (
+      <div className="artist-page" data-testid="artist-songs">
+        <ArtistSongs
+          section={artistSection}
+          onPlayStreamed={(index) =>
+            playback.run(
+              window.wave.artistPage.play(route.id, artistSection.pick, { streamed: index }, false),
+            )
+          }
+          onSongMenu={ytSongMenu}
+        >
+          {table}
+        </ArtistSongs>
+      </div>
     ) : (
       table
     );
@@ -1115,7 +1184,7 @@ export function App() {
         </button>
       </aside>
       <div className="content" ref={content} inert={nowPlaying}>
-        {hero && route.kind !== "graveyard" ? (
+        {hero && route.kind !== "graveyard" && route.kind !== "artistSongs" ? (
           <div className="hero" data-testid="hero">
             <Artwork
               large
@@ -1215,10 +1284,30 @@ export function App() {
             </div>
           </div>
         ) : route.kind === "ytArtist" ||
+          route.kind === "ytArtistSongs" ||
           route.kind === "ytAlbum" ||
           route.kind === "discoverMix" ? null : (
           <div className="page-heading">
             <h1>{title}</h1>
+            {route.kind === "artistSongs" && (
+              <>
+                <p className="secondary" data-testid="artist-songs-count">
+                  {artistSection.songs &&
+                    text.library.countedHeading(text.library.songs, artistSection.songs.total)}
+                </p>
+                <div className="hero-actions">
+                  <button onClick={() => playList(false)}>
+                    <Icon name="play" size={16} />
+                    {labels.play}
+                  </button>
+                  <button onClick={() => playList(true)} {...shuffleMenu}>
+                    <Icon name="shuffle" size={16} />
+                    {labels.shuffle}
+                  </button>
+                  <ArtistToggle section={artistSection} />
+                </div>
+              </>
+            )}
             {(route.kind === "home" || route.kind === "songs" || route.kind === "favorites") && (
               <p className="secondary" data-testid="song-count">
                 {songCount !== undefined && labels.songCount(songCount)}

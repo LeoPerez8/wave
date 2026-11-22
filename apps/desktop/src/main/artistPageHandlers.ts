@@ -31,7 +31,7 @@ const start = (value: unknown): value is ArtistPlayStart => {
   const keys = Object.keys(value);
   if (keys.length !== 1) return false;
   const at = (value as Record<string, unknown>)[keys[0]!];
-  return (keys[0] === "library" || keys[0] === "streamed") && index(at);
+  return (keys[0] === "library" || keys[0] === "streamed" || keys[0] === "popular") && index(at);
 };
 
 export const artistPageHandlers = (): Handlers => ({
@@ -49,6 +49,12 @@ export const artistPageHandlers = (): Handlers => ({
           artistSection.view(artistId, picked, offset, limit),
         )
       : refuse("artistPage.section"),
+  "artistPage.songs": ([artistId, picked, limit]) =>
+    id(artistId) && pick(picked) && index(limit) && limit <= 500
+      ? Effect.map(YtFeatures, ({ artistSection }) =>
+          artistSection.pageSongs(artistId, picked, limit),
+        )
+      : refuse("artistPage.songs"),
   "artistPage.ask": ([artistId]) =>
     id(artistId)
       ? Effect.gen(function* () {
@@ -56,11 +62,28 @@ export const artistPageHandlers = (): Handlers => ({
           yield* Effect.promise(() => artistSection.ask(artistId));
         })
       : refuse("artistPage.ask"),
-  "artistPage.play": ([artistId, picked, from, shuffle]) =>
-    id(artistId) && pick(picked) && start(from) && typeof shuffle === "boolean"
+  "artistPage.play": ([artistId, picked, from, shuffle, popular]) =>
+    id(artistId) &&
+    pick(picked) &&
+    start(from) &&
+    typeof shuffle === "boolean" &&
+    typeof popular === "boolean" &&
+    // The artist page's Popular list starts from its own places, the Songs view from its own.
+    (from === null || popular === "popular" in from)
       ? Effect.gen(function* () {
           const { artistSection } = yield* YtFeatures;
           const playback = yield* Playback;
+          if (popular) {
+            const ids = artistSection.pageQueue(artistId, picked);
+            const at = from !== null && "popular" in from ? from.popular : undefined;
+            if (at !== undefined && at >= ids.length)
+              return yield* Effect.fail(new Error("Invalid song position"));
+            return yield* Effect.tryPromise({
+              try: () =>
+                playback.activate(ids, at, { kind: "artist", id: String(artistId) }, shuffle),
+              catch: (error) => error,
+            });
+          }
           const db = yield* Database;
           const { ids, listStart } = artistSection.queue(artistId, picked);
           const at =
@@ -71,7 +94,9 @@ export const artistPageHandlers = (): Handlers => ({
                   ids.indexOf(
                     browseTrackIds(db, { kind: "artist", id: artistId })[from.library] ?? "",
                   )
-                : listStart + from.streamed;
+                : "streamed" in from
+                  ? listStart + from.streamed
+                  : -1;
           if (at !== undefined && (at < 0 || at >= ids.length))
             return yield* Effect.fail(new Error("Invalid song position"));
           return yield* Effect.tryPromise({

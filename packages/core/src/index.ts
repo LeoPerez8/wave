@@ -616,6 +616,7 @@ export {
   inLibraryStack,
   isDetailPath,
   playlistAddSongsPath,
+  artistSongsPath,
   tabOfPath,
 } from "./navigation.ts";
 export type { DetailScreen } from "./navigation.ts";
@@ -1082,7 +1083,7 @@ export { rankPopular } from "./popularSongs.ts";
 export { artistSongOrder } from "./artistSongOrder.ts";
 export type { RankedArtistSong } from "./artistSongOrder.ts";
 export { ytArtistOpening, ytArtistOpeningState } from "./ytArtistOpening.ts";
-export { artistPageItems } from "./artistPage.ts";
+export { ARTIST_PAGE_SONGS, artistPageItems } from "./artistPage.ts";
 export type {
   ArtistPageAbout,
   ArtistPageAfter,
@@ -1755,7 +1756,12 @@ export type {
   TrackService,
   YtMusicLinkPlay,
 } from "./songLinkOpening.ts";
-export { spotifySearchQuery, spotifyYtMatch, searchRecording } from "./spotifyImport.ts";
+export {
+  musicVideoAudioTrack,
+  spotifySearchQuery,
+  spotifyYtMatch,
+  searchRecording,
+} from "./spotifyImport.ts";
 export { settleUnsearched, unsearchedSearchQuery, unsearchedSettles } from "./unsearchedEntries.ts";
 export {
   PLAYING_SEARCHES,

@@ -54,6 +54,22 @@ export interface ArtistSectionView {
 }
 
 /**
+ * The artist page's songs (docs/spec.md, "Artist songs"): the artist's whole list in Popular
+ * order whatever the table's sort, with Online YouTube Music's songs in it, of which the page
+ * shows the first few.
+ */
+export interface ArtistPageSongs {
+  /** Whether the artist's Popular list is saved and ranks the songs: the heading says Popular. */
+  readonly popular: boolean;
+  /** How many of the list's first songs carry a rank (1, 2, 3…). */
+  readonly ranked: number;
+  /** The list's first songs, as many as asked for. */
+  readonly songs: readonly BrowseRow[];
+  /** How many songs the whole list holds. */
+  readonly total: number;
+}
+
+/**
  * A Library album page's YouTube Music section, or null when it has none (YT Music off, an album
  * artist that isn't an artist's name): the Library | Online toggle, and with Online the album's
  * tracklist with the release's songs the Library lacks (docs/spec.md, "Album page").
@@ -79,8 +95,15 @@ export interface AlbumSectionView {
   readonly release: string | null;
 }
 
-/** Where Play on the artist page starts: a Library row, or a song YouTube Music adds. */
-export type ArtistPlayStart = { readonly library: number } | { readonly streamed: number } | null;
+/**
+ * Where Play on the artist's songs starts: a Library row, or a song YouTube Music adds, of the
+ * Songs view; a place in the artist page's Popular list; or null, the first.
+ */
+export type ArtistPlayStart =
+  | { readonly library: number }
+  | { readonly streamed: number }
+  | { readonly popular: number }
+  | null;
 
 export interface ArtistPageContract {
   /** The artist's Library albums (`artistAlbums`). */
@@ -98,15 +121,25 @@ export interface ArtistPageContract {
     readonly args: readonly [artistId: number, pick: YtPick | null, offset: number, limit: number];
     readonly result: ArtistSectionView | null;
   };
+  /** The artist page's songs with [pick]: the first [limit] of its Popular list. */
+  readonly "artistPage.songs": {
+    readonly args: readonly [artistId: number, pick: YtPick | null, limit: number];
+    readonly result: ArtistPageSongs;
+  };
   /** Asks YouTube Music for the artist; resolves once answered, however it went. */
   readonly "artistPage.ask": { readonly args: readonly [artistId: number]; readonly result: void };
-  /** Plays the page's songs from [start] (null: the first), shuffled or not. */
+  /**
+   * Plays the artist's songs from [start] (null: the first), shuffled or not: with [popular] the
+   * artist page's Popular list, which starts only from `{ popular }`, else the Songs view's list
+   * in its sort, which never does.
+   */
   readonly "artistPage.play": {
     readonly args: readonly [
       artistId: number,
       pick: YtPick | null,
       start: ArtistPlayStart,
       shuffle: boolean,
+      popular: boolean,
     ];
     readonly result: PlayStart;
   };
@@ -139,6 +172,7 @@ export const ARTIST_PAGE_CALLS = [
   "artistPage.albums",
   "artistPage.albumArtists",
   "artistPage.section",
+  "artistPage.songs",
   "artistPage.ask",
   "artistPage.play",
   "artistPage.albumSection",
@@ -151,9 +185,16 @@ export const artistPageBridge = (invoke: Invoke) => ({
   albumArtists: (albumId: number) => invoke("artistPage.albumArtists", albumId),
   section: (artistId: number, pick: YtPick | null, offset: number, limit: number) =>
     invoke("artistPage.section", artistId, pick, offset, limit),
+  songs: (artistId: number, pick: YtPick | null, limit: number) =>
+    invoke("artistPage.songs", artistId, pick, limit),
   ask: (artistId: number) => invoke("artistPage.ask", artistId),
-  play: (artistId: number, pick: YtPick | null, start: ArtistPlayStart, shuffle: boolean) =>
-    invoke("artistPage.play", artistId, pick, start, shuffle),
+  play: (
+    artistId: number,
+    pick: YtPick | null,
+    start: ArtistPlayStart,
+    shuffle: boolean,
+    popular = false,
+  ) => invoke("artistPage.play", artistId, pick, start, shuffle, popular),
   albumSection: (albumId: number, pick: YtPick | null) =>
     invoke("artistPage.albumSection", albumId, pick),
   albumAsk: (albumId: number, pick: YtPick | null, again: boolean) =>

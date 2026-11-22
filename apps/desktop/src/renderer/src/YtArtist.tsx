@@ -3,7 +3,7 @@ import type { BrowseRow } from "../../shared/browse.ts";
 import type { YtStatus } from "../../shared/yt.ts";
 import type { YtAlbumView, YtArtistRelease, YtArtistView } from "../../shared/ytPages.ts";
 import { Icon } from "./Icon.tsx";
-import { listDuration } from "@wave/core";
+import { ARTIST_PAGE_SONGS, listDuration } from "@wave/core";
 import { FollowButton } from "./FollowButton.tsx";
 import { labels, text } from "./text.ts";
 import { Artwork } from "./VirtualTable.tsx";
@@ -51,7 +51,17 @@ function YtPageQuiet({ status, again }: { readonly status: YtStatus; readonly ag
   );
 }
 
-const readArtist = (id: string) => window.wave.yt.artist(id);
+/** The artist page read last, so their Songs view shows the same songs without asking again. */
+let lastArtist: { readonly id: string; readonly view: YtArtistView } | undefined;
+const readArtist = (id: string) =>
+  window.wave.yt.artist(id).then((view) => {
+    lastArtist = { id, view };
+    return view;
+  });
+const readArtistSongs = (id: string) =>
+  lastArtist?.id === id && lastArtist.view.page !== null
+    ? Promise.resolve(lastArtist.view)
+    : readArtist(id);
 const noArtist: YtArtistView = { status: "failed", page: null };
 /** An album page its opener already read (a new release's tap), shown once instead of asking again. */
 let held: { readonly id: string; readonly view: YtAlbumView } | undefined;
@@ -113,7 +123,12 @@ function Loading() {
   );
 }
 
-/** A YouTube Music artist's page: their songs, albums, singles and similar artists. */
+/**
+ * A YouTube Music artist's page: their first songs in YouTube Music's order under a heading with
+ * the count of all of them, See more past them to their Songs view (docs/spec.md, "Artist
+ * songs"), then their albums, singles and similar artists. Play, Shuffle and a song's click play
+ * every song.
+ */
 export function YtArtistPage({
   id,
   run,
@@ -121,6 +136,7 @@ export function YtArtistPage({
   onAlbum,
   onLibraryAlbum,
   onArtist,
+  onSongs,
   onError,
 }: {
   readonly id: string;
@@ -130,6 +146,8 @@ export function YtArtistPage({
   /** Opens the Library's album page: a release the Library already has. */
   readonly onLibraryAlbum: (albumId: number) => void;
   readonly onArtist: (browseId: string) => void;
+  /** Opens the artist's Songs view. */
+  readonly onSongs: () => void;
   /** Shows that following the artist didn't work. */
   readonly onError: (message: string) => void;
 }) {
@@ -155,13 +173,20 @@ export function YtArtistPage({
       </div>
       {songs.length > 0 && (
         <>
-          <h2>{text.library.songs}</h2>
+          <h2 data-testid="yt-artist-songs-heading">
+            {text.library.countedHeading(text.library.songs, songs.length)}
+          </h2>
           <YtSongList
-            songs={songs}
+            songs={songs.slice(0, ARTIST_PAGE_SONGS)}
             label={text.library.songs}
             onPlay={(index) => playFrom(run, songs, index)}
             onMenu={onSongMenu}
           />
+          {songs.length > ARTIST_PAGE_SONGS && (
+            <button className="artist-more" data-testid="yt-artist-see-more" onClick={onSongs}>
+              {text.library.seeMore}
+            </button>
+          )}
         </>
       )}
       <Shelf
@@ -184,6 +209,42 @@ export function YtArtistPage({
           label: text.library.artistLabel(artist.name),
         }))}
         onOpen={(index) => onArtist(page.similar[index]!.browseId)}
+      />
+    </div>
+  );
+}
+
+/** A YouTube Music artist's Songs view: their name, the count, Play, Shuffle and every song. */
+export function YtArtistSongsPage({
+  id,
+  run,
+  onSongMenu,
+}: {
+  readonly id: string;
+  readonly run: Run;
+  readonly onSongMenu: Menu;
+}) {
+  const { value: read, again } = useRead(id, readArtistSongs, noArtist);
+  if (read === undefined) return <Loading />;
+  const { page } = read;
+  if (page === null) return <YtPageQuiet status={read.status} again={again} />;
+  const songs = page.songs.items;
+  return (
+    <div className="yt-page" data-testid="yt-artist-songs">
+      <div className="page-heading">
+        <h1>{page.name}</h1>
+        <p className="secondary">{text.library.countedHeading(text.library.songs, songs.length)}</p>
+        {songs.length > 0 && (
+          <div className="hero-actions">
+            <PlayButtons run={run} songs={songs} />
+          </div>
+        )}
+      </div>
+      <YtSongList
+        songs={songs}
+        label={text.library.songs}
+        onPlay={(index) => playFrom(run, songs, index)}
+        onMenu={onSongMenu}
       />
     </div>
   );

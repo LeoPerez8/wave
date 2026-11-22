@@ -1,4 +1,5 @@
 import {
+  artistSongsPath,
   detailPath,
   recapId,
   type DetailScreen,
@@ -129,6 +130,14 @@ export const openAlbum = (id: number, known?: AlbumRow | null, from?: DetailOpen
  */
 export const openArtist = (id: number, known?: ArtistRow | null, from?: DetailOpening): void =>
   open("artist", id, known, integratedQuery(from));
+/**
+ * Opens the artist's Songs screen (their page's See more), on the stack their
+ * page is on; opened from an integrated page ([from]), it's integrated too.
+ */
+export const openArtistSongs = (id: number, from?: DetailOpening): void =>
+  router.push(
+    `${artistSongsPath(currentRoute.get().pathname, id)}${integratedQuery(from)}` as Href,
+  );
 export const openGenre = (id: number, known?: GenreRow | null): void => open("genre", id, known);
 export const openPlaylist = (id: number, known?: PlaylistRow | null): void =>
   open("playlist", id, known);

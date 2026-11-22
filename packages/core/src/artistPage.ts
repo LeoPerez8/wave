@@ -6,6 +6,12 @@
  * also like).
  */
 
+/**
+ * How many of the artist's songs an artist page shows; past them, See More
+ * opens the artist's Songs screen with all of them.
+ */
+export const ARTIST_PAGE_SONGS = 5;
+
 /** An album shelf: its heading and its covers, in the order they show. */
 export interface ArtistPageShelf<C> {
   readonly label: string;
@@ -38,6 +44,8 @@ export type ArtistPageItem<C, S, R = never, A extends ArtistPageAbout = never> =
   | { readonly type: "section"; readonly label: string }
   | { readonly type: "shelf"; readonly label: string; readonly covers: readonly C[] }
   | { readonly type: "song"; readonly song: S; readonly index: number }
+  /** See More, after the songs shown: [total] is how many songs the artist's Songs screen lists. */
+  | { readonly type: "more"; readonly total: number }
   | { readonly type: "similar"; readonly label: string; readonly artists: readonly R[] }
   | (A extends never ? never : { readonly type: "about"; readonly about: A });
 
@@ -45,10 +53,11 @@ export type ArtistPageItem<C, S, R = never, A extends ArtistPageAbout = never> =
  * The page's list: [shelves] in order, each heading over one row of covers,
  * then [songs] under [songsLabel] ("Songs", or "Popular" when they're in
  * YouTube Music's order), then [after] them the similar artists as one row
- * under their heading and About, which draws its own heading. While Find in artist narrows the songs ([found]:
+ * under their heading and About, which draws its own heading. Past the first
+ * [shown] songs, See More takes the rest's place. While Find in artist narrows the songs ([found]:
  * their places among [songs], a finder's answer), the shelves, the heading
- * and what follows the songs step aside and only the songs found show, each
- * keeping its place, so a tap plays the page's songs from it.
+ * and what follows the songs step aside and only the songs found show, past
+ * the cut too, each keeping its place, so a tap plays the page's songs from it.
  */
 export const artistPageItems = <C, S, R = never, A extends ArtistPageAbout = never>(
   shelves: readonly ArtistPageShelf<C>[],
@@ -56,6 +65,7 @@ export const artistPageItems = <C, S, R = never, A extends ArtistPageAbout = nev
   songsLabel = "Songs",
   found: readonly number[] | null = null,
   after: ArtistPageAfter<R, A> = {},
+  shown: number = Number.POSITIVE_INFINITY,
 ): ArtistPageItem<C, S, R, A>[] => {
   if (found !== null)
     return found.flatMap((index) =>
@@ -68,7 +78,10 @@ export const artistPageItems = <C, S, R = never, A extends ArtistPageAbout = nev
     items.push({ type: "shelf", label, covers });
   }
   if (songs.length > 0) items.push({ type: "section", label: songsLabel });
-  songs.forEach((song, index) => items.push({ type: "song", song, index }));
+  songs.forEach((song, index) => {
+    if (index < shown) items.push({ type: "song", song, index });
+  });
+  if (songs.length > shown) items.push({ type: "more", total: songs.length });
   const { similar } = after;
   if (similar !== undefined && similar.artists.length > 0) {
     items.push({ type: "section", label: similar.label });

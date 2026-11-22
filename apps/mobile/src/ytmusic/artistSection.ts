@@ -50,6 +50,7 @@ import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { artistOpeningRequest, fetchArtistAnswer } from "@wave/client/ytArtistFetch";
 import { readArtistPage } from "./candidateCatalog";
 import { createArtistOpeningRead } from "./artistOpeningRead";
+import { createArtistVisits, type VisitHold } from "./artistVisit";
 import { searchAllowanceSnapshot, withSearchTurn } from "./searchAllowance";
 import { libraryFinderForRows, useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
 import { useLineToggle } from "./OnlineToggle";
@@ -343,14 +344,11 @@ export const useYtArtistSection = (
   contentReady: boolean,
 ): YtArtistSectionShown => {
   const always = useSearchOnlineAlways();
-  // The toggle's segment picked while the page is open; null until one is.
-  const [pick, setPick] = useState<YtPick | null>(null);
-  const { state, enabled, openedAt, show, find, select, asking } = useDeferredArtistSection(
+  const { state, enabled, openedAt, show, find, select, asking, pick } = useDeferredArtistSection(
     name,
     contentReady,
     openedIntegrated,
     always,
-    pick,
   );
   const popular = artistPopularSongs(state);
   const findAlbum = useMemo(() => libraryAlbumFinder(artistId, albums), [artistId, albums]);
@@ -388,7 +386,6 @@ export const useYtArtistSection = (
   const onPick = useCallback(
     (next: YtPick) => {
       select(next);
-      setPick(next);
       // Online after an ask that got no answer asks again.
       if (next === "online" && retry) show();
     },
@@ -419,56 +416,80 @@ export const useYtArtistSection = (
 };
 
 /**
+ * Each Library artist's visit: their page and its Songs screen share one Online
+ * read and one Library | Online pick (`artistVisit`). The read sees the visit
+ * while either screen is in sight.
+ */
+const artistVisits = createArtistVisits<ReturnType<typeof createArtistOpeningRead<NativeYtSong>>>();
+
+/**
  * Reviewed online boundary: wait for local content and screen settlement even
  * for Always/integrated openings and retries. A standing saved online page
  * needs the shared finder; Library mode and missing/partial/expired answers do not.
+ * The artist page and its Songs screen share the read and the pick (`artistVisits`).
  */
 const useDeferredArtistSection = (
   name: string,
   contentReady: boolean,
   integrated: boolean,
   always: boolean,
-  pick: YtPick | null,
 ) => {
   // Settled once is enough for this artist: Now Playing over the page keeps its online rows.
   const settled = useSettledOnce(name);
   const sight = useScreenSight();
   const enabled = useYtMusicEnabled();
-  const [reader] = useState(() =>
-    createArtistOpeningRead<NativeYtSong>({
-      restore: (key, signal) => appRuntime.runPromise(readSaved(key), { signal }),
-      request: (artistName, key, saved, signal, canSend) =>
-        appRuntime
-          .runPromise(
-            Effect.result(
-              artistOpeningRequest(
-                canSend,
-                fetchArtist(artistName, key, saved, { allSongs: true, canSend }),
-              ),
-            ),
-            { signal },
-          )
-          .then((result) => {
-            if (Result.isFailure(result)) throw result.failure;
-            return result.success;
-          }),
-      online,
-      settled: () => sight.visible() && isScreenSettled(),
-      allowance: searchAllowanceSnapshot,
-      always: searchOnlineAlwaysNow,
-    }),
-  );
-  const snapshot = useSyncExternalStore(reader.subscribe, reader.snapshot);
   const artistKey = identityKey(name);
+  const visit = useMemo(
+    () =>
+      artistVisits.visit(artistKey, (visible) =>
+        createArtistOpeningRead<NativeYtSong>({
+          restore: (key, signal) => appRuntime.runPromise(readSaved(key), { signal }),
+          request: (artistName, key, saved, signal, canSend) =>
+            appRuntime
+              .runPromise(
+                Effect.result(
+                  artistOpeningRequest(
+                    canSend,
+                    fetchArtist(artistName, key, saved, { allSongs: true, canSend }),
+                  ),
+                ),
+                { signal },
+              )
+              .then((result) => {
+                if (Result.isFailure(result)) throw result.failure;
+                return result.success;
+              }),
+          online,
+          settled: () => visible() && isScreenSettled(),
+          allowance: searchAllowanceSnapshot,
+          always: searchOnlineAlwaysNow,
+        }),
+      ),
+    [artistKey],
+  );
+  const { reader } = visit;
+  const snapshot = useSyncExternalStore(reader.subscribe, reader.snapshot);
+  // The toggle's segment picked on the page or its Songs screen this visit; null until one is.
+  const pick = useSyncExternalStore(visit.subscribe, visit.pick);
   const state = snapshot.key === artistKey ? snapshot.state : YT_ARTIST_SECTION_START;
   const openedAt = snapshot.openedAt;
+  const hold = useRef<VisitHold | null>(null);
+  // The sight the visit asks about: the screen's latest, without holding the visit again.
+  const seen = useRef(sight);
   useEffect(() => {
-    reader.open(name);
-    return reader.close;
-  }, [reader, name]);
+    seen.current = sight;
+  }, [sight]);
+  useEffect(() => {
+    const release = visit.hold(name, () => seen.current.visible());
+    hold.current = release;
+    return () => {
+      hold.current = null;
+      release();
+    };
+  }, [visit, name]);
   const context = { enabled, integrated, always, pick, settled, contentReady };
   useEffect(() => {
-    reader.update(context);
+    if (hold.current !== null) visit.update(hold.current, context);
   });
   const work = ytArtistOpening(state, { ...context, name, now: openedAt });
   const needsFinder = work.finder && online();
@@ -482,8 +503,9 @@ const useDeferredArtistSection = (
     state,
     enabled,
     openedAt,
+    pick,
     show: reader.retry,
-    select: reader.pick,
+    select: visit.setPick,
     find: needsFinder ? loadedFind : null,
   };
 };

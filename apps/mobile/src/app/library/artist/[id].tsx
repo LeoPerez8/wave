@@ -3,12 +3,15 @@ import { useFollowAction } from "@/library/FollowButton";
 import { useScreenContent } from "@/lib/screenTiming";
 
 import {
+  ARTIST_PAGE_SONGS,
   artistPageItems,
   artistSongOrder,
+  sortSongs,
   ytTrackId,
   type ArtistPageItem,
   type Catalogue,
   type RankedArtistSong,
+  type SongSort,
   type SimilarArtistLink,
   type YtArtistAbout,
   type YtArtistAlbum,
@@ -52,10 +55,17 @@ import { entryText, FindFrame, FindHead, useFindInLegendList } from "@/library/F
 import { useArtist } from "@/library/hooks";
 import { LibraryAlbumCard } from "@/library/LibraryAlbumCard";
 import type { AlbumRow, ArtistDetail, ArtistRow, SongRow } from "@wave/client";
-import { openAlbum, parseId, useKnownRow, useOpenedIntegrated } from "@/library/routes";
+import {
+  openAlbum,
+  openArtistSongs,
+  parseId,
+  useKnownRow,
+  useOpenedIntegrated,
+} from "@/library/routes";
+import { SEE_MORE_ROW, SeeMoreRow } from "@/library/SeeMoreRow";
 import { SimilarArtistsRow, similarArtistsRowHeight } from "@/library/SimilarArtistsRow";
 import { SongSortButton } from "@/library/SongSortButton";
-import { useSortedSongs } from "@/library/songSort";
+import { useSongSort } from "@/library/songSort";
 import { ListIntro, songCount } from "@/library/TrackList";
 import { useLocalisation } from "@/localisation/localisation";
 import { SongList } from "@/songs/SongList";
@@ -90,6 +100,15 @@ type PageSong = RankedArtistSong<NativeYtSong, SongRow>;
 type Similar = SimilarArtistLink<ArtistRow>;
 
 type Item = ArtistPageItem<AlbumCell, PageSong, Similar, YtArtistAbout>;
+
+/**
+ * What the screen is: the artist's page, or their Songs screen, which its See
+ * more opens (docs/spec.md › Artist songs).
+ */
+type ArtistView = "page" | "songs";
+
+/** The artist page's songs are always in Popular order; the Songs screen has the chosen sort. */
+const POPULAR: SongSort = { key: "popular", descending: false };
 
 /** Neither Fans might also like nor About: no page kept, or its place taken by skeletons. */
 const NOTHING_KEPT: ArtistKeptPageShown = { similar: [], about: null };
@@ -129,7 +148,8 @@ const cellKey = (cell: AlbumCell): string => {
 /**
  * The page's shelves and songs, the songs under [songsLabel]. While YouTube
  * Music is asked ([loading]), skeleton tiles follow the Library's albums where
- * its releases will go. After the songs come Fans might also like and About,
+ * its releases will go. Past the first [shown] songs, See more takes the
+ * rest's place. After the songs come Fans might also like and About,
  * from the artist's [kept] YouTube Music page. While Find in artist narrows
  * the songs ([found]), only the songs found show.
  */
@@ -142,6 +162,7 @@ const artistItems = (
   { library }: Catalogue,
   found: readonly number[] | null,
   kept: ArtistKeptPageShown,
+  shown: number,
 ): Item[] =>
   artistPageItems(
     [
@@ -167,6 +188,7 @@ const artistItems = (
       similar: { label: library.fansAlsoLike, artists: kept.similar },
       ...(kept.about === null ? {} : { about: kept.about }),
     },
+    shown,
   );
 
 const itemKey = (item: Item): string => {
@@ -179,6 +201,8 @@ const itemKey = (item: Item): string => {
       return "similar";
     case "about":
       return "about";
+    case "more":
+      return "more";
     case "song":
       return item.song.source === "library"
         ? String(item.song.track.id)
@@ -188,7 +212,7 @@ const itemKey = (item: Item): string => {
 
 /**
  * What can be checked on the page, in page order: the albums (their shelf,
- * then Appears on), then the songs. Albums and songs check together.
+ * then Appears on), then the songs it shows. Albums and songs check together.
  */
 const selectableItems = (
   detail: ArtistDetail,
@@ -199,8 +223,17 @@ const selectableItems = (
   ...yt.albums.map(ytAlbumItem),
   ...yt.singles.map(ytAlbumItem),
   ...detail.appearsOn.map(albumItem),
-  ...songs.map((row) => (row.source === "library" ? trackItem(row.track) : ytTrackItem(row.song))),
+  ...songs.map(songItem),
 ];
+
+const songItem = (row: PageSong): MixedItem =>
+  row.source === "library" ? trackItem(row.track) : ytTrackItem(row.song);
+
+/** The Songs screen's list: every song, or while Find narrows them, the songs found. */
+const songItems = (songs: readonly PageSong[], found: readonly number[] | null): Item[] =>
+  artistPageItems<AlbumCell, PageSong, Similar, YtArtistAbout>([], songs, "", found).filter(
+    (item) => item.type === "song",
+  );
 
 /**
  * An album shelf as one row of covers that scrolls sideways: Library albums
@@ -272,6 +305,24 @@ function AlbumShelfRow({
   );
 }
 
+/** The Songs screen's head: the artist's name as its title. */
+function ArtistSongsHead({ artist }: { artist: ArtistRow }) {
+  return (
+    <View style={{ paddingTop: CELL, paddingBottom: CELL }}>
+      <CompactTitleMark>
+        <Text
+          accessibilityRole="header"
+          numberOfLines={2}
+          className="font-sans text-title1 font-light text-foreground"
+          style={{ letterSpacing: -0.4 }}
+        >
+          {artist.name}
+        </Text>
+      </CompactTitleMark>
+    </View>
+  );
+}
+
 /** The artist page's head: their image as a large circle, then their name. */
 function ArtistHead({ artist }: { artist: ArtistRow }) {
   const { width } = useWindowDimensions();
@@ -316,8 +367,17 @@ const selectedSong = (item: Item): MixedItem | null =>
       ? trackItem(item.song.track)
       : ytTrackItem(item.song.song);
 
-function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegrated: boolean }) {
+function ArtistContent({
+  shown,
+  openedIntegrated,
+  view,
+}: {
+  shown: Shown;
+  openedIntegrated: boolean;
+  view: ArtistView;
+}) {
   const { strings } = useLocalisation();
+  const songsView = view === "songs";
   const loaded = shown.detail !== undefined;
   const detail = useMemo(() => shown.detail ?? unread(shown.artist), [shown.detail, shown.artist]);
   const scrollable = useListScrollable();
@@ -346,9 +406,12 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   const ytView = loaded ? yt.view : null;
   const ytShelves = loaded ? yt.shelves : null;
   const integrated = loaded && yt.integrated;
-  // The artist's songs in the sort chosen for artists (Popular by default); `artistSongOrder`
-  // below ranks them by YouTube Music's list once it's known.
-  const { sort, songs } = useSortedSongs("artist", detail.songs);
+  // The page lists the artist's songs by popularity whatever the sort chosen for artists; the
+  // Songs screen in that sort (Popular by default). `artistSongOrder` below ranks them by
+  // YouTube Music's list once it's known.
+  const chosenSort = useSongSort("artist");
+  const sort = songsView ? chosenSort : POPULAR;
+  const songs = useMemo(() => sortSongs(detail.songs, sort), [detail.songs, sort]);
   // Under Popular with the list known: the songs read "Popular" and carry their ranks.
   const byPopularity = sort.key === "popular" && yt.popular !== null;
   const additions = useMemo((): YtAdditions => {
@@ -389,31 +452,45 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   // Fans might also like and About, from the artist's YouTube Music page: looked up once the
   // page is read and the screen has settled, never before the songs and albums. While
   // YouTube Music's songs are on their way, their skeletons follow the songs instead.
-  const keptPage = useArtistKeptPage(detail.artist.name, loaded, yt);
-  const kept = ytLoading ? NOTHING_KEPT : keptPage;
+  // The Songs screen has neither, and looks nothing up.
+  const keptPage = useArtistKeptPage(detail.artist.name, loaded && !songsView, yt);
+  const kept = ytLoading || songsView ? NOTHING_KEPT : keptPage;
   // Find in artist narrows the songs on the page, the Library's or the mixed list with Online.
   const findInArtist = useFindInLegendList(list, pageSongs, entryText, true);
   const { found } = findInArtist;
   const { scroll, listProps } = useListScroll(findInArtist.initialOffset);
   useCompactTitleList({ list, find: findInArtist, scroll });
+  // The songs' heading counts the whole list as it stands, the cut's hidden songs included.
+  const heading = strings.library.countedHeading(
+    byPopularity ? strings.library.popular : strings.library.songs,
+    pageSongs.length,
+  );
   const items = useMemo(
     () =>
-      artistItems(
-        detail,
-        pageSongs,
-        additions,
-        ytLoading,
-        byPopularity ? strings.library.popular : strings.library.songs,
-        strings,
-        found,
-        kept,
-      ),
-    [detail, pageSongs, additions, ytLoading, byPopularity, strings, found, kept],
+      songsView
+        ? songItems(pageSongs, found)
+        : artistItems(
+            detail,
+            pageSongs,
+            additions,
+            ytLoading,
+            heading,
+            strings,
+            found,
+            kept,
+            ARTIST_PAGE_SONGS,
+          ),
+    [songsView, detail, pageSongs, additions, ytLoading, heading, strings, found, kept],
+  );
+  // The songs the screen shows: past the page's cut they're the Songs screen's to show.
+  const shownSongs = useMemo(
+    () => (songsView || found !== null ? pageSongs : pageSongs.slice(0, ARTIST_PAGE_SONGS)),
+    [songsView, found, pageSongs],
   );
   // Albums and songs select together; the bar acts on them in page order.
   const selectable = useMemo(
-    () => selectableItems(detail, pageSongs, additions),
-    [detail, pageSongs, additions],
+    () => (songsView ? shownSongs.map(songItem) : selectableItems(detail, shownSongs, additions)),
+    [songsView, detail, shownSongs, additions],
   );
   const page = useListSelection({ items: selectable, keyOf: mixedItemKey, target: mixedTarget });
   const albumSelection = useMemo(() => albumSelectionOf(page), [page]);
@@ -460,9 +537,24 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
           <SimilarArtistsRow artists={item.artists} height={similarRow} selecting={selecting} />
         );
       if (item.type === "about") return <ArtistAbout about={item.about} />;
+      if (item.type === "more")
+        return (
+          <SeeMoreRow
+            onPress={() => openArtistSongs(detail.artist.id, { integrated: openedIntegrated })}
+          />
+        );
       return null;
     },
-    [albumSelection, releaseSelection, integrated, shelfHeight, similarRow, selecting],
+    [
+      albumSelection,
+      releaseSelection,
+      integrated,
+      shelfHeight,
+      similarRow,
+      selecting,
+      detail.artist.id,
+      openedIntegrated,
+    ],
   );
   // About's height follows its text, so the list measures it.
   const slotSize = useCallback(
@@ -473,7 +565,9 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
           ? similarRow
           : item.type === "about"
             ? undefined
-            : shelfHeight,
+            : item.type === "more"
+              ? SEE_MORE_ROW
+              : shelfHeight,
     [shelfHeight, similarRow],
   );
 
@@ -490,7 +584,20 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
     .filter((part) => part !== null)
     .join(" · ");
 
-  const head = (
+  // The sort is the Songs screen's: the page's songs are always by popularity.
+  const head = songsView ? (
+    <>
+      <ArtistSongsHead artist={detail.artist} />
+      <ListIntro
+        line={strings.library.countedHeading(strings.library.songs, pageSongs.length)}
+        songs={loaded ? songs : undefined}
+        mixed={loaded ? pageSongs : undefined}
+        context={context}
+        sortControl={<SongSortButton kind="artist" />}
+        toggle={loaded ? yt.toggle : null}
+      />
+    </>
+  ) : (
     <>
       <ArtistHead artist={detail.artist} />
       <FollowArtistIntro
@@ -499,13 +606,14 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
         songs={loaded ? songs : undefined}
         mixed={loaded ? pageSongs : undefined}
         context={context}
-        sortControl={<SongSortButton kind="artist" />}
         toggle={loaded ? yt.toggle : null}
       />
       <ArtistShows name={detail.artist.name} />
       {loaded && <ArtistStatsBlock artistId={detail.artist.id} songs={detail.songs} />}
     </>
   );
+  // Past the page's cut, skeleton rows for YouTube Music's songs would have no place to show.
+  const songSkeletons = songsView || found !== null || pageSongs.length < ARTIST_PAGE_SONGS;
 
   return (
     <FindFrame find={findInArtist} of="artist">
@@ -550,7 +658,9 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
         }
         ListFooterComponent={
           ytView === null ? null : ytView.note === "loading" ? (
-            <TrackSkeletons leading="card" />
+            songSkeletons ? (
+              <TrackSkeletons leading="card" />
+            ) : null
           ) : (
             <YtLookupFooter
               note={ytView.note === null ? null : ytArtistNote(ytView.note, strings)}
@@ -579,6 +689,21 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
  * the rest follows once read.
  */
 export default function ArtistScreen() {
+  return <ArtistScreenOf view="page" />;
+}
+
+/**
+ * An artist's Songs screen, which their page's See more opens on the same
+ * stack (`openArtistSongs`): the artist's name over "Songs · 42", Play,
+ * Shuffle, the sort, the Library | Online toggle and every song in the sort
+ * chosen for artists, with Find in artist and selection. The sort and the
+ * toggle are the page's own (`artistVisit`).
+ */
+export function ArtistSongsScreen() {
+  return <ArtistScreenOf view="songs" />;
+}
+
+function ArtistScreenOf({ view }: { view: ArtistView }) {
   const { id } = useLocalSearchParams<{ id: string }>();
   const artistId = parseId(id);
   const detail = useArtist(artistId);
@@ -595,7 +720,7 @@ export default function ArtistScreen() {
         : { artist: detail.artist, detail };
   return (
     <DetailFrame detail={shown} noun="artist" compactTitle={({ artist }) => artist.name}>
-      {(artist) => <ArtistContent shown={artist} openedIntegrated={openedIntegrated} />}
+      {(artist) => <ArtistContent shown={artist} openedIntegrated={openedIntegrated} view={view} />}
     </DetailFrame>
   );
 }
