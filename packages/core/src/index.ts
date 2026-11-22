@@ -927,7 +927,13 @@ export { focusedVersion, startFocusedVersion } from "./focusedVersion.ts";
 export type { FocusedVersion, FocusedVersionEvent } from "./focusedVersion.ts";
 export { startTabSwitch, stepTabSwitch } from "./tabSwitch.ts";
 export type { TabSwitch, TabSwitchEvent, TabSwitchStep } from "./tabSwitch.ts";
-export { describeTabScreens, keepTabs, parseTabScreens } from "./tabScreens.ts";
+export {
+  describeTabScreens,
+  keepTabs,
+  parseTabScreens,
+  sameKeptTabs,
+  warmTab,
+} from "./tabScreens.ts";
 export type { TabScreens } from "./tabScreens.ts";
 export {
   LIBRARY_QUERY_LIMITS,

@@ -95,3 +95,26 @@ export const keepTabs = <T extends string>(
   const next = [...(shown === null ? [] : [shown]), ...hidden].slice(0, Math.max(1, limit));
   return next.length === kept.length && next.every((tab, i) => tab === kept[i]) ? kept : next;
 };
+
+/**
+ * The tabs to keep mounted once [tab] is built ahead of its first visit (#1438): after the
+ * [kept] ones, so it is the next to go, while it is on the [bar] and fits under [limit].
+ * Returns [kept] itself when that changes nothing.
+ */
+export const warmTab = <T extends string>(
+  kept: readonly T[],
+  tab: T,
+  bar: readonly T[],
+  limit: number,
+): readonly T[] =>
+  kept.includes(tab) || !bar.includes(tab) || kept.length >= limit ? kept : [...kept, tab];
+
+/**
+ * [next] for the tab navigator, or [shown] itself when it holds the same tabs: which tabs are
+ * kept matters to it, not their order, so a switch between kept tabs draws nothing new (#1438).
+ */
+export const sameKeptTabs = <T extends string>(
+  shown: readonly T[],
+  next: readonly T[],
+): readonly T[] =>
+  next.length === shown.length && next.every((tab) => shown.includes(tab)) ? shown : next;

@@ -87,3 +87,15 @@ test("the downloads' resume and the background fill leave no Library-sized step 
   assert.doesNotMatch(input, /\bindexFillPlaylists\(/);
   assert.match(read("library/backgroundFill.ts"), /namedWork\(FILL_WORK\)/);
 });
+
+test("Search's screen is built hidden in idle time, so its first tap shows a kept tab (#1438)", () => {
+  // A first tap that builds Search held the thread 100–500 ms with a scan running; warmed, it
+  // shows a kept tab. The build is a transition, so a touch in the meantime goes first.
+  const layout = read("app/_layout.tsx");
+  const start = layout.indexOf('afterFirstSettled("searchScreen"');
+  assert.ok(start >= 0, "Search's screen isn't warmed after startup");
+  const body = layout.slice(start, layout.indexOf("\n", layout.indexOf(");", start)));
+  assert.match(body, /startTransition\(\(\) => warmTabScreen\("search"\)\)/);
+  // Before the scan, so the build doesn't share the thread with it.
+  assert.ok(start < layout.indexOf('afterFirstSettled(\n        "scan"'), "warm Search before the scan");
+});

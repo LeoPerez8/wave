@@ -4,7 +4,9 @@
 //   node scripts/perf/perf.ts run [--scenario all|<a,b>] [--variant idle|import|idle,import]
 //        [--label <l>] [--iterations <n>] [--commit <sha>] [--apk <file>] [--import-link <url>]
 //        [--artist <name>] [--playlist <name>] [--album <name>] [--yt-artist <name>] [--compile <filter>] [--glass <probe>] [--perfetto] [--meta key=value]...
-//        [--out <file>] [--serial <s>] [--dry-run]
+//        [--launch-settle <ms>] [--out <file>] [--serial <s>] [--dry-run]
+//        (--launch-settle: how long a launch settles before the steps, the fixture's launchSettleMs
+//        by default; a longer one lets the launch's background work start, e.g. a --stale scan)
 //        (--scenario glass runs the glass comparison's scenarios; --glass needs a perf build)
 //   node scripts/perf/perf.ts emulator-check [--noise-ms <ms>] [--iterations <n>] [--apk <file>]
 //        [--artist <name>] [--playlist <name>] [--album <name>] [--yt-artist <name>] [--serial <s>]
@@ -104,6 +106,7 @@ const { values, positionals } = parseArgs({
     install: { type: "boolean", default: false },
     "dry-run": { type: "boolean", default: false },
     "noise-ms": { type: "string" },
+    "launch-settle": { type: "string" },
   },
 });
 
@@ -500,7 +503,10 @@ const commands: Record<string, () => Promise<void>> = {
       importLink: values["import-link"] ?? fixture.importLink,
       settleMs: fixture.settleMs,
       windowMs: fixture.windowMs,
-      launchSettleMs: fixture.launchSettleMs,
+      launchSettleMs:
+        values["launch-settle"] === undefined
+          ? fixture.launchSettleMs
+          : Number(values["launch-settle"]),
       memoryIdleMs: fixture.memoryIdleMs,
       flushTimeoutMs: fixture.flushTimeoutMs,
       commit: values.commit ?? null,
