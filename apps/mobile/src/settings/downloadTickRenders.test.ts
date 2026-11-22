@@ -106,17 +106,30 @@ const song = (videoId: string) => ({
   durationMs: null,
   artworkUrl: null,
   explicit: false,
+  albumId: null,
 });
 const roadTrip = { kind: "playlist" as const, id: "7", name: "Road Trip" };
+const job = (
+  id: string,
+  phase: "transferring" | "queued",
+  progress: { received?: number; total?: number } = {},
+): NativeDownloadJob => ({
+  id,
+  song: song(id),
+  phase,
+  ...progress,
+  origin: roadTrip,
+  generation: 1,
+  policy: "youtube-m4a",
+});
 
 /** The journal with "a" and "b" downloading at [a] and [b] percent and "c" and "d" waiting. */
-const jobs = (a: number, b = 20): NativeDownloadJob[] =>
-  [
-    { id: "a", song: song("a"), phase: "transferring", received: a, total: 100, origin: roadTrip },
-    { id: "b", song: song("b"), phase: "transferring", received: b, total: 100, origin: roadTrip },
-    { id: "c", song: song("c"), phase: "queued", origin: roadTrip },
-    { id: "d", song: song("d"), phase: "queued", origin: roadTrip },
-  ] as NativeDownloadJob[];
+const jobs = (a: number, b = 20): NativeDownloadJob[] => [
+  job("a", "transferring", { received: a, total: 100 }),
+  job("b", "transferring", { received: b, total: 100 }),
+  job("c", "queued"),
+  job("d", "queued"),
+];
 
 /** The journal after native's change: the ticking job fresh (its song too), the others the same objects. */
 const tick = (previous: readonly NativeDownloadJob[], received: number) =>
@@ -157,12 +170,7 @@ test("a progress tick re-renders only the row whose progress changed (#1441)", a
 
     // A song joining is a change of membership: the list renders, and the new row appears.
     counts().rows = [];
-    await act(() =>
-      journal.set([
-        ...journal.get(),
-        { id: "e", song: song("e"), phase: "queued", origin: roadTrip } as NativeDownloadJob,
-      ]),
-    );
+    await act(() => journal.set([...journal.get(), job("e", "queued")]));
     assert.ok(counts().list > 0);
     assert.ok(counts().rows.includes("e: Waiting to download"));
     // The songs downloading keep their rows; the waiting ones may render for their new count.
