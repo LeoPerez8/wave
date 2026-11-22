@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { pagerMounts, stagedMounts } from "./index.ts";
+import { listMounts, pagerMounts, stagedMounts } from "./index.ts";
 
 describe("stagedMounts", () => {
   test("the first frame mounts the sections that start inside the viewport, the next one the rest", () => {
@@ -57,5 +57,28 @@ describe("pagerMounts", () => {
 
   test("no pages mount nothing", () => {
     assert.deepEqual(pagerMounts({ count: 0, index: 0 }), { order: [], counts: [0] });
+  });
+});
+
+describe("listMounts", () => {
+  test("a long list grows a few rows a frame until a screen is filled, then takes the rest at once", () => {
+    // A virtualized list mounts only what is on screen, so the rest of the rows cost nothing.
+    assert.deepEqual(listMounts({ count: 300, perFrame: 3, screen: 16 }), [3, 6, 9, 12, 15, 300]);
+  });
+
+  test("a list shorter than a screen ends when its last row mounts", () => {
+    assert.deepEqual(listMounts({ count: 5, perFrame: 3, screen: 16 }), [3, 5]);
+  });
+
+  test("a list that fits one frame's rows mounts whole at once", () => {
+    assert.deepEqual(listMounts({ count: 2, perFrame: 3, screen: 16 }), [2]);
+  });
+
+  test("an empty list mounts nothing", () => {
+    assert.deepEqual(listMounts({ count: 0, perFrame: 3, screen: 16 }), [0]);
+  });
+
+  test("every frame mounts at least one row", () => {
+    assert.deepEqual(listMounts({ count: 4, perFrame: 0, screen: 3 }), [1, 2, 4]);
   });
 });

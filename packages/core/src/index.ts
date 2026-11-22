@@ -3422,8 +3422,10 @@ export { djSeedFull, djSessionWithAlbumSongs } from "./dj.ts";
 export type { DjSearchFound } from "./djSearch.ts";
 
 export {
+  listMounts,
   pagerMounts,
   stagedMounts,
+  type ListMountsInput,
   type PagerMountsInput,
   type StagedMountsInput,
 } from "./stagedMounts.ts";
