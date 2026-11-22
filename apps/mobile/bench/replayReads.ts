@@ -14,7 +14,6 @@
  */
 import { finishSteps, writePlaylistYtSong } from "@wave/core";
 import assert from "node:assert/strict";
-import { performance } from "node:perf_hooks";
 
 import type { LibraryDatabase } from "@wave/client/db/database";
 import { mixPlaylisted } from "@wave/client/db/mixInputs";
@@ -23,8 +22,9 @@ import * as offThread from "@wave/client/db/offThreadReads";
 import { playlistEntryVideoIdRows, readPlaylistOpening } from "@wave/client/db/playlists";
 import * as schema from "@wave/client/db/schema";
 import { uniqueVideosSteps } from "@wave/client/db/videoPages";
-import { addLibrary, asyncReadClient, openTestDatabase } from "@wave/client/testing";
+import { addLibrary, openTestDatabase } from "@wave/client/testing";
 import { median, printMeta } from "./measure.ts";
+import { timedReplays } from "./replaySteps.ts";
 
 const quick = process.argv.includes("--quick");
 const runs = quick ? 3 : 7;
@@ -124,19 +124,7 @@ const reads: readonly [
 for (const [, read, rows, made] of reads)
   assert.equal(made(read(db)), rows, "the seed has the phone's row counts");
 
-// Every replay step (a pass, or a step of mapping rows) is timed, as the app's block log names it.
-let steps: number[] = [];
-offThread.runReplayPassesWith((run) => {
-  const start = performance.now();
-  try {
-    return run();
-  } finally {
-    steps.push(performance.now() - start);
-  }
-});
-
-const connection = offThread.readConnections(async () => asyncReadClient(db));
-const now = () => performance.now();
+const { steps, connection, now } = timedReplays(db);
 // One share for every caller, as the Library store keeps.
 const replay = offThread.sharedReplays(connection, now);
 
@@ -158,7 +146,7 @@ for (const [operation, read] of reads) {
   for (let run = 0; run < runs; run++) {
     // A new function each run: the first time this read runs.
     const fresh = counted((d) => read(d));
-    steps = [];
+    steps.length = 0;
     first.push((await replay(fresh.read)).heldMs);
     const firstPasses = fresh.passes;
     fresh.passes = 0;

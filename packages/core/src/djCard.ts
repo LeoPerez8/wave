@@ -3,7 +3,14 @@
  * right edge.
  */
 import type { PlayedSeedArtist } from "./artistMixes.ts";
-import { djArtistTile, type DjArtistTile, type DjTile, type DjTileKey } from "./dj.ts";
+import { finishSteps } from "./buildSteps.ts";
+import {
+  djArtistTile,
+  djLibraryArtistTilesSteps,
+  type DjArtistTile,
+  type DjTile,
+  type DjTileKey,
+} from "./dj.ts";
 
 /** The most faces the DJ card shows. */
 export const DJ_CARD_ARTISTS = 4;
@@ -26,11 +33,7 @@ export const djCardArtists = ({
   readonly played: readonly PlayedSeedArtist[];
   readonly artists?: readonly { readonly id: number; readonly name: string }[];
 }): DjArtistTile[] => {
-  const library = new Map<DjTileKey, DjArtistTile>();
-  for (const artist of artists) {
-    const tile = djArtistTile(artist.name, artist.id);
-    if (tile !== null && !library.has(tile.key)) library.set(tile.key, tile);
-  }
+  const library = finishSteps(djLibraryArtistTilesSteps(artists));
   const faces = new Map<DjTileKey, DjArtistTile>();
   const add = (tile: DjArtistTile | null): void => {
     if (tile === null || faces.size >= DJ_CARD_ARTISTS || faces.has(tile.key)) return;

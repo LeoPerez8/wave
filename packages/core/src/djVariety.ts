@@ -149,7 +149,7 @@ export function* djVarietyCandidatesSteps<S extends RankedRadioSong>(
  * The song of the radio [radioId]'s page [songs] that starts a DJ queue
  * before its first batch is read: the first one that batch could take. Not a
  * video, not [disliked], not played or learned from yet
- * (`magicRadioEligible`), on a family tile's radio of its family
+ * (`magicRadioEligibleSteps`), on a family tile's radio of its family
  * (`djRadioSongAllowed`), and within the Artist variety's reach of the
  * selected artists in [graph] (Low: a selected artist's song). With none in
  * reach, the nearest, as the batch fills (`djVarietyCandidates`). Null when
