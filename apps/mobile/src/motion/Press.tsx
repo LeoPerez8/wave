@@ -130,6 +130,30 @@ const PressMotion = memo(function PressMotion({
   return null;
 });
 
+/**
+ * Where [PressMotion] mounts: this leaf keeps whether it has, so a first touch
+ * ([arm]) re-renders only it, and `Press` renders once, when the motion hands
+ * over the style to attach (#1423). Highlighted mounts it at once.
+ */
+const PressMotionSlot = memo(function PressMotionSlot({
+  onArm,
+  highlighted,
+  ...motion
+}: Omit<Parameters<typeof PressMotion>[0], "litAtMount"> & {
+  /** Hands `Press` what mounts the motion, or null once it has. */
+  onArm: (arm: (() => void) | null) => void;
+}) {
+  const [mounted, setMounted] = useState(highlighted);
+  if (highlighted && !mounted) setMounted(true);
+  const [litAtMount] = useState(highlighted);
+  useLayoutEffect(() => {
+    onArm(mounted ? null : () => setMounted(true));
+  }, [onArm, mounted]);
+  return mounted ? (
+    <PressMotion {...motion} highlighted={highlighted} litAtMount={litAtMount} />
+  ) : null;
+});
+
 /** Where a touch event's finger is in the window, if it carries one. */
 const pointOf = ({ nativeEvent }: GestureResponderEvent) =>
   Number.isFinite(nativeEvent.pageX) && Number.isFinite(nativeEvent.pageY)
@@ -166,10 +190,11 @@ export function Press({
 }: Props) {
   const longPressDelay = useLongPressDelayMs();
   const reduceMotion = useReducedMotion();
-  // The animation mounts on the first touch or highlight and stays (`PressMotion`).
-  const [animated, setAnimated] = useState(highlighted);
-  if (highlighted && !animated) setAnimated(true);
-  const [litAtMount] = useState(highlighted);
+  // The animation mounts on the first touch or highlight and stays (`PressMotionSlot`).
+  const armMotion = useRef<(() => void) | null>(null);
+  const [onArm] = useState(() => (arm: (() => void) | null) => {
+    armMotion.current = arm;
+  });
   const [motion, setMotion] = useState<Motion | null>(null);
   const motionRef = useRef<Motion | null>(null);
   const pressedTarget = useRef(0);
@@ -288,7 +313,7 @@ export function Press({
 
   const animateTo = (value: number) => {
     pressedTarget.current = value;
-    if (motionRef.current === null) setAnimated(true);
+    if (motionRef.current === null) armMotion.current?.();
     else
       motionRef.current.pressed.set(
         withTiming(value, { duration: TAP_ANIMATION_MS, easing: EASE }),
@@ -306,7 +331,7 @@ export function Press({
       onLongPress={onLongPress == null ? undefined : longPress}
       delayLongPress={delayLongPress ?? longPressDelay}
       onTouchStart={(event) => {
-        if (!animated) setAnimated(true);
+        armMotion.current?.();
         intent.begin();
         touchAt.current = performance.now();
         traceLongPress(key, "touch-start", `delay=${delayLongPress ?? longPressDelay}`);
@@ -371,16 +396,14 @@ export function Press({
         // Only the outermost Press is handed over.
         <HandOverPress value={undefined}>{children}</HandOverPress>
       )}
-      {animated && (
-        <PressMotion
-          pressedTarget={pressedTarget}
-          litAtMount={litAtMount}
-          highlighted={highlighted}
-          depth={depth}
-          reduceMotion={reduceMotion}
-          onReady={onMotionReady}
-        />
-      )}
+      <PressMotionSlot
+        onArm={onArm}
+        pressedTarget={pressedTarget}
+        highlighted={highlighted}
+        depth={depth}
+        reduceMotion={reduceMotion}
+        onReady={onMotionReady}
+      />
     </AnimatedPressable>
   );
 }
