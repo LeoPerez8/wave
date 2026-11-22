@@ -183,15 +183,12 @@ describe("artistPageItems", () => {
         { similar: { label: "Fans might also like", artists: ["Air"] }, about },
         5,
       );
-      assert.deepEqual(
-        items.slice(-4),
-        [
-          { type: "more", total: 7 },
-          { type: "section", label: "Fans might also like" },
-          { type: "similar", label: "Fans might also like", artists: ["Air"] },
-          { type: "about", about },
-        ],
-      );
+      assert.deepEqual(items.slice(-4), [
+        { type: "more", total: 7 },
+        { type: "section", label: "Fans might also like" },
+        { type: "similar", label: "Fans might also like", artists: ["Air"] },
+        { type: "about", about },
+      ]);
     });
 
     test("while Find in artist narrows the songs, every song found shows, past the cut too", () => {
