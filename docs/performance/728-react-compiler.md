@@ -3,9 +3,10 @@
 Ticket: #728 (parent #712). Branch `feat/728-react-compiler`, based on
 `origin/feat/712-faster-lighter` at a6333827.
 
-**The phone numbers are pending.** This ticket makes the compiler safe to turn on and makes the
-build that measures it. The decision waits for the owner's runs on the reference phone (see "On the
-reference phone (#1355)"). Nothing in this doc is a phone measurement.
+**The compiler is on (#1433).** This ticket made the compiler safe to turn on and made the build
+that measures it. #1433 ran the comparison on the emulator and turned the compiler on by default
+(see "On the emulator (#1433)"). The phone numbers are still pending: the owner runs them on the
+`ti` release (see "On the reference phone (#1355)"). Nothing in this doc is a phone measurement.
 
 ## What changed
 
@@ -35,10 +36,11 @@ reference phone (#1355)"). Nothing in this doc is a phone measurement.
   it can't build). `stats/hooks.test.ts` and `settings/searchOnline.test.ts` run each case on
   both builds. Before the fixes the compiled ones failed: no re-read after a play, a scan or a new
   Search visit.
-- **The flag is one inlined variable.** `EXPO_PUBLIC_WAVE_REACT_COMPILER=1` at bundle time turns the
-  compiler on (`app.config.ts`, `experiments.reactCompiler`; #303's `WAVE_REACT_COMPILER` is gone).
-  Off by default. The bundle inlines the same variable, so a perf build reports `reactCompiler` in
-  its run metadata, `perf.ts run` prints it on the run's first line, and `perf.ts compare` says
+- **The flag is one inlined variable.** `EXPO_PUBLIC_WAVE_REACT_COMPILER` at bundle time sets
+  `app.config.ts`'s `experiments.reactCompiler` (#303's `WAVE_REACT_COMPILER` is gone). #728 left
+  it off unless the variable was `1`; since #1433 it is on unless the variable is `0`
+  (`plugins/reactCompiler.ts`). The bundle inlines the same variable, so a perf build reports
+  `reactCompiler` in its run metadata, `perf.ts run` prints it on the run's first line, and `perf.ts compare` says
   "React Compiler: off, then on." when the two runs differ (builds from before #728 don't say, and
   count as off).
 
@@ -69,7 +71,7 @@ tickets are merged, so the compiler is judged on what it adds to them:
 ```sh
 cd apps/mobile/android
 rm -rf app/build/generated/assets/react "$TMPDIR/metro-cache"
-EXPO_PUBLIC_WAVE_PERF=1 EXPO_PUBLIC_WAVE_COMMIT=$(git rev-parse --short HEAD) \
+EXPO_PUBLIC_WAVE_REACT_COMPILER=0 EXPO_PUBLIC_WAVE_PERF=1 EXPO_PUBLIC_WAVE_COMMIT=$(git rev-parse --short HEAD) \
   ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
 # install, then the off runs:
 node scripts/perf/perf.ts run --scenario all,glass --variant idle,import \
@@ -101,11 +103,86 @@ below pass. Otherwise it stays off and the spec says why.
 | screen-off soaks, JS wake-ups per minute | **pending** | **pending** | —      |
 | Hermes bundle size                       | **pending** | **pending** | —      |
 
+## On the emulator (#1433)
+
+The `wave-marquee` AVD (x86_64, Android 15, read-only instance, `-no-audio`), seeded with
+`node scripts/perf/seed.ts` (3,000 songs, 60 playlists, 12,000 plays), on mobile data only so Magic
+Queue and Related show and Wi-Fi pre-download stays off. Both APKs are the kept x86_64 release APK
+with a fresh perf bundle from commit 88c8a39ed (`repack-js.sh`, `EXPO_PUBLIC_WAVE_PERF=1`, and
+`EXPO_PUBLIC_WAVE_REACT_COMPILER=0` or `=1`); `adb install -r` swapped them over the same Library,
+and every run used here says on its first line which build it was.
+
+**`reference-taps`** (`perf.ts emulator-check --iterations 3`), three runs of each, alternating
+installs. First frame p90 in ms, by tap kind:
+
+| Tap kind                 | Off (3 runs)    | Off median | On (3 runs)   | On median | Change |
+| ------------------------ | --------------- | ---------- | ------------- | --------- | ------ |
+| tab                      | 175, 220, 256   | 220        | 200, 165, 164 | 165       | −25%   |
+| push                     | 446, 1,000, 279 | 446        | 298, 226, 205 | 226       | −49%   |
+| pop                      | 347, 405, 160   | 347        | 188, 108, 127 | 127       | −63%   |
+| Now Playing open (1 tap) | 143, 83, 60     | 83         | 69, 106, 73   | 73        | −12%   |
+| Queue (1 tap)            | 246, 130, 91    | 130        | 123, 77, 92   | 92        | −29%   |
+| JS blocks over 50 ms     | 64, 57, 52      | 57         | 50, 45, 49    | 49        | −14%   |
+
+The scenario stops at its first `queue-close` on the seeded emulator (the Queue view there has no
+"Queue" control), so each run times only its warm-up pass: 5 tabs, 10 pushes, 10 pops and one of
+each sheet. Every on run beats the off median for tabs, pushes, pops and JS blocks.
+
+**Step scenarios** (`perf.ts run --variant idle --iterations 3 --compile baseline`, the `all` set
+without `push-empty`, whose "Developer" row the seeded emulator doesn't show). One valid run of
+each; another off run lost its first metrics flush to a launch over 10 s and recorded frames only,
+and the emulator was shut down before the second on run. The table holds the steps both runs
+recorded: `push-playlist` failed in the off run, `search-first-tap` in the on run, and the off run
+stopped before `scroll-songs`. Medians per step, off → on:
+
+| Step                 | Renders/step | First frame ms | Settle ms     | Frame p90 ms | Missed frames |
+| -------------------- | ------------ | -------------- | ------------- | ------------ | ------------- |
+| tab-first            | 10 → 7.5     | 162 → 174      | 651 → 630     | 77 → 150     | 0.3 → 0.4     |
+| tab-switch           | 5.1 → 4.5    | 64 → 61        | 496 → 453     | 53 → 48      | 0.3 → 0.2     |
+| rapid-tabs           | 16.3 → 16    | 9 → 22         | 769 → 656     | 48 → 65      | 0.3 → 0.4     |
+| push-settings push   | 7 → 6.3      | 60 → 76        | 723 → 725     | 61 → 61      | 0.4 → 0.4     |
+| push-settings pop    | 4.3 → 3      | 88 → 107       | 673 → 672     | 61 → 61      | 0.5 → 0.5     |
+| push-library push    | 4 → 4        | 41 → 30        | 1,037 → 730   | 109 → 57     | 0.5 → 0.3     |
+| push-library pop     | 2.7 → 2.7    | 165 → 106      | 809 → 636     | 121 → 48     | 0.6 → 0.2     |
+| push-tracklist push  | 37 → 36      | 25 → 26        | 1,219 → 893   | 77 → 69      | 0.6 → 0.4     |
+| push-tracklist pop   | 4.7 → 2.7    | 128 → 106      | 693 → 675     | 57 → 48      | 0.4 → 0.2     |
+| push-artist push     | 17 → 14.7    | 60 → 60        | 693 → 666     | 48 → 48      | 0.3 → 0.3     |
+| push-artist pop      | 4 → 2.3      | 130 → 97       | 622 → 597     | 46 → 36      | 0.2 → 0.1     |
+| now-playing open     | 14 → 9       | 107 → 71       | 827 → 776     | 65 → 61      | 0.7 → 0.5     |
+| now-playing close    | 8 → 5        | 111 → 81       | 749 → 731     | 73 → 48      | 0.5 → 0.3     |
+| search-typing        | 28.3 → 30    | 13 → 10        | 645 → 459     | 48 → 57      | 0.5 → 0.4     |
+| scroll-playlist up   | 20.3 → 21.3  | 63 → 54        | 1,550 → 1,605 | 61 → 48      | 0.4 → 0.2     |
+| scroll-playlist down | 12.3 → 13.3  | 62 → 77        | 1,483 → 1,495 | 53 → 61      | 0.3 → 0.3     |
+| scroll-home up       | 0 → 0        | 100 → 66       | 2,318 → 1,516 | 250 → 57     | 0.9 → 0.4     |
+| scroll-home down     | 0 → 0        | 71 → 78        | 2,604 → 930   | 250 → 85     | 0.9 → 0.5     |
+
+Renders summed over the steps: 195 → 178 (−9%). Missed frames are the share of frames over budget.
+
+| Measure (emulator)                         | Off                   | On           | Change                      |
+| ------------------------------------------ | --------------------- | ------------ | --------------------------- |
+| `reference-taps` first frame p90, tap kind | table above           | table above  | −12% to −63%                |
+| step render counts, summed                 | 195                   | 178          | −9%                         |
+| step settle, of 18 steps                   | table above           | table above  | 14 better, 4 equal or worse |
+| step frame p90, of 18 steps                | table above           | table above  | 11 better, 3 equal, 4 worse |
+| screen-off soaks, JS wake-ups per minute   | not run               | not run      | —                           |
+| Hermes bundle size                         | 21,671,640 B          | 22,077,540 B | +405,900 B (+1.9%)          |
+| compiled memo caches in the bundle         | 2 (from dependencies) | 826          | —                           |
+
+Screen-off soaks weren't run: the emulator plays the seed's silent placeholder files with no audio
+device, so it has no playback whose wake-ups would mean anything. They stay with the phone run.
+
+**Decision: on by default.** Taps, renders and JS blocks improve beyond run-to-run noise and the
+behaviour checks below pass on the compiled build. The one step that got worse in its single run,
+`tab-first`'s frame p90 (77 → 150 ms, 6 taps), is the first tab tap after a cold launch; the
+`reference-taps` tab tap kind, which includes it, went the other way in all three runs. The phone
+run checks it.
+
 ## On the reference phone (#1355)
 
 #1346 moved the decision to the reference phone (Xiaomi 25118PC98G, Android 15; `docs/spec.md` ›
 Fluidity), and #1355 runs it on its own commit, so the compiler is judged against the cheap first
-frames it would otherwise replace by hand. The compiler stays off until this run says otherwise.
+frames it would otherwise replace by hand. #1433 turned the compiler on from the emulator run
+above; this run confirms it on the phone, or makes off the default again if it hurts there.
 #1380 (Home and Now Playing) takes its decision from here.
 
 `scripts/perf/react-compiler-apks.sh` builds both perf APKs from the checked-out commit (arm64,
@@ -141,7 +218,8 @@ React Compiler paragraph says so; otherwise the spec says why it stays off.
 | PSS after the run                           | **pending** | **pending** | —      |
 | Hermes bundle size                          | **pending** | **pending** | —      |
 
-Decision: **pending**; the compiler is off.
+Decision on the phone: **pending**, run by the owner on the `ti` release. The compiler is on from
+the emulator run (#1433).
 
 ## Behaviour checks on the compiled build
 
@@ -154,6 +232,20 @@ Decision: **pending**; the compiler is off.
 - The flows #303 listed (detail screens from Home, a section tab and the Library stack; Now
   Playing's artist link; Go to Artist on a streamed song).
 
+On the emulator (#1433), with the default build after the merge (compiler on, seeded library):
+
+- Search online: on mobile data, typing into an empty field leaves Library selected. On Wi-Fi,
+  after clearing and typing, Online is selected. Back on mobile data it goes back to Library.
+  Pass.
+- Genre (Jazz): Select All about four seconds after opening showed 266 selected with every row
+  checked, and the bar showed Play Next, Add to Queue, Add to Playlist and Delete. Pass, but the
+  whole order had probably arrived before the tap, so the early-press path isn't proven here.
+- The #303 flows: Library › Artists › artist › album; Now Playing's artist link; Playlists ›
+  playlist; Home › album › Go to Artist; Go to Artist on a song found online. All pass.
+- Stats: not checked. The seeded files are silent placeholders that don't play, so no play passes
+  the counting point. The desktop tests in `hooks.test.ts` cover the compiled hooks; the phone run
+  checks it.
+
 ## Not covered, and risks
 
 - **Render-time reads of mutable values.** The compiler caches a call on its arguments, so a
@@ -163,5 +255,7 @@ Decision: **pending**; the compiler is off.
   handlers are unaffected.
 - The guard checks names: a memo that reads `a.b` passes with `a` listed, even when `a` is listed
   to mean "when `a.c` changes". The compiler would key that memo on `a.b` alone.
-- If the compiler is adopted, hand-written `useMemo`/`useCallback` it covers can go in later
+- Now that the compiler is on, hand-written `useMemo`/`useCallback` it covers can go in later
   tickets; the Performance rules still apply either way.
+- The emulator run measured the warm-up pass of `reference-taps` only, one valid step run per
+  build, and no screen-off soak; the phone run covers all three.

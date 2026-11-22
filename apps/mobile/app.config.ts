@@ -5,6 +5,7 @@ import packageJson from "./package.json" with { type: "json" };
 import { versionCode } from "./plugins/appVersion.ts";
 import { withAppLanguages } from "./plugins/withAppLanguages.ts";
 import { updateSigning } from "./plugins/updateSigning.ts";
+import { reactCompilerOn } from "./plugins/reactCompiler.ts";
 import { withArtProfiles } from "./plugins/withArtProfiles.ts";
 import { withGradleBuildCache } from "./plugins/withGradleBuildCache.ts";
 import { withHermesFlags } from "./plugins/withHermesFlags.ts";
@@ -95,10 +96,10 @@ const config: ExpoConfig = {
   },
   experiments: {
     typedRoutes: true,
-    // React Compiler stays off until a phone run shows it helps (docs/performance/
-    // 728-react-compiler.md). `EXPO_PUBLIC_WAVE_REACT_COMPILER=1` at bundle time builds the
-    // comparison; the bundle inlines it too, so a perf build reports it.
-    ...(process.env.EXPO_PUBLIC_WAVE_REACT_COMPILER === "1" && { reactCompiler: true }),
+    // The React Compiler is on (#1433, docs/performance/728-react-compiler.md).
+    // `EXPO_PUBLIC_WAVE_REACT_COMPILER=0` at bundle time builds without it, for a comparison;
+    // the bundle inlines the same variable, so a perf build reports it.
+    ...(reactCompilerOn(process.env.EXPO_PUBLIC_WAVE_REACT_COMPILER) && { reactCompiler: true }),
   },
   // The Wave account (docs/spec.md, "Wave account and sync"): the sync service's URL and Wave's
   // web OAuth client id, the audience of the Google ID tokens it accepts. Neither is a secret.
