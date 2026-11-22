@@ -5,17 +5,21 @@ import {
   djRadioSongAllowed,
   djNewReleasesRanked,
   djMoodRanked,
+  djMoodRankedSteps,
+  djNewReleasesRankedSteps,
   djVarietyCandidates,
+  djVarietyCandidatesSteps,
   identityKey,
-  recordingMatches,
+  libraryFinderSteps,
   type MixKnownSongs,
   magicLibrarySongs,
-  magicRadioExclusions,
+  magicRadioExclusionsSteps,
   magicRadioReadPlan,
   magicFaithfulGenreProfile,
   magicSeedProfile,
   magicYtSong,
   availableMagicSongs,
+  filterSteps,
   mapSteps,
   rankRadioSongsSteps,
   type ArtistGraph,
@@ -148,12 +152,15 @@ export const magicQueueYtCandidates = (
     const mapLibrary = magicLibrarySongs(library.artists);
     // Mapped once, in slices: every original ranking weighs the whole playable Library.
     const playableMagic = yield* runSteps(mapSteps(playable, mapLibrary), freeTurnEffect);
-    // The snapshot already indexed recordings. A cold session has only its seed songs.
+    // The snapshot already indexed recordings. A cold session indexes its playable songs, in slices,
+    // so a radio song's step looks up its title instead of matching the whole Library (#1448).
     const find: MixKnownSongs<SongRow>["inLibrary"] =
-      library.known?.inLibrary ??
-      ((song) => playable.find((local) => recordingMatches(local, song)) ?? null);
+      library.known?.inLibrary ?? (yield* runSteps(libraryFinderSteps(playable), freeTurnEffect));
     const popularity = new Map(
-      catalog.map((entry) => [entry.song.videoId, 1 - 0.5 ** entry.radios.length]),
+      yield* runSteps(
+        mapSteps(catalog, (entry) => [entry.song.videoId, 1 - 0.5 ** entry.radios.length] as const),
+        freeTurnEffect,
+      ),
     );
     const connected = ytMusicEnabled() && online();
     const cachedVideos =
@@ -166,34 +173,30 @@ export const magicQueueYtCandidates = (
     // Read before the first ranking; each ranking takes the dislikes as they are by then.
     yield* Effect.promise(loadDislikes);
     // A DJ session's New releases raises the songs on its artists' recent releases; any other keeps the order.
+    // Both re-rank the whole ranking, the playable Library included, so they run in slices (#1448).
     const rank = (group: readonly SongRadioSeed[], original: boolean, faithfulFallback = false) =>
-      Effect.map(radioRanked(group, original, faithfulFallback), (ranked) =>
-        djMoodRanked(
-          djNewReleasesRanked(sessionNow?.() ?? session, ranked, releases, Date.now()),
-          mood,
-          moodFeatures,
-          moodGenres,
-          libraryMoodFeatures,
-        ),
-      );
+      Effect.gen(function* () {
+        const ranked = yield* radioRanked(group, original, faithfulFallback);
+        const released = yield* runSteps(
+          djNewReleasesRankedSteps(sessionNow?.() ?? session, ranked, releases, Date.now()),
+          freeTurnEffect,
+        );
+        return yield* runSteps(
+          djMoodRankedSteps(released, mood, moodFeatures, moodGenres, libraryMoodFeatures),
+          freeTurnEffect,
+        );
+      });
     const radioRanked = (
       group: readonly SongRadioSeed[],
       original: boolean,
       faithfulFallback: boolean,
-    ) => {
+    ) =>
+      Effect.gen(function* () {
       const current = sessionNow?.() ?? session;
       const read = readers.current(session.id, group);
       // Old artist radios still provide an offline fallback until an ordered page is saved.
       const familyAllowed = (id: string, songArtists: readonly string[]): boolean =>
         djRadioSongAllowed(current, id, songArtists, profileOf, graph);
-      const fallback = catalog.flatMap((entry) => {
-        const matching = entry.radios.filter((radio) =>
-          artists.some((name) => catalogSeedKey(name) === radio.seed),
-        );
-        return matching.some((radio) => familyAllowed(`artist:${radio.seed}`, entry.song.artists))
-          ? [entry.song]
-          : [];
-      });
       const radios = read.flatMap(({ seed, page }) => {
         if (page === null) return [];
         return [
@@ -204,11 +207,26 @@ export const magicQueueYtCandidates = (
           },
         ];
       });
-      if (original && radios.length === 0 && !connected)
-        radios.push({ id: seeds[0]!.id, artists, songs: fallback });
-      const exclude = magicRadioExclusions(
-        current,
-        radios.flatMap((radio) => radio.songs),
+      // Only an offline batch with no radio page reads the catalog: it may hold thousands of songs.
+      if (original && radios.length === 0 && !connected) {
+        const fallback = yield* runSteps(
+          filterSteps(catalog, (entry) =>
+            entry.radios.some(
+              (radio) =>
+                artists.some((name) => catalogSeedKey(name) === radio.seed) &&
+                familyAllowed(`artist:${radio.seed}`, entry.song.artists),
+            ),
+          ),
+          freeTurnEffect,
+        );
+        radios.push({ id: seeds[0]!.id, artists, songs: fallback.map((entry) => entry.song) });
+      }
+      const exclude = yield* runSteps(
+        magicRadioExclusionsSteps(
+          current,
+          radios.flatMap((radio) => radio.songs),
+        ),
+        freeTurnEffect,
       );
       // Ranked in background slices (#1350): a batch never holds the JS thread past 8 ms at a time.
       const ranked = rankRadioSongsSteps(
@@ -246,25 +264,20 @@ export const magicQueueYtCandidates = (
           libraryFallback: session.continuation === true && !connected,
         },
       );
-      return Effect.map(runSteps(ranked, freeTurnEffect), (songs) =>
-        availableMagicSongs(current, songs, {
-          online: online(),
-          ytMusic: ytMusicEnabled(),
-          cachedVideos,
-        }),
-      );
-    };
+      return availableMagicSongs(current, yield* runSteps(ranked, freeTurnEffect), {
+        online: online(),
+        ytMusic: ytMusicEnabled(),
+        cachedVideos,
+      });
+      });
     // A DJ session's Artist variety limits who a batch may hold; any other keeps every song.
     const allowed = (size: number) =>
       Effect.gen(function* () {
         const seed = yield* rank(seeds, true);
         const likedRanked = yield* rank(liked, false);
-        yield* freeTurnEffect;
-        return djVarietyCandidates(
-          sessionNow?.() ?? session,
-          graph,
-          { seed, liked: likedRanked },
-          size,
+        return yield* runSteps(
+          djVarietyCandidatesSteps(sessionNow?.() ?? session, graph, { seed, liked: likedRanked }, size),
+          freeTurnEffect,
         );
       });
     // Unfilled, so a radio short of allowed songs reads its continuations.

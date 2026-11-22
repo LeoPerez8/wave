@@ -13,6 +13,18 @@ export function* mapSteps<A, B>(values: Iterable<A>, map: (value: A) => B): Gene
   }
   return result;
 }
+/** [values] that [keep] keeps, in their order, a step per value. */
+export function* filterSteps<A>(
+  values: Iterable<A>,
+  keep: (value: A) => boolean,
+): Generator<void, A[]> {
+  const result: A[] = [];
+  for (const value of values) {
+    if (keep(value)) result.push(value);
+    yield;
+  }
+  return result;
+}
 /** Stable merge sort: equal values keep their source order, as Array.sort does. */
 export function* sortSteps<A>(
   values: readonly A[],

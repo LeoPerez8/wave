@@ -4,6 +4,7 @@
  * singles their saved YouTube Music pages list.
  */
 import { artistNeighbourhood, type ArtistGraph } from "./artistGraph.ts";
+import { finishSteps, mapSteps, sortSteps } from "./buildSteps.ts";
 import { catalogSeedKey } from "./candidateCatalog.ts";
 import { identityKey } from "./library.ts";
 import type { MagicSession } from "./magicQueue.ts";
@@ -52,7 +53,15 @@ export const djNewReleasesRanked = <S extends Pick<RankedRadioSong, "song" | "sc
   ranked: readonly S[],
   pages: readonly DjReleasePage[],
   now: number,
-): S[] => {
+): S[] => finishSteps(djNewReleasesRankedSteps(session, ranked, pages, now));
+
+/** `djNewReleasesRanked`, a step per song, for a background slice (#1448). */
+export function* djNewReleasesRankedSteps<S extends Pick<RankedRadioSong, "song" | "score">>(
+  session: MagicSession,
+  ranked: readonly S[],
+  pages: readonly DjReleasePage[],
+  now: number,
+): Generator<void, S[]> {
   if (session.dj?.newReleases !== true) return [...ranked];
   const year = new Date(now).getFullYear();
   const albumPages = new Set<string>();
@@ -78,9 +87,9 @@ export const djNewReleasesRanked = <S extends Pick<RankedRadioSong, "song" | "sc
       return artist !== null && titles.get(artist)?.has(title) === true;
     });
   };
-  const raised = ranked.map((song) =>
-    recent(song) ? { ...song, score: song.score + DJ_NEW_RELEASE_BOOST } : song,
+  const raised = yield* mapSteps(
+    ranked,
+    (song): S => (recent(song) ? { ...song, score: song.score + DJ_NEW_RELEASE_BOOST } : song),
   );
-  // oxlint-disable-next-line unicorn/no-array-sort -- fresh array; Hermes lacks toSorted
-  return raised.sort((a, b) => b.score - a.score);
-};
+  return yield* sortSteps(raised, (a, b) => b.score - a.score);
+}
