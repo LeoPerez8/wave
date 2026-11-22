@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
+import { runTestPromise } from "../lib/steppedTesting.ts";
 import {
   artistMixSeeds,
   genreMixSeeds,
@@ -61,7 +62,7 @@ for (const cachedFinder of [false, true])
       artworkUrl: null,
       explicit: false,
     }));
-    const { library, matchRadios } = await Effect.runPromise(
+    const { library, matchRadios } = await runTestPromise(
       readMixBuildLibrary(
         null,
         {
@@ -104,7 +105,7 @@ for (const cachedFinder of [false, true])
     const genreSeeds = genreMixSeeds(library);
     assert.equal(artistSeeds.length, 1);
     assert.equal(genreSeeds[0]?.name, "Metal");
-    await Effect.runPromise(matchRadios(radio));
+    await runTestPromise(matchRadios(radio));
     for (const seed of [artistSeeds[0]!, genreSeeds[0]!]) {
       const mixes = discoverMixesOfRadios(
         [
@@ -156,7 +157,7 @@ test("a cold build seeds from streamed plays as Stats ranks them", async () => {
     thumbPath: null,
     artworkPath: null,
   };
-  const { library } = await Effect.runPromise(
+  const { library } = await runTestPromise(
     readMixBuildLibrary(
       null,
       {

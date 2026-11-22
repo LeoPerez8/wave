@@ -22,7 +22,7 @@ import * as Effect from "effect/Effect";
 import type { LibraryStore } from "../library/LibraryStore.ts";
 import type { SongRow, ArtistRow } from "@wave/client";
 import { binary, byTitleArtistPath } from "../library/binaryOrder.ts";
-import { runSteps } from "../lib/stepped.ts";
+import { runSteps, type Turn } from "../lib/stepped.ts";
 import type { MixStreamedPlays } from "@wave/client/db/mixInputs";
 
 type MixSong = SongRow & { readonly genres?: readonly string[] };
@@ -39,7 +39,7 @@ export const readMixInputs = (
     | "mixStreamed"
     | "mixPlaylisted"
   >,
-  between: Effect.Effect<void>,
+  between: Turn,
   now: number,
 ) =>
   Effect.gen(function* () {

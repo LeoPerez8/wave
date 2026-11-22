@@ -15,6 +15,7 @@ import * as Effect from "effect/Effect";
 import { snapshotRead } from "../lib/snapshotRead.ts";
 import type { ArtistGraphReads } from "./artistGraph.ts";
 import { shareArtistGraph } from "./sharedArtistGraph.ts";
+import type { Turn } from "../lib/stepped.ts";
 
 /** The snapshot's parts, as one recommendation reads them together. */
 interface RecommendationSnapshot<L> {
@@ -41,7 +42,7 @@ export const shareRecommendationSnapshot = <L, R>({
   readonly graph: {
     readonly store: Effect.Effect<ArtistGraphReads, never, R>;
     readonly start: Effect.Effect<void>;
-    readonly between: Effect.Effect<void>;
+    readonly between: Turn;
   };
   readonly versions: () => SnapshotVersions;
   readonly now?: () => number;

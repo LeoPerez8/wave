@@ -2,13 +2,13 @@
 import type { CatalogRadio } from "@wave/core";
 import * as Effect from "effect/Effect";
 import type { GraphPage } from "@wave/client/db/artistGraph";
-import { runSteps } from "../lib/stepped.ts";
+import { runSteps, type Turn } from "../lib/stepped.ts";
 export const readCatalogInputs = <A, E>(
   songsPage: (after: number) => Effect.Effect<GraphPage<A, number>, E>,
   radiosPage: (
     after: number,
   ) => Effect.Effect<GraphPage<CatalogRadio & { readonly videoId: string }, number>, E>,
-  between: Effect.Effect<void>,
+  between: Turn,
   videoId: (entry: A) => string,
 ) =>
   Effect.gen(function* () {

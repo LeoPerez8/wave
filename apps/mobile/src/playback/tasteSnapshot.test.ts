@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
+import { runTestSync } from "../lib/steppedTesting.ts";
 import {
   magicLibrarySongs,
   magicQueuePicks,
@@ -57,11 +58,11 @@ const watched = (store: Store) => {
 
 /** ti's profile: the whole sources read at once. */
 const tiProfile = (store: Store, now: number, history?: TasteHistory) => {
-  const convert = magicLibrarySongs(Effect.runSync(store.listArtists));
+  const convert = magicLibrarySongs(runTestSync(store.listArtists));
   const byId = new Map(
-    Effect.runSync(store.listSongs).map((song) => [String(song.id), convert(song)]),
+    runTestSync(store.listSongs).map((song) => [String(song.id), convert(song)]),
   );
-  return tasteProfile(history ?? Effect.runSync(store.tasteHistory), (id) => byId.get(id), now);
+  return tasteProfile(history ?? runTestSync(store.tasteHistory), (id) => byId.get(id), now);
 };
 
 /** A tenth of the fixture's plays: shorter attempts, so a writer outlasts several of them. */
@@ -85,20 +86,20 @@ test("playback's own saves don't restart a taste derivation: it finishes in one 
   try {
     fewerPlays(fixture);
     const base = await loadLibraryStore(root, fixture.db);
-    Effect.runSync(base.saveQueue({ queue: "[]", positionMs: 0 }));
+    runTestSync(base.saveQueue({ queue: "[]", positionMs: 0 }));
     const track = fixture.songIds[3]!;
     const startedAt = fixture.now - 60_000;
-    const playId = Effect.runSync(base.recordPlay(ongoing(track, startedAt, 0)));
+    const playId = runTestSync(base.recordPlay(ongoing(track, startedAt, 0)));
     const { store, walks, turn } = watched(base);
-    const profile = Effect.runSync(
+    const profile = runTestSync(
       deriveTaste(
         store,
         turn((n) => {
           if (n > STORM_TURNS) return;
           // What playing music writes: the position every 5 s, the play's progress every 15 s,
           // and a pause ("stopped" so far), all as fast as the turns come.
-          Effect.runSync(base.savePosition(n));
-          Effect.runSync(
+          runTestSync(base.savePosition(n));
+          runTestSync(
             base.updatePlay(playId, {
               ...ongoing(track, startedAt, n * 1000),
               endReason: n % 2 === 0 ? "stopped" : "interrupted",
@@ -126,22 +127,22 @@ test("a write to a taste source during the derivation still restarts it", async 
       const base = await loadLibraryStore(root, fixture.db);
       const track = fixture.songIds[4]!;
       const startedAt = fixture.now - 60_000;
-      const playId = Effect.runSync(base.recordPlay(ongoing(track, startedAt, 0)));
+      const playId = runTestSync(base.recordPlay(ongoing(track, startedAt, 0)));
       const { store, walks, turn } = watched(base);
-      const profile = Effect.runSync(
+      const profile = runTestSync(
         deriveTaste(
           store,
           turn((n) => {
             if (n !== 40) return;
             if (write === "play end")
-              Effect.runSync(
+              runTestSync(
                 base.endPlay(playId, {
                   ...ongoing(track, startedAt, 180_000),
                   endReason: "completed",
                   counted: true,
                 }),
               );
-            else if (write === "star") Effect.runSync(base.setFavorites([track], true));
+            else if (write === "star") runTestSync(base.setFavorites([track], true));
             else fixture.db.run(sql`UPDATE tracks SET path = NULL WHERE id = ${track}`);
           }),
           fixture.now,
@@ -168,7 +169,7 @@ test("a storm of taste writes ends after the checked attempts with one consisten
     const { store, walks, turn } = watched(base);
     // Moving a counted play across the walk's (started_at, id) order on every turn: a mixed
     // walk would count it twice or not at all.
-    const profile = Effect.runSync(
+    const profile = runTestSync(
       deriveTaste(
         store,
         turn((n) => {
@@ -207,7 +208,7 @@ test("Home's due pick under a write storm still saves picks after the checked at
   try {
     const store = await loadLibraryStore(root, fixture.db);
     let reads = 0;
-    const picked = Effect.runSync(
+    const picked = runTestSync(
       buildHomeMagicQueue(store, null, {
         now: fixture.now,
         random: seededRandom("storm"),
@@ -224,7 +225,7 @@ test("Home's due pick under a write storm still saves picks after the checked at
       }),
     );
     assert.equal(reads, CHECKED_ATTEMPTS);
-    const library = Effect.runSync(readTasteLibrary(store, Effect.void));
+    const library = runTestSync(readTasteLibrary(store, Effect.void));
     assert.deepEqual(
       picked,
       magicQueuePicks(null, library.playable, {
@@ -242,23 +243,22 @@ test("the taste revision moves only for what the taste reads", async () => {
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
-    Effect.runSync(store.saveQueue({ queue: "[]", positionMs: 0 }));
+    runTestSync(store.saveQueue({ queue: "[]", positionMs: 0 }));
     const track = fixture.songIds[5]!;
     const startedAt = fixture.now - 60_000;
-    const playId = Effect.runSync(store.recordPlay(ongoing(track, startedAt, 0)));
+    const playId = runTestSync(store.recordPlay(ongoing(track, startedAt, 0)));
     // A dislike waiting to go up, for sync to mark as sent.
-    Effect.runSync(
+    runTestSync(
       store.setDislikes([{ key: "yt:waiting", title: "t", artists: ["a"], durationMs: null }]),
     );
-    const revision = () => Effect.runSync(store.tasteRevision);
+    const revision = () => runTestSync(store.tasteRevision);
     const unrelated: Record<string, () => void> = {
-      "position save": () => Effect.runSync(store.savePosition(1234)),
-      "queue save": () =>
-        Effect.runSync(store.saveQueue({ queue: "[]", index: 1, positionMs: 99 })),
+      "position save": () => runTestSync(store.savePosition(1234)),
+      "queue save": () => runTestSync(store.saveQueue({ queue: "[]", index: 1, positionMs: 99 })),
       "ongoing play's progress": () =>
-        Effect.runSync(store.updatePlay(playId, ongoing(track, startedAt, 15_000))),
+        runTestSync(store.updatePlay(playId, ongoing(track, startedAt, 15_000))),
       "pause of the ongoing play": () =>
-        Effect.runSync(
+        runTestSync(
           store.updatePlay(playId, { ...ongoing(track, startedAt, 16_000), endReason: "stopped" }),
         ),
       "sync's pushed flags": () => {
@@ -277,22 +277,22 @@ test("the taste revision moves only for what the taste reads", async () => {
       assert.equal(revision(), before, name);
     }
     const taste: Record<string, () => void> = {
-      "a play starting": () => Effect.runSync(store.recordPlay(ongoing(track, fixture.now, 0))),
+      "a play starting": () => runTestSync(store.recordPlay(ongoing(track, fixture.now, 0))),
       "a play ending": () =>
-        Effect.runSync(
+        runTestSync(
           store.endPlay(playId, {
             ...ongoing(track, startedAt, 180_000),
             endReason: "completed",
             counted: true,
           }),
         ),
-      "a star": () => Effect.runSync(store.setFavorites([track], true)),
-      "an unstar": () => Effect.runSync(store.setFavorites([track], false)),
+      "a star": () => runTestSync(store.setFavorites([track], true)),
+      "an unstar": () => runTestSync(store.setFavorites([track], false)),
       "a dislike": () =>
-        Effect.runSync(
+        runTestSync(
           store.setDislikes([{ key: String(track), title: "t", artists: ["a"], durationMs: null }]),
         ),
-      "a dislike removed": () => Effect.runSync(store.removeDislikes([String(track)])),
+      "a dislike removed": () => runTestSync(store.removeDislikes([String(track)])),
       "a song's file": () => fixture.db.run(sql`UPDATE tracks SET path = NULL WHERE id = ${track}`),
       "a song's credits": () =>
         fixture.db.run(sql`DELETE FROM track_artists WHERE track_id = ${track}`),

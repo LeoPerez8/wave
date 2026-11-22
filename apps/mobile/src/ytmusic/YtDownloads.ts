@@ -110,6 +110,7 @@ import { appLog } from "@/log/appLog";
 
 import { askForNotifications } from "@/lib/askForNotifications";
 import { freeTurn } from "@/lib/backgroundWork";
+import { namedWork } from "@/lib/stepped";
 import { useLocalisation } from "@/localisation/localisation";
 import { persistedSetting } from "@/lib/persistedSetting";
 import {
@@ -1055,7 +1056,7 @@ const answerJob = async (id: string): Promise<void> => {
     renewing = setInterval(() => {
       WaveSoulseek.renewDecision(claim.id, claim.generation, claim.token).catch(() => {});
     }, RENEW_EVERY_MS);
-    const payload = await appRuntime.runPromise(answer(claim));
+    const payload = await appRuntime.runPromise(answer(claim).pipe(namedWork("Download decision")));
     clearInterval(renewing);
     const accepted = await WaveSoulseek.submitDecision(
       claim.id,
@@ -1189,7 +1190,7 @@ const removeFailedReplacementFiles = (jobs: readonly NativeDownloadJob[]): void 
         const store = yield* LibraryStore;
         yield* store.recordFileDeletions(fresh);
         yield* finishFileDeletions("failedReplacement");
-      }),
+      }).pipe(namedWork("Failed replacement files")),
     )
     .catch(() => {
       for (const path of fresh) removedReplacementFiles.delete(path);
@@ -1776,7 +1777,7 @@ const qualityReplacementRequests = async (
       yield* finishFileDeletions("replacementRun");
       const store = yield* LibraryStore;
       return yield* Effect.forEach(trackIds, (id) => store.replacedTrack(id));
-    }),
+    }).pipe(namedWork("Quality replacements")),
   );
   const source: DownloadSource = direction === "upgrade" ? "soulseek" : "youtube";
   return tracks.flatMap((track) => {

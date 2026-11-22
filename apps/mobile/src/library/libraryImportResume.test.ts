@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
+import { runTestPromise, runTestSync } from "../lib/steppedTesting.ts";
 import {
   NO_YT_LIBRARY_READS,
   queueYtLibraryReads,
@@ -24,7 +25,7 @@ test("library resume waits between actual items, pauses offline without consumin
   try {
     const store = await loadLibraryStore(root, fixture.db);
     const lists = ["First", "Failed", "Last"].map((name) =>
-      Effect.runSync(store.createPlaylist(name, [])),
+      runTestSync(store.createPlaylist(name, [])),
     );
     let batch = queueYtLibraryReads(
       NO_YT_LIBRARY_READS,
@@ -48,7 +49,7 @@ test("library resume waits between actual items, pauses offline without consumin
         batch: () => batch,
         prune: async () => {
           events.push("prune");
-          await Effect.runPromise(store.listPlaylists);
+          await runTestPromise(store.listPlaylists);
         },
         settle: async (id) => {
           events.push(`settle:${id}`);
@@ -77,7 +78,7 @@ test("library resume waits between actual items, pauses offline without consumin
             },
             [],
           );
-          await Effect.runPromise(
+          await runTestPromise(
             finishLinkImport(store, startPlaylistImport(plan, read), Effect.void),
           );
           batch = ytLibraryReadDone(batch, read);
@@ -118,7 +119,7 @@ test("library resume waits between actual items, pauses offline without consumin
       [0, "First"],
       [2, "Last"],
     ] as const) {
-      const items = Effect.runSync(store.getPlaylist(lists[index]!.playlistId))!.items;
+      const items = runTestSync(store.getPlaylist(lists[index]!.playlistId))!.items;
       assert.equal(items.length, 1);
       assert.equal(items[0]!.source === "unsearched" && items[0]!.song.title, name);
     }

@@ -1,6 +1,6 @@
 import { indexFillPlaylistsSteps } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { runSteps } from "../lib/stepped.ts";
+import { runSteps, type Turn } from "../lib/stepped.ts";
 import type { LibraryStore } from "./LibraryStore.ts";
 
 /**
@@ -10,8 +10,8 @@ import type { LibraryStore } from "./LibraryStore.ts";
  */
 export const readBackgroundFillInput = (
   store: LibraryStore["Service"],
-  turn: Effect.Effect<void>,
-  between: Effect.Effect<void>,
+  turn: Turn,
+  between: Turn,
 ) =>
   Effect.gen(function* () {
     yield* turn;

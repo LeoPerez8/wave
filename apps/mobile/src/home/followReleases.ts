@@ -26,8 +26,8 @@ const check = followReleasesCheck<YtMusicError, LibraryStore>({
   country: currentFollowCountry,
   showsCheckable: async () => showsConfigured && (await waveSignedIn()),
   checkShows: (context) => checkFollowShows(context, false),
-  settle: settledTurnEffect,
-  answered: freeTurnEffect,
+  settle: settledTurnEffect.pipe(namedWork("Follows check")),
+  answered: freeTurnEffect.pipe(namedWork("Follows check")),
   // Its Albums searches and album pages share the search allowance, last in line.
   ytTurn: (query, read) => withSearchTurn("newReleases", query, read),
 });

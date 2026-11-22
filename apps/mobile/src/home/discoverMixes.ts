@@ -40,7 +40,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
-import { namedWork, runSteps } from "@/lib/stepped";
+import { type BackgroundWorkName, namedWork, runSteps } from "@/lib/stepped";
 import { settledTurnEffect as settledTurn } from "@/lib/backgroundWork";
 import { recommendationTurnEffect as recommendationTurn } from "@/lib/recommendationWork";
 import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
@@ -174,7 +174,7 @@ type MixBuildInputs = Effect.Success<typeof readMixBuildInputs>;
  * starts after it finished reads them again.
  */
 const sharedMixBuildInputs = sharedRead(readMixBuildInputs, { keepMs: 0 });
-const mixBuildInputs: Effect.Effect<MixBuildInputs, unknown, LibraryStore> =
+const mixBuildInputs: Effect.Effect<MixBuildInputs, unknown, LibraryStore | BackgroundWorkName> =
   sharedMixBuildInputs.get;
 
 /**
@@ -712,13 +712,15 @@ const focusMixes = (played: boolean): void => {
     .then((library) => {
       // A newly completed index can provide seeds a cold or empty Library did not have.
       if (library !== previousLibrary) refresh(played);
-      void appRuntime.runPromise(tasteProfileForRecommendation(library)).catch(() => {});
+      void appRuntime
+        .runPromise(tasteProfileForRecommendation(library).pipe(namedWork("Taste profile")))
+        .catch(() => {});
     })
     .catch(() => {});
   const previousGraph = recommendationSnapshot.peek().graph;
   if (buildableRows().includes("genre-mixes"))
     void appRuntime
-      .runPromise(recommendationSnapshot.graph)
+      .runPromise(recommendationSnapshot.graph.pipe(namedWork("Artist graph")))
       .then((graph) => {
         const genre = SECTIONS["genre-mixes"];
         if (graph !== previousGraph && genre.saved.get() === null) {

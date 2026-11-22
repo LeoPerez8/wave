@@ -12,7 +12,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
-import { runSteps } from "../lib/stepped.ts";
+import { BackgroundWorkName, namedWork, runSteps, type Turn } from "../lib/stepped.ts";
 import { byTitleArtistPath } from "../library/binaryOrder.ts";
 import { withSyncLibraryReads } from "../library/syncLibraryReads.ts";
 import type { LibraryStore, LibraryStoreError } from "../library/LibraryStore.ts";
@@ -51,8 +51,14 @@ const TASTE_SNAPSHOT_ATTEMPTS = 3;
  * An effect run to its end in the current task: nothing else on this thread runs meanwhile.
  * Its Library reads stay on the JS thread for that (#1348).
  */
-const inOneTask = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
-  Effect.suspend(() => Effect.runSyncExit(withSyncLibraryReads(effect)));
+const inOneTask = <A, E>(
+  effect: Effect.Effect<A, E, BackgroundWorkName>,
+): Effect.Effect<A, E, BackgroundWorkName> =>
+  Effect.gen(function* () {
+    // The single task keeps the name of the work that runs it.
+    const name = yield* BackgroundWorkName;
+    return yield* Effect.runSyncExit(withSyncLibraryReads(effect.pipe(namedWork(name))));
+  });
 
 /**
  * Copies [walk]'s source rows as of one taste revision; the CPU work on the copy comes after,
@@ -65,9 +71,13 @@ const inOneTask = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
  */
 const tasteSnapshot = <S>(
   store: LibraryStore["Service"],
-  turn: Effect.Effect<void>,
-  walk: (revision: string, pace: Effect.Effect<void>) => Effect.Effect<S, LibraryStoreError>,
-): Effect.Effect<{ readonly revision: string; readonly rows: S }, LibraryStoreError> =>
+  turn: Turn,
+  walk: (revision: string, pace: Turn) => Effect.Effect<S, LibraryStoreError, BackgroundWorkName>,
+): Effect.Effect<
+  { readonly revision: string; readonly rows: S },
+  LibraryStoreError,
+  BackgroundWorkName
+> =>
   Effect.gen(function* () {
     for (let attempt = 0; attempt < TASTE_SNAPSHOT_ATTEMPTS; attempt++) {
       yield* turn;
@@ -97,7 +107,7 @@ const discard = () => Effect.fail(new Discarded());
  */
 export const stableTasteSnapshot = <A, E, R>(
   store: LibraryStore["Service"],
-  turn: Effect.Effect<void>,
+  turn: Turn,
   read: (
     unchanged: (revision: string) => Effect.Effect<boolean, LibraryStoreError>,
     discard: () => Effect.Effect<never, Discarded>,
@@ -127,8 +137,8 @@ interface TasteLibraryRows {
 /** The songs and artists the taste maps, one keyset walk each, copied as they are. */
 const tasteLibraryRows = (
   store: LibraryStore["Service"],
-  pace: Effect.Effect<void>,
-): Effect.Effect<TasteLibraryRows, LibraryStoreError> =>
+  pace: Turn,
+): Effect.Effect<TasteLibraryRows, LibraryStoreError, BackgroundWorkName> =>
   Effect.gen(function* () {
     const songs: SongRow[] = [];
     let after = 0;
@@ -162,11 +172,7 @@ const tasteLibraryRows = (
   });
 
 /** ti's title/artist/path order restored, then mapped for picking. */
-const tasteLibraryOf = (
-  { songs, artists }: TasteLibraryRows,
-  revision: string,
-  turn: Effect.Effect<void>,
-) =>
+const tasteLibraryOf = ({ songs, artists }: TasteLibraryRows, revision: string, turn: Turn) =>
   Effect.gen(function* () {
     const sorted = yield* runSteps(sortSteps(songs, byTitleArtistPath), turn);
     // The mapper indexes unique artist ids; their insertion order is unobservable.
@@ -174,7 +180,7 @@ const tasteLibraryOf = (
     return yield* runSteps(mapSongs(sorted, convert, revision), turn);
   });
 
-export const readTasteLibrary = (store: LibraryStore["Service"], turn: Effect.Effect<void>) =>
+export const readTasteLibrary = (store: LibraryStore["Service"], turn: Turn) =>
   Effect.gen(function* () {
     const { revision, rows } = yield* tasteSnapshot(store, turn, (_, pace) =>
       tasteLibraryRows(store, pace),
@@ -182,7 +188,7 @@ export const readTasteLibrary = (store: LibraryStore["Service"], turn: Effect.Ef
     return yield* tasteLibraryOf(rows, revision, turn);
   });
 
-export const readTasteHistory = (store: LibraryStore["Service"], turn: Effect.Effect<void>) =>
+export const readTasteHistory = (store: LibraryStore["Service"], turn: Turn) =>
   Effect.gen(function* () {
     const plays: TasteHistory["plays"][number][] = [];
     let cursor: readonly [number, number] = [-Number.MAX_VALUE, 0];
@@ -263,7 +269,7 @@ const readStreamedSongs = (
   store: LibraryStore["Service"],
   history: ReadTasteHistory,
   streamedSong: StreamedTasteSong,
-  pace: Effect.Effect<void>,
+  pace: Turn,
 ) =>
   Effect.gen(function* () {
     const videoIds = [
@@ -295,7 +301,7 @@ const readStreamedSongs = (
  */
 export const deriveTaste = (
   store: LibraryStore["Service"],
-  turn: Effect.Effect<void>,
+  turn: Turn,
   now: number,
   library?: TasteLibrary,
   snapshotTaken: (history: TasteHistory) => void = () => {},
@@ -324,7 +330,7 @@ export const deriveTaste = (
  */
 export const deriveTasteFromLibrary = (
   store: LibraryStore["Service"],
-  turn: Effect.Effect<void>,
+  turn: Turn,
   now: number,
   library: TasteLibraryRows,
   snapshotTaken: (history: TasteHistory) => void = () => {},

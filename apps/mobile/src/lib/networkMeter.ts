@@ -15,7 +15,7 @@ import * as Exit from "effect/Exit";
 
 import { appLog } from "@/log/appLog";
 import { WaveYtMusic } from "@/native/waveYtMusic";
-import { BackgroundWorkName } from "./stepped";
+import { type BackgroundWorkName, namedWork } from "./stepped";
 
 const timingRuns = new Map<string, number>();
 registerTimingBackground("magicQueue", () =>
@@ -59,7 +59,7 @@ export const withNetworkLog = <A, E, R>(
   what: string,
   effect: Effect.Effect<A, E, R>,
   outcome?: (value: A) => string | undefined,
-): Effect.Effect<A, E, R> =>
+): Effect.Effect<A, E, Exclude<R, BackgroundWorkName>> =>
   Effect.suspend(() => {
     const startedAt = Date.now();
     const meter: Meter = { yt: WaveYtMusic.startNetworkMeter() };
@@ -68,7 +68,7 @@ export const withNetworkLog = <A, E, R>(
     return effect.pipe(
       Effect.provideService(CurrentMeter, meter),
       // Its slices and free turns carry the run's name to the block log (#1350).
-      Effect.provideService(BackgroundWorkName, what),
+      namedWork(what),
       Effect.onExit((exit) =>
         Effect.sync(() => {
           const count = (timingRuns.get(what) ?? 1) - 1;

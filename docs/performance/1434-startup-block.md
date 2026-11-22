@@ -77,9 +77,10 @@ Named and ticketed (or proposed):
   downloads and the background fill in slices".
 - `unnamed background work`: 50 to 401 ms, many per launch. Stepped work started without a
   `BackgroundWorkName` gets the default name. Proposed ticket "Name every stepped background
-  work".
+  work", done in #1447 (`1447-named-background-work.md`).
 - `no background work`: 52 to 173 ms, with nothing named running after the first settle.
-  Proposed ticket "Find the unnamed blocks after Home's first content".
+  Proposed ticket "Find the unnamed blocks after Home's first content", read from the code in
+  #1447 (`1447-named-background-work.md`).
 
 ## Behavior kept
 
