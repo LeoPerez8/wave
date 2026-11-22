@@ -62,6 +62,24 @@ const statsHooksTest = {
     return () => resultListeners.delete(listener);
   },
 };
+/** Home's sight: whether it is in view, as `useScreenSight` gives it. */
+let inView = true;
+const sightListeners = new Set<(visible: boolean) => void>();
+const sight = {
+  visible: () => inView,
+  subscribe: (listener: (visible: boolean) => void) => {
+    sightListeners.add(listener);
+    return () => sightListeners.delete(listener);
+  },
+};
+const showHome = (visible: boolean): void => {
+  inView = visible;
+  for (const listener of sightListeners) listener(visible);
+};
+Object.assign(statsHooksTest, {
+  sight,
+  recaps: () => [{ kind: "month", year: 2026, month: 9 }],
+});
 Object.assign(globalThis, { __statsHooksTest: statsHooksTest });
 
 const react = JSON.stringify(import.meta.resolve("react"));
@@ -93,7 +111,7 @@ const builds = await reactCompilerBuilds<Hooks>(new URL("./hooks.ts", import.met
        export const onNowPlayingShownChange = () => () => {};`,
   ),
   "@/lib/screenSight": stubModule(
-    `export const useScreenSight = () => { throw new Error("unused"); };`,
+    `export const useScreenSight = () => globalThis.__statsHooksTest.sight;`,
   ),
   "@/localisation/localisation": stubModule(
     `export const useLocalisation = () => ({ language: globalThis.__statsHooksTest.language });`,
@@ -112,7 +130,7 @@ const builds = await reactCompilerBuilds<Hooks>(new URL("./hooks.ts", import.met
   ),
   "./openedRecaps": stubModule(`export const getOpenedRecaps = () => [];`),
   "./recapAvailabilityLive": stubModule(
-    `export const knownRecaps = () => [];
+    `export const knownRecaps = () => globalThis.__statsHooksTest.recaps();
        export const useRecapAvailability = () => undefined;`,
   ),
 });
@@ -274,6 +292,36 @@ for (const [build, hooks] of Object.entries(builds)) {
       await act(() => answer("stats:topGenres:all", ["jazz"]));
       assert.equal(shownFirst(renderer), "jazz");
     } finally {
+      await act(() => renderer?.unmount());
+    }
+  });
+}
+
+// Every Settings push and tab switch hides Home and shows it again: with the
+// same Recap to announce, Home isn't drawn for it (#1439).
+for (const [build, hooks] of Object.entries(builds)) {
+  test(`${build}: hiding and showing Home again with the same Recap doesn't draw Home`, async () => {
+    let renders = 0;
+    let announced: unknown;
+    function Home() {
+      renders++;
+      announced = hooks.useRecapToAnnounce(true);
+      return null;
+    }
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      await act(() => {
+        renderer = create(createElement(Home));
+      });
+      const first = announced;
+      assert.deepEqual(first, { kind: "month", year: 2026, month: 9 });
+      const drawn = renders;
+      await act(() => showHome(false));
+      await act(() => showHome(true));
+      assert.equal(renders, drawn);
+      assert.equal(announced, first);
+    } finally {
+      showHome(true);
       await act(() => renderer?.unmount());
     }
   });

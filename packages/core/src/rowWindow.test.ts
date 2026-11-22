@@ -65,4 +65,17 @@ describe("windowRows", () => {
   test("a dragged row inside the window is not mounted twice", () => {
     assert.deepEqual(windowRows({ start: 10, end: 14 }, 12), [10, 11, 12, 13]);
   });
+
+  test("while a first mount is staged, mounts only the window's first rows (#1440)", () => {
+    assert.deepEqual(windowRows({ start: 0, end: 14 }, -1, 3), [0, 1, 2]);
+    assert.deepEqual(windowRows({ start: 10, end: 14 }, -1, 2), [10, 11]);
+  });
+
+  test("a stage larger than the window mounts the whole window", () => {
+    assert.deepEqual(windowRows({ start: 10, end: 14 }, -1, 9), [10, 11, 12, 13]);
+  });
+
+  test("a dragged row stays mounted past a staged limit", () => {
+    assert.deepEqual(windowRows({ start: 0, end: 14 }, 8, 3), [0, 1, 2, 8]);
+  });
 });
