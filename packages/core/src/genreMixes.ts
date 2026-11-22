@@ -552,7 +552,8 @@ export interface GenreMixDjCandidate {
 export const genreMixDjCandidates = (library: GenreMixLibrary): GenreMixDjCandidate[] =>
   finishSteps(genreMixDjCandidatesSteps(library));
 
-function* genreMixDjCandidatesSteps(
+/** `genreMixDjCandidates` in steps, for the app's background slices (#1437). */
+export function* genreMixDjCandidatesSteps(
   library: GenreMixLibrary,
 ): Generator<void, GenreMixDjCandidate[]> {
   const eligible: RankedFamily[] = [];

@@ -184,7 +184,12 @@ export const startDjMoodLookup = (): (() => void) => {
           }
           const codes = [...new Set(isrcs.values())];
           const byIsrc = new Map<string, Record<string, unknown>[]>();
-          const foundRows = await featureRows(codes);
+          // A failed feature read fails only this page's ISRC songs, not the whole pass;
+          // they go on to the search fallback like a miss.
+          const foundRows = await featureRows(codes).catch(() => {
+            for (const song of page) if (isrcs.has(song.videoId)) unavailable.add(song.videoId);
+            return [];
+          });
           for (const row of foundRows) {
             if (typeof row.isrc !== "string") continue;
             const code = row.isrc.toUpperCase();
@@ -213,7 +218,11 @@ export const startDjMoodLookup = (): (() => void) => {
               continue;
             }
           }
-          const fallbackRows = await featureRows([...new Set(fallbackIds.values())]);
+          const fallbackRows = await featureRows([...new Set(fallbackIds.values())]).catch(() => {
+            for (const videoId of fallbackIds.keys()) unavailable.add(videoId);
+            fallbackIds.clear();
+            return [];
+          });
           const byId = new Map(fallbackRows.map((row) => [String(row.id), row]));
           for (const [videoId, id] of fallbackIds) {
             const row = byId.get(id);
@@ -223,15 +232,25 @@ export const startDjMoodLookup = (): (() => void) => {
           }
           if (!enabled()) break;
           // A stored entry that no longer reads can't be looked up: it waits as a miss.
+          // A failed lookup is saved too, to be retried later (`DJ_MOOD_RETRY_MS`): left
+          // unsaved, every pass the catalog started asked about it again (#1437).
           const writes = [
-            ...page
-              .filter(({ videoId }) => !unavailable.has(videoId))
-              .map((song) => ({
-                videoId: song.videoId,
-                isrc: isrcs.get(song.videoId) ?? fallbackIsrcs.get(song.videoId) ?? null,
-                features: featureByVideo.get(song.videoId) ?? null,
-                checkedAt: Date.now(),
-              })),
+            ...page.map((song) =>
+              unavailable.has(song.videoId) && !featureByVideo.has(song.videoId)
+                ? {
+                    videoId: song.videoId,
+                    isrc: null,
+                    features: null,
+                    checkedAt: Date.now(),
+                    failed: true,
+                  }
+                : {
+                    videoId: song.videoId,
+                    isrc: isrcs.get(song.videoId) ?? fallbackIsrcs.get(song.videoId) ?? null,
+                    features: featureByVideo.get(song.videoId) ?? null,
+                    checkedAt: Date.now(),
+                  },
+            ),
             ...pending.unreadable.map((videoId) => ({
               videoId,
               isrc: null,

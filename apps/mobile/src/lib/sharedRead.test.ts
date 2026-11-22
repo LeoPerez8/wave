@@ -100,6 +100,32 @@ describe("A shared read", () => {
     assert.equal(await Effect.runPromise(shared.get), 2);
   });
 
+  test("kept for no time, asks while it's read share it and an ask after it reads again", async () => {
+    let now = 0;
+    let reads = 0;
+    let release!: () => void;
+    const shared = sharedRead(
+      Effect.callback<number>((resume) => {
+        reads += 1;
+        const read = reads;
+        release = () => resume(Effect.succeed(read));
+      }),
+      { keepMs: 0, now: () => now },
+    );
+    const first = Effect.runPromise(shared.get);
+    now = 5;
+    const second = Effect.runPromise(shared.get);
+    await new Promise((resolve) => setImmediate(resolve));
+    release();
+    assert.deepEqual(await Promise.all([first, second]), [1, 1]);
+    assert.equal(reads, 1, "the rows building together read once");
+    now = 10;
+    const third = Effect.runPromise(shared.get);
+    await new Promise((resolve) => setImmediate(resolve));
+    release();
+    assert.equal(await third, 2);
+  });
+
   test("reads with the services of whoever asked first", async () => {
     const shared = sharedRead(Effect.map(Effect.service(Store), (store) => store.value));
     const value = await Effect.runPromise(

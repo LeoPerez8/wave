@@ -622,8 +622,11 @@ const djAlbumSeedSongs = (tiles: readonly DjTile[], deadlineAt: number, libraryO
       });
     return yield* Effect.promise(() =>
       readDjAlbumSongs(tiles, {
-        library: (albumId) => Effect.runPromise(library(albumId)),
-        page: (browseId) => (libraryOnly ? Promise.resolve([]) : Effect.runPromise(page(browseId))),
+        library: (albumId) => Effect.runPromise(library(albumId).pipe(namedWork("DJ album songs"))),
+        page: (browseId) =>
+          libraryOnly
+            ? Promise.resolve([])
+            : Effect.runPromise(page(browseId).pipe(namedWork("DJ album songs"))),
       }),
     );
   });
@@ -823,9 +826,12 @@ export const startDjMagicQueue = (
     return "started" satisfies DjStart;
   }).pipe(namedWork("DJ batch"));
 
-/** Runs [effect] on its own; the Magic Queue is best effort and never disturbs playback. */
-const fork = (effect: Effect.Effect<void, unknown>): void => {
-  Effect.runFork(Effect.ignore(effect));
+/**
+ * Runs [effect] on its own; the Magic Queue is best effort and never disturbs
+ * playback. Its turns are logged as [name] unless the work names itself (#1437).
+ */
+const fork = (effect: Effect.Effect<void, unknown>, name = "Magic Queue"): void => {
+  Effect.runFork(Effect.ignore(effect).pipe(namedWork(name)));
 };
 
 /**
@@ -899,7 +905,10 @@ export const layer = Layer.effectDiscard(
       const session = activeMagicSession();
       if (trackIds.length === 0 || session === null) return;
       const learned = Effect.runPromise(
-        learn(session.id, kind, trackIds).pipe(Effect.catchCause(() => Effect.void)),
+        learn(session.id, kind, trackIds).pipe(
+          Effect.catchCause(() => Effect.void),
+          namedWork("Magic Queue signals"),
+        ),
       );
       pendingSignals.add(learned);
       void learned.finally(() => {
@@ -918,7 +927,7 @@ export const layer = Layer.effectDiscard(
         yield* waitForSignals();
         if (activeMagicSession()?.id !== wanted.id)
           return { kind: "dropped" } satisfies MagicBatchOutcome;
-        fork(warmInputs);
+        fork(warmInputs, "Magic Queue inputs");
         const latest = recommendationSnapshot.peek();
         // The batch's JS starts on a free turn, away from the owner's tap.
         yield* freeTurnEffect;
