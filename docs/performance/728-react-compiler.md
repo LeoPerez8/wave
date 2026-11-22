@@ -232,6 +232,20 @@ the emulator run (#1433).
 - The flows #303 listed (detail screens from Home, a section tab and the Library stack; Now
   Playing's artist link; Go to Artist on a streamed song).
 
+On the emulator (#1433), with the default build after the merge (compiler on, seeded library):
+
+- Search online: on mobile data, typing into an empty field leaves Library selected. On Wi-Fi,
+  after clearing and typing, Online is selected. Back on mobile data it goes back to Library.
+  Pass.
+- Genre (Jazz): Select All about four seconds after opening showed 266 selected with every row
+  checked, and the bar showed Play Next, Add to Queue, Add to Playlist and Delete. Pass, but the
+  whole order had probably arrived before the tap, so the early-press path isn't proven here.
+- The #303 flows: Library › Artists › artist › album; Now Playing's artist link; Playlists ›
+  playlist; Home › album › Go to Artist; Go to Artist on a song found online. All pass.
+- Stats: not checked. The seeded files are silent placeholders that don't play, so no play passes
+  the counting point. The desktop tests in `hooks.test.ts` cover the compiled hooks; the phone run
+  checks it.
+
 ## Not covered, and risks
 
 - **Render-time reads of mutable values.** The compiler caches a call on its arguments, so a
