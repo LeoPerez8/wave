@@ -13,7 +13,8 @@ Ticket: #725 (parent #712). Branch `feat/725-database-settings-2`, based on
   `optimize` that runs after the migrations, once the first screen has settled. The second
   is a plain `optimize` each time Wave goes to the background. `analysis_limit` caps ANALYZE
   at about 400 rows per index. Neither run is part of building the store, so cold launch
-  does no ANALYZE before the first screen.
+  does no ANALYZE before the first screen. Since #1434 the first run waits for Wave's first trip
+  to the background as well (`1434-startup-block.md`).
 - Migration `0044_ongoing_plays` adds `play_events_ongoing_idx`, a partial index on
   `ongoing` for ongoing play events only. Index 43 belongs to #720's queue persistence. The
   0044 timestamp sorts after 0043 so phones apply both, in either merge order.

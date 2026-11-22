@@ -122,6 +122,12 @@ export type DragRows = {
   readonly retarget: () => void;
   /** Hands the list a mounted row's offset, so a landing drop can reset it; returns the call that lets it go. */
   readonly trackOffset: (offset: SharedValue<number>) => () => void;
+  /**
+   * Hands the list how to move a mounted row to a new index (#1441): when [keys] change, the
+   * list moves each row whose place changed, so a row needn't render again only for its index.
+   * Returns the call that lets it go.
+   */
+  readonly placeRow: (key: string, place: (index: number) => void) => () => void;
 };
 
 /**
@@ -389,6 +395,21 @@ export function useRowDrag({
     };
   }, []);
 
+  // Mounted rows by key, each with how to move it to a new index.
+  const placed = useRef(new Map<string, (index: number) => void>());
+  const placeRow = useCallback((key: string, place: (index: number) => void) => {
+    const rowsByKey = placed.current;
+    rowsByKey.set(key, place);
+    return () => {
+      if (rowsByKey.get(key) === place) rowsByKey.delete(key);
+    };
+  }, []);
+  // The order changed (a song played, one removed, a drop landed): each mounted row learns its
+  // new index on the UI thread, without a render of its own.
+  useLayoutEffect(() => {
+    keys.forEach((key, index) => placed.current.get(key)?.(index));
+  }, [keys]);
+
   const rowDrag = useMemo<DragRows>(
     () => ({
       session,
@@ -402,6 +423,7 @@ export function useRowDrag({
       drop,
       retarget,
       trackOffset,
+      placeRow,
     }),
     [
       session,
@@ -415,6 +437,7 @@ export function useRowDrag({
       drop,
       retarget,
       trackOffset,
+      placeRow,
     ],
   );
 
@@ -440,23 +463,46 @@ export function useRowDrag({
  * following the finger while it's the lifted row).
  */
 export function useDraggedRow(rowDrag: DragRows, key: string, index: number, enabled = true) {
-  const { session, aside, lifted, liftedY, waiting, begin, move, drop, retarget, trackOffset } =
-    rowDrag;
+  const {
+    session,
+    aside,
+    lifted,
+    liftedY,
+    waiting,
+    begin,
+    move,
+    drop,
+    retarget,
+    trackOffset,
+    placeRow,
+  } = rowDrag;
   const offset = useSharedValue(0);
   const rowIndex = useSharedValue(index);
   useLayoutEffect(() => trackOffset(offset), [trackOffset, offset]);
 
   // A new index lands with the offset it calls for, in one step on the UI thread.
-  useLayoutEffect(() => {
-    scheduleOnUI(() => {
-      "worklet";
-      rowIndex.set(index);
-      const current = aside.get();
-      offset.set(
-        current.live ? reorderShift({ index, from: current.from, to: current.to }) * ROW : 0,
-      );
-    });
-  }, [rowIndex, aside, offset, index]);
+  const placedAt = useRef(index);
+  const place = useCallback(
+    (next: number, always = false) => {
+      if (!always && placedAt.current === next) return;
+      placedAt.current = next;
+      scheduleOnUI(() => {
+        "worklet";
+        rowIndex.set(next);
+        const current = aside.get();
+        offset.set(
+          current.live
+            ? reorderShift({ index: next, from: current.from, to: current.to }) * ROW
+            : 0,
+        );
+      });
+    },
+    [rowIndex, aside, offset],
+  );
+  // [index] as the row last rendered (a row mounting mid-drag steps aside at once); after that
+  // the list moves it as its keys change (`placeRow`), whether or not the row renders again.
+  useLayoutEffect(() => place(index, true), [place, index]);
+  useLayoutEffect(() => placeRow(key, place), [placeRow, key, place]);
 
   // Rows glide aside as the drop target moves.
   useAnimatedReaction(

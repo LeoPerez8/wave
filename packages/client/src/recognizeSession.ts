@@ -78,6 +78,7 @@ export interface RecognizeRun {
   readonly done: Promise<void>;
 }
 
+/** Numbers each session since Wave started: its native request and its log line's attempt. */
 let lastRequest = 0;
 
 /** How often the session's clock ticks, for Core's deadlines (`stepRecognize`). */
@@ -132,6 +133,7 @@ export const startRecognizeSession = <L extends RecognizeTrack, S extends YtSong
         outcome,
         failedAsks: session.failedAsks,
         ...(lookup === undefined ? {} : { lookup }),
+        attempt: request,
       }),
     );
     resolveDone();

@@ -118,6 +118,8 @@ const setup = (
 ) => {
   const native = fakeNative(options);
   const cards: RecognizeCard[] = [];
+  // Each line as written, and without its attempt number, which depends on the tests before.
+  const logged: string[] = [];
   const lines: string[] = [];
   const levels: string[] = [];
   const playback = { playing: options.playing ?? false, pauses: 0, resumes: 0 };
@@ -148,7 +150,8 @@ const setup = (
       }),
     log: (level, line) => {
       levels.push(level);
-      lines.push(line);
+      logged.push(line);
+      lines.push(line.replace(/ \(attempt \d+\)$/, ""));
     },
   };
   const session = startRecognizeSession(
@@ -161,6 +164,7 @@ const setup = (
     deps,
     native,
     cards,
+    logged,
     lines,
     levels,
     playback,
@@ -424,6 +428,55 @@ describe("a Recognize session", () => {
     assert.equal(last()?.kind, "resolved");
     assert.deepEqual(lines, [
       "Recognize through the microphone: a match after 8.0 s, 1 request failed before it, YT Music lookup: disabled",
+    ]);
+  });
+
+  test("an attempt logs one outcome, and Try Again's attempt that ends alike is numbered apart", async () => {
+    const { deps, native, logged, cards, session, clock } = setup();
+    const limited = { kind: "failed", failure: "refused", status: 429 } as const;
+    await settle();
+    // Every step's ask is rate limited; the last one answers too late for a retry.
+    for (const seconds of [4, 8, 12, 16, 20, 24]) {
+      await native.hear(seconds);
+      await native.answer(limited);
+    }
+    await native.hear(28);
+    await clock.advance(10);
+    await native.answer(limited);
+    await session.done;
+    assert.equal(logged.length, 1);
+    const [failed] = logged;
+    const attempt = Number(/\(attempt (\d+)\)$/.exec(failed!)?.[1]);
+    assert.equal(
+      failed,
+      `Recognize through the microphone: failed after 28.0 s (refused, HTTP 429), 6 requests failed before it (attempt ${attempt})`,
+    );
+
+    // Nothing that reaches the ended attempt logs it again.
+    await native.answer({ kind: "match", song: SONG });
+    await native.hear(32);
+    await clock.advance(5);
+    session.cancel();
+    await settle();
+    assert.equal(logged.length, 1);
+
+    // Try Again: a new attempt that hears as long, fails as often, and then matches.
+    const again = startRecognizeSession(
+      deps,
+      "microphone",
+      (card) => void cards.push(card),
+      () => {},
+    );
+    await settle();
+    for (const seconds of [4, 8, 12, 16, 20, 24]) {
+      await native.hear(seconds, 8);
+      await native.answer(limited);
+    }
+    await native.hear(28, 8);
+    await native.answer({ kind: "match", song: SONG });
+    await again.done;
+    assert.deepEqual(logged.slice(1), [
+      `Recognize through the microphone: a match after 28.0 s, 6 requests failed before it, YT Music lookup: disabled (attempt ${attempt + 1})`,
     ]);
   });
 

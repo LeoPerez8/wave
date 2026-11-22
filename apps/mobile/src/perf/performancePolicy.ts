@@ -37,6 +37,7 @@ export const LIBRARY_SEEDS = [
   "library/hooks.ts#useLoadedArtists",
   ...[
     "currentLibraryFinder",
+    "currentLibraryFinderInSlices",
     "useLoadedLibraryFinder",
     "useLibraryFinder",
     "useLoadedInLibrary",
@@ -395,6 +396,13 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
   },
 
+  "playback/magicQueueRadio.ts#magicQueueYtCandidates": {
+    howOften:
+      "Once per Magic Queue batch, and only when the recommendation snapshot hasn't indexed the Library's recordings yet (a cold session).",
+    reason:
+      "#1448: a cold batch indexes its playable songs once, a song per step on free turns, so each radio song looks up its title instead of matching the whole Library. Covered by Core's ytMusic finder tests and magicBatchSlices.test.ts.",
+    capabilities: ["../../../packages/core/src/ytMusic.ts#libraryFinderSteps"],
+  },
   "ytmusic/libraryFinder.ts#finderOver": {
     howOften:
       "Lazily on first lookup per rows identity; weakly cached while those rows remain reachable.",
@@ -448,17 +456,17 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
 
   "ytmusic/YtDownloads.ts#forgetSettledFailures": {
     howOften:
-      "Once per launch when failures exist; uses the current shared finder, never per journal event.",
+      "Once per launch when failures exist; uses the current shared finder, built in background slices, never per journal event.",
     reason:
       "Download recovery runs on explicit/background work; the failed-download UI follows only while shown.",
-    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinderInSlices"],
   },
   "ytmusic/YtDownloads.ts#requeueThrottledFailures": {
     howOften:
-      "Once per install migration, retried next launch on failure; uses the current shared finder.",
+      "Once per install migration, retried next launch on failure; uses the current shared finder, built in background slices.",
     reason:
       "Download recovery runs on explicit/background work; the failed-download UI follows only while shown.",
-    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinderInSlices"],
   },
   "ytmusic/YtDownloads.ts#useFailedDownloadsInput": {
     howOften: FOLLOWED_FINDER,
@@ -925,13 +933,10 @@ export const WHOLE_SET_HOOKS = [
     "usePendingFavoriteVideos",
     "useLivePendingFavoriteVideos",
   ].map((name) => `library/favorites.ts#${name}`),
-  ...[
-    "useSongListDownloads",
-    "useDownloadJournal",
-    "useMissingSongDownloadStatuses",
-    "useDownloadingList",
-    "useFailedDownloads",
-  ].map((name) => `ytmusic/YtDownloads.ts#${name}`),
+  ...["useSongListDownloads", "useMissingSongDownloadStatuses", "useFailedDownloads"].map(
+    (name) => `ytmusic/YtDownloads.ts#${name}`,
+  ),
+  "ytmusic/downloadingRows.ts#useDownloadingList",
   "library/hooks.ts#useScanProgress",
 ];
 /** Whole stores a row may not name itself (a narrow hook may read them for it). */
