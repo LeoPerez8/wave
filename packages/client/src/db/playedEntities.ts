@@ -22,7 +22,6 @@ import {
   type SongListening,
   type SongPlayTotals,
   type StatsWindow,
-  type YtAlbumSong,
 } from "@wave/core";
 import { sql } from "drizzle-orm";
 
@@ -43,7 +42,12 @@ import {
   summedCreditedPlayTotals,
   type ArtistPlays,
 } from "./stats.ts";
-import { streamedSongsOf } from "./streamedSongs.ts";
+import {
+  streamedSongRows,
+  streamedSongsOf,
+  streamedSongsSteps,
+  type StreamedSongRows,
+} from "./streamedSongs.ts";
 
 export type OnlineAlbum = PlayedAlbumKey & {
   readonly id: string;
@@ -78,7 +82,10 @@ export interface StreamedListeningTotal {
 export const streamedListeningTotals = (
   db: LibraryDatabase,
   window?: StatsWindow,
-): StreamedListeningTotal[] => {
+): StreamedListeningTotal[] => db.all<StreamedListeningTotal>(streamedTotalsQuery(db, window));
+
+/** The statement `streamedListeningTotals` reads. */
+const streamedTotalsQuery = (db: LibraryDatabase, window?: StatsWindow) => {
   const from =
     window?.from === null
       ? sql`streamed_totals AS kept CROSS JOIN play_events
@@ -110,10 +117,10 @@ export const streamedListeningTotals = (
       ? sql`(SELECT song_track FROM played_songs
         WHERE song = 'v:' || streamed.video_id || '|' || streamed.recording_key)`
       : streamedTrack(sql`streamed.video_id`, sql`nullif(streamed.recording_key, '')`);
-  return db.all<StreamedListeningTotal>(sql`WITH streamed AS (${source})
+  return sql`WITH streamed AS (${source})
     SELECT video_id AS "videoId", ${track} AS "trackId",
       counted_plays AS "countedPlays", listened_ms AS "listenedMs", counted_listened_ms AS "countedListenedMs",
-      coalesce(last_counted_at, 0) AS "latestPlayAt", last_played_at AS "lastPlayedAt" FROM streamed`);
+      coalesce(last_counted_at, 0) AS "latestPlayAt", last_played_at AS "lastPlayedAt" FROM streamed`;
 };
 
 /**
@@ -187,8 +194,8 @@ export interface SummedTotalsRows {
   readonly credits: readonly CreditedPlayTotals[];
   /** The streamed songs with counted plays in the window. */
   readonly streams: readonly StreamedListeningTotal[];
-  /** Each of [streams]' songs, by video id. */
-  readonly songs: ReadonlyMap<string, YtAlbumSong>;
+  /** What [streams]' songs are made from (`streamedSongsSteps`). */
+  readonly songRows: StreamedSongRows;
   /** What the credit resolver matches against: the Library's artists, albums and stored credits. */
   readonly artists: readonly ArtistRow[];
   readonly albums: readonly AlbumRow[];
@@ -224,24 +231,22 @@ const summedTotalsRows = (
   withAlbums: boolean,
 ): SummedTotalsRows => {
   const credits = summedCreditedPlayTotals(db, window);
-  const streams = streamedListeningTotals(db, window).filter((entry) => entry.countedPlays > 0);
-  const songs = streamedSongsOf(
-    db,
-    streams.map((entry) => entry.videoId),
-  );
+  // Statements only, each the same however many plays: a replayed read runs this whole in
+  // every pass, so work on the rows waits for `playedTotalsSteps` (#1451). The streams' own
+  // statement picks their songs and Library songs, not a list of them made here.
+  const counted = sql`SELECT * FROM (${streamedTotalsQuery(db, window)}) WHERE "countedPlays" > 0`;
+  const streams = db.all<StreamedListeningTotal>(counted);
+  const songRows = streamedSongRows(db, sql`SELECT "videoId" FROM (${counted})`);
   const artists = selectArtists(db, {});
   const albums = withAlbums ? selectAlbums(db, undefined) : [];
   const creditRows = libraryCreditRows(db);
-  // The Library songs streams count for, in the order Core's `mergeCountedPlays` keys them.
-  const tracks = new Set<number>();
-  for (const entry of streams) if (entry.trackId !== null) tracks.add(entry.trackId);
   const links = db.all<{ id: number; albumId: number; artistId: number }>(
     sql`
     SELECT tracks.id, tracks.album_id AS "albumId", track_artists.artist_id AS "artistId"
     FROM tracks JOIN track_artists ON track_artists.track_id = tracks.id
-    WHERE tracks.id IN (SELECT value FROM json_each(${JSON.stringify([...tracks])}))`,
+    WHERE tracks.id IN (SELECT "trackId" FROM (${counted}) WHERE "trackId" IS NOT NULL)`,
   );
-  return { withAlbums, credits, streams, songs, artists, albums, creditRows, links };
+  return { withAlbums, credits, streams, songRows, artists, albums, creditRows, links };
 };
 
 /**
@@ -253,7 +258,8 @@ const summedTotalsRows = (
  */
 export function* playedTotalsSteps(read: PlayedTotalsRead): Generator<void, PlayedEntityTotals> {
   if (read.kept !== undefined) return read.kept;
-  const { withAlbums, songs } = read;
+  const { withAlbums } = read;
+  const songs = yield* streamedSongsSteps(read.streams, read.songRows);
   const credits: string[] = [];
   for (const { credit, stored } of read.creditRows) {
     credits.push(...readCredits(credit, stored));
@@ -308,7 +314,12 @@ export function* playedTotalsSteps(read: PlayedTotalsRead): Generator<void, Play
     yield;
   }
   // Each song's streamed plays: a Library song's credit its artists and album, the rest as resolved.
-  const merged = yield* mergeCountedPlaysSteps({ streamed: read.streams.map(countedSums) });
+  const streamed: ReturnType<typeof countedSums>[] = [];
+  for (const entry of read.streams) {
+    streamed.push(countedSums(entry));
+    yield;
+  }
+  const merged = yield* mergeCountedPlaysSteps({ streamed });
   const downloaded = new Map<number, { albumId: number; artistId: number }[]>();
   for (const row of read.links) {
     const links = downloaded.get(row.id) ?? [];

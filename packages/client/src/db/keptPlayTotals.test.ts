@@ -583,6 +583,35 @@ test("the summed totals work out each streamed song on a step of its own", async
   assert.ok(stepsOf(db, window) - before >= 20 * 3, `${stepsOf(db, window)} - ${before}`);
 });
 
+test("the summed totals' read is its statements alone, the same however many songs streamed", async () => {
+  const db = await openTestDatabase();
+  addTrack(db, { title: "Solo", artist: "A", album: "First" });
+  const window = statsWindow("all", NOW);
+  const streams = (from: number, count: number) => {
+    for (let index = from; index < from + count; index++)
+      recordPlay(
+        db,
+        play(`yt:v${index}`, NOW - index * 60_000),
+        false,
+        streamed(`v${index}`, ["A"], "First", null),
+      );
+  };
+  // A replayed read runs in every pass whatever it does between statements (#1451): no list
+  // of the songs it read, made here to read more by, only statements.
+  const statements = () => {
+    unsettle(db);
+    return traceQueries(db, () => playedTotalsRead(db, window, true)).queries.map(({ sql }) => sql);
+  };
+  streams(0, 3);
+  const few = statements();
+  streams(3, 40);
+  assert.deepEqual(statements(), few);
+  assert.ok(
+    few.every((statement) => !statement.includes("json_each(?)")),
+    few.join("\n"),
+  );
+});
+
 test("marking songs owed looks them up by their key, never through every settled song", async () => {
   const db = await openTestDatabase();
   const owing = (body: string) =>

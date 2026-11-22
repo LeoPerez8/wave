@@ -88,8 +88,9 @@ export const renderRan = (name: string, startedAt: number, durationMs: number): 
   blocks.renderRan(name, startedAt, durationMs);
 
 // An off-thread read's replay builds its queries and maps its rows on the JS thread, in passes
-// and in steps of 8 ms that yield to a new task between them (#1435); each is named here.
-runReplayPassesWith((run) => inSlice("Library read replay", run));
+// and in steps of 8 ms that yield to a new task between them (#1435); each is named here, by
+// the name its caller gives if any (#1451).
+runReplayPassesWith((run, name) => inSlice(name ?? "Library read replay", run));
 
 /**
  * Runs [run], [name]'s asynchronous work, saying to the block log that it runs until its promise

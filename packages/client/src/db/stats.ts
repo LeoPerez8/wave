@@ -28,6 +28,7 @@ import { and, eq, gte, inArray, isNotNull, lte, sql, type SQL } from "drizzle-or
 import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
 import { keptCreditedPlayTotals, keptSongPlayTotals } from "./keptPlayTotals.ts";
+import { decodedRows } from "./offThreadReads.ts";
 import * as schema from "./schema.ts";
 
 /** Counted plays, streamed ones too, that started within `window`. */
@@ -182,14 +183,22 @@ export const creditedPlayTotals = (
 ): CreditedPlayTotals[] =>
   keptCreditedPlayTotals(db, window) ?? summedCreditedPlayTotals(db, window);
 
-/** `creditedPlayTotals` summed from the plays: what the kept totals are checked against and read while they settle. */
+/** A row of `summedCreditedPlayTotals` as it reads it: [primary] is SQLite's 0 or 1. */
+const creditedTotalsRow = (
+  row: Omit<CreditedPlayTotals, "primary"> & { primary: number },
+): CreditedPlayTotals => ({ ...row, primary: row.primary === 1 });
+
+/**
+ * `creditedPlayTotals` summed from the plays: what the kept totals are checked against and read
+ * while they settle. A replayed read decodes its rows in steps (#1451).
+ */
 export const summedCreditedPlayTotals = (
   db: LibraryDatabase,
   window: StatsWindow,
 ): CreditedPlayTotals[] =>
-  db
-    .all<Omit<CreditedPlayTotals, "primary"> & { primary: number }>(
-      sql`WITH plays AS (${window.from === null ? playsUpTo(window.to) : playsIn(window)}),
+  decodedRows(
+    db,
+    sql`WITH plays AS (${window.from === null ? playsUpTo(window.to) : playsIn(window)}),
       credited AS (${CREDITED_ARTISTS}),
       -- Each song's first credited position, once (as a correlated subquery
       -- per row it cost ten times the rest at 10,000 songs on 1,000 albums).
@@ -206,8 +215,8 @@ export const summedCreditedPlayTotals = (
       JOIN firsts ON firsts.track_id = plays.track_id
       JOIN artists ON artists.id = credited.artist_id
       GROUP BY albums.id, artists.id, "primary"`,
-    )
-    .map((row) => ({ ...row, primary: row.primary === 1 }));
+    creditedTotalsRow,
+  );
 
 /**
  * Each played song's listening over all time, one row per song in no order:

@@ -17,6 +17,22 @@ export interface VideoPage<Cursor> {
 export const videoIdsOf = (rows: readonly { readonly videoId: unknown }[]): string[] =>
   rows.flatMap(({ videoId }) => (typeof videoId === "string" && videoId !== "" ? [videoId] : []));
 
+/**
+ * The videos of [statements]' rows in their order, each once, as `videoIdsOf` reads a row: a
+ * row per step, so a replayed read can leave its rows to steps between passes (#1452).
+ */
+export function* uniqueVideosSteps(
+  statements: readonly (readonly { readonly videoId: unknown }[])[],
+): Generator<void, string[]> {
+  const videos = new Set<string>();
+  for (const rows of statements)
+    for (const { videoId } of rows) {
+      yield;
+      if (typeof videoId === "string" && videoId !== "") videos.add(videoId);
+    }
+  return [...videos];
+}
+
 /** Every page from [start], each video once, with [between] between pages. */
 export const readVideoPages = <Cursor, ReadError, ReadNeeds, TurnError, TurnNeeds>(
   start: Cursor,

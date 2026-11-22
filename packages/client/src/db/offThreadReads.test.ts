@@ -5,6 +5,7 @@ import { inArray, sql } from "drizzle-orm";
 import { libraryCounts } from "./counts.ts";
 import { countTracks, listSongs } from "./libraryQueries.ts";
 import {
+  decodedRows,
   finishReplaySteps,
   NotReplayable,
   readConnections,
@@ -413,6 +414,84 @@ test("a large result fetched ahead is mapped in short steps before the pass", as
   assert.deepEqual(value.value, expected);
   assert.equal(counted.passes, 1);
   assert.ok(Math.max(...held) <= 8, `no step held the thread over 8 ms: ${Math.max(...held)}`);
+});
+
+// A raw statement's row decoder that costs [slow]'s time 1 ms a row, as a JSON column does.
+const slowRow = (row: { id: number; title: string }) => {
+  slow.time.pass(1);
+  slow.decoded++;
+  return { id: row.id, name: row.title.toUpperCase() };
+};
+const decodedIds = (d: LibraryDatabase, below = 1e9) =>
+  decodedRows(d, sql`SELECT id, title FROM tracks WHERE id < ${below} ORDER BY id`, slowRow);
+
+test("a raw statement's rows decode in short steps, once however many passes the read takes", async () => {
+  const db = await openTestDatabase();
+  addLibrary(db, { tracks: 600, artists: 12, albums: 20 });
+  const reads = readConnections(async () => asyncReadClient(db));
+  // Two statements, the second from the first's rows: at least three passes.
+  const read = (d: LibraryDatabase) => {
+    const all = decodedIds(d);
+    return { all, some: decodedIds(d, all[300]!.id) };
+  };
+  slow.decoded = 0;
+  const expected = read(db);
+  const once = slow.decoded;
+  slow.decoded = 0;
+  slow.time = clock();
+  const { value, held } = await steps(slow.time.now, () => replayRead(reads, read, slow.time.now));
+  assert.deepEqual(value.value, expected);
+  assert.equal(value.statements, 2);
+  assert.equal(slow.decoded, once, "as many rows as the synchronous read decodes");
+  assert.ok(Math.max(...held) <= 8, `no step held the thread over 8 ms: ${Math.max(...held)}`);
+});
+
+test("a raw statement's rows decoded last time are decoded ahead, in short steps", async () => {
+  const db = await openTestDatabase();
+  addLibrary(db, { tracks: 600, artists: 12, albums: 20 });
+  const reads = readConnections(async () => asyncReadClient(db));
+  const expected = decodedIds(db);
+  const counted = passesOf((d: LibraryDatabase) => decodedIds(d));
+  await replayRead(reads, counted.read, () => 0);
+  counted.passes = 0;
+  slow.time = clock();
+  const { value, held } = await steps(slow.time.now, () =>
+    replayRead(reads, counted.read, slow.time.now),
+  );
+  assert.deepEqual(value.value, expected);
+  assert.equal(counted.passes, 1);
+  assert.ok(Math.max(...held) <= 8, `no step held the thread over 8 ms: ${Math.max(...held)}`);
+});
+
+test("a read decoding a raw statement two ways gets each way's values", async () => {
+  const db = await library();
+  const reads = readConnections(async () => asyncReadClient(db));
+  const titles = (row: { id: number; title: string }) => row.title;
+  const read = (d: LibraryDatabase) => ({
+    decoded: decodedIds(d),
+    titles: decodedRows(d, sql`SELECT id, title FROM tracks WHERE id < ${1e9} ORDER BY id`, titles),
+    raw: d.all(sql`SELECT id, title FROM tracks WHERE id < ${1e9} ORDER BY id`),
+  });
+  assert.deepEqual((await replayRead(reads, read, () => 0)).value, read(db));
+});
+
+test("a slice of a read's working out runs under the name its caller gives", async () => {
+  const names: (string | undefined)[] = [];
+  runReplayPassesWith((pass, name) => {
+    names.push(name);
+    return pass();
+  });
+  try {
+    function* two(): Generator<void, number> {
+      yield;
+      return 2;
+    }
+    await finishReplaySteps(two(), () => 0, "play totals fallback");
+    await finishReplaySteps(two(), () => 0);
+  } finally {
+    runReplayPassesWith((pass) => pass());
+  }
+  assert.deepEqual(names, ["play totals fallback", undefined]);
 });
 
 test("two callers asking for the same read at once share it", async () => {
