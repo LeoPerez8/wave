@@ -297,3 +297,61 @@ test("with Online and another sort, the Library's songs keep that sort and the r
       listStart: 2,
     });
   }));
+
+test("the artist page's songs keep Popular order whatever the sort, and its Play follows them", () =>
+  inLibrary(async (db) => {
+    for (const [title, album] of [
+      ["Sour Times", "Dummy"],
+      ["Machine Gun", "Third"],
+    ] as const)
+      addTrack(db, { title, artist: "Portishead", album, durationMs: 240_000 });
+    const id = seedPortishead(db);
+    const { section } = sectionOver(db);
+    const ids = new Map(
+      browseLibrary(db, { kind: "artist", id }, 0, 10).items.map((row) => [row.title, row.id]),
+    );
+    const titles = (limit: number, pick: "library" | "online") =>
+      section.pageSongs(id, pick, limit).songs.map((row) => row.title);
+
+    // No Popular list saved yet: by song name.
+    assert.equal(section.pageSongs(id, "library", 5).popular, false);
+    assert.deepEqual(titles(5, "library"), ["Glory Box", "Machine Gun", "Sour Times"]);
+
+    await section.ask(id);
+    // Song name, Z to A, for the Songs view: the page keeps Popular.
+    toggleBrowseSort(db as unknown as LibraryDatabase, "artist", "title");
+    toggleBrowseSort(db as unknown as LibraryDatabase, "artist", "title");
+
+    const library = section.pageSongs(id, "library", 5);
+    assert.equal(library.popular, true);
+    assert.equal(library.total, 3);
+    assert.equal(library.ranked, 2);
+    assert.deepEqual(titles(5, "library"), ["Glory Box", "Machine Gun", "Sour Times"]);
+
+    const online = section.pageSongs(id, "online", 2);
+    assert.equal(online.total, 4, "with Online the count takes in Roads");
+    assert.equal(online.ranked, 3);
+    assert.deepEqual(titles(2, "online"), ["Glory Box", "Roads"]);
+    assert.deepEqual(section.pageQueue(id, "online"), [
+      String(ids.get("Glory Box")),
+      "yt:roads00001",
+      String(ids.get("Machine Gun")),
+      String(ids.get("Sour Times")),
+    ]);
+    assert.deepEqual(
+      section.pageQueue(id, "library"),
+      ["Glory Box", "Machine Gun", "Sour Times"].map((title) => String(ids.get(title))),
+    );
+  }));
+
+test("with YT Music off, the artist page's songs are the Library's", () =>
+  inLibrary(async (db) => {
+    const id = seedPortishead(db);
+    const songs = sectionOver(db, { enabled: () => false }).section.pageSongs(id, null, 5);
+    assert.deepEqual(
+      songs.songs.map((row) => row.title),
+      ["Glory Box"],
+    );
+    assert.equal(songs.total, 1);
+    assert.equal(songs.popular, false);
+  }));

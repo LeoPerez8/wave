@@ -34,9 +34,9 @@ import { sql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
-import type { ArtistSectionView } from "../../shared/artistPage.ts";
+import type { ArtistPageSongs, ArtistSectionView } from "../../shared/artistPage.ts";
 import { ytRow } from "../../shared/yt.ts";
-import { browseSongs, browseTrackIds } from "../library/browse.ts";
+import { artistSongsForPopular, browseSongs, browseTrackIds } from "../library/browse.ts";
 import { readBrowseSort } from "../library/browseSort.ts";
 
 export interface ArtistSectionDeps {
@@ -74,6 +74,14 @@ export interface ArtistSectionShape {
     artistId: number,
     pick: YtPick | null,
   ) => { readonly ids: string[]; readonly listStart: number };
+  /**
+   * The artist page's songs with [pick] (docs/spec.md, "Artist songs"): the whole list in Popular
+   * order whatever the table's sort, YouTube Music's songs in it with Online, and its first
+   * [limit] rows.
+   */
+  readonly pageSongs: (artistId: number, pick: YtPick | null, limit: number) => ArtistPageSongs;
+  /** The queue the artist page's Play makes: `pageSongs`'s whole list, in its order. */
+  readonly pageQueue: (artistId: number, pick: YtPick | null) => string[];
   /** What stands for the artist [name], what was saved for them read on first sight. */
   readonly state: (name: string) => YtArtistSection<YtAlbumSong>;
 }
@@ -156,6 +164,30 @@ export const createArtistSection = (deps: ArtistSectionDeps): ArtistSectionShape
     );
   };
 
+  /**
+   * The artist page's list: the Library's songs, with Online the ones YouTube Music adds, in
+   * Popular order (`artistSongOrder`) once the artist's list is saved; with none, the Library's
+   * by song name and YouTube Music's after them. [known]: a Popular list ranks them.
+   */
+  const pageList = (artistId: number, pick: YtPick | null) => {
+    const name = nameOf(artistId);
+    const found = shown(artistId, pick);
+    const online = found?.view.toggle === "online";
+    const popular = name === null ? null : artistPopularSongs(sectionOf(name));
+    const list = artistSongOrder(
+      [
+        ...artistSongsForPopular(db, artistId).map((track) => ({
+          source: "library" as const,
+          track,
+        })),
+        ...(online ? found.view.songs : []).map((song) => ({ source: "stream" as const, song })),
+      ],
+      popular,
+      { sort: "popular", online },
+    );
+    return { known: popular !== null, list };
+  };
+
   return {
     view: (artistId, pick, offset, limit) => {
       const found = shown(artistId, pick);
@@ -229,6 +261,21 @@ export const createArtistSection = (deps: ArtistSectionDeps): ArtistSectionShape
         listStart: library.length,
       };
     },
+    pageSongs: (artistId, pick, limit) => {
+      const { known, list } = pageList(artistId, pick);
+      return {
+        popular: known,
+        ranked: list.filter((row) => row.popularRank !== undefined).length,
+        songs: list
+          .slice(0, limit)
+          .map((row) => (row.source === "library" ? row.track : ytRow(row.song))),
+        total: list.length,
+      };
+    },
+    pageQueue: (artistId, pick) =>
+      pageList(artistId, pick).list.map((row) =>
+        row.source === "library" ? String(row.track.id) : ytTrackId(row.song.videoId),
+      ),
     state: sectionOf,
   };
 };

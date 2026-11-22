@@ -239,6 +239,7 @@ test("the page has no Node and only the typed bridge", async () => {
       "wave.artistPage.albums",
       "wave.artistPage.albumArtists",
       "wave.artistPage.section",
+      "wave.artistPage.songs",
       "wave.artistPage.ask",
       "wave.artistPage.play",
       "wave.artistPage.albumSection",
