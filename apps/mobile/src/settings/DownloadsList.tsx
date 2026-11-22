@@ -110,7 +110,7 @@ const sameRunCounts = (a: DownloadRunCounts | undefined, b: DownloadRunCounts | 
  * elsewhere, Cancel until it's saving to the Library, and a waiting song's drag handle (one
  * downloading now has room for it instead, so the Cancels line up). A row only renders again
  * when its song, place or Cancel changed, or its own progress line (which it follows itself,
-`useQueuedDownloadLine`), not on another song's progress tick (#1441).
+ * `useQueuedDownloadLine`), not on another song's progress tick (#1441).
  */
 const QueuedDownloadRow = memo(
   function QueuedDownloadRow({
