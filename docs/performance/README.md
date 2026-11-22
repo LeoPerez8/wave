@@ -113,13 +113,14 @@ version, package and signature as the release it's built from, so it installs ov
 - `importLink`: a public playlist link for the large import, shared to Wave as a share sheet would.
   **Not set yet.** Pick a YouTube Music or Spotify playlist of at least 2,000 songs and commit its
   link here. The import variant can't run without it.
-- `artist`: the artist `push-artist` opens, by name as Library › Artists shows it. **Not set
-  yet.** Pick an artist with a long play history that shows on the list's first screen without
-  scrolling, and commit the name here. `push-artist` can't run without it. `--artist` overrides it.
-- `playlist`: the playlist `push-playlist` opens by its visible name on Library › Playlists.
-  **Not set yet.** Set it from the actual test Library, or pass `--playlist`. A missing or blank
-  name records a scenario error and allows the other scenarios to continue. Keep its contents,
-  layout and sort order comparable; the name alone does not establish equal workloads.
+- `artist`: the artist `push-artist` opens, by name as Library › Artists shows it: `Amber Ainsley`,
+  the first artist of the emulator seed (`scripts/perf/seed.ts`, see
+  `docs/agents/emulator-checks.md`). On a phone, pass `--artist` with an artist that has a long
+  play history and shows on the list's first screen without scrolling.
+- `playlist`: the playlist `push-playlist` opens by its visible name on Library › Playlists:
+  `Archive`, the seed's first and biggest playlist. On a phone, pass `--playlist`. A missing or
+  blank name records a scenario error and allows the other scenarios to continue. Keep its
+  contents, layout and sort order comparable; the name alone does not establish equal workloads.
 - `settleMs`, `windowMs`, `launchSettleMs`, `memoryIdleMs`, `flushTimeoutMs`: timing (below).
 
 The phone, for runs that compare:

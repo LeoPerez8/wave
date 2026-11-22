@@ -7,7 +7,8 @@
  * block (#1423) names it as "rendering <name>" when it held more of the
  * block than any slice did, and beats running work. A block that spans Wave
  * leaving the screen (#1446) is the phone pausing the process, not work: it is
- * written apart, as "JS paused", so no total of blocks counts it.
+ * written apart, as "JS paused", so no total of blocks counts it. A block is named when it's
+ * judged, so a render whose commit is reported after the long task still names it (#1449).
  */
 import { timingDuration } from "./timing.ts";
 
@@ -48,9 +49,11 @@ export interface JsBlockLog {
   readonly sliceRan: (name: string, startedAt: number, durationMs: number) => void;
   /**
    * The scheduler gave [name] a free turn at [at]: what runs on it, and its awaited
-   * continuations, count as [name]'s work for `TURN_WORK_MS`, or until its next turn.
+   * continuations, count as [name]'s work for [forMs] (`TURN_WORK_MS`), or until its next turn.
+   * Work that names its continuations itself (as slices) passes 0: only the turn's own task is
+   * its, and a render or anything else that follows is not put down to it (#1449).
    */
-  readonly turnTaken: (name: string, at: number) => void;
+  readonly turnTaken: (name: string, at: number, forMs?: number) => void;
   /** [name]'s work began at [at]; the returned call says when it ended. */
   readonly workBegan: (name: string, at: number) => (endedAt: number) => void;
   /**
@@ -164,18 +167,22 @@ export const createJsBlockLog = ({ write, screen, later }: JsBlockLogPorts): JsB
   let settledAt: number | null = null;
   /**
    * Writes the block [from, from + durationMs] on the screen shown now, once a pause during it
-   * would have been heard. Whether a screen was shown is known at once.
+   * would have been heard. Whether a screen was shown is known at once; the work that held it
+   * ([work], or no line when it says false) is asked then too, so what JS heard meanwhile, a
+   * render's commit or a slice, counts.
    */
-  const log = (from: number, durationMs: number, work: string | null): boolean => {
+  const log = (from: number, durationMs: number, work: () => string | null | false): boolean => {
     const shown = screen();
     if (shown === null) return false;
     const judge = () => {
+      const named = work();
+      if (named === false) return;
       const to = from + durationMs;
       const pausedMeanwhile = away.some((span) => within(span, from, to + PAUSE_HEARD_MS));
       write(
         pausedMeanwhile
           ? jsPausedLine({ durationMs, screen: shown })
-          : jsBlockLine({ durationMs, screen: shown, work }),
+          : jsBlockLine({ durationMs, screen: shown, work: named }),
       );
     };
     if (later === undefined) judge();
@@ -194,13 +201,13 @@ export const createJsBlockLog = ({ write, screen, later }: JsBlockLogPorts): JsB
   };
   return {
     sliceRan: (name, startedAt, durationMs) => {
-      const logged = durationMs > JS_BLOCK_MS && log(startedAt, durationMs, name);
+      const logged = durationMs > JS_BLOCK_MS && log(startedAt, durationMs, () => name);
       keep(slices, { name, from: startedAt, to: startedAt + durationMs, logged });
     },
-    turnTaken: (name, at) => {
+    turnTaken: (name, at, forMs = TURN_WORK_MS) => {
       // The same work's previous turn ended where this one begins.
       for (const work of works) if (work.name === name && work.to > at) work.to = at;
-      keep(works, { name, from: at, to: at + TURN_WORK_MS, logged: false });
+      keep(works, { name, from: at, to: at + forMs, logged: false });
     },
     workBegan: (name, at) => {
       const work: Span = { name, from: at, to: Number.POSITIVE_INFINITY, logged: false };
@@ -233,21 +240,23 @@ export const createJsBlockLog = ({ write, screen, later }: JsBlockLogPorts): JsB
     longTask: (startTime, durationMs) => {
       if (durationMs <= JS_BLOCK_MS) return;
       const end = startTime + durationMs;
-      // A slice inside the task beats the work running around it: the one that held most of it.
-      const slice = mostWithin(slices, startTime, end);
-      if (slice?.logged === true) return;
-      const render = renderWithin(renders, startTime, end);
-      const rendering =
-        render !== undefined &&
-        (slice === undefined || render.held > overlap(slice, startTime, end))
-          ? `rendering ${render.name}`
-          : undefined;
-      const name =
-        rendering ??
-        slice?.name ??
-        latestWithin(works, startTime, end)?.name ??
-        (settledAt === null || startTime < settledAt ? startup(end) : null);
-      log(startTime, durationMs, name);
+      log(startTime, durationMs, () => {
+        // A slice inside the task beats the work running around it: the one that held most of it.
+        const slice = mostWithin(slices, startTime, end);
+        if (slice?.logged === true) return false;
+        const render = renderWithin(renders, startTime, end);
+        const rendering =
+          render !== undefined &&
+          (slice === undefined || render.held > overlap(slice, startTime, end))
+            ? `rendering ${render.name}`
+            : undefined;
+        return (
+          rendering ??
+          slice?.name ??
+          latestWithin(works, startTime, end)?.name ??
+          (settledAt === null || startTime < settledAt ? startup(end) : null)
+        );
+      });
     },
   };
 };

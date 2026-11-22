@@ -1897,6 +1897,7 @@ export {
   blackPlayerPlayId,
   missingSongTrack,
   planMissingSongs,
+  planMissingSongsSteps,
   planSongSync,
 } from "./syncPlan.ts";
 export type {
@@ -1914,6 +1915,7 @@ export {
   SYNC_FIELDS,
   SYNC_PUSH_BATCH,
   SYNC_TABLE_NAMES,
+  pullPagePieces,
   pushBatches,
   pushBody,
   readPullPage,
@@ -1931,6 +1933,7 @@ export type {
   SyncFollow,
   SyncHiddenRelease,
   SyncNotifiedShow,
+  PullPagePiece,
   SyncPullPage,
   SyncPushAnswer,
   SyncPlayEnd,

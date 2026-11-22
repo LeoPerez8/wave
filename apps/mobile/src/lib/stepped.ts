@@ -84,3 +84,15 @@ export const runSteps = <A, R = never>(
   now?: () => number,
 ): Effect.Effect<A, never, BackgroundWorkName | R> =>
   pacedSteps(steps, () => ({ ...GENTLE_STEPS, between }), now);
+
+/**
+ * One gentle slice of [steps] for the background work [name], for work driven outside an
+ * Effect (the sync's database steps, `SyncCycleInput.slice`); its caller waits a free turn
+ * before each.
+ */
+export const sliceOf =
+  (name: string) =>
+  <A>(steps: Iterator<void, A>): SliceResult<A> =>
+    shared === null
+      ? runStepSlice(steps, { now: () => performance.now(), ...GENTLE_STEPS })
+      : shared(name, steps, GENTLE_STEPS);

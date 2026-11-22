@@ -87,7 +87,14 @@ test("every stepped work runs under a name (#1447)", () => {
 
 test("turns and slices taken outside an Effect carry a name at each call site (#1447)", () => {
   const scheduler = sources["lib/backgroundWork.ts"]!;
-  for (const helper of ["inSlice", "namedAsyncWork", "whenFree", "freeTurn", "startupTurn"]) {
+  for (const helper of [
+    "inSlice",
+    "namedAsyncWork",
+    "whenFree",
+    "freeTurn",
+    "freeTurnAlone",
+    "startupTurn",
+  ]) {
     const signature = new RegExp(`export const ${helper} = [^\n]*`).exec(scheduler)?.[0];
     assert.ok(signature !== undefined, `lib/backgroundWork.ts no longer exports ${helper}`);
     assert.match(signature, /\bname: string\b/, `${helper} takes the work's name`);
