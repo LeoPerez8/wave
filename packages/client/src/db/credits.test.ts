@@ -335,9 +335,27 @@ describe("credits", () => {
     const split = splits.split;
     scanBatches(ariana.slice(0, 1));
     assert.equal(splits.split, split);
-    const late = warmCreditSplitsSteps(splits, new Set(["Someone Else"]));
+    const late = warmCreditSplitsSteps(splits, readLibraryCredits(db));
     while (late.next().done !== true);
     assert.equal(splits.split, split);
+  });
+
+  test("credits read ahead find a Library filed as they split, so the scan's end re-files nothing", () => {
+    scan(...ariana);
+    const warmed = () => {
+      const fresh = creditSplits();
+      const warming = warmCreditSplitsSteps(fresh, readLibraryCredits(db));
+      while (warming.next().done !== true);
+      return fresh;
+    };
+    assert.equal(warmed().stale, false);
+    // A track filed under no one, or an artist named otherwise, has it re-filed.
+    db.run(sql`DELETE FROM track_artists WHERE track_id = (SELECT min(id) FROM tracks)`);
+    assert.equal(warmed().stale, true);
+    scan(...ariana);
+    assert.equal(warmed().stale, false);
+    db.run(sql`UPDATE artists SET name = 'DOJA CAT' WHERE name = 'Doja Cat'`);
+    assert.equal(warmed().stale, true);
   });
 
   test("the Library's artist count and an artist's link row count collaborations", () => {

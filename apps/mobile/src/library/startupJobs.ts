@@ -239,10 +239,12 @@ export const scanSavePace = (
 };
 
 /**
- * The first slice of the app's pace: a quarter of `SCAN_SAVE_SLICE`, about
- * the budget on the emulator after #1436 (docs/performance/1436-scan-js.md).
+ * The first slice of the app's pace: two files, under Core's slice budget on
+ * the emulator even before the connection is warm (25 took 314 ms there);
+ * the pace doubles it while saves stay well under the budget
+ * (docs/performance/1436-scan-js.md).
  */
-const FIRST_SCAN_SAVE_SLICE = 25;
+const FIRST_SCAN_SAVE_SLICE = 2;
 
 /** The app's pace, kept from batch to batch and scan to scan. */
 const appScanSavePace = scanSavePace();

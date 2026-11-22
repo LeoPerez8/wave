@@ -89,24 +89,115 @@ export const creditSplits = (
   build: (knownCredits: Iterable<string>) => Splitter = creditSplitter,
 ): CreditSplits => ({ known: null, split: unread, stale: true, build });
 
-/** The Library's whole credits, as a scan's first save would read them (`warmCreditSplitsSteps`). */
-export const readLibraryCredits = (db: LibraryDatabase): Set<string> => libraryCredits(db);
+/**
+ * What a scan reads ahead of its first save (`warmCreditSplitsSteps`): the
+ * Library's whole credits, each track's and album's credit, its artists, and
+ * how tracks and albums are filed under them. Plain rows, so the read can
+ * leave the JS thread.
+ */
+export interface LibraryCreditsRead {
+  readonly credits: readonly { readonly credit: string; readonly stored: string | null }[];
+  readonly rows: readonly {
+    readonly kind: CreditRow["kind"];
+    readonly id: number;
+    readonly credit: string;
+    readonly stored: string | null;
+  }[];
+  readonly artists: readonly { readonly id: number; readonly key: string; readonly name: string }[];
+  readonly trackLinks: readonly { readonly owner: number; readonly artist: number }[];
+  readonly albumLinks: readonly { readonly owner: number; readonly artist: number }[];
+}
+
+const linkRows = (db: LibraryDatabase, table: LinkTable) =>
+  db.all<{ owner: number; artist: number }>(
+    sql`SELECT ${sql.raw(table.owner)} AS "owner", artist_id AS "artist" FROM ${sql.raw(table.links)}
+      ORDER BY ${sql.raw(table.owner)}, position`,
+  );
+
+/** What `warmCreditSplitsSteps` works from. */
+export const readLibraryCredits = (db: LibraryDatabase): LibraryCreditsRead => ({
+  credits: db.all<{ credit: string; stored: string | null }>(
+    sql`SELECT DISTINCT artist_credit AS "credit", artist_credits AS "stored" FROM tracks
+      UNION SELECT album_artist_credit, album_artist_credits FROM albums`,
+  ),
+  rows: db.all<{ kind: CreditRow["kind"]; id: number; credit: string; stored: string | null }>(
+    SELECT_CREDITS,
+  ),
+  artists: db.all<{ id: number; key: string; name: string }>(
+    sql`SELECT id AS "id", key AS "key", name AS "name" FROM artists`,
+  ),
+  trackLinks: linkRows(db, TRACKS),
+  albumLinks: linkRows(db, ALBUMS),
+});
+
+/** [rows] (in credit order) by what they file, a step per row. */
+function* linksByOwner(
+  rows: LibraryCreditsRead["trackLinks"],
+): Generator<void, Map<number, number[]>> {
+  const links = new Map<number, number[]>();
+  for (const { owner, artist } of rows) {
+    const artists = links.get(owner);
+    if (artists === undefined) links.set(owner, [artist]);
+    else artists.push(artist);
+    yield;
+  }
+  return links;
+}
 
 /**
- * Builds [splits]' splitter from the Library's [credits] (`readLibraryCredits`)
- * a known credit per step, so a scan's first save doesn't build it in one
- * hold. Leaves [splits] as it is when a save read the credits first.
+ * Whether every track and album of [read] is filed as [split] files it, under
+ * artists named as `relinkCredits` would name them: then it has nothing to
+ * re-file. A step per track or album.
+ */
+function* filedAsSplit(read: LibraryCreditsRead, split: Splitter): Generator<void, boolean> {
+  const artists = new Map(read.artists.map((artist) => [artist.key, artist] as const));
+  const tracks = yield* linksByOwner(read.trackLinks);
+  const albums = yield* linksByOwner(read.albumLinks);
+  // The name each artist is given: the first credit naming it, as `creditArtists` names it.
+  const named = new Set<string>();
+  for (const row of read.rows) {
+    const ids: number[] = [];
+    for (const name of split(readCredits(row.credit, row.stored))) {
+      const key = identityKey(name);
+      const artist = artists.get(key);
+      if (artist === undefined) return false;
+      if (!named.has(key)) {
+        if (artist.name !== name) return false;
+        named.add(key);
+      }
+      ids.push(artist.id);
+    }
+    if (ids.length > 0 && !sameArtists((row.kind === "track" ? tracks : albums).get(row.id), ids))
+      return false;
+    yield;
+  }
+  return true;
+}
+
+/**
+ * Builds [splits]' splitter from the Library's credits ([read],
+ * `readLibraryCredits`) a step at a time, so a scan's first save doesn't
+ * build it in one hold, and finds whether the Library is already filed as it
+ * splits: then the scan's end has nothing to re-file (`relinkCredits`).
+ * Leaves [splits] as it is when a save read the credits first.
  */
 export function* warmCreditSplitsSteps(
   splits: CreditSplits,
-  credits: Set<string>,
+  read: LibraryCreditsRead,
 ): Generator<void, void> {
   if (splits.known !== null) return;
+  const credits = new Set<string>();
+  for (const { credit, stored } of read.credits) {
+    for (const each of readCredits(credit, stored)) credits.add(each);
+    yield;
+  }
   const split =
     splits.build === creditSplitter ? yield* creditSplitterSteps(credits) : splits.build(credits);
+  const filed = yield* filedAsSplit(read, split);
   if (splits.known !== null) return;
   splits.known = credits;
   splits.split = split;
+  if (filed) splits.stale = false;
 }
 
 /** The splitter for [credits]: the Library's whole credits and theirs. */
