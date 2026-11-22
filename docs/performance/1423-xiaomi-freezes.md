@@ -16,7 +16,7 @@ The emulator logged startup blocks of 6.0 to 6.2 s before the first screen settl
 
 ## Change and follow-up
 
-Scan saves now write four tracks per synchronous database transaction instead of 100. The scan still produced 1.1 s and 373 ms blocks after this change, so bounding writes alone does not bound the whole scan turn. While the post-change scan was active, a Settings push took 800 ms to respond and 1.0 s to first frame; the pop took 345 ms and 467 ms. During the post-change launch, WaveTiming also recorded a 4.6 s startup block; the watchdog reported the JS thread returning after 4.8 s, and the main thread returning after 5.8 s. Home's mix read held JS for 863 ms. In a later Search run, the tap response was 376 ms with a 513 ms first frame, then Home mix replays held JS for 449 and 511 ms. These results show that the change did not meet the freeze or transition budgets.
+I tried saving four tracks per synchronous scan transaction instead of 100. The scan still produced 1.1 s and 373 ms blocks with it, so bounding writes alone does not bound the whole scan turn, and the emulator showed no gain from it. It meant 25 times the transactions, free turns and saved-star publishes per batch, with the first slice still carrying all of the batch's artwork, so it was reverted: scan saves stay at 100 tracks per transaction (Core's `SCAN_SAVE_SLICE`). The scan's remaining blocks are a follow-up ticket (below). The rest of this section measures that four-track build. While the post-change scan was active, a Settings push took 800 ms to respond and 1.0 s to first frame; the pop took 345 ms and 467 ms. During the post-change launch, WaveTiming also recorded a 4.6 s startup block; the watchdog reported the JS thread returning after 4.8 s, and the main thread returning after 5.8 s. Home's mix read held JS for 863 ms. In a later Search run, the tap response was 376 ms with a 513 ms first frame, then Home mix replays held JS for 449 and 511 ms. These results show that the change did not meet the freeze or transition budgets.
 
 The focused runner's Search first-tap sample changed from 1,559 ms response and 439 ms first frame before the change to 518 ms and 144 ms after. That after sample did not overlap a logged scan slice, so it is not evidence of an improvement under concurrent scan. Settings push/pop worsened from 311/198 ms response and 92/39 ms first frame before, to 1,039/467 ms and 212/155 ms after while scan work was logged nearby.
 
@@ -77,7 +77,7 @@ What's left:
 - Mount commits are larger after the merge: Tabs up to 1,098 ms and Home up to 828 ms on a cold launch, against 601 and 440 ms. The added Home sections are a likely cause, but this run doesn't separate them.
 - The Tab bar still commits on every switch.
 
-With a scan running (200 touched files, then a cold launch) on the after build:
+With a scan running (200 touched files, then a cold launch) on the after build, which still saved four tracks per transaction:
 
 | Step             | Before the fixes, scan active       | After, scan active                           |
 | ---------------- | ----------------------------------- | -------------------------------------------- |
@@ -90,7 +90,7 @@ Search's first tap is still over budget while a scan runs.
 ## Tickets to file under #1409
 
 - **Yield while replaying large Library reads.** Mapping results for 3,000 songs or albums still holds JS for hundreds of milliseconds to 2.8 s. Cause: row mapping in synchronous replay passes. Where: `packages/client/src/db/offThreadReads.ts` and large list readers such as `packages/client/src/db/tracks.ts`.
-- **Bound scan event and index work on JS.** Scan and changed-song index work still blocks from 250 ms to 1.3 s after reducing save slices. Cause: remaining event reconciliation and follow-on index work in foreground JS. Where: `apps/mobile/src/library/LibraryScan.ts`, `apps/mobile/src/library/startupJobs.ts`, and `apps/mobile/src/library/lyricsSearchIndexer.ts`.
+- **Bound scan event and index work on JS.** Scan and changed-song index work still blocks from 250 ms to 1.3 s, with 100-track or four-track save slices alike. Cause: remaining event reconciliation and follow-on index work in foreground JS. Where: `apps/mobile/src/library/LibraryScan.ts`, `apps/mobile/src/library/startupJobs.ts`, and `apps/mobile/src/library/lyricsSearchIndexer.ts`.
 - **Reduce Home and DJ work on large Libraries.** Home mix reads and DJ opening blocked for 349 and 470 ms on this fixture. Cause: recommendation input/ranking work over a full 3,000-row Library. Where: `apps/mobile/src/home/` and the DJ implementation under `apps/mobile/src/playback/`.
 - **Trace startup blocks before first content.** Startup was attributed a 6.0 to 6.2 s hold, but the current line gives no subtask detail. Cause: unresolved from this run. Where: startup registrations in `apps/mobile/src/lib/startupWork.ts` and their callers in `apps/mobile/src/`.
 - **Diagnose followed-artists route on device.** This run did not reach the route, so its reported freeze has no reproduced cause here. Cause: unconfirmed. Where: followed-artists screen and its data reads under `apps/mobile/src/`.

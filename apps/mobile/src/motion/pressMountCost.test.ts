@@ -8,14 +8,28 @@ import {
   loadWithStubs,
   nativeStubs,
   resetAnimationCounts,
+  stubModule,
 } from "../perf/renderHarness.ts";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
+const RENDERS_KEY = "__wavePressableRenders";
+const pressableRenders = () => (globalThis as unknown as Record<string, number>)[RENDERS_KEY] ?? 0;
+
+const stubs = nativeStubs();
 const [{ CardTile, CardRow }, { Press }] = await loadWithStubs<
   [typeof import("../catalog/cards/CardParts.tsx"), typeof import("./Press.tsx")]
 >([import.meta.resolve("../catalog/cards/CardParts.tsx"), import.meta.resolve("./Press.tsx")], {
-  ...nativeStubs(),
+  ...stubs,
+  // Each Pressable render counted: what Press re-renders with it.
+  "react-native": stubModule(`
+    import { createElement } from ${JSON.stringify(import.meta.resolve("react"))};
+    export * from ${JSON.stringify(stubs["react-native"])};
+    export const Pressable = props => {
+      globalThis.${RENDERS_KEY} = (globalThis.${RENDERS_KEY} ?? 0) + 1;
+      return createElement("pressable", props);
+    };
+  `),
 });
 
 const TILES = 150;
@@ -76,6 +90,25 @@ test(`mounting ${TILES} tiles and rows makes no press animation until one is tou
     const style = [pressables(renderer!)[3]!.props.style].flat(3).at(-1) as {
       opacity: number;
     };
+    assert.ok(style.opacity < 1, "the touched target dims as it is pressed");
+  } finally {
+    await act(() => renderer?.unmount());
+  }
+});
+
+test("a first touch renders the press once, to attach its animation", async () => {
+  resetAnimationCounts();
+  let renderer: ReactTestRenderer | undefined;
+  await act(() => {
+    renderer = create(shelf());
+  });
+  try {
+    const before = pressableRenders();
+    await act(() => pressables(renderer!)[3]!.props.onTouchStart?.({ nativeEvent: {} }));
+    assert.equal(pressableRenders() - before, 1, "one render of the touched press, none other");
+    assert.deepEqual({ ...animationCounts() }, { sharedValues: 2, animatedStyles: 1 });
+    await act(() => pressables(renderer!)[3]!.props.onPressIn?.({ nativeEvent: {} }));
+    const style = [pressables(renderer!)[3]!.props.style].flat(3).at(-1) as { opacity: number };
     assert.ok(style.opacity < 1, "the touched target dims as it is pressed");
   } finally {
     await act(() => renderer?.unmount());

@@ -17,6 +17,7 @@
 import {
   Profiler,
   useLayoutEffect,
+  useRef,
   type ProfilerOnRenderCallback,
   type ReactElement,
   type ReactNode,
@@ -28,14 +29,24 @@ import { timingRoute } from "./timing";
 
 /**
  * Notes [name]'s render for the JS block log: from this call, made first thing in the
- * component, to its commit's layout effects, which run after its children's.
+ * component, to its commit's layout effects, which run after its children's. Only a commit
+ * that came from a new render reports: React re-runs layout effects when a frozen or hidden
+ * screen shows again without rendering, and a span from an older render (or one started
+ * before the previous commit) would name the wrong work.
  */
 export function useRenderCost(name: string): void {
   "use no memo";
-  // oxlint-disable-next-line react/purity -- the render's start is what this hook measures.
-  const startedAt = performance.now();
+  const startedAt = useRef<number | null>(null);
+  const committedAt = useRef(Number.NEGATIVE_INFINITY);
+  // oxlint-disable-next-line react/purity, react/refs -- the render's start is what this hook measures.
+  startedAt.current = performance.now();
   useLayoutEffect(() => {
-    renderRan(name, startedAt, performance.now() - startedAt);
+    const now = performance.now();
+    const from = startedAt.current;
+    const previous = committedAt.current;
+    startedAt.current = null;
+    committedAt.current = now;
+    if (from !== null && from >= previous) renderRan(name, from, now - from);
   });
 }
 

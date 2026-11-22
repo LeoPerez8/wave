@@ -1,0 +1,69 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { Activity, createElement, type ComponentProps, type ReactNode } from "react";
+import { act, create, type ReactTestRenderer } from "react-test-renderer";
+
+import { loadWithStubs, nativeStubs, stubModule } from "../perf/renderHarness.ts";
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+const SPANS_KEY = "__waveRenderSpans";
+const spans = (): string[] =>
+  ((globalThis as unknown as Record<string, string[]>)[SPANS_KEY] ??= []);
+
+const [{ useRenderCost }] = await loadWithStubs<[typeof import("./renderCost.tsx")]>(
+  [import.meta.resolve("./renderCost.tsx")],
+  {
+    ...nativeStubs(),
+    "./backgroundWork": stubModule(`
+      export const renderRan = (name) => (globalThis.${SPANS_KEY} ??= []).push(name);
+    `),
+    "@/perf/perf": stubModule(`
+      export const PERF_ENABLED = false;
+      export const perfCommitCount = () => {};
+      export const perfMark = () => {};
+    `),
+    "./timing": stubModule(`export const timingRoute = () => null;`),
+  },
+);
+
+function Measured() {
+  useRenderCost("Home");
+  return createElement("text", null, "Home");
+}
+
+const measured = createElement(Measured);
+const shell = (mode: "visible" | "hidden", children: ReactNode = measured) =>
+  createElement(Activity, { mode } as ComponentProps<typeof Activity>, children);
+
+test("a render is reported once, from its own commit", async () => {
+  spans().length = 0;
+  let renderer: ReactTestRenderer | undefined;
+  await act(() => {
+    renderer = create(shell("visible"));
+  });
+  try {
+    assert.deepEqual(spans(), ["Home"]);
+    await act(() => renderer!.update(shell("visible", createElement(Measured))));
+    assert.deepEqual(spans(), ["Home", "Home"], "a new render reports again");
+  } finally {
+    await act(() => renderer?.unmount());
+  }
+});
+
+test("a hidden screen shown again without rendering reports no span", async () => {
+  spans().length = 0;
+  let renderer: ReactTestRenderer | undefined;
+  await act(() => {
+    renderer = create(shell("visible"));
+  });
+  try {
+    spans().length = 0;
+    // The same element: React shows it again without rendering it, but re-runs its layout effects.
+    await act(() => renderer!.update(shell("hidden")));
+    await act(() => renderer!.update(shell("visible")));
+    assert.deepEqual(spans(), []);
+  } finally {
+    await act(() => renderer?.unmount());
+  }
+});
