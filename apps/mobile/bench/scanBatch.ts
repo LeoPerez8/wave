@@ -1,7 +1,7 @@
 /**
  * A scan's JavaScript work (#315): one scanner batch of new files saved in
  * one transaction (as before) against the same files saved in slices of
- * `SCAN_SAVE_SLICE` (one per free turn now), the startup scan's first read
+ * `SCAN_SAVE_SLICE` (100 files, one transaction per free turn), the startup scan's first read
  * (`selectKnownFiles`, every indexed file), and the whole-Library link a
  * scan's end ran every time (`linkPlaylistEntries`) against the revision
  * read that now decides whether it runs. Prints each step's median time; for

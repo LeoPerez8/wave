@@ -177,6 +177,31 @@ describe("a long task names the screen or section rendering in it", () => {
     assert.deepEqual(lines, ["JS blocked 310 ms on / by rendering Home"]);
   });
 
+  test("of sibling renders, the one that held most of it names it", () => {
+    const { log, lines } = setup("/");
+    log.renderRan("Home", 1000, 100);
+    log.renderRan("Settings", 1100, 60);
+    log.longTask(1000, 170);
+    assert.deepEqual(lines, ["JS blocked 170 ms on / by rendering Home"]);
+  });
+
+  test("a section beside its screen's render, not inside it, doesn't name it", () => {
+    const { log, lines } = setup("/");
+    log.renderRan("HomeSection(recent)", 900, 160);
+    log.renderRan("Home", 1000, 150);
+    log.longTask(1000, 160);
+    assert.deepEqual(lines, ["JS blocked 160 ms on / by rendering Home"]);
+  });
+
+  test("the render is weighed against the slice that held most of the task, not the latest", () => {
+    const { log, lines } = setup("/search");
+    log.sliceRan("scan", 1000, 45);
+    log.renderRan("Search", 1050, 40);
+    log.sliceRan("sync", 1150, 5);
+    log.longTask(1000, 170);
+    assert.deepEqual(lines, ["JS blocked 170 ms on /search by scan"]);
+  });
+
   test("a render that holds more of the task than a slice beats the slice", () => {
     const { log, lines } = setup("/search");
     log.sliceRan("scan", 1100, 7);
