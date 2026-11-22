@@ -15,8 +15,9 @@ import type { WaveBridge } from "../src/shared/bridge.ts";
 
 /**
  * A playlist's, an artist's and a genre's songs sort from their headers: a playlist keeps its
- * own sort and offers Move Up and Move Down only in Custom, an artist's songs sort by Popular,
- * and Play starts the queue in the order shown.
+ * own sort and offers Move Up and Move Down only in Custom, an artist's page lists their first
+ * songs by Popular while their Songs view sorts them all, and Play starts the queue in the order
+ * shown.
  */
 const appFolder = join(import.meta.dirname, "..");
 const text = catalogueOf("en", "desktop");
@@ -74,12 +75,13 @@ test("playlist, artist and genre pages sort their songs and play in the order sh
           album: string,
           added: number,
           year?: number,
+          genre = "Jazz",
         ) => {
           const id = addTrack(db, {
             title,
             artist,
             album,
-            genre: "Jazz",
+            genre,
             durationMs: MS,
             addedAt: Date.UTC(2024, added, 10, 12),
             ...(year === undefined ? {} : { year }),
@@ -94,6 +96,9 @@ test("playlist, artist and genre pages sort their songs and play in the order sh
           song("Cherry", "Amy", "Two", 1, 1990),
           song("Apple", "Zed", "Three", 2),
         ];
+        // Zed's songs past the artist page's first five, in a genre of their own.
+        for (const [index, title] of ["Fig", "Grape", "Kiwi", "Lemon"].entries())
+          song(title, "Zed", "Four", 3 + index, undefined, "Folk");
         const library = db as unknown as LibraryDatabase;
         createPlaylist(library, "Fruit", entries, 1);
         createPlaylist(library, "Other", entries, 2);
@@ -144,6 +149,15 @@ test("playlist, artist and genre pages sort their songs and play in the order sh
     const sort = (name: string) => header(name).getByRole("button");
     const play = () =>
       page.getByTestId("hero").getByRole("button", { name: "Play", exact: true }).click();
+    // An artist's Songs view has its Play under its heading.
+    const playSongs = () =>
+      page.locator(".page-heading").getByRole("button", { name: "Play", exact: true }).click();
+    const zedSongs = ["Fig", "Grape", "Kiwi", "Lemon"];
+    const seeMore = () =>
+      page
+        .getByTestId("artist-page")
+        .getByRole("button", { name: text.library.seeMore, exact: true })
+        .click();
     const menuHas = async (row: number, name: string) => {
       await title(row).click({ button: "right" });
       await expect(page.getByRole("menu")).toBeVisible();
@@ -207,34 +221,40 @@ test("playlist, artist and genre pages sort their songs and play in the order sh
     });
     expect(refused).toEqual(["refused", "refused", "refused"]);
 
-    // An artist's songs open by Popular: with Online, one list in YouTube Music's order under
-    // the table's header, which sorts it back into the Library's table.
+    // An artist's page lists their first five songs by Popular, YouTube Music's order first, and
+    // Play plays them all in that order.
     await open("Artists");
     await page.getByRole("row", { name: /Zed/ }).dblclick();
     const popular = page.getByRole("list", { name: "Popular" }).getByRole("listitem");
-    await expect(popular).toHaveText([/Banana/, /Apple/]);
-    await expect(header("Popular")).toHaveAttribute("aria-sort", "ascending");
+    await expect(popular).toHaveCount(5);
+    await expect(popular.first()).toHaveText(/Banana/);
     await play();
-    await expect.poll(() => queue(page)).toEqual(["Banana", "Apple"]);
+    await expect.poll(async () => (await queue(page)).length).toBe(6);
+    expect((await queue(page))[0]).toBe("Banana");
     await page.screenshot({
       path: join(appFolder, "test-results", `page-sort-artist-popular-${process.platform}.png`),
     });
+    // Their Songs view opens by Popular too: with Online, one list in YouTube Music's order under
+    // the table's header, which sorts it back into the Library's table.
+    await seeMore();
+    await expect(popular).toHaveCount(6);
+    await expect(header("Popular")).toHaveAttribute("aria-sort", "ascending");
     await sort("Title").click();
     await expect(popular).toHaveCount(0);
     await expect(title(0)).toBeVisible();
     await expect(title(0)).toHaveText("Apple");
     await expect(header("Title")).toHaveAttribute("aria-sort", "ascending");
     await expect(page.locator("#library-row-1 .order-column")).toHaveText("1");
-    await play();
-    await expect.poll(() => queue(page)).toEqual(["Apple", "Banana"]);
+    await playSongs();
+    await expect.poll(() => queue(page)).toEqual(["Apple", "Banana", ...zedSongs]);
     // With Library, Popular orders the Library's own songs by their ranks.
     await page.getByRole("button", { name: "Library", exact: true }).click();
     await sort("Popular").click();
     await expect(title(0)).toBeVisible();
     await expect(title(0)).toHaveText("Banana");
     await expect(page.locator("#library-row-0 .order-column")).toHaveText("1");
-    await play();
-    await expect.poll(() => queue(page)).toEqual(["Banana", "Apple"]);
+    await playSongs();
+    await expect.poll(async () => (await queue(page))[0]).toBe("Banana");
     await sort("Title").click();
     await expect(title(0)).toHaveText("Apple");
     await page.screenshot({
@@ -268,6 +288,7 @@ test("playlist, artist and genre pages sort their songs and play in the order sh
     await expect(header("Custom")).toHaveAttribute("aria-sort", "ascending");
     await open("Artists");
     await page.getByRole("row", { name: /Zed/ }).dblclick();
+    await seeMore();
     await expect(header("Title")).toHaveAttribute("aria-sort", "ascending");
     await expect(title(0)).toHaveText("Apple");
     await open("Genres");
