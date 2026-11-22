@@ -13,6 +13,7 @@ import * as Effect from "effect/Effect";
 import { AppState, type GestureResponderEvent } from "react-native";
 
 import { appLog } from "@/log/appLog";
+import { runLibraryWritesWith } from "@/library/libraryWrites";
 import {
   isScreenSettled,
   onScreenSettled,
@@ -90,6 +91,8 @@ export const renderRan = (name: string, startedAt: number, durationMs: number): 
 // An off-thread read's replay builds its queries and maps its rows on the JS thread, in passes
 // and in steps of 8 ms that yield to a new task between them (#1435); each is named here.
 runReplayPassesWith((run) => inSlice("Library read replay", run));
+// A Library write holds the JS thread for its whole transaction: a long one names itself.
+runLibraryWritesWith((operation, run) => inSlice(`Library write: ${operation}`, run));
 
 /**
  * Runs [run], [name]'s asynchronous work, saying to the block log that it runs until its promise
@@ -216,16 +219,17 @@ let startupStarted = 0;
 
 /**
  * Startup starts keep their registration order, after global settlement and quiet frames. A
- * block in a start, or in the work it leaves running, names it as "startup <name>" (#1434).
+ * block in a start, or in the work it leaves running, names it as "startup <name>" (#1434), or
+ * just <name> when its turn came long after startup (Core's `startupWork`, #1432).
  */
 export const afterFirstSettled = (name: string, start: () => void): (() => void) =>
-  startupWork.whenFree(
-    named(`startup ${name}`, () => {
-      startupStarted++;
-      perfMark("startup.started", name);
-      inSlice(`startup ${name}`, start);
-    }),
-  );
+  startupWork.whenFree(() => {
+    const work = blocks.startupWork(name, performance.now());
+    workTurnTaken(work);
+    startupStarted++;
+    perfMark("startup.started", name);
+    inSlice(work, start);
+  });
 
 let contentSeen = false;
 

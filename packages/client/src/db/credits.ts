@@ -8,7 +8,13 @@
  * `album_artist_id` hold the primary (first) one. Kept free of Expo so the
  * store tests run it against a real SQLite.
  */
-import { creditSplitter, identityKey, respreadDeletedSongs, sortKey } from "@wave/core";
+import {
+  creditSplitter,
+  creditSplitterSteps,
+  identityKey,
+  respreadDeletedSongs,
+  sortKey,
+} from "@wave/core";
 import { sql } from "drizzle-orm";
 
 import { refreshArtistImages } from "./artists.ts";
@@ -88,6 +94,117 @@ const unread: Splitter = () => {
 export const creditSplits = (
   build: (knownCredits: Iterable<string>) => Splitter = creditSplitter,
 ): CreditSplits => ({ known: null, split: unread, stale: true, build });
+
+/**
+ * What a scan reads ahead of its first save (`warmCreditSplitsSteps`): the
+ * Library's whole credits, each track's and album's credit, its artists, and
+ * how tracks and albums are filed under them. Plain rows, so the read can
+ * leave the JS thread.
+ */
+export interface LibraryCreditsRead {
+  readonly credits: readonly { readonly credit: string; readonly stored: string | null }[];
+  readonly rows: readonly {
+    readonly kind: CreditRow["kind"];
+    readonly id: number;
+    readonly credit: string;
+    readonly stored: string | null;
+  }[];
+  readonly artists: readonly { readonly id: number; readonly key: string; readonly name: string }[];
+  readonly trackLinks: readonly { readonly owner: number; readonly artist: number }[];
+  readonly albumLinks: readonly { readonly owner: number; readonly artist: number }[];
+}
+
+const linkRows = (db: LibraryDatabase, table: LinkTable) =>
+  db.all<{ owner: number; artist: number }>(
+    sql`SELECT ${sql.raw(table.owner)} AS "owner", artist_id AS "artist" FROM ${sql.raw(table.links)}
+      ORDER BY ${sql.raw(table.owner)}, position`,
+  );
+
+/** What `warmCreditSplitsSteps` works from. */
+export const readLibraryCredits = (db: LibraryDatabase): LibraryCreditsRead => ({
+  credits: db.all<{ credit: string; stored: string | null }>(
+    sql`SELECT DISTINCT artist_credit AS "credit", artist_credits AS "stored" FROM tracks
+      UNION SELECT album_artist_credit, album_artist_credits FROM albums`,
+  ),
+  rows: db.all<{ kind: CreditRow["kind"]; id: number; credit: string; stored: string | null }>(
+    SELECT_CREDITS,
+  ),
+  artists: db.all<{ id: number; key: string; name: string }>(
+    sql`SELECT id AS "id", key AS "key", name AS "name" FROM artists`,
+  ),
+  trackLinks: linkRows(db, TRACKS),
+  albumLinks: linkRows(db, ALBUMS),
+});
+
+/** [rows] (in credit order) by what they file, a step per row. */
+function* linksByOwner(
+  rows: LibraryCreditsRead["trackLinks"],
+): Generator<void, Map<number, number[]>> {
+  const links = new Map<number, number[]>();
+  for (const { owner, artist } of rows) {
+    const artists = links.get(owner);
+    if (artists === undefined) links.set(owner, [artist]);
+    else artists.push(artist);
+    yield;
+  }
+  return links;
+}
+
+/**
+ * Whether every track and album of [read] is filed as [split] files it, under
+ * artists named as `relinkCredits` would name them: then it has nothing to
+ * re-file. A step per track or album.
+ */
+function* filedAsSplit(read: LibraryCreditsRead, split: Splitter): Generator<void, boolean> {
+  const artists = new Map(read.artists.map((artist) => [artist.key, artist] as const));
+  const tracks = yield* linksByOwner(read.trackLinks);
+  const albums = yield* linksByOwner(read.albumLinks);
+  // The name each artist is given: the first credit naming it, as `creditArtists` names it.
+  const named = new Set<string>();
+  for (const row of read.rows) {
+    const ids: number[] = [];
+    for (const name of split(readCredits(row.credit, row.stored))) {
+      const key = identityKey(name);
+      const artist = artists.get(key);
+      if (artist === undefined) return false;
+      if (!named.has(key)) {
+        if (artist.name !== name) return false;
+        named.add(key);
+      }
+      ids.push(artist.id);
+    }
+    if (ids.length > 0 && !sameArtists((row.kind === "track" ? tracks : albums).get(row.id), ids))
+      return false;
+    yield;
+  }
+  return true;
+}
+
+/**
+ * Builds [splits]' splitter from the Library's credits ([read],
+ * `readLibraryCredits`) a step at a time, so a scan's first save doesn't
+ * build it in one hold, and finds whether the Library is already filed as it
+ * splits: then the scan's end has nothing to re-file (`relinkCredits`).
+ * Leaves [splits] as it is when a save read the credits first.
+ */
+export function* warmCreditSplitsSteps(
+  splits: CreditSplits,
+  read: LibraryCreditsRead,
+): Generator<void, void> {
+  if (splits.known !== null) return;
+  const credits = new Set<string>();
+  for (const { credit, stored } of read.credits) {
+    for (const each of readCredits(credit, stored)) credits.add(each);
+    yield;
+  }
+  const split =
+    splits.build === creditSplitter ? yield* creditSplitterSteps(credits) : splits.build(credits);
+  const filed = yield* filedAsSplit(read, split);
+  if (splits.known !== null) return;
+  splits.known = credits;
+  splits.split = split;
+  if (filed) splits.stale = false;
+}
 
 /** The splitter for [credits]: the Library's whole credits and theirs. */
 const splitterFor = (db: LibraryDatabase, splits: CreditSplits, credits: Credits): Splitter => {
@@ -229,30 +346,52 @@ const currentLinks = (
 const sameArtists = (a: readonly number[] | undefined, b: readonly number[]): boolean =>
   a !== undefined && a.length === b.length && a.every((id, i) => id === b[i]);
 
-/** Rewrites the links (and primary artist) of each of [links] that changed. */
+/**
+ * Rewrites the links (and primary artist) of each of [links] that changed, a
+ * few statements for them all rather than three each: a scan's save slice
+ * files a hundred new tracks, and each statement costs the JS thread its own
+ * round trip (#1436).
+ */
 const writeLinks = (
   db: LibraryDatabase,
   table: LinkTable,
   links: readonly CreditLink[],
   current: ReadonlyMap<number, readonly number[]>,
 ): void => {
+  // The last link given for an id is the one it keeps.
+  const changed = new Map<number, readonly number[]>();
+  for (const link of links) {
+    if (link.artistIds.length === 0 || sameArtists(current.get(link.id), link.artistIds)) continue;
+    changed.delete(link.id);
+    changed.set(link.id, link.artistIds);
+  }
+  if (changed.size === 0) return;
   const linkTable = sql.raw(table.links);
   const owner = sql.raw(table.owner);
-  for (const link of links) {
-    const [primary] = link.artistIds;
-    if (primary === undefined || sameArtists(current.get(link.id), link.artistIds)) continue;
-    db.run(sql`DELETE FROM ${linkTable} WHERE ${owner} = ${link.id}`);
+  for (const ids of chunks([...changed.keys()]))
     db.run(
-      sql`INSERT INTO ${linkTable} (${owner}, artist_id, position) VALUES ${sql.join(
-        link.artistIds.map((artist, position) => sql`(${link.id}, ${artist}, ${position})`),
+      sql`DELETE FROM ${linkTable} WHERE ${owner} IN (${sql.join(
+        ids.map((id) => sql`${id}`),
         sql`, `,
-      )}`,
+      )})`,
     );
+  const rows = [...changed].flatMap(([id, artists]) =>
+    artists.map((artist, position) => sql`(${id}, ${artist}, ${position})`),
+  );
+  for (const chunk of chunks(rows, ROWS_PER_STATEMENT))
     db.run(
-      sql`UPDATE ${sql.raw(table.table)} SET ${sql.raw(table.primary)} = ${primary}
-        WHERE id = ${link.id}`,
+      sql`INSERT INTO ${linkTable} (${owner}, artist_id, position) VALUES ${sql.join(chunk, sql`, `)}`,
     );
-  }
+  for (const chunk of chunks([...changed], ROWS_PER_STATEMENT))
+    db.run(
+      sql`UPDATE ${sql.raw(table.table)} SET ${sql.raw(table.primary)} = CASE id ${sql.join(
+        chunk.map(([id, artists]) => sql`WHEN ${id} THEN ${artists[0]}`),
+        sql` `,
+      )} END WHERE id IN (${sql.join(
+        chunk.map(([id]) => sql`${id}`),
+        sql`, `,
+      )})`,
+    );
 };
 
 /** Files tracks under their credited artists ([links]); the first is the primary artist. */

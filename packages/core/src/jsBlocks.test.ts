@@ -357,3 +357,81 @@ describe("a long task that spans Wave leaving the screen is a pause, not a block
     assert.equal(lines.length, 1);
   });
 });
+
+describe("a block is logged once, however many slices ran before its long task came (#1432)", () => {
+  /** Short slices from [at] on, more than any fixed count of kept slices. */
+  const manySlices = (log: ReturnType<typeof setup>["log"], at: number) => {
+    for (let i = 0; i < 40; i++) log.sliceRan("Library finder", at + i * 9, 6);
+  };
+
+  test("a logged slice's long task, reported after many other slices, adds no line", () => {
+    const { log, lines } = setup();
+    log.sliceRan("kept play totals", 1000, 117);
+    manySlices(log, 1120);
+    log.longTask(999, 118);
+    assert.deepEqual(lines, ["JS blocked 117 ms on /search by kept play totals"]);
+  });
+
+  test("nor does a turn's work give it a second line of the same name", () => {
+    const { log, lines } = setup();
+    log.turnTaken("startup downloads", 990);
+    log.sliceRan("startup downloads", 1000, 268);
+    manySlices(log, 1270);
+    log.longTask(998, 270);
+    assert.deepEqual(lines, ["JS blocked 268 ms on /search by startup downloads"]);
+  });
+
+  test("a short slice still names its long task after many other slices", () => {
+    const { log, lines } = setup();
+    log.sliceRan("scan", 2000, 7);
+    manySlices(log, 2100);
+    log.longTask(1990, 80);
+    assert.deepEqual(lines, ["JS blocked 80 ms on /search by scan"]);
+  });
+
+  test("a paused slice's long task, judged after many other slices, adds no line", () => {
+    const lines: string[] = [];
+    const timers: (() => void)[] = [];
+    const log = createJsBlockLog({
+      write: (line) => lines.push(line),
+      screen: () => "/library/songs",
+      later: (_ms, run) => timers.push(run),
+    });
+    log.firstSettled(0);
+    log.sliceRan("Home mix inputs", 1000, 135);
+    log.left(1200);
+    log.longTask(998, 138);
+    manySlices(log, 1210);
+    log.returned(40_000);
+    for (const timer of timers.splice(0)) timer();
+    assert.deepEqual(lines, [
+      "JS paused 135 ms on /library/songs (Wave left the screen meanwhile); not a block",
+    ]);
+  });
+});
+
+describe("only work started during startup is named as startup's (#1432)", () => {
+  test("a startup piece that gets its turn soon after the first screen settled is startup's", () => {
+    const { log } = setup();
+    assert.equal(log.startupWork("downloads", 4000), "startup downloads");
+  });
+
+  test("one whose turn comes before the first screen settled is startup's too", () => {
+    const log = createJsBlockLog({ write: () => {}, screen: () => "/" });
+    assert.equal(log.startupWork("backgroundFill", 90_000), "startup backgroundFill");
+  });
+
+  test("one whose turn comes minutes later goes by its own name", () => {
+    const { log } = setup();
+    assert.equal(log.startupWork("downloads", 5 * 60_000), "downloads");
+    assert.equal(log.startupWork("backgroundFill", 5 * 60_000), "backgroundFill");
+  });
+
+  test("its blocks then say so", () => {
+    const { log, lines } = setup();
+    const name = log.startupWork("downloads", 300_000);
+    log.turnTaken(name, 300_000);
+    log.longTask(300_100, 268);
+    assert.deepEqual(lines, ["JS blocked 268 ms on /search by downloads"]);
+  });
+});

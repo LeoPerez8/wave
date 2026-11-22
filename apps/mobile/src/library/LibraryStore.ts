@@ -19,7 +19,6 @@ import {
   removeExcludedFolder,
   clearRecentSearches,
   albumsByIds,
-  linkEntries,
 } from "@wave/client/db/libraryQueries";
 import {
   songHasFile,
@@ -298,7 +297,12 @@ import {
   type LibraryCounts,
   type LibraryScale,
 } from "@wave/client/db/counts";
-import { creditSplits, relinkCreditsIfUnlinked } from "@wave/client/db/credits";
+import {
+  creditSplits,
+  readLibraryCredits,
+  relinkCreditsIfUnlinked,
+  warmCreditSplitsSteps,
+} from "@wave/client/db/credits";
 import {
   selectGenreOpening,
   selectGenreOrderSlice,
@@ -367,6 +371,10 @@ import {
   selectPlaylistEntries,
   selectPlaylistGraveyard,
   selectPlaylistEntriesRevision,
+  linkPlaylistEntries,
+  playlistLinkSteps,
+  readPlaylistLinks,
+  writePlaylistLinks,
   selectPlaylistEntrySongs,
   selectPlaylistEntryVideoIdsPage,
   selectPlaylistEntryVideoIds,
@@ -402,6 +410,7 @@ import {
   type SavedLyricsCandidate,
 } from "@wave/client/db/savedLyrics";
 import { notifyLyricsSearchIndexChanged } from "./lyricsSearchVersion";
+import { runLibraryWrite } from "./libraryWrites";
 import {
   rememberNoBetterCopies,
   replaceTrackFile,
@@ -592,6 +601,11 @@ export class LibraryStore extends Context.Service<
      * when it ends. Returns how many entries it changed.
      */
     readonly linkPlaylistEntries: Effect.Effect<number, LibraryStoreError>;
+    /**
+     * Reads the Library's credits off the JS thread and builds their splitter in steps, so
+     * a scan's first save doesn't (#1436); nothing once a save has.
+     */
+    readonly warmCreditSplits: Effect.Effect<void, LibraryStoreError>;
     /** Rises whenever playlists' entries are written: whether a link has new entries to see. */
     readonly playlistEntriesRevision: Effect.Effect<number, LibraryStoreError>;
     /** Whether one of [roots] has never finished a scan (Core's `scanEnd` `firstScan`). */
@@ -1599,8 +1613,12 @@ export class LibraryStore extends Context.Service<
  */
 const KEPT_TOTALS_STEP = { songs: 2, plays: 250, days: 24 };
 
+/** A synchronous write on the JS thread, named for the block log (`runLibraryWrite`). */
 const writeAttempt = <A>(operation: string, run: () => A): Effect.Effect<A, LibraryStoreError> =>
-  Effect.try({ try: run, catch: (cause) => new LibraryStoreError({ operation, cause }) });
+  Effect.try({
+    try: () => runLibraryWrite(operation, run),
+    catch: (cause) => new LibraryStoreError({ operation, cause }),
+  });
 
 const now = () => performance.now();
 
@@ -1810,10 +1828,39 @@ const make = Effect.gen(function* () {
         saveBatch(db, splits, tracks, artworkRows, moves, Date.now(), options),
       ).pipe(Effect.tap(() => Effect.sync(() => publishSavedRecordings(tracks)))),
 
-    linkPlaylistEntries: writeAttempt("link playlist entries", () => linkEntries(db, Date.now())),
+    // The whole Library's link reads off the JS thread and matches in steps; its write runs the
+    // whole link again only if playlists' entries changed in between (#1436).
+    linkPlaylistEntries: Effect.gen(function* () {
+      const revision = yield* attempt("read the playlists' revision", (db) =>
+        selectPlaylistEntriesRevision(db),
+      );
+      const found = yield* attemptStepped(
+        "read playlist entries to link",
+        (db) => readPlaylistLinks(db),
+        playlistLinkSteps,
+        ({ links, drops }) => links.length + drops.length,
+      );
+      return yield* writeAttempt("link playlist entries", () =>
+        db.transaction((tx) =>
+          selectPlaylistEntriesRevision(tx) === revision
+            ? writePlaylistLinks(tx, Date.now(), found)
+            : linkPlaylistEntries(tx, Date.now()),
+        ),
+      );
+    }),
 
     playlistEntriesRevision: attempt("read the playlists' revision", (db) =>
       selectPlaylistEntriesRevision(db),
+    ),
+
+    warmCreditSplits: Effect.suspend(() =>
+      splits.known !== null
+        ? Effect.void
+        : attemptStepped(
+            "read the Library's credits",
+            (db) => readLibraryCredits(db),
+            (credits) => warmCreditSplitsSteps(splits, credits),
+          ),
     ),
 
     hasUnscannedRoot: (roots) =>

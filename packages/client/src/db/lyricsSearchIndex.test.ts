@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
 import { normalizeTrack } from "@wave/core";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 
 import type { IndexedTrack } from "../types.ts";
 import { creditSplits } from "./credits.ts";
@@ -120,6 +120,19 @@ describe("local lyrics search index", () => {
     deleteTracksById(db, [id]);
     assert.equal(selectLyricsSearchText(db, id), null);
     assert.deepEqual(selectLyricsCandidates(db, "new phrase"), []);
+  });
+
+  test("a rescan of a file whose lyrics didn't change leaves its index rows untouched", () => {
+    const id = saveTrack("Same");
+    const lyrics = "Every word of a long verse\nand the chorus again";
+    keepLyricsSearchText(db, id, lyrics);
+    const changes = () => db.get<{ n: number }>(sql`SELECT total_changes() AS n`).n;
+    const before = changes();
+
+    keepLyricsSearchText(db, id, `${lyrics}\n`);
+
+    assert.equal(changes(), before);
+    assert.deepEqual(selectLyricsCandidates(db, "long verse"), [{ trackId: id, lyrics }]);
   });
 
   test("lyrics stay indexed across a database reopen", async () => {
