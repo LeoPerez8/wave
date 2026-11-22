@@ -1144,6 +1144,10 @@ export const OWN_DEFERRALS: Record<string, { readonly reason: string }> = {
     reason:
       "Coalesces a list's download progress into one update per microtask for its rows: UI state, no work of its own.",
   },
+  "@wave/client/db/offThreadReads.ts": {
+    reason:
+      "A Library read's replay yields a new task between its 8 ms steps of mapping rows (#1435): a screen waits for the read, so it gives frames and touches their turn without queuing behind background work.",
+  },
   "@wave/client/db/matchingSong.ts": {
     reason:
       "The one-time recording-title backfill the Library store starts; its turn moves to the scheduler with the store's asynchronous reads (#1348), which own that file's caller.",
