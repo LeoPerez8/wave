@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { createJsBlockLog } from "./index.ts";
+import { PAUSE_HEARD_MS, createJsBlockLog } from "./index.ts";
 
 const setup = (screen: string | null = "/search") => {
   const lines: string[] = [];
@@ -222,5 +222,98 @@ describe("a long task names the screen or section rendering in it", () => {
     const { log, lines } = setup("/");
     log.renderRan("Home", 1000, 400);
     assert.deepEqual(lines, []);
+  });
+});
+
+describe("a long task that spans Wave leaving the screen is a pause, not a block (#1446)", () => {
+  /** A block log whose judgments wait on a timer the test runs by hand. */
+  const paused = (screen: string | null = "/") => {
+    const lines: string[] = [];
+    const timers: (() => void)[] = [];
+    let shown = screen;
+    const log = createJsBlockLog({
+      write: (line) => lines.push(line),
+      screen: () => shown,
+      later: (ms, run) => {
+        assert.equal(ms, PAUSE_HEARD_MS);
+        timers.push(run);
+      },
+    });
+    log.firstSettled(0);
+    const run = () => {
+      for (const timer of timers.splice(0)) timer();
+    };
+    return { log, lines, run, show: (next: string | null) => (shown = next) };
+  };
+
+  test("a task held across a trip to the background, heard once it ended, is marked paused", () => {
+    const { log, lines, run } = paused("/");
+    log.turnTaken("Home mix inputs", 1000);
+    // Wave left at about 1100 and came back 42 s later; JS hears both only after the task.
+    log.left(43_810);
+    log.returned(43_812);
+    log.longTask(1000, 42_800);
+    run();
+    assert.deepEqual(lines, [
+      "JS paused 42.8 s on / (Wave left the screen meanwhile); not a block",
+    ]);
+  });
+
+  test("the app state heard after the long task's report, within the grace, still marks it", () => {
+    const { log, lines, run } = paused("/");
+    log.longTask(1000, 7300);
+    log.left(8310);
+    log.returned(8320);
+    run();
+    assert.deepEqual(lines, ["JS paused 7.3 s on / (Wave left the screen meanwhile); not a block"]);
+  });
+
+  test("a task that began in the background and ended after the return is marked paused", () => {
+    const { log, lines, run } = paused("/");
+    log.left(500);
+    log.longTask(1000, 5000);
+    log.returned(6010);
+    run();
+    assert.deepEqual(lines, ["JS paused 5.0 s on / (Wave left the screen meanwhile); not a block"]);
+  });
+
+  test("a block with Wave on screen throughout is written as before, once the grace passed", () => {
+    const { log, lines, run } = paused("/search");
+    log.left(100);
+    log.returned(200);
+    log.sliceRan("scan", 1000, 7);
+    log.longTask(1000, 300);
+    assert.deepEqual(lines, []);
+    // Leaving well after the block ended doesn't make it a pause.
+    log.left(1300 + PAUSE_HEARD_MS + 1);
+    run();
+    assert.deepEqual(lines, ["JS blocked 300 ms on /search by scan"]);
+  });
+
+  test("the block names the screen shown when it was reported, not when it was judged", () => {
+    const { log, lines, run, show } = paused("/search");
+    log.longTask(1000, 120);
+    show("/library");
+    run();
+    assert.deepEqual(lines, ["JS blocked 120 ms on /search by no background work"]);
+  });
+
+  test("a slice over 50 ms that spans a pause is marked paused too", () => {
+    const { log, lines, run } = paused("/");
+    log.sliceRan("scan", 1000, 7300);
+    log.left(8310);
+    log.returned(8320);
+    run();
+    assert.deepEqual(lines, ["JS paused 7.3 s on / (Wave left the screen meanwhile); not a block"]);
+  });
+
+  test("its long task then adds no line of its own", () => {
+    const { log, lines, run } = paused("/");
+    log.sliceRan("scan", 1000, 7300);
+    log.left(8310);
+    log.returned(8320);
+    log.longTask(995, 7310);
+    run();
+    assert.equal(lines.length, 1);
   });
 });

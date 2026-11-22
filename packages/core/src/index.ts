@@ -944,7 +944,14 @@ export type {
   LibraryReads,
 } from "./libraryQueries.ts";
 export { BACKGROUND_WORK_LIMITS, createBackgroundWork, runStepSlice } from "./backgroundWork.ts";
-export { JS_BLOCK_MS, TURN_WORK_MS, createJsBlockLog, jsBlockLine } from "./jsBlocks.ts";
+export {
+  JS_BLOCK_MS,
+  PAUSE_HEARD_MS,
+  TURN_WORK_MS,
+  createJsBlockLog,
+  jsBlockLine,
+  jsPausedLine,
+} from "./jsBlocks.ts";
 export type { JsBlockLog, JsBlockLogPorts } from "./jsBlocks.ts";
 export type {
   BackgroundWork,
@@ -1771,6 +1778,8 @@ export {
   fillPauseLine,
   nextFillStep,
   indexFillPlaylists,
+  indexFillPlaylistsSteps,
+  type FillPlaylistsIndex,
 } from "./backgroundFill.ts";
 export type {
   BackgroundFill,
@@ -2803,6 +2812,9 @@ export {
   timingDuration,
   timingBudgetExceeded,
   slowTapLine,
+  TAP_BLOCKS_WAIT_MS,
+  createSlowTapLines,
+  type SlowTapLines,
   slowScreenLine,
   speedSummaryLine,
   type TimingKind,

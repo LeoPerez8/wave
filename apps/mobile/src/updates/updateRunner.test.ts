@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import * as Effect from "effect/Effect";
 
-import type { NativeUpdate } from "@wave/core";
+import { formatLogEntry, type NativeUpdate } from "@wave/core";
 
 import { createUpdateRunner, type UpdateClient, type UpdateSurroundings } from "./updateRunner.ts";
 
@@ -85,6 +85,18 @@ const setup = ({
 
 const failing = Effect.fail(new Error("offline"));
 const found: UpdateClient["check"] = Effect.succeed(true);
+
+/** How Expo's native call fails offline, reaching the runner through `Effect.tryPromise`. */
+const unreachable = Effect.tryPromise(() =>
+  Promise.reject(
+    Object.assign(
+      new Error(
+        "Call to function 'ExpoUpdates.checkForUpdateAsync' has been rejected.\n→ Caused by: java.net.UnknownHostException: Unable to resolve host \"updates.example\"?token=abc123",
+      ),
+      { code: "ERR_UPDATES_CHECK" },
+    ),
+  ),
+);
 
 describe("the update runner", () => {
   it("checks, downloads what it found, and holds it while Wave is visible", async () => {
@@ -177,6 +189,25 @@ describe("the update runner", () => {
     assert.ok(
       logged.some(({ level, message }) => level === "warn" && /check failed/i.test(message)),
     );
+  });
+
+  it("names why a check or an APK check failed, past Effect's wrapper, redacted as every line is", async () => {
+    const { runner, logged, settle } = setup({ check: unreachable, checkNative: unreachable });
+    runner.reconsider();
+    await settle();
+    const warned = logged
+      .filter(({ level }) => level === "warn")
+      .map(({ message }) =>
+        formatLogEntry({ at: 0, level: "warn", tag: "WaveUpdates", message }).slice(25, -1),
+      );
+    assert.ok(warned.length > 0);
+    for (const line of warned) {
+      assert.doesNotMatch(line, /Effect\.tryPromise/);
+      assert.match(
+        line,
+        /failed: java\.net\.UnknownHostException: Unable to resolve host "updates\.example"\?token=\[redacted\]$/,
+      );
+    }
   });
 
   it("finds a failed download again at the next check", async () => {

@@ -8,7 +8,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import { freeTurnEffect } from "@/lib/backgroundWork";
-import { runSteps } from "@/lib/stepped";
+import { namedWork, runSteps } from "@/lib/stepped";
 import { libraryListQueries } from "@/library/hooks";
 import { libraryVersion } from "@/library/LibraryScan";
 import type { SongRow } from "@wave/client";
@@ -69,6 +69,19 @@ export const libraryFinderOver = (songs: readonly SongRow[]): FindInLibrary => f
 
 /** A finder current with the Library: at once when one was read at this Library version, else after a read. */
 export const currentLibraryFinder = (): Promise<FindInLibrary> => finders.current();
+
+/**
+ * `currentLibraryFinder` for background work (#1453): the finder is built in slices on [name]'s
+ * free turns before it's handed back, where its first use would build it over the whole Library
+ * at once (a downloads' resume at startup held the thread this way).
+ */
+export const currentLibraryFinderInSlices = async (name: string): Promise<FindInLibrary> => {
+  const find = await finders.current();
+  const prepare = preparations.get(find);
+  if (prepare !== undefined)
+    await appRuntime.runPromise(runSteps(prepare(), freeTurnEffect).pipe(namedWork(name)));
+  return find;
+};
 
 /** The last finder built, unfollowed, or null before the Library was first read: for a row's render. */
 export const knownLibraryFinder = (): FindInLibrary | null => finders.known();

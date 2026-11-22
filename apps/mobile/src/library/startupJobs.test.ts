@@ -202,6 +202,7 @@ test("actual startup jobs cannot read before global settlement; navigation pause
       write: () => {},
       context: () => ({ background: [], offline: true }),
       build: () => ({ version: "test", commit: "test" }),
+      later: () => {},
     });
     const work = createStartupWork({
       now: () => now,
