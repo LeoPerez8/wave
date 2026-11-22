@@ -1,13 +1,17 @@
 import { countedGenreSongIds, readPlaylistYtSong } from "@wave/core";
 import {
-  albumPlayTotals,
-  artistPlayTotals,
+  albumPlayTotalsSteps,
+  artistPlayTotalsSteps,
+  finishSteps,
   mergeCountedPlays,
-  rankEntityPlays,
+  mergeCountedPlaysSteps,
+  rankEntityPlaysSteps,
   recentlyPlayedAlbums,
+  streamedCreditResolverSteps,
   sortKey,
   type ArtistFirstPlay,
   type ArtistStatsInput,
+  type CreditedPlayTotals,
   type EntityPlayTotals,
   type KeptSong,
   type KeptSongs,
@@ -18,13 +22,16 @@ import {
   type SongListening,
   type SongPlayTotals,
   type StatsWindow,
+  type YtAlbumSong,
 } from "@wave/core";
 import { sql } from "drizzle-orm";
 
 import type { AlbumRow, ArtistRow } from "../types.ts";
 import { selectAlbums } from "./albums.ts";
+import { selectArtists } from "./artists.ts";
 import { keptPlayedTotals, keptTotalsSettled } from "./keptPlayTotals.ts";
-import { playedLibrary } from "./playedLibrary.ts";
+import { readCredits } from "./credits.ts";
+import { libraryCreditRows, playedLibrary } from "./playedLibrary.ts";
 import * as schema from "./schema.ts";
 import type { LibraryDatabase } from "./database.ts";
 import {
@@ -146,7 +153,7 @@ const playedArtist = (
  * history while those still settle.
  */
 export const playedEntityTotals = (db: LibraryDatabase, window: StatsWindow): PlayedEntityTotals =>
-  keptPlayedTotals(db, window, true) ?? summedPlayedTotals(db, window, true);
+  finishSteps(playedTotalsSteps(playedTotalsRead(db, window, true)));
 
 /**
  * Each played artist's totals as `playedEntityTotals` counts them, without
@@ -156,7 +163,7 @@ export const playedArtistTotals = (
   db: LibraryDatabase,
   window: StatsWindow,
 ): readonly PlayedEntityTotal<PlayedArtist>[] =>
-  (keptPlayedTotals(db, window, false) ?? summedPlayedTotals(db, window, false)).artists;
+  finishSteps(playedTotalsSteps(playedTotalsRead(db, window, false))).artists;
 
 /**
  * Each album's and artist's totals over [window] summed from the plays, as
@@ -167,18 +174,109 @@ export const summedPlayedTotals = (
   db: LibraryDatabase,
   window: StatsWindow,
   withAlbums: boolean,
-): PlayedEntityTotals => {
+): PlayedEntityTotals => finishSteps(playedTotalsSteps(summedTotalsRows(db, window, withAlbums)));
+
+/**
+ * The rows the summed totals are worked out from (`summedPlayedTotals`):
+ * statements and their rows only, the working out left to `playedTotalsSteps`.
+ */
+export interface SummedTotalsRows {
+  readonly kept?: undefined;
+  readonly withAlbums: boolean;
+  /** The Library songs' plays, by album and credited artist. */
+  readonly credits: readonly CreditedPlayTotals[];
+  /** The streamed songs with counted plays in the window. */
+  readonly streams: readonly StreamedListeningTotal[];
+  /** Each of [streams]' songs, by video id. */
+  readonly songs: ReadonlyMap<string, YtAlbumSong>;
+  /** What the credit resolver matches against: the Library's artists, albums and stored credits. */
+  readonly artists: readonly ArtistRow[];
+  readonly albums: readonly AlbumRow[];
+  readonly creditRows: readonly { readonly credit: string; readonly stored: string | null }[];
+  /** Each album and credited artist of the Library songs [streams] count for. */
+  readonly links: readonly {
+    readonly id: number;
+    readonly albumId: number;
+    readonly artistId: number;
+  }[];
+}
+
+/**
+ * What `playedTotalsSteps` works the totals out from: the kept totals once
+ * they settle, else the rows to sum them from. A read for the read replay
+ * (`replayRead`), which callers may share: nothing that reads it changes it.
+ */
+export type PlayedTotalsRead = { readonly kept: PlayedEntityTotals } | SummedTotalsRows;
+
+/** Each album's and artist's totals over [window] as one read (`PlayedTotalsRead`). */
+export const playedTotalsRead = (
+  db: LibraryDatabase,
+  window: StatsWindow,
+  withAlbums: boolean,
+): PlayedTotalsRead => {
+  const kept = keptPlayedTotals(db, window, withAlbums);
+  return kept === null ? summedTotalsRows(db, window, withAlbums) : { kept };
+};
+
+const summedTotalsRows = (
+  db: LibraryDatabase,
+  window: StatsWindow,
+  withAlbums: boolean,
+): SummedTotalsRows => {
   const credits = summedCreditedPlayTotals(db, window);
   const streams = streamedListeningTotals(db, window).filter((entry) => entry.countedPlays > 0);
   const songs = streamedSongsOf(
     db,
     streams.map((entry) => entry.videoId),
   );
-  const library = playedLibrary(db, songs.values(), withAlbums);
+  const artists = selectArtists(db, {});
+  const albums = withAlbums ? selectAlbums(db, undefined) : [];
+  const creditRows = libraryCreditRows(db);
+  // The Library songs streams count for, in the order Core's `mergeCountedPlays` keys them.
+  const tracks = new Set<number>();
+  for (const entry of streams) if (entry.trackId !== null) tracks.add(entry.trackId);
+  const links = db.all<{ id: number; albumId: number; artistId: number }>(
+    sql`
+    SELECT tracks.id, tracks.album_id AS "albumId", track_artists.artist_id AS "artistId"
+    FROM tracks JOIN track_artists ON track_artists.track_id = tracks.id
+    WHERE tracks.id IN (SELECT value FROM json_each(${JSON.stringify([...tracks])}))`,
+  );
+  return { withAlbums, credits, streams, songs, artists, albums, creditRows, links };
+};
+
+/**
+ * The album and artist totals from [read], worked out a step at a time: a
+ * step per stored credit, Library row, credited total, streamed song (each
+ * resolved on its own step) and ranked entry, so work that runs in slices
+ * (the read replay's) never sums the whole history at once. [read] is left as
+ * it is, for callers sharing one read.
+ */
+export function* playedTotalsSteps(read: PlayedTotalsRead): Generator<void, PlayedEntityTotals> {
+  if (read.kept !== undefined) return read.kept;
+  const { withAlbums, songs } = read;
+  const credits: string[] = [];
+  for (const { credit, stored } of read.creditRows) {
+    credits.push(...readCredits(credit, stored));
+    yield;
+  }
+  const library = yield* streamedCreditResolverSteps({
+    artists: read.artists,
+    albums: read.albums,
+    credits,
+    releases: songs.values(),
+  });
   const artists = new Map<number | string, PlayedEntityTotal<PlayedArtist>>();
   const albums = new Map<number | string, PlayedEntityTotal<PlayedAlbum>>();
-  const artistRows = new Map(library.artists.map((row) => [row.id, row]));
-  const albumRows = new Map(library.albums.map((row) => [row.id, row]));
+  const artistRows = new Map<number, ArtistRow>();
+  for (const row of read.artists) {
+    artistRows.set(row.id, row);
+    yield;
+  }
+  const albumRows = new Map<number, AlbumRow>();
+  for (const row of read.albums) {
+    albumRows.set(row.id, row);
+    yield;
+  }
   const add = <A extends { readonly id: number | string }>(
     entries: Map<number | string, PlayedEntityTotal<A>>,
     item: A | undefined,
@@ -197,23 +295,26 @@ export const summedPlayedTotals = (
       latestPlayAt: Math.max(previous?.latestPlayAt ?? 0, totals.latestPlayAt),
     });
   };
-  if (withAlbums)
-    for (const totals of albumPlayTotals(credits))
+  if (withAlbums) {
+    const albumTotals = yield* albumPlayTotalsSteps(read.credits);
+    for (const totals of albumTotals) {
       add(albums, albumRows.get(totals.id), totals.sortKey, totals);
-  for (const totals of artistPlayTotals(credits))
+      yield;
+    }
+  }
+  const artistTotals = yield* artistPlayTotalsSteps(read.credits);
+  for (const totals of artistTotals) {
     add(artists, artistRows.get(totals.id), totals.sortKey, totals);
+    yield;
+  }
   // Each song's streamed plays: a Library song's credit its artists and album, the rest as resolved.
-  const merged = mergeCountedPlays({ streamed: streams.map(countedSums) });
+  const merged = yield* mergeCountedPlaysSteps({ streamed: read.streams.map(countedSums) });
   const downloaded = new Map<number, { albumId: number; artistId: number }[]>();
-  for (const row of db.all<{ id: number; albumId: number; artistId: number }>(
-    sql`
-    SELECT tracks.id, tracks.album_id AS "albumId", track_artists.artist_id AS "artistId"
-    FROM tracks JOIN track_artists ON track_artists.track_id = tracks.id
-    WHERE tracks.id IN (SELECT value FROM json_each(${JSON.stringify([...merged.library.keys()])}))`,
-  )) {
+  for (const row of read.links) {
     const links = downloaded.get(row.id) ?? [];
     links.push(row);
     downloaded.set(row.id, links);
+    yield;
   }
   for (const [trackId, totals] of merged.library) {
     const links = downloaded.get(trackId) ?? [];
@@ -223,6 +324,7 @@ export const summedPlayedTotals = (
     }
     const album = links[0] === undefined ? undefined : albumRows.get(links[0].albumId);
     if (withAlbums) add(albums, album, album?.titleSort ?? "", totals);
+    yield;
   }
   for (const [videoId, totals] of merged.online) {
     const song = songs.get(videoId);
@@ -240,12 +342,13 @@ export const summedPlayedTotals = (
         sortKey(album.title),
         totals,
       );
+    yield;
   }
   return {
-    albums: rankEntityPlays([...albums.values()], Infinity),
-    artists: rankEntityPlays([...artists.values()], Infinity),
+    albums: yield* rankEntityPlaysSteps([...albums.values()], Infinity),
+    artists: yield* rankEntityPlaysSteps([...artists.values()], Infinity),
   };
-};
+}
 
 /**
  * What the owner keeps, for Core's `followSuggestions` to rank a light

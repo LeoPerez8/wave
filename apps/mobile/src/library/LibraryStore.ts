@@ -28,7 +28,12 @@ import {
   databaseLayer,
   type LibraryDatabase,
 } from "@wave/client";
-import { NotReplayable, sharedReplays, type ReplayedRead } from "@wave/client/db/offThreadReads";
+import {
+  finishReplaySteps,
+  NotReplayable,
+  sharedReplays,
+  type ReplayedRead,
+} from "@wave/client/db/offThreadReads";
 import { SyncLibraryReads } from "./syncLibraryReads.ts";
 import { sqliteDriverLayer } from "./sqliteDriver.ts";
 import { collaborationStore, type CollaborationStore } from "@/collaboration/collaborationStore";
@@ -106,8 +111,8 @@ import {
 } from "@wave/client/db/listDownloadMembers";
 import type { ListDownloadsScope } from "@wave/core";
 import {
-  playedEntityTotals,
-  playedArtistTotals,
+  playedTotalsRead,
+  playedTotalsSteps,
   playedArtistSongs,
   keptArtistSongs,
   streamedLibraryPlays,
@@ -241,6 +246,7 @@ import {
   type CatalogSong,
   type PlaylistFindText,
   type PlaylistRecommendationSlot,
+  finishSteps,
 } from "@wave/core";
 
 import * as Context from "effect/Context";
@@ -1637,6 +1643,28 @@ const make = Effect.gen(function* () {
     return replayed.value;
   };
 
+  // A read whose working out is Core's steps (#1451): off the thread, the statements
+  // replay, then the steps run in replay slices, so the work holds the thread no longer
+  // than its rows' mapping. On this connection, the read and its steps run whole.
+  const readSteppedOffThread = async <R, A>(
+    replay: NonNullable<typeof replays>,
+    operation: string,
+    read: (db: LibraryDatabase) => R,
+    steps: (read: R) => Generator<void, A>,
+    rows?: (result: A) => number,
+  ): Promise<A> => {
+    let replayed: ReplayedRead<R>;
+    try {
+      replayed = await replay(read);
+    } catch (cause) {
+      if (cause instanceof NotReplayable) readsHere(operation, cause);
+      return readHere(operation, (here) => finishSteps(steps(read(here))), rows);
+    }
+    const worked = await finishReplaySteps(steps(replayed.value), now);
+    heldLibraryRead(operation, replayed.heldMs + worked.heldMs, worked.value, rows);
+    return worked.value;
+  };
+
   // Every read shares this boundary: [run] reads through the database it's handed, which
   // each read names `db` too, so the main connection is out of its reach.
   // Row counts are inspected only on the slow path; named bundles count the rows
@@ -1654,6 +1682,24 @@ const make = Effect.gen(function* () {
           })
         : Effect.tryPromise({
             try: () => readOffThread(replays, operation, run, rows),
+            catch: (cause) => new LibraryStoreError({ operation, cause }),
+          }),
+    );
+  // `attempt` for a read whose working out runs in steps (`readSteppedOffThread`).
+  const attemptStepped = <R, A>(
+    operation: string,
+    read: (db: LibraryDatabase) => R,
+    steps: (read: R) => Generator<void, A>,
+    rows?: (result: A) => number,
+  ): Effect.Effect<A, LibraryStoreError> =>
+    Effect.flatMap(Effect.service(SyncLibraryReads), (here) =>
+      here || replays === undefined
+        ? Effect.try({
+            try: () => readHere(operation, (d) => finishSteps(steps(read(d))), rows),
+            catch: (cause) => new LibraryStoreError({ operation, cause }),
+          })
+        : Effect.tryPromise({
+            try: () => readSteppedOffThread(replays, operation, read, steps, rows),
             catch: (cause) => new LibraryStoreError({ operation, cause }),
           }),
     );
@@ -2229,10 +2275,22 @@ const make = Effect.gen(function* () {
     streamedSongsByIds: (videoIds) =>
       attempt("read streamed songs", (db) => streamedSongsOf(db, videoIds)),
 
+    // While the kept totals settle these sum the history: the summing runs in steps.
     playedEntityTotals: (window) =>
-      attempt("sum up played albums and artists", (db) => playedEntityTotals(db, window)),
+      attemptStepped(
+        "sum up played albums and artists",
+        (db) => playedTotalsRead(db, window, true),
+        playedTotalsSteps,
+      ),
     playedArtistTotals: (window) =>
-      attempt("sum up played artists", (db) => playedArtistTotals(db, window)),
+      Effect.map(
+        attemptStepped(
+          "sum up played artists",
+          (db) => playedTotalsRead(db, window, false),
+          playedTotalsSteps,
+        ),
+        (totals) => totals.artists,
+      ),
     keptArtistSongs: attempt("read the artists of kept songs", (db) => keptArtistSongs(db)),
     streamedLibraryPlays: attempt("sum up the Library songs' streamed plays", (db) =>
       streamedLibraryPlays(db),

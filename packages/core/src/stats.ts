@@ -4,7 +4,7 @@ import { en, type Catalogue } from "./catalogueEn.ts";
  * a stats period, a rolling window ending now. Only counted plays (see
  * `isCountedPlay`) enter a ranking, and artists are credited by track artist.
  */
-import { sortSteps } from "./buildSteps.ts";
+import { finishSteps, sortSteps } from "./buildSteps.ts";
 import { compareRefIds, compareTrackRefs } from "./refOrder.ts";
 import type { TrackRef } from "./ytMusic.ts";
 
@@ -162,34 +162,45 @@ export interface CreditedPlayTotals {
   readonly latestPlayAt: number;
 }
 
-/** Sums credited totals into one entry per entity, as `entity` picks it. */
-const sumBy = (
+/** Sums credited totals into one entry per entity, as `entity` picks it, a step per credit. */
+function* sumBySteps(
   credits: readonly CreditedPlayTotals[],
   entity: (credit: CreditedPlayTotals) => { readonly id: number; readonly sortKey: string },
-): PlayTotals[] => {
+  counts: (credit: CreditedPlayTotals) => boolean = () => true,
+): Generator<void, PlayTotals[]> {
   const byId = new Map<number, PlayTotals>();
   for (const credit of credits) {
-    const { id, sortKey } = entity(credit);
-    const sum = byId.get(id);
-    byId.set(id, {
-      id,
-      sortKey,
-      countedPlays: (sum?.countedPlays ?? 0) + credit.countedPlays,
-      listenedMs: (sum?.listenedMs ?? 0) + credit.listenedMs,
-      latestPlayAt: Math.max(sum?.latestPlayAt ?? 0, credit.latestPlayAt),
-    });
+    if (counts(credit)) {
+      const { id, sortKey } = entity(credit);
+      const sum = byId.get(id);
+      byId.set(id, {
+        id,
+        sortKey,
+        countedPlays: (sum?.countedPlays ?? 0) + credit.countedPlays,
+        listenedMs: (sum?.listenedMs ?? 0) + credit.listenedMs,
+        latestPlayAt: Math.max(sum?.latestPlayAt ?? 0, credit.latestPlayAt),
+      });
+    }
+    yield;
   }
   return [...byId.values()];
-};
+}
 
 /**
  * Each album's totals: the plays of all its tracks, whoever the track artists,
  * a collaboration's plays counted once. Ranked by `rankPlays`.
  */
 export const albumPlayTotals = (credits: readonly CreditedPlayTotals[]): PlayTotals[] =>
-  sumBy(
-    credits.filter((credit) => credit.primary),
+  finishSteps(albumPlayTotalsSteps(credits));
+
+/** `albumPlayTotals` in steps, a step per credited row. */
+export const albumPlayTotalsSteps = (
+  credits: readonly CreditedPlayTotals[],
+): Generator<void, PlayTotals[]> =>
+  sumBySteps(
+    credits,
     (credit) => ({ id: credit.albumId, sortKey: credit.albumSort }),
+    (credit) => credit.primary,
   );
 
 /**
@@ -198,9 +209,14 @@ export const albumPlayTotals = (credits: readonly CreditedPlayTotals[]): PlayTot
  * artists on its tracks, never to its album artist. Ranked by `rankPlays`.
  */
 export const artistPlayTotals = (credits: readonly CreditedPlayTotals[]): PlayTotals[] =>
-  sumBy(credits, (credit) => ({ id: credit.artistId, sortKey: credit.artistSort }));
+  finishSteps(artistPlayTotalsSteps(credits));
 
-/** The window `period` covers when the ranking is read at `now`. */
+/** `artistPlayTotals` in steps, a step per credited row. */
+export const artistPlayTotalsSteps = (
+  credits: readonly CreditedPlayTotals[],
+): Generator<void, PlayTotals[]> =>
+  sumBySteps(credits, (credit) => ({ id: credit.artistId, sortKey: credit.artistSort }));
+
 export const statsWindow = (period: StatsPeriod, now: number): StatsWindow => {
   switch (period) {
     case "week":
