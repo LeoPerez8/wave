@@ -55,6 +55,11 @@ export const detailPath = (from: string, screen: DetailScreen, id: number): stri
 export const playlistAddSongsPath = (from: string, id: number): string =>
   `${detailPath(from, "playlist", id)}/add`;
 
+/** An artist's Songs screen (their page's See more), on the same stack as their page. */
+// not UI text: a route path
+export const artistSongsPath = (from: string, id: number): string =>
+  `${detailPath(from, "artist", id)}/songs`;
+
 /** Whether `pathname` is detail screen `id`, on the Library stack or in a section tab. */
 export const isDetailPath = (pathname: string, screen: DetailScreen, id: number): boolean =>
   (["library", ...LIBRARY_SECTION_SLUGS] as const).some(

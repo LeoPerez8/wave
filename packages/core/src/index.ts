@@ -599,6 +599,7 @@ export {
   inLibraryStack,
   isDetailPath,
   playlistAddSongsPath,
+  artistSongsPath,
   tabOfPath,
 } from "./navigation.ts";
 export type { DetailScreen } from "./navigation.ts";

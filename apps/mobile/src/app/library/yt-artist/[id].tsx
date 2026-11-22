@@ -3,6 +3,7 @@ import { useFollowAction } from "@/library/FollowButton";
 import { useScreenContent } from "@/lib/screenTiming";
 import { IconUser } from "@tabler/icons-react-native";
 import {
+  ARTIST_PAGE_SONGS,
   artistInitial,
   artistPageItems,
   discoverTrackId,
@@ -21,7 +22,7 @@ import { useCallback, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { AlbumTile } from "@/catalog/AlbumTile";
-import { SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
+import { CatalogLine, SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, ListAction } from "@/catalog/PlayShuffle";
@@ -42,6 +43,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { TextButton } from "@/components/TextButton";
 import { albumRowHeight, toAlbumSummary } from "@/library/AlbumGrid";
 import { ArtistAbout } from "@/library/ArtistAbout";
+import { SEE_MORE_ROW, SeeMoreRow } from "@/library/SeeMoreRow";
 import { SimilarArtistsRow, similarArtistsRowHeight } from "@/library/SimilarArtistsRow";
 import type { AlbumRow, ArtistRow, SongRow } from "@wave/client";
 import { openAlbum } from "@/library/routes";
@@ -66,7 +68,7 @@ import { SongList } from "@/songs/SongList";
 import { occurrenceKeys } from "@/songs/songRowState";
 import { ytArtistNote, YtReleaseTile } from "@/ytmusic/YtArtistSection";
 import { useLocalisation } from "@/localisation/localisation";
-import { useOpenedArtistCover, YT_ARTIST_BY_NAME } from "@/ytmusic/routes";
+import { openYtArtistSongs, useOpenedArtistCover, YT_ARTIST_BY_NAME } from "@/ytmusic/routes";
 
 type Song = DiscoverSong<NativeYtSong, SongRow>;
 type Release = YtArtistRelease<AlbumRow>;
@@ -81,6 +83,19 @@ type Similar = SimilarArtistLink<ArtistRow>;
 
 type Item = ArtistPageItem<Cover, Song, Similar, YtArtistAbout>;
 
+/**
+ * What the screen is: the artist's page, or their Songs screen, which its See
+ * more opens (docs/spec.md › Artist songs).
+ */
+type ArtistView = "page" | "songs";
+
+/** How the screen was opened: its route's id (a browse id or `by-name`), the name, offline. */
+interface Opened {
+  readonly id: string;
+  readonly name: string | null;
+  readonly offline: boolean;
+}
+
 /** Height of a shelf's row, the gap under it included. */
 const SHELF_ROW = albumRowHeight(COVER_ROW_TILE);
 
@@ -92,7 +107,8 @@ const pageNote = (note: Exclude<YtArtistPageNote, "loading">, strings: Catalogue
 
 /**
  * As the integrated Library artist page lays it out: the releases, then the
- * songs, then Fans might also like and About.
+ * first songs under their count and See more, then Fans might also like and
+ * About.
  */
 const pageItems = (
   shelves: readonly YtArtistShelf<AlbumRow>[],
@@ -107,13 +123,18 @@ const pageItems = (
       covers: shelf.releases.map((release): Cover => ({ kind: shelf.kind, release })),
     })),
     songs,
-    undefined,
+    library.countedHeading(library.songs, songs.length),
     null,
     {
       similar: { label: library.fansAlsoLike, artists: similar },
       ...(about === null ? {} : { about }),
     },
+    ARTIST_PAGE_SONGS,
   );
+
+/** The Songs screen's list: every song of the artist. */
+const songItems = (songs: readonly Song[]): Item[] =>
+  songs.map((song, index): Item => ({ type: "song", song, index }));
 
 const itemType = (item: Item): Item["type"] => item.type;
 
@@ -273,6 +294,47 @@ function Head({
   );
 }
 
+/** The Songs screen's head: the artist's name, "Songs · 42" under it, then Play and Shuffle. */
+function SongsHead({
+  name,
+  count,
+  loading,
+  onPlay,
+}: {
+  name: string | null;
+  count: number;
+  loading: boolean;
+  onPlay: ((shuffle: boolean) => void) | null;
+}) {
+  const { strings } = useLocalisation();
+  return (
+    <View style={{ gap: CELL, paddingTop: CELL, paddingBottom: CELL * 2 }}>
+      {name === null ? (
+        <HiddenSkeletonLine lineHeight={34} width="60%" />
+      ) : (
+        <CompactTitleMark>
+          <Text
+            accessibilityRole="header"
+            numberOfLines={2}
+            className="font-sans text-title1 font-light text-foreground"
+            style={{ letterSpacing: -0.4 }}
+          >
+            {name}
+          </Text>
+        </CompactTitleMark>
+      )}
+      {!loading && (
+        <CatalogLine>{strings.library.countedHeading(strings.library.songs, count)}</CatalogLine>
+      )}
+      {loading ? (
+        <PlayShuffleSkeleton />
+      ) : onPlay !== null ? (
+        <PlayShuffle onPlay={() => onPlay(false)} onShuffle={() => onPlay(true)} />
+      ) : null}
+    </View>
+  );
+}
+
 /** A quiet line (offline, YT Music off…) and Try Again when it can be asked again. */
 function QuietLine({
   note,
@@ -301,10 +363,15 @@ function QuietLine({
 function YtArtistList({
   page: { view, similar, retry, browseId, name, contextId },
   cover,
+  shows,
+  opened,
 }: {
   page: ReturnType<typeof useYtArtistPage>;
   cover: string | null;
+  shows: ArtistView;
+  opened: Opened;
 }) {
+  const songsView = shows === "songs";
   const { strings } = useLocalisation();
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
@@ -312,9 +379,15 @@ function YtArtistList({
   const { fontScale } = useWindowDimensions();
   const similarRow = similarArtistsRowHeight(fontScale);
   const songs = view?.songs ?? NO_SONGS;
+  // The page checks the releases and the songs it shows; the Songs screen every song.
   const selectable = useMemo(
-    () => (view === null ? [] : artistSelectionItems(view.shelves, view.songs)),
-    [view],
+    () =>
+      view === null
+        ? []
+        : songsView
+          ? artistSelectionItems([], view.songs)
+          : artistSelectionItems(view.shelves, view.songs.slice(0, ARTIST_PAGE_SONGS)),
+    [view, songsView],
   );
   const selection = useListSelection({
     items: selectable,
@@ -329,8 +402,13 @@ function YtArtistList({
     [selection],
   );
   const items = useMemo(
-    () => (view === null ? [] : pageItems(view.shelves, view.songs, similar, view.about, strings)),
-    [view, similar, strings],
+    () =>
+      view === null
+        ? []
+        : songsView
+          ? songItems(view.songs)
+          : pageItems(view.shelves, view.songs, similar, view.about, strings),
+    [view, songsView, similar, strings],
   );
   // Songs key by id, a real duplicate by its occurrence, never by place.
   const songKeys = useMemo(() => occurrenceKeys(songs, discoverTrackId), [songs]);
@@ -344,7 +422,9 @@ function YtArtistList({
             ? "similar"
             : item.type === "about"
               ? "about"
-              : (songKeys.get(item.song) ?? discoverTrackId(item.song)),
+              : item.type === "more"
+                ? "more"
+                : (songKeys.get(item.song) ?? discoverTrackId(item.song)),
     [songKeys],
   );
   const context = useMemo(() => ({ kind: "ytArtist", id: contextId }) as const, [contextId]);
@@ -359,7 +439,14 @@ function YtArtistList({
   const artworkUrl = view?.artworkUrl ?? cover;
   const header = useMemo(
     () =>
-      name === null && !loading ? null : (
+      name === null && !loading ? null : songsView ? (
+        <SongsHead
+          name={name}
+          count={songs.length}
+          loading={loading}
+          onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
+        />
+      ) : (
         <Head
           name={name}
           browseId={browseId}
@@ -369,7 +456,7 @@ function YtArtistList({
           onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
         />
       ),
-    [name, browseId, artworkUrl, cover, loading, songs.length, play],
+    [name, browseId, artworkUrl, cover, loading, songs.length, play, songsView],
   );
   const footer = useMemo(
     () =>
@@ -404,9 +491,15 @@ function YtArtistList({
           />
         );
       if (item.type === "about") return <ArtistAbout about={item.about} />;
+      if (item.type === "more")
+        return (
+          <SeeMoreRow
+            onPress={() => openYtArtistSongs(opened.id, name ?? opened.name, opened.offline)}
+          />
+        );
       return null;
     },
-    [selection, similarRow],
+    [selection, similarRow, opened, name],
   );
   const slotSize = useCallback(
     (item: Item): number | undefined =>
@@ -416,7 +509,9 @@ function YtArtistList({
           ? similarRow
           : item.type === "about"
             ? undefined
-            : SHELF_ROW,
+            : item.type === "more"
+              ? SEE_MORE_ROW
+              : SHELF_ROW,
     [similarRow],
   );
 
@@ -433,7 +528,7 @@ function YtArtistList({
       renderSlot={renderSlot}
       slotType={itemType}
       slotSize={slotSize}
-      extraData={selection.selection}
+      extraData={{ selection: selection.selection, opened, name }}
       selection={rowSelection}
       onPlay={(item) => {
         if (item.type === "song") play(item.index);
@@ -443,7 +538,7 @@ function YtArtistList({
       ListHeaderComponent={
         <CompactTitleHead>
           {header}
-          <ArtistShows name={name ?? ""} />
+          {!songsView && <ArtistShows name={name ?? ""} />}
         </CompactTitleHead>
       }
       ListFooterComponent={footer}
@@ -465,17 +560,34 @@ function YtArtistList({
  * Try Again, under the similar artists and the About of a page seen before; with YT Music off, it says so.
  */
 export default function YtArtistScreen() {
+  return <YtArtistScreenOf shows="page" />;
+}
+
+/**
+ * The YouTube Music artist's Songs screen, which their page's See more opens
+ * (`/library/yt-artist/<id>/songs`, `openYtArtistSongs`): the artist's name
+ * over "Songs · 42", Play and Shuffle, and every song of theirs, read as the
+ * page reads them.
+ */
+export function YtArtistSongsScreen() {
+  return <YtArtistScreenOf shows="songs" />;
+}
+
+function YtArtistScreenOf({ shows }: { shows: ArtistView }) {
   useScreenContent(true);
   const params = useLocalSearchParams<{ id: string; name?: string; offline?: string }>();
   const browseId = params.id === YT_ARTIST_BY_NAME ? null : (params.id ?? "");
   const knownName = params.name === undefined || params.name === "" ? null : params.name;
-  const page = useYtArtistPage(browseId, knownName, params.offline === "1");
+  const offline = params.offline === "1";
+  const page = useYtArtistPage(browseId, knownName, offline);
   const cover = useOpenedArtistCover(browseId);
+  const id = params.id ?? "";
+  const opened = useMemo(() => ({ id, name: knownName, offline }), [id, knownName, offline]);
   return (
     <CompactTitleFrame title={page.name ?? undefined}>
       <View className="flex-1 bg-background">
         <ScreenHeader />
-        <YtArtistList page={page} cover={cover} />
+        <YtArtistList page={page} cover={cover} shows={shows} opened={opened} />
       </View>
     </CompactTitleFrame>
   );
