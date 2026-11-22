@@ -357,6 +357,56 @@ export const readPullPage = (body: string): SyncPullPage | null => {
   return { ...tables, cursor: raw.cursor, more: raw.more };
 };
 
+/**
+ * The order a pulled page is applied in: songs and playlists before the rows that point at
+ * them, a page's stars before its dislikes (a song left with both keeps the later mark).
+ */
+const PULL_APPLY_ORDER = [
+  "songs",
+  "playlists",
+  "playlistEntries",
+  "favorites",
+  "dislikes",
+  "plays",
+  "preferences",
+  "follows",
+  "hiddenReleases",
+  "notifiedShows",
+  "dismissedSuggestions",
+] as const satisfies readonly (keyof SyncTables)[];
+
+/** A piece of a pulled page, and the cursor to keep once it's applied (null: keep the one held). */
+export interface PullPagePiece {
+  readonly rows: SyncTables;
+  readonly cursor: string | null;
+}
+
+/**
+ * Splits [page] into pieces of at most [maxRows] rows, in the order a page is applied in, so
+ * each is applied in a step short enough to leave the JavaScript thread free (#1450). Only the
+ * last piece carries the page's cursor: a sync stopped between pieces pulls the page again,
+ * and the pieces already applied merge as no change. A page with no rows is one piece.
+ */
+export const pullPagePieces = (page: SyncPullPage, maxRows: number): PullPagePiece[] => {
+  const size = Math.max(1, Math.floor(maxRows));
+  const pieces: SyncTables[] = [];
+  let piece: Record<string, unknown[]> = {};
+  let held = 0;
+  for (const table of PULL_APPLY_ORDER) {
+    for (const row of page[table]) {
+      if (held === size) {
+        pieces.push({ ...EMPTY_SYNC_TABLES, ...piece });
+        piece = {};
+        held = 0;
+      }
+      (piece[table] ??= []).push(row);
+      held++;
+    }
+  }
+  pieces.push({ ...EMPTY_SYNC_TABLES, ...piece });
+  return pieces.map((rows, n) => ({ rows, cursor: n === pieces.length - 1 ? page.cursor : null }));
+};
+
 /** A pushed row the service stored with another change time than the one sent. */
 export interface CorrectedChangeTime {
   readonly table: Exclude<keyof SyncTables, "plays">;

@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { AppState } from "react-native";
 
 import { freeTurn } from "@/lib/backgroundWork";
+import { sliceOf } from "@/lib/stepped";
 import { LibraryStore } from "@/library/LibraryStore";
 
 import { WaveAccount, waveAccountErrorCode, type WaveAccountErrorCode } from "@/native/waveAccount";
@@ -48,6 +49,7 @@ export const make = Effect.gen(function* () {
         wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
         // Each database step waits until the owner's taps are through.
         turn: () => freeTurn("sync"),
+        slice: sliceOf("sync"),
         collaboration: collaborations,
       }),
     ).then(
@@ -90,6 +92,7 @@ export const make = Effect.gen(function* () {
             songsChanged: false,
             wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
             turn: () => freeTurn("collaborative playlist sync"),
+            slice: sliceOf("collaborative playlist sync"),
             collaboration: collaborations,
           },
           playlistId,
