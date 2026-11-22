@@ -86,6 +86,20 @@ export const openYtArtistNamed = (name: string, offline = false): void =>
   );
 
 /**
+ * Opens the Songs screen of the YouTube Music artist page [id] (its route's
+ * id: a browse id, or `by-name`), with the page's [name] and offline opening.
+ */
+export const openYtArtistSongs = (id: string, name: string | null, offline: boolean): void => {
+  const query = [
+    name === null || name === "" ? null : `name=${encodeURIComponent(name)}`,
+    offline ? "offline=1" : null,
+  ].filter((part) => part !== null);
+  router.push(
+    `/library/yt-artist/${encodeURIComponent(id)}/songs${query.length === 0 ? "" : `?${query.join("&")}`}` as Href,
+  );
+};
+
+/**
  * The name of the YouTube Music artist page at [pathname] (its `name`
  * parameter, [params]: the name it was opened with), or null when it isn't
  * one, so a streamed song's artist link leaves it out (Core's

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { artistPageItems } from "./index.ts";
+import { ARTIST_PAGE_SONGS, artistPageItems } from "./index.ts";
 
 describe("artistPageItems", () => {
   test("each shelf is its heading then one row of all its covers, and the songs follow", () => {
@@ -143,5 +143,64 @@ describe("artistPageItems", () => {
     assert.deepEqual(artistPageItems([], ["t1"], "Songs", [0], { about }), [
       { type: "song", song: "t1", index: 0 },
     ]);
+  });
+
+  describe("the songs cut at the first few", () => {
+    const songs = ["t1", "t2", "t3", "t4", "t5", "t6", "t7"];
+
+    test("an artist page shows five songs", () => {
+      assert.equal(ARTIST_PAGE_SONGS, 5);
+    });
+
+    test("past the cut, See More follows the songs shown and counts them all", () => {
+      const items = artistPageItems([], songs, "Popular", null, {}, 5);
+      assert.deepEqual(items, [
+        { type: "section", label: "Popular" },
+        { type: "song", song: "t1", index: 0 },
+        { type: "song", song: "t2", index: 1 },
+        { type: "song", song: "t3", index: 2 },
+        { type: "song", song: "t4", index: 3 },
+        { type: "song", song: "t5", index: 4 },
+        { type: "more", total: 7 },
+      ]);
+    });
+
+    test("at the cut or under it there's no See More", () => {
+      const five = songs.slice(0, 5);
+      assert.deepEqual(
+        artistPageItems([], five, "Songs", null, {}, 5).map((item) => item.type),
+        ["section", "song", "song", "song", "song", "song"],
+      );
+    });
+
+    test("Fans might also like and About follow See More", () => {
+      const about = { description: "A biography", subscribers: null, views: null };
+      const items = artistPageItems(
+        [],
+        songs,
+        "Songs",
+        null,
+        { similar: { label: "Fans might also like", artists: ["Air"] }, about },
+        5,
+      );
+      assert.deepEqual(items.slice(-4), [
+        { type: "more", total: 7 },
+        { type: "section", label: "Fans might also like" },
+        { type: "similar", label: "Fans might also like", artists: ["Air"] },
+        { type: "about", about },
+      ]);
+    });
+
+    test("while Find in artist narrows the songs, every song found shows, past the cut too", () => {
+      assert.deepEqual(artistPageItems([], songs, "Songs", [1, 5, 6], {}, 5), [
+        { type: "song", song: "t2", index: 1 },
+        { type: "song", song: "t6", index: 5 },
+        { type: "song", song: "t7", index: 6 },
+      ]);
+    });
+
+    test("with no cut given, every song shows", () => {
+      assert.equal(artistPageItems([], songs).filter((item) => item.type === "song").length, 7);
+    });
   });
 });

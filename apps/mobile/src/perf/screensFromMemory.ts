@@ -163,6 +163,10 @@ export const SCREENS_FROM_MEMORY: Record<string, ScreenFromMemory> = {
   "app/(tabs)/songs/index.tsx": SECTION_LISTS,
   "app/library/album/[id].tsx": { draws: ["library/hooks.ts#useAlbum"] },
   "app/library/artist/[id].tsx": { draws: ["library/hooks.ts#useArtist"] },
+  "app/library/artist/[id]/songs.tsx": {
+    via: ["app/library/artist/[id].tsx"],
+    draws: ["library/hooks.ts#useArtist"],
+  },
   "app/library/genre/[id].tsx": {
     via: ["library/GenreSongList.tsx"],
     draws: ["library/GenreSongList.tsx#useGenreOpening", "library/pagedSongs.ts#usePagedSongs"],
@@ -265,6 +269,8 @@ export const NOT_LOCAL_SCREENS: Record<string, string> = {
   "app/library/yt-album/[id].tsx": "An online YT Music album page: #1356 opens it from known data.",
   "app/library/yt-artist/[id].tsx":
     "An online YT Music artist page: #1356 opens it from known data.",
+  "app/library/yt-artist/[id]/songs.tsx":
+    "An online YT Music artist's Songs screen, read as their page (#1356) is, from known data.",
   "app/library/yt-playlist/[id].tsx":
     "An online YT Music playlist page: #1356 opens it from known data.",
   "app/library/discover-mix/[id].tsx":

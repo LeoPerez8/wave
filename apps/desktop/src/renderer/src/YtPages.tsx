@@ -3,14 +3,18 @@ import type { BrowseRow } from "../../shared/browse.ts";
 import { DiscoverPage } from "./Discover.tsx";
 import { DiscoverMixPage } from "./DiscoverMixPage.tsx";
 import { MagicQueuePage } from "./MagicQueuePage.tsx";
-import { YtAlbumPage, YtArtistPage } from "./YtArtist.tsx";
+import { YtAlbumPage, YtArtistPage, YtArtistSongsPage } from "./YtArtist.tsx";
 
-/** YouTube Music's pages: Discover and a mix's, the Magic Queue, and an artist's or album's page. */
+/**
+ * YouTube Music's pages: Discover and a mix's, the Magic Queue, an artist's page and their Songs
+ * view, and an album's page.
+ */
 export type YtRoute =
   | { readonly kind: "discover" }
   | { readonly kind: "discoverMix"; readonly id: string }
   | { readonly kind: "magicQueue" }
   | { readonly kind: "ytArtist"; readonly id: string }
+  | { readonly kind: "ytArtistSongs"; readonly id: string }
   | { readonly kind: "ytAlbum"; readonly id: string };
 
 const KINDS: ReadonlySet<string> = new Set<YtRoute["kind"]>([
@@ -18,6 +22,7 @@ const KINDS: ReadonlySet<string> = new Set<YtRoute["kind"]>([
   "discoverMix",
   "magicQueue",
   "ytArtist",
+  "ytArtistSongs",
   "ytAlbum",
 ]);
 
@@ -77,9 +82,12 @@ export function YtPage({
           onAlbum={(id) => go({ kind: "ytAlbum", id })}
           onLibraryAlbum={onLibraryAlbum}
           onArtist={(id) => go({ kind: "ytArtist", id })}
+          onSongs={() => go({ kind: "ytArtistSongs", id: route.id })}
           onError={onError}
         />
       );
+    case "ytArtistSongs":
+      return <YtArtistSongsPage key={route.id} id={route.id} run={run} onSongMenu={onSongMenu} />;
     case "ytAlbum":
       return (
         <YtAlbumPage

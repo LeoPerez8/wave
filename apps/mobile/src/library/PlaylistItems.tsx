@@ -169,10 +169,13 @@ function Grip({ shown, color }: { shown: boolean; color: string }) {
   );
 }
 
-/** The playlist's first song-list item: a route into the song-only add search. */
+/**
+ * The playlist's first song-list item: a route into the song-only add search.
+ * Its plus sits on an empty song cover, so the tile keeps the songs' rhythm.
+ */
 function AddSongsTile({ playlistId, from }: { playlistId: number; from: string }) {
   const { strings } = useLocalisation();
-  const background = useThemeColor("background");
+  const secondary = useThemeColor("secondary");
   return (
     <Press
       accessibilityRole="button"
@@ -181,10 +184,10 @@ function AddSongsTile({ playlistId, from }: { playlistId: number; from: string }
     >
       <View className="flex-row items-center" style={{ height: ROW, gap: CELL * 1.5 }}>
         <View
-          className="items-center justify-center rounded-lg bg-primary"
+          className="items-center justify-center bg-fill"
           style={{ width: CELL * 5, height: CELL * 5 }}
         >
-          <IconPlus size={24} color={background} strokeWidth={1.75} />
+          <IconPlus size={24} color={secondary} strokeWidth={1.75} />
         </View>
         <Text className="flex-1 font-sans text-body text-foreground">
           {strings.playlists.addSongs}

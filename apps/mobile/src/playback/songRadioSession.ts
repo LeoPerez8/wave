@@ -1,5 +1,6 @@
 /** A live first page per session, cached starts, and continuation reads only when low. */
 import {
+  musicVideoAudioTrack,
   songSearchMatch,
   songSearchQuery,
   type MagicSongRadioSeed,
@@ -14,6 +15,13 @@ export interface SongRadioPage {
 }
 /** How long a radio read waited for may take. */
 export const MAGIC_RADIO_DEADLINE_MS = 8000;
+
+/**
+ * Whether [page] brings a song. A music video's radio brings only music
+ * videos, and no batch takes those, so it counts as no radio at all.
+ */
+const bringsSongs = (page: SongRadioPage | null): page is SongRadioPage =>
+  page !== null && page.songs.some((song) => song.video !== true);
 
 /** Network/database dependencies stay at this boundary; no graph or genre reads belong here. */
 export const createSongRadioSession = <E, R>(
@@ -32,7 +40,8 @@ export const createSongRadioSession = <E, R>(
     ) => Effect.Effect<SongRadioPage | null, unknown, R>;
   },
 ) => {
-  let page = deps.cached;
+  // A saved page of videos alone can't start a batch: the first read waits for the live radio.
+  let page = bringsSongs(deps.cached) ? deps.cached : null;
   let started = false;
   let reading = false;
   const remember = (received: SongRadioPage) =>
@@ -57,6 +66,13 @@ export const createSongRadioSession = <E, R>(
     if (videoId === undefined) {
       const songs = yield* deps.search(songSearchQuery(seed));
       videoId = songSearchMatch(seed, songs) ?? undefined;
+    } else {
+      const own = yield* deps.radio(videoId);
+      if (bringsSongs(own)) return own;
+      // The seed is a music video: the radio of its audio track brings songs.
+      const songs = yield* deps.search(songSearchQuery(seed));
+      const audioTrack = musicVideoAudioTrack(seed, songs)?.videoId;
+      videoId = audioTrack === videoId ? undefined : audioTrack;
     }
     if (videoId !== undefined) return yield* deps.radio(videoId);
     const artist = seed.artists[0];

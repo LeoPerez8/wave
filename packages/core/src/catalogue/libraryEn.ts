@@ -102,6 +102,10 @@ export const libraryEn = {
   about: "About",
   showMore: "Show more",
   showLess: "Show less",
+  /** An artist page's row after its first songs, opening the artist's Songs screen. */
+  seeMore: "See more",
+  /** A heading with the count of what it heads ("Popular · 42"). */
+  countedHeading: (label: string, count: number): string => `${label} · ${n(count)}`,
   subscribersValue: (count: string): string => `${count} subscribers`,
   viewsValue: (count: string): string => `${count} views`,
   popular: "Popular",
