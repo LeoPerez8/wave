@@ -109,6 +109,7 @@ import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { appLog } from "@/log/appLog";
 
 import { askForNotifications } from "@/lib/askForNotifications";
+import { freeTurn } from "@/lib/backgroundWork";
 import { useLocalisation } from "@/localisation/localisation";
 import { persistedSetting } from "@/lib/persistedSetting";
 import {
@@ -163,7 +164,7 @@ import { readYtAlbum } from "./albumPages";
 import { failedJobsNow, journal, queuedCountsNow } from "./downloadJournal";
 import { followDownloadRuns } from "./downloadRun";
 import { createDownloadRecovery } from "./downloadRecovery";
-import { currentLibraryFinder, useLoadedLibraryFinder } from "./libraryFinder";
+import { currentLibraryFinderInSlices, useLoadedLibraryFinder } from "./libraryFinder";
 import { followYoutubeThrottle } from "./youtubeThrottle";
 import type { YtMusicError } from "./YtMusic";
 
@@ -1272,6 +1273,12 @@ const starAsked = persistedSetting<ReadonlySet<string>>({
 const ownerAsked = (jobIds: readonly string[]): void =>
   starAsked.set(starAskedAfter(starAsked.get(), { kind: "ownerAsked", ids: jobIds }));
 
+/**
+ * The resume's own work after `startup downloads` (#1453): each step starts on a free turn of
+ * its own and builds the Library finder in slices, so none holds the thread at startup.
+ */
+const RESUME_WORK = "downloads resume";
+
 let forgotSettled = false;
 /**
  * Has the journal forget the failures that settled another way since (Core's
@@ -1284,12 +1291,13 @@ const forgetSettledFailures = (): void => {
   forgotSettled = true;
   requests = requests
     .then(async () => {
+      await freeTurn(RESUME_WORK);
       const jobs = await WaveSoulseek.jobsSnapshot();
       if (!jobs.some(hasFailed)) return;
       // A replacement with no better copy settles here once what it found is recorded: while
       // that can't be written, the journal keeps it, so the song isn't offered again.
       const recorded = await rememberNoBetterCopies(jobs);
-      const find = await currentLibraryFinder();
+      const find = await currentLibraryFinderInSlices(RESUME_WORK);
       const missing = await appRuntime.runPromise(
         Effect.gen(function* () {
           const store = yield* LibraryStore;
@@ -1320,10 +1328,11 @@ const requeueThrottledFailures = (): void => {
   if (Storage.getItemSync(THROTTLED_REQUEUE_KEY) !== null || !ytMusicEnabled()) return;
   requests = requests
     .then(async () => {
+      await freeTurn(RESUME_WORK);
       if (Storage.getItemSync(THROTTLED_REQUEUE_KEY) !== null) return;
       const jobs = await WaveSoulseek.jobsSnapshot();
       const session = await sessionNow();
-      const find = await currentLibraryFinder();
+      const find = await currentLibraryFinderInSlices(RESUME_WORK);
       const library = await appRuntime.runPromise(
         Effect.gen(function* () {
           const store = yield* LibraryStore;

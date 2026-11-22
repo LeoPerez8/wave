@@ -37,6 +37,7 @@ export const LIBRARY_SEEDS = [
   "library/hooks.ts#useLoadedArtists",
   ...[
     "currentLibraryFinder",
+    "currentLibraryFinderInSlices",
     "useLoadedLibraryFinder",
     "useLibraryFinder",
     "useLoadedInLibrary",
@@ -448,17 +449,17 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
 
   "ytmusic/YtDownloads.ts#forgetSettledFailures": {
     howOften:
-      "Once per launch when failures exist; uses the current shared finder, never per journal event.",
+      "Once per launch when failures exist; uses the current shared finder, built in background slices, never per journal event.",
     reason:
       "Download recovery runs on explicit/background work; the failed-download UI follows only while shown.",
-    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinderInSlices"],
   },
   "ytmusic/YtDownloads.ts#requeueThrottledFailures": {
     howOften:
-      "Once per install migration, retried next launch on failure; uses the current shared finder.",
+      "Once per install migration, retried next launch on failure; uses the current shared finder, built in background slices.",
     reason:
       "Download recovery runs on explicit/background work; the failed-download UI follows only while shown.",
-    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinderInSlices"],
   },
   "ytmusic/YtDownloads.ts#useFailedDownloadsInput": {
     howOften: FOLLOWED_FINDER,
