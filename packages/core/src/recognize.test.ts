@@ -614,6 +614,33 @@ describe("the app log's line", () => {
     );
   });
 
+  test("names the attempt, so two attempts that end alike read as two", () => {
+    const outcome = { kind: "failed", failure: "refused", status: 429 } as const;
+    const first = recognizeLogLine({
+      source: "microphone",
+      heardMs: 28_000,
+      outcome,
+      failedAsks: 6,
+      attempt: 4,
+    });
+    const second = recognizeLogLine({
+      source: "microphone",
+      heardMs: 28_000,
+      outcome: { kind: "match", song: SONG },
+      failedAsks: 6,
+      lookup: "library",
+      attempt: 5,
+    });
+    assert.equal(
+      first,
+      "Recognize through the microphone: failed after 28.0 s (refused, HTTP 429), 6 requests failed before it (attempt 4)",
+    );
+    assert.equal(
+      second,
+      "Recognize through the microphone: a match after 28.0 s, 6 requests failed before it, YT Music lookup: library (attempt 5)",
+    );
+  });
+
   test("a session counts the failed requests it went on from", () => {
     assert.equal(startRecognize("microphone").failedAsks, 0);
     const refused = failed("refused", 429);

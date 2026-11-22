@@ -1,4 +1,5 @@
 import {
+  describeCause,
   afterApkDownload,
   afterRequestedCheck,
   installTapAfter,
@@ -75,8 +76,6 @@ export interface UpdateRunnerOptions {
   /** Waits for a free turn before handling a step's answer: its network wait isn't a slice (#1350). */
   readonly answered?: Effect.Effect<void>;
 }
-
-const reason = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /**
  * Carries out Core's update policy (`nextUpdateStep`). Nothing ticks: it acts when told something
@@ -172,7 +171,7 @@ export const createUpdateRunner = ({
     Effect.catch((error) =>
       Effect.sync(() => {
         checkFailed = true;
-        log("warn", `The APK check failed: ${reason(error)}`);
+        log("warn", `The APK check failed: ${describeCause(error)}`);
       }),
     ),
   );
@@ -194,7 +193,7 @@ export const createUpdateRunner = ({
       Effect.catch((error) =>
         Effect.sync(() => {
           checkFailed = true;
-          log("warn", `The update check failed: ${reason(error)}`);
+          log("warn", `The update check failed: ${describeCause(error)}`);
           return true;
         }),
       ),
@@ -210,7 +209,7 @@ export const createUpdateRunner = ({
       }),
       Effect.catch((error) =>
         Effect.sync(() => {
-          log("warn", `Asking about mobile data failed: ${reason(error)}`);
+          log("warn", `Asking about mobile data failed: ${describeCause(error)}`);
           endRequest("downloadFailed");
           return true;
         }),
@@ -231,7 +230,7 @@ export const createUpdateRunner = ({
       }),
       Effect.catch((error) =>
         Effect.sync(() => {
-          log("warn", `The update download failed: ${reason(error)}`);
+          log("warn", `The update download failed: ${describeCause(error)}`);
           return true;
         }),
       ),
@@ -257,7 +256,7 @@ export const createUpdateRunner = ({
       // downloaded, so Install Now stays for another try, and this one goes on running.
       Effect.catch((error) =>
         Effect.sync(() => {
-          log("warn", `The update apply failed: ${reason(error)}`);
+          log("warn", `The update apply failed: ${describeCause(error)}`);
           endRequest(stoppedStepNotice({ step: "applyBundle", updateRequest }));
           return false;
         }),
@@ -285,7 +284,7 @@ export const createUpdateRunner = ({
       }),
       Effect.catch((error) =>
         Effect.sync(() => {
-          log("warn", `The APK download failed: ${reason(error)}`);
+          log("warn", `The APK download failed: ${describeCause(error)}`);
           // The next check finds it again.
           nativeUpdate = "none";
           endDownload("failed");
@@ -304,7 +303,7 @@ export const createUpdateRunner = ({
       Effect.as(false),
       Effect.catch((error) =>
         Effect.sync(() => {
-          log("warn", `Opening the install permission screen failed: ${reason(error)}`);
+          log("warn", `Opening the install permission screen failed: ${describeCause(error)}`);
           failInstall();
           return false;
         }),
@@ -323,7 +322,7 @@ export const createUpdateRunner = ({
       Effect.as(false),
       Effect.catch((error) =>
         Effect.sync(() => {
-          log("warn", `The APK install failed: ${reason(error)}`);
+          log("warn", `The APK install failed: ${describeCause(error)}`);
           // The file may be gone. The next check says, and the policy holds off a new download.
           nativeUpdate = "available";
           failInstall();
@@ -377,7 +376,7 @@ export const createUpdateRunner = ({
       // for the next change is all that's left, and it mustn't leave `running` set for good.
       Effect.catchCause((cause) =>
         Effect.sync(() => {
-          log("warn", `The ${step} step stopped: ${reason(Cause.squash(cause))}`);
+          log("warn", `The ${step} step stopped: ${describeCause(Cause.squash(cause))}`);
           installTap = "none";
           endRequest(stoppedStepNotice({ step, updateRequest }));
           return false;

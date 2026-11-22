@@ -1,4 +1,4 @@
-import type { DatedRelease, LogLevel } from "@wave/core";
+import { describeCause, type DatedRelease, type LogLevel } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
@@ -23,8 +23,6 @@ export interface VersionHistoryStoreOptions {
   };
   readonly log: (level: LogLevel, message: string) => void;
 }
-
-const reason = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /**
  * The channel's history for Settings' row and the Version History page. It starts from the list the
@@ -53,7 +51,7 @@ export const createVersionHistoryStore = ({
         }),
         Effect.catch((error) =>
           Effect.sync(() => {
-            log("warn", `The version history fetch failed: ${reason(error)}`);
+            log("warn", `The version history fetch failed: ${describeCause(error)}`);
             store.update((state) => ({ ...state, status: "failed" }));
           }),
         ),
