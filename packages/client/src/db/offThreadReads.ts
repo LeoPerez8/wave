@@ -12,16 +12,28 @@
  * one transaction on its read connection, so they see one snapshot, as the
  * synchronous read did.
  *
+ * Mapping rows into values is most of a large read's JS time (3,000 songs held
+ * the thread for seconds when every pass mapped every row again, #1435). So a
+ * statement's rows are mapped once per read and kept for the passes after, and
+ * a large result is mapped in steps of `REPLAY_STEP_MS` that yield between
+ * them: no step of a replay holds the thread long, whatever the read's size.
+ * Each pass hands a read its own array, but the row objects are shared across
+ * passes, so a replayed read never mutates the rows it reads (none does).
+ *
  * A read that writes, asks the connection about itself (a PRAGMA), or doesn't
  * settle (its statements change between passes) can't be replayed: it rejects
  * with `NotReplayable` and the caller runs it on the main connection.
  */
 import * as drizzleOrm from "drizzle-orm";
 import {
+  Column,
   createTableRelationsHelpers,
   entityKind,
   extractTablesRelationalConfig,
   fillPlaceholders,
+  is,
+  SQL,
+  Subquery,
   type Query,
 } from "drizzle-orm";
 import {
@@ -86,6 +98,12 @@ class Miss {
 /** Passes before a read counts as not settling (its statements keep changing). */
 const MAX_PASSES = 512;
 
+/** The longest a step of mapping rows holds the JS thread, in ms (background work's slice). */
+export const REPLAY_STEP_MS = 8;
+
+/** Rows a pass maps itself; a statement with more is mapped in steps between passes. */
+const MAPPED_IN_PASS = 200;
+
 // Transaction control the replayed read issues itself (Drizzle's `transaction`):
 // the whole read already runs inside the snapshot's transaction.
 const CONTROL = /^\s*(begin|commit|end|rollback|savepoint|release)\b/i;
@@ -104,18 +122,31 @@ const keyParam = (_key: string, value: unknown): unknown =>
 const keyOf = (statement: ReadStatement): string =>
   `${statement.mode}\u0000${statement.sql}\u0000${JSON.stringify(statement.params, keyParam)}`;
 
-/** The rows of the pass running now. Passes are synchronous, so one at a time. */
-let answers: Map<string, readonly unknown[]> | null = null;
+interface MappedRows {
+  readonly print: Print;
+  readonly rows: readonly unknown[];
+}
+
+/** What a pass answers from: the read's rows so far, and the rows it has mapped. */
+interface Pass {
+  readonly rows: Map<string, readonly unknown[]>;
+  readonly mapped: Map<string, MappedRows>;
+  /** Statements whose kept rows this pass already handed out: asked again, it maps afresh. */
+  readonly handed: Set<string>;
+}
+
+/** The pass running now. Passes are synchronous, so one at a time. */
+let current: Pass | null = null;
 
 const answer = (sql: string, params: readonly ReadParam[], mode: ReadMode) => {
-  if (answers === null) throw new NotReplayable("a replayed statement ran outside its pass");
+  if (current === null) throw new NotReplayable("a replayed statement ran outside its pass");
   if (!READ.test(sql) || CONNECTION_STATE.test(sql))
     throw new NotReplayable(`not a plain read: ${sql.slice(0, 40)}`);
   const statement = { sql, params: [...params], mode };
   const key = keyOf(statement);
-  const rows = answers.get(key);
+  const rows = current.rows.get(key);
   if (rows === undefined) throw new Miss(key, statement);
-  return rows;
+  return { key, rows };
 };
 
 // The replay's Drizzle session, the expo-sqlite driver's (drizzle-orm 0.45) with its
@@ -128,6 +159,61 @@ type ResultMapper = (rows: unknown[][]) => unknown;
 const { mapResultRow } = drizzleOrm as unknown as {
   mapResultRow: (fields: Fields, row: unknown[], joins: unknown) => unknown;
 };
+
+/**
+ * What tells two selections' mappings apart: each value's path and decoder, and the joins
+ * that null a left-joined table. The same statement mapped with the same print gives the
+ * same values, so its mapped rows serve every pass that asks for it that way.
+ */
+type Print = readonly unknown[];
+
+/** A decoder's identity: a `mapWith(fn)` wraps [fn] anew in each pass, so it's the function. */
+const decoderOf = (decoder: { mapFromDriverValue: unknown }): unknown =>
+  Object.getPrototypeOf(decoder) === Object.prototype ? decoder.mapFromDriverValue : decoder;
+
+/** A SQL value's decoder, which drizzle keeps off its public type. */
+const sqlDecoder = (value: SQL): unknown =>
+  decoderOf((value as unknown as { decoder: { mapFromDriverValue: unknown } }).decoder);
+
+const printOf = (fields: Fields, joins: Record<string, boolean> | undefined): Print => {
+  const print: unknown[] = [joins === undefined ? "" : JSON.stringify(joins)];
+  for (const { path, field } of fields as unknown as readonly {
+    path: string[];
+    field: unknown;
+  }[]) {
+    print.push(path.join("\u0000"));
+    if (is(field, Column)) print.push(field);
+    else if (is(field, SQL)) print.push(sqlDecoder(field));
+    else if (is(field, Subquery)) print.push(sqlDecoder(field._.sql));
+    else print.push(sqlDecoder((field as SQL.Aliased).sql));
+  }
+  return print;
+};
+
+const samePrint = (a: Print, b: Print): boolean =>
+  a.length === b.length && a.every((part, at) => part === b[at]);
+
+/** A statement's rows, too many to map inside a pass: the replay maps them in steps. */
+class Unmapped {
+  readonly key: string;
+  readonly rows: readonly unknown[][];
+  readonly fields: Fields;
+  readonly joins: Record<string, boolean> | undefined;
+  readonly print: Print;
+  constructor(
+    key: string,
+    rows: readonly unknown[][],
+    fields: Fields,
+    joins: Record<string, boolean> | undefined,
+    print: Print,
+  ) {
+    this.key = key;
+    this.rows = rows;
+    this.fields = fields;
+    this.joins = joins;
+    this.print = print;
+  }
+}
 
 class ReplayPreparedQuery extends SQLitePreparedQuery<{
   type: "sync";
@@ -172,16 +258,29 @@ class ReplayPreparedQuery extends SQLitePreparedQuery<{
   override all(placeholderValues?: Record<string, unknown>): unknown {
     const { fields, customResultMapper } = this;
     if (!fields && !customResultMapper)
-      return [...answer(this.query.sql, this.params(placeholderValues), "objects")];
-    const rows = this.values(placeholderValues);
-    if (customResultMapper) return customResultMapper(rows);
-    return rows.map((row) => mapResultRow(fields, row, this.joins()));
+      return [...answer(this.query.sql, this.params(placeholderValues), "objects").rows];
+    if (customResultMapper) return customResultMapper(this.values(placeholderValues));
+    const { key, rows } = answer(this.query.sql, this.params(placeholderValues), "values");
+    const pass = current!;
+    const joins = this.joins();
+    const print = printOf(fields, joins);
+    const kept = pass.mapped.get(key);
+    const fresh = !pass.handed.has(key);
+    pass.handed.add(key);
+    if (kept !== undefined && fresh && samePrint(kept.print, print)) return [...kept.rows];
+    const raw = rows as readonly unknown[][];
+    // Rows asked for again in one pass, or with another mapping, are mapped here and not kept.
+    if (kept === undefined && raw.length > MAPPED_IN_PASS)
+      throw new Unmapped(key, raw, fields, joins, print);
+    const mapped = raw.map((row) => mapResultRow(fields, row, joins));
+    if (kept === undefined) pass.mapped.set(key, { print, rows: mapped });
+    return [...mapped];
   }
 
   override get(placeholderValues?: Record<string, unknown>): unknown {
     const { fields, customResultMapper } = this;
     if (!fields && !customResultMapper)
-      return answer(this.query.sql, this.params(placeholderValues), "objects")[0] ?? null;
+      return answer(this.query.sql, this.params(placeholderValues), "objects").rows[0] ?? null;
     const row = this.values(placeholderValues)[0];
     if (!row) return undefined;
     if (customResultMapper) return customResultMapper([row]);
@@ -189,7 +288,9 @@ class ReplayPreparedQuery extends SQLitePreparedQuery<{
   }
 
   override values(placeholderValues?: Record<string, unknown>): unknown[][] {
-    return [...answer(this.query.sql, this.params(placeholderValues), "values")] as unknown[][];
+    return [
+      ...answer(this.query.sql, this.params(placeholderValues), "values").rows,
+    ] as unknown[][];
   }
 
   /** @internal */
@@ -258,9 +359,9 @@ const replayDb = (): LibraryDatabase => {
 };
 
 /** The replay's own signal under [error], which Drizzle may have wrapped (its `run`). */
-const replayReason = (error: unknown): Miss | NotReplayable | null => {
+const replayReason = (error: unknown): Miss | Unmapped | NotReplayable | null => {
   for (let at = error, depth = 0; at instanceof Object && depth < 8; depth++) {
-    if (at instanceof Miss || at instanceof NotReplayable) return at;
+    if (at instanceof Miss || at instanceof Unmapped || at instanceof NotReplayable) return at;
     at = (at as { cause?: unknown }).cause;
   }
   return null;
@@ -274,18 +375,42 @@ export interface ReplayedRead<A> {
   readonly statements: number;
 }
 
-/** Runs [read] with its statements on [connection], as described at the top. */
-/** Runs a replay pass: as it is, unless the app names it (`runReplayPassesWith`). */
+/** Runs a replay step: as it is, unless the app names it (`runReplayPassesWith`). */
 let replayPass: <B>(run: () => B) => B = (run) => run();
 
 /**
- * Runs each replay pass through [runner], which the app uses to name the JS
- * thread's block after the read's last answer arrives (#1359).
+ * Runs each replay step (a pass, or a step of mapping rows) through [runner], which the app
+ * uses to name the JS thread's block after the read's last answer arrives (#1359).
  */
 export const runReplayPassesWith = (runner: <B>(run: () => B) => B): void => {
   replayPass = runner;
 };
 
+/** Gives the JS thread up between steps of mapping rows: a new task, so frames and touches go first. */
+let yieldReplay: () => Promise<void> = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+/** Yields between steps of mapping rows with [yielder] instead of a new task (tests). */
+export const yieldReplaysWith = (yielder: () => Promise<void>): void => {
+  yieldReplay = yielder;
+};
+
+/** Maps [unmapped]'s rows in steps of `REPLAY_STEP_MS` at most, yielding between them. */
+const mapInSteps = async ({ rows, fields, joins }: Unmapped, now: () => number) => {
+  const out: unknown[] = [];
+  let heldMs = 0;
+  while (out.length < rows.length) {
+    const start = now();
+    replayPass(() => {
+      do out.push(mapResultRow(fields, rows[out.length]!, joins));
+      while (out.length < rows.length && now() - start < REPLAY_STEP_MS);
+    });
+    heldMs += now() - start;
+    if (out.length < rows.length) await yieldReplay();
+  }
+  return { rows: out, heldMs };
+};
+
+/** Runs [read] with its statements on [connection], as described at the top. */
 export const replayRead = <A>(
   connection: ReadConnection,
   read: (db: LibraryDatabase) => A,
@@ -293,11 +418,12 @@ export const replayRead = <A>(
 ): Promise<ReplayedRead<A>> =>
   connection.snapshot(async (query) => {
     const rows = new Map<string, readonly unknown[]>();
+    const mapped = new Map<string, MappedRows>();
     let heldMs = 0;
     for (let pass = 0; pass < MAX_PASSES; pass++) {
       const start = now();
-      let missed: Miss;
-      answers = rows;
+      let stopped: Miss | Unmapped;
+      current = { rows, mapped, handed: new Set() };
       try {
         const value = replayPass(() => read(replayDb()));
         return { value, heldMs: heldMs + now() - start, statements: rows.size };
@@ -305,12 +431,17 @@ export const replayRead = <A>(
         const reason = replayReason(error);
         if (reason === null) throw error;
         if (reason instanceof NotReplayable) throw reason;
-        missed = reason;
+        stopped = reason;
       } finally {
-        answers = null;
+        current = null;
         heldMs += now() - start;
       }
-      rows.set(missed.key, await query(missed.statement));
+      if (stopped instanceof Miss) rows.set(stopped.key, await query(stopped.statement));
+      else {
+        const done = await mapInSteps(stopped, now);
+        heldMs += done.heldMs;
+        mapped.set(stopped.key, { print: stopped.print, rows: done.rows });
+      }
     }
     throw new NotReplayable(`a read didn't settle in ${MAX_PASSES} passes`);
   });

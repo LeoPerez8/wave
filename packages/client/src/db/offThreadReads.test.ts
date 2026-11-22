@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 
 import { libraryCounts } from "./counts.ts";
 import { countTracks, listSongs } from "./libraryQueries.ts";
@@ -8,6 +8,8 @@ import {
   NotReplayable,
   readConnections,
   replayRead,
+  runReplayPassesWith,
+  yieldReplaysWith,
   type AsyncSqlite,
   type ReadConnection,
 } from "./offThreadReads.ts";
@@ -165,4 +167,107 @@ test("a failed read rolls back and frees its connection for the next", async () 
     ),
   );
   assert.equal((await replayRead(reads, countTracks, () => 0)).value, 120);
+});
+
+// A decoder that costs [time] 1 ms a value, so a test sees how long mapping held the thread.
+const slow = { time: clock(), decoded: 0 };
+const slowly = (value: unknown): number => {
+  slow.time.pass(1);
+  slow.decoded++;
+  return value as number;
+};
+const slowIds = (d: LibraryDatabase, where?: ReturnType<typeof inArray>) =>
+  d
+    .select({ id: sql<number>`${schema.tracks.id}`.mapWith(slowly), title: schema.tracks.title })
+    .from(schema.tracks)
+    .where(where)
+    .orderBy(schema.tracks.id)
+    .all();
+
+/** Runs [run] with each replay step timed on [now], and each yield counted. */
+const steps = async <A>(now: () => number, run: () => Promise<A>) => {
+  const held: number[] = [];
+  let yields = 0;
+  runReplayPassesWith((pass) => {
+    const start = now();
+    try {
+      return pass();
+    } finally {
+      held.push(now() - start);
+    }
+  });
+  yieldReplaysWith(async () => {
+    yields++;
+  });
+  try {
+    return { value: await run(), held, yields };
+  } finally {
+    runReplayPassesWith((pass) => pass());
+    yieldReplaysWith(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  }
+};
+
+test("a large result is mapped in short steps that yield between them", async () => {
+  const db = await openTestDatabase();
+  addLibrary(db, { tracks: 600, artists: 12, albums: 20 });
+  const reads = readConnections(async () => asyncReadClient(db));
+  const expected = slowIds(db);
+  slow.time = clock();
+  const { value, held, yields } = await steps(slow.time.now, () =>
+    replayRead(reads, slowIds, slow.time.now),
+  );
+  assert.deepEqual(value.value, expected);
+  assert.ok(expected.length >= 600);
+  assert.ok(Math.max(...held) <= 8, `no step held the thread over 8 ms: ${Math.max(...held)}`);
+  assert.ok(yields >= expected.length / 8 - 1, `yielded between steps: ${yields}`);
+  assert.equal(
+    value.heldMs,
+    held.reduce((a, b) => a + b, 0),
+  );
+});
+
+test("each row is mapped once, however many passes the read takes", async () => {
+  const db = await library();
+  const reads = readConnections(async () => asyncReadClient(db));
+  // Each statement depends on the one before: three statements, four passes.
+  const read = (d: LibraryDatabase) => {
+    const all = slowIds(d);
+    const some = slowIds(
+      d,
+      inArray(
+        schema.tracks.id,
+        all.slice(0, 60).map((row) => row.id),
+      ),
+    );
+    return slowIds(
+      d,
+      inArray(
+        schema.tracks.id,
+        some.slice(0, 30).map((row) => row.id),
+      ),
+    );
+  };
+  slow.decoded = 0;
+  const expected = read(db);
+  const once = slow.decoded;
+  slow.decoded = 0;
+  const replayed = await replayRead(reads, read, () => 0);
+  assert.deepEqual(replayed.value, expected);
+  assert.equal(replayed.statements, 3);
+  assert.equal(slow.decoded, once, "as many values as the synchronous read decodes");
+});
+
+test("a read that sorts or repeats a statement's rows gets its own rows each time", async () => {
+  const db = await library();
+  const reads = readConnections(async () => asyncReadClient(db));
+  const read = (d: LibraryDatabase) => {
+    const first = slowIds(d).sort((a, b) => b.id - a.id);
+    const again = slowIds(d);
+    d.get(sql`SELECT ${first.length} AS n`);
+    return { first, again, shared: first.some((row) => again.includes(row)) };
+  };
+  const replayed = await replayRead(reads, read, () => 0);
+  assert.deepEqual(replayed.value, read(db));
+  assert.equal(replayed.value.shared, false);
+  assert.equal(replayed.value.again[0]!.id < replayed.value.again[1]!.id, true);
 });
