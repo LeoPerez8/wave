@@ -952,6 +952,7 @@ export { BACKGROUND_WORK_LIMITS, createBackgroundWork, runStepSlice } from "./ba
 export {
   JS_BLOCK_MS,
   PAUSE_HEARD_MS,
+  STARTUP_WORK_MS,
   TURN_WORK_MS,
   createJsBlockLog,
   jsBlockLine,

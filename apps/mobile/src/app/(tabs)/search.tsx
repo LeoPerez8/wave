@@ -130,7 +130,8 @@ export default function SearchScreen() {
   // The tab's tap raises the keyboard; the Library is read only once it has.
   const focus = useSearchFieldFocus(field);
 
-  const library = useSearchIndex(focus.libraryWanted || query !== "");
+  // The index is started once the field is focused, and followed once something is typed.
+  const library = useSearchIndex(focus.libraryWanted || query !== "", query !== "");
   const index = library?.index ?? null;
   // The field updates on every keystroke; results follow as soon as they're ready.
   const deferredQuery = useDeferredValue(query);

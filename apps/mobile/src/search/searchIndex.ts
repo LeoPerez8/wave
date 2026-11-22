@@ -12,9 +12,10 @@ import {
   type YtSong,
 } from "@wave/core";
 import type * as Effect from "effect/Effect";
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo } from "react";
 
 import { inSlice, whenFree } from "@/lib/backgroundWork";
+import { useStoreWhile } from "@/lib/storeWhile";
 import { libraryListQueries } from "@/library/hooks";
 import { onLibraryChange } from "@/library/libraryChanges";
 import { publishLibraryRows } from "@/library/libraryRows";
@@ -269,6 +270,7 @@ const subscribeIndex = (listener: () => void): (() => void) => {
   };
 };
 const currentShown = (): Shown | null => shown;
+const shownIndex = { subscribe: subscribeIndex, get: currentShown };
 
 registerPerfMeta("search", () => ({
   ...catalog.stats(),
@@ -321,13 +323,16 @@ const releasesOf = (
  *   index's songs; whether it has an artist or album, lookups over its
  *   artists and albums, each built on first use.
  * - Typing only ever runs the (prepared, narrowing) search itself.
+ * - While not [following] it gives null and doesn't render for the index's
+ *   changes: a scan republishes it per batch, and Search with nothing typed
+ *   has no use for it (#1438). Following again gives the current one at once.
  */
-export const useSearchIndex = (active: boolean): LibrarySearch | null => {
+export const useSearchIndex = (active: boolean, following = true): LibrarySearch | null => {
   useEffect(() => {
     if (active && !started) startSearchIndex();
   }, [active]);
 
-  const current = useSyncExternalStore(subscribeIndex, currentShown);
+  const current = useStoreWhile(shownIndex, following, null);
   const songs = current?.songs;
   const artists = current?.artists;
   const albums = current?.albums;
