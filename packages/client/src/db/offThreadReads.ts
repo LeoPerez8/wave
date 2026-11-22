@@ -20,6 +20,16 @@
  * Each pass hands a read its own array, but the row objects are shared across
  * passes, so a replayed read never mutates the rows it reads (none does).
  *
+ * A read runs again and again (Home's mix builds read the same 20,000 rows
+ * several times a second on the reference phone, #1452), and each of its k
+ * statements used to cost a pass that redid everything before it. So a read
+ * (the same function) fetches the statements it ran last time before its
+ * first pass, and maps their large results in steps: a read whose statements
+ * haven't changed runs each of them once, in one pass. A statement that
+ * changes on every run (a time in its params) stops being fetched ahead once
+ * two runs disagree on it. `sharedReplays` also lets callers that ask for the
+ * same read at once share one replay.
+ *
  * A read that writes, asks the connection about itself (a PRAGMA), or doesn't
  * settle (its statements change between passes) can't be replayed: it rejects
  * with `NotReplayable` and the caller runs it on the main connection.
@@ -125,6 +135,21 @@ const keyOf = (statement: ReadStatement): string =>
 interface MappedRows {
   readonly print: Print;
   readonly rows: readonly unknown[];
+  /** Mapped ahead of the read's first pass, as the read mapped them last time. */
+  readonly ahead?: boolean;
+}
+
+/** How a statement's rows were mapped into values: what maps them again ahead of a pass. */
+interface Mapping {
+  readonly fields: Fields;
+  readonly joins: Record<string, boolean> | undefined;
+  readonly print: Print;
+}
+
+/** A statement a pass asked for, and how it mapped its rows (none for raw rows). */
+interface Asked {
+  readonly statement: ReadStatement;
+  mapping?: Mapping;
 }
 
 /** What a pass answers from: the read's rows so far, and the rows it has mapped. */
@@ -133,6 +158,8 @@ interface Pass {
   readonly mapped: Map<string, MappedRows>;
   /** Statements whose kept rows this pass already handed out: asked again, it maps afresh. */
   readonly handed: Set<string>;
+  /** Every statement this pass got rows for, in the order it asked. */
+  readonly asked: Map<string, Asked>;
 }
 
 /** The pass running now. Passes are synchronous, so one at a time. */
@@ -146,6 +173,7 @@ const answer = (sql: string, params: readonly ReadParam[], mode: ReadMode) => {
   const key = keyOf(statement);
   const rows = current.rows.get(key);
   if (rows === undefined) throw new Miss(key, statement);
+  if (!current.asked.has(key)) current.asked.set(key, { statement });
   return { key, rows };
 };
 
@@ -264,7 +292,13 @@ class ReplayPreparedQuery extends SQLitePreparedQuery<{
     const pass = current!;
     const joins = this.joins();
     const print = printOf(fields, joins);
-    const kept = pass.mapped.get(key);
+    pass.asked.get(key)!.mapping ??= { fields, joins, print };
+    let kept = pass.mapped.get(key);
+    // Rows mapped ahead another way than this read maps them now are mapped again, as if new.
+    if (kept?.ahead === true && !samePrint(kept.print, print)) {
+      pass.mapped.delete(key);
+      kept = undefined;
+    }
     const fresh = !pass.handed.has(key);
     pass.handed.add(key);
     if (kept !== undefined && fresh && samePrint(kept.print, print)) return [...kept.rows];
@@ -394,8 +428,12 @@ export const yieldReplaysWith = (yielder: () => Promise<void>): void => {
   yieldReplay = yielder;
 };
 
-/** Maps [unmapped]'s rows in steps of `REPLAY_STEP_MS` at most, yielding between them. */
-const mapInSteps = async ({ rows, fields, joins }: Unmapped, now: () => number) => {
+/** Maps [rows] in steps of `REPLAY_STEP_MS` at most, yielding between them. */
+const mapInSteps = async (
+  rows: readonly unknown[][],
+  { fields, joins }: Pick<Mapping, "fields" | "joins">,
+  now: () => number,
+) => {
   const out: unknown[] = [];
   let heldMs = 0;
   while (out.length < rows.length) {
@@ -410,6 +448,26 @@ const mapInSteps = async ({ rows, fields, joins }: Unmapped, now: () => number) 
   return { rows: out, heldMs };
 };
 
+/** What a read fetches before its first pass: what it asked for last time, and before that. */
+interface Plan {
+  /** The statements the read's last run asked for. */
+  readonly last: ReadonlySet<string>;
+  /** Those its last two runs both asked for (all of them after its first): fetched ahead. */
+  readonly ahead: readonly (readonly [string, Asked])[];
+}
+
+/** Each read's plan, by its function: a read made for one call (its own params) has none. */
+const plans = new WeakMap<object, Plan>();
+
+/** Keeps what [read]'s run just [asked] for as its next plan. */
+const learn = (read: object, asked: ReadonlyMap<string, Asked>): void => {
+  const before = plans.get(read);
+  plans.set(read, {
+    last: new Set(asked.keys()),
+    ahead: [...asked].filter(([key]) => before === undefined || before.last.has(key)),
+  });
+};
+
 /** Runs [read] with its statements on [connection], as described at the top. */
 export const replayRead = <A>(
   connection: ReadConnection,
@@ -420,13 +478,25 @@ export const replayRead = <A>(
     const rows = new Map<string, readonly unknown[]>();
     const mapped = new Map<string, MappedRows>();
     let heldMs = 0;
+    for (const [key, { statement, mapping }] of plans.get(read)?.ahead ?? []) {
+      // A statement fetched ahead that fails is left to the pass that asks for it, if any.
+      const fetched = await query(statement).catch(() => null);
+      if (fetched === null) continue;
+      rows.set(key, fetched);
+      if (mapping === undefined || fetched.length <= MAPPED_IN_PASS) continue;
+      const done = await mapInSteps(fetched as readonly unknown[][], mapping, now);
+      heldMs += done.heldMs;
+      mapped.set(key, { print: mapping.print, rows: done.rows, ahead: true });
+    }
     for (let pass = 0; pass < MAX_PASSES; pass++) {
       const start = now();
       let stopped: Miss | Unmapped;
-      current = { rows, mapped, handed: new Set() };
+      const asked = new Map<string, Asked>();
+      current = { rows, mapped, handed: new Set(), asked };
       try {
         const value = replayPass(() => read(replayDb()));
-        return { value, heldMs: heldMs + now() - start, statements: rows.size };
+        learn(read, asked);
+        return { value, heldMs: heldMs + now() - start, statements: asked.size };
       } catch (error) {
         const reason = replayReason(error);
         if (reason === null) throw error;
@@ -438,13 +508,59 @@ export const replayRead = <A>(
       }
       if (stopped instanceof Miss) rows.set(stopped.key, await query(stopped.statement));
       else {
-        const done = await mapInSteps(stopped, now);
+        const done = await mapInSteps(stopped.rows, stopped, now);
         heldMs += done.heldMs;
         mapped.set(stopped.key, { print: stopped.print, rows: done.rows });
       }
     }
     throw new NotReplayable(`a read didn't settle in ${MAX_PASSES} passes`);
   });
+
+/**
+ * Replays reads on [connection] (`replayRead`), and lets callers that ask for the same read
+ * (the same function) at once share one replay. A caller joins a replay under way only until
+ * that replay begins reading: its snapshot then starts after the caller asked, so it holds
+ * every write the caller made before asking (writes run on the main connection, on the JS
+ * thread, and finish before the call returns). Each caller gets its own copy of an array
+ * result (the rows in it are shared, and no read's caller changes them); only the caller
+ * whose replay ran is told the JS time it held.
+ */
+export const sharedReplays = (connection: ReadConnection, now: () => number) => {
+  interface UnderWay {
+    readonly replay: Promise<ReplayedRead<unknown>>;
+    callers: number;
+  }
+  const joinable = new Map<object, UnderWay>();
+  // Copies are taken as the replay settles, before any caller's code runs on the result.
+  const own = <A>(entry: UnderWay, replayed: ReplayedRead<A>, ran: boolean): ReplayedRead<A> => {
+    const value =
+      entry.callers > 1 && Array.isArray(replayed.value)
+        ? ([...replayed.value] as A)
+        : replayed.value;
+    return ran ? { ...replayed, value } : { value, heldMs: 0, statements: 0 };
+  };
+  return <A>(read: (db: LibraryDatabase) => A): Promise<ReplayedRead<A>> => {
+    const running = joinable.get(read);
+    if (running !== undefined) {
+      running.callers++;
+      return running.replay.then((replayed) => own(running, replayed as ReplayedRead<A>, false));
+    }
+    let entry: UnderWay | undefined;
+    // From its first statement on, it takes no one else: the next ask replays the read again.
+    const close = () => {
+      if (entry !== undefined && joinable.get(read) === entry) joinable.delete(read);
+    };
+    const replay = replayRead(
+      { snapshot: (inSnapshot) => connection.snapshot((query) => (close(), inSnapshot(query))) },
+      read,
+      now,
+    );
+    entry = { replay, callers: 1 };
+    joinable.set(read, entry);
+    replay.then(close, close);
+    return replay.then((replayed) => own(entry!, replayed, true));
+  };
+};
 
 /** Statements kept prepared per connection. */
 const STATEMENTS_KEPT = 64;
