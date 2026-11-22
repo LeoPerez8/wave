@@ -332,6 +332,7 @@ test("the real slow-read boundary contributes its operation to the opening scree
     write: (line) => lines.push(line),
     context: () => ({ background: [], offline: false }),
     build: () => ({ version: "test", commit: "abc1234" }),
+    later: (_ms, run) => run(),
   });
   const flush = connectLibraryReadLog({ route: session.route, write: (line) => lines.push(line) });
   const stop = onSlowLibraryRead((read) => session.read(read.operation, read.durationMs));

@@ -254,7 +254,9 @@ describe("a long task that spans Wave leaving the screen is a pause, not a block
     log.returned(43_812);
     log.longTask(1000, 42_800);
     run();
-    assert.deepEqual(lines, ["JS paused 42.8 s on / (Wave left the screen meanwhile); not a block"]);
+    assert.deepEqual(lines, [
+      "JS paused 42.8 s on / (Wave left the screen meanwhile); not a block",
+    ]);
   });
 
   test("the app state heard after the long task's report, within the grace, still marks it", () => {

@@ -86,7 +86,10 @@ export const jsBlockLine = (block: {
   `JS blocked ${timingDuration(block.durationMs)} on ${block.screen} by ${block.work ?? "no background work"}`;
 
 // not UI text: the app log's line
-export const jsPausedLine = (block: { readonly durationMs: number; readonly screen: string }): string =>
+export const jsPausedLine = (block: {
+  readonly durationMs: number;
+  readonly screen: string;
+}): string =>
   `JS paused ${timingDuration(block.durationMs)} on ${block.screen} (Wave left the screen meanwhile); not a block`;
 
 interface Span {
