@@ -70,7 +70,7 @@ import {
 import { homeRecommendationSnapshot as recommendationSnapshot } from "./recommendationSnapshot";
 import { homeTurnOf } from "./homeWork";
 import { buildHomeMixes } from "./homeMixBuild";
-import { refreshKnownVideos, useKnownVideos } from "./mixKnown";
+import { refreshKnownVideos, sharedKnownVideos, useKnownVideos } from "./mixKnown";
 import { noteMixesShown } from "./mixPreDownload";
 import { similarOffline, withSimilar } from "./similarArtists";
 import { chartArtists } from "./ytChart";
@@ -78,6 +78,7 @@ import { artistRadioCacheId } from "./cachedArtistRadio";
 import { mixRadioPages, readMixArtistRadio } from "./mixArtistRadio";
 import { readMixRadios } from "./mixRadioReads";
 import { readMixBuildLibrary } from "./mixBuildLibrary";
+import { sharedRead } from "@/lib/sharedRead";
 import { knownLibraryFinder } from "@/ytmusic/libraryFinder";
 
 export type { MixSectionId } from "./discoverMixLevel";
@@ -142,11 +143,15 @@ const saveBuilt = (id: MixSectionId, built: DiscoverMixes): void => {
 };
 
 /** Builds use the last completed indexes; derivations warm separately on focus. */
-const mixBuildInputs = Effect.gen(function* () {
+const readMixBuildInputs = Effect.gen(function* () {
   const snapshot = recommendationSnapshot.peek();
+  const store = yield* LibraryStore;
   const { library, matchRadios } = yield* readMixBuildLibrary(
     snapshot.library,
-    yield* LibraryStore,
+    {
+      ...store,
+      knownVideos: sharedKnownVideos.pipe(Effect.provideService(LibraryStore, store)),
+    },
     recommendationTurnEffect,
     knownLibraryFinder(),
   );
@@ -161,7 +166,16 @@ const mixBuildInputs = Effect.gen(function* () {
   };
 });
 
-type MixBuildInputs = Effect.Success<typeof mixBuildInputs>;
+type MixBuildInputs = Effect.Success<typeof readMixBuildInputs>;
+
+/**
+ * The inputs rows building at the same time share: one read of the Library
+ * and its genre profiles for all of them, not one each (#1437). A build that
+ * starts after it finished reads them again.
+ */
+const sharedMixBuildInputs = sharedRead(readMixBuildInputs, { keepMs: 0 });
+const mixBuildInputs: Effect.Effect<MixBuildInputs, unknown, LibraryStore> =
+  sharedMixBuildInputs.get;
 
 /**
  * [saved] ranked again from cached radios: the build's

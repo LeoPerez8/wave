@@ -177,7 +177,7 @@ test("the families and the grid are worked out in steps that give the same resul
 
 test("DJ's opening takes a grid worked out beforehand in place of ranking again", () => {
   const grid = djGrid(sources);
-  const mixes = { kind: "skeleton" } as const;
+  const mixes = { kind: "skeleton", failed: false } as const;
   assert.deepEqual(djOpeningGrid({ ...sources, artistMixes: mixes, grid }), djOpeningGrid({ ...sources, artistMixes: mixes }));
   assert.deepEqual(
     djOpeningGrid({ ...sources, artistMixes: mixes, grid: [] }),

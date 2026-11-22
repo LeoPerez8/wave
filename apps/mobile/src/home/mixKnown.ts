@@ -50,6 +50,12 @@ const videoRead = createKnownVideosRead(
   }),
 );
 onLibraryChange(videoRead.change);
+
+/**
+ * The videos the owner knows, from the read re-blends share: a mix build
+ * reads the 20,000-odd rows again only after a source of them changed (#1437).
+ */
+export const sharedKnownVideos = videoRead.get;
 export const refreshKnownVideos = (): void => {
   void appRuntime
     .runPromise(videoRead.get)
