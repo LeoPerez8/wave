@@ -157,6 +157,21 @@ const DEFAULT_HOME_ARRANGEMENT: HomeArrangement = {
   discoverRows: DEFAULT_DISCOVER_ROWS,
 };
 
+/** No sections left out: a Wave that draws every section in the catalogue. */
+const NO_SECTIONS: readonly HomeSectionId[] = [];
+
+/**
+ * The default arrangement for a Wave that doesn't draw [skip] (the computer has no DJ). A
+ * skipped section is neither shown nor hidden there, so the Wave that draws it decides.
+ */
+const defaultArrangement = (skip: readonly HomeSectionId[]): HomeArrangement =>
+  skip.length === 0
+    ? DEFAULT_HOME_ARRANGEMENT
+    : {
+        ...DEFAULT_HOME_ARRANGEMENT,
+        sections: DEFAULT_SECTIONS.filter((id) => !skip.includes(id)),
+      };
+
 const sameOrder = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((id, index) => id === b[index]);
 
@@ -173,13 +188,17 @@ export const HOME_ARRANGEMENT_SETTING = "settings.homeArrangement";
  * (`joinsBefore`). Stats and Listening overview merge at the first shown one's place,
  * visible if either was shown. Nothing stored, or anything unreadable, is the default.
  */
-export const parseHomeArrangement = (stored: string | null): HomeArrangement => {
-  if (stored === null) return DEFAULT_HOME_ARRANGEMENT;
+export const parseHomeArrangement = (
+  stored: string | null,
+  skip: readonly HomeSectionId[] = NO_SECTIONS,
+): HomeArrangement => {
+  const fallback = defaultArrangement(skip);
+  if (stored === null) return fallback;
   const { shown, hidden, discover } = readStoredRecord(stored);
-  if (!Array.isArray(shown)) return DEFAULT_HOME_ARRANGEMENT;
-  const arrangement = knownSections(shown);
+  if (!Array.isArray(shown)) return fallback;
+  const arrangement = knownSections(shown).filter((id) => !skip.includes(id));
   const known = new Set([...arrangement, ...knownSections(Array.isArray(hidden) ? hidden : [])]);
-  const newer = HOME_SECTIONS.filter(({ id }) => !known.has(id));
+  const newer = HOME_SECTIONS.filter(({ id }) => !known.has(id) && !skip.includes(id));
   for (const { id, joinsAfter = [], joinsBefore = [] } of newer) {
     const place = DEFAULT_SECTIONS.indexOf(id);
     const next = joinsBefore.find((anchor) => arrangement.includes(anchor));
@@ -236,13 +255,16 @@ const knownSections = (values: readonly unknown[]): HomeSectionId[] => [
  * sections it hides are stored too, so a section added to the catalogue later
  * can tell it's new.
  */
-export const storedHomeArrangement = (arrangement: HomeArrangement): string | null =>
-  sameOrder(arrangement.sections, DEFAULT_SECTIONS) &&
+export const storedHomeArrangement = (
+  arrangement: HomeArrangement,
+  skip: readonly HomeSectionId[] = NO_SECTIONS,
+): string | null =>
+  sameOrder(arrangement.sections, defaultArrangement(skip).sections) &&
   sameOrder(arrangement.discoverRows, DEFAULT_DISCOVER_ROWS)
     ? null
     : JSON.stringify({
         shown: arrangement.sections,
-        hidden: hiddenHomeSections(arrangement),
+        hidden: hiddenHomeSections(arrangement, skip),
         discover: { shown: arrangement.discoverRows, hidden: hiddenDiscoverRows(arrangement) },
       });
 
@@ -294,9 +316,12 @@ export const editHomeArrangement = (
   return { ...arrangement, sections: moveItem(arrangement.sections, edit.move.from, edit.move.to) };
 };
 
-/** The catalogue's sections [arrangement] doesn't show, in catalogue order. */
-export const hiddenHomeSections = (arrangement: HomeArrangement): HomeSectionId[] =>
-  DEFAULT_SECTIONS.filter((id) => !arrangement.sections.includes(id));
+/** The catalogue's sections [arrangement] doesn't show, in catalogue order, [skip] left out. */
+export const hiddenHomeSections = (
+  arrangement: HomeArrangement,
+  skip: readonly HomeSectionId[] = NO_SECTIONS,
+): HomeSectionId[] =>
+  DEFAULT_SECTIONS.filter((id) => !arrangement.sections.includes(id) && !skip.includes(id));
 
 /** Missing row metadata predates editable rows. Unknown ids and duplicates are discarded. */
 const parseDiscoverRows = (value: unknown): readonly DiscoverRowId[] => {
