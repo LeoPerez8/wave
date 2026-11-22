@@ -2267,7 +2267,12 @@ const make = Effect.gen(function* () {
     keepStreamedGenre: (videoId, genre) =>
       writeAttempt("save a streamed genre", () => keepStreamedGenre(db, videoId, genre)),
     pendingDjMoodSongs: (after, now) =>
-      attempt("read pending DJ mood songs", (db) => pendingDjMoodSongs(db, after, now)),
+      attempt(
+        "read pending DJ mood songs",
+        (db) => pendingDjMoodSongs(db, after, now),
+        // The page's songs, not the page: an empty one logged as "1 row" looked like a stuck song.
+        (page) => page.songs.length + page.unreadable.length,
+      ),
     keepDjMoodFeatures: (writes) =>
       writeAttempt("save DJ mood features", () => keepDjMoodFeatures(db, writes)),
     djMoodFeatures: (videoIds) =>

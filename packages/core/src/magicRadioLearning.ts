@@ -1,5 +1,6 @@
 /** Magic Queue keeps its seed in the lead while learning from liked-song radios. */
-import { radioRankingBatch, type RankedRadioSong } from "./radioRanking.ts";
+import { filterSteps, finishSteps } from "./buildSteps.ts";
+import { radioRankingBatchSteps, type RankedRadioSong } from "./radioRanking.ts";
 import { magicArtistKey, type MagicSession, type MagicSongRadioSeed } from "./magicQueue.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
 import { recordingMatches, recordingMatchTitle, ytTrackId } from "./ytMusic.ts";
@@ -30,8 +31,18 @@ export const availableMagicSongs = (
 export const magicRadioExclusions = (
   session: MagicSession,
   songs: Iterable<YtAlbumSong>,
-): ReadonlySet<string> => {
-  const exclude = new Set(session.used);
+): ReadonlySet<string> => finishSteps(magicRadioExclusionsSteps(session, songs));
+
+/** `magicRadioExclusions`, a step per song, for a background slice (#1448). */
+export function* magicRadioExclusionsSteps(
+  session: MagicSession,
+  songs: Iterable<YtAlbumSong>,
+): Generator<void, ReadonlySet<string>> {
+  const exclude = new Set<string>();
+  for (const id of session.used) {
+    exclude.add(id);
+    yield;
+  }
   for (const id of session.seedVideoIds) exclude.add(ytTrackId(id));
   const recordings = new Map<string, MagicSongRadioSeed[]>();
   for (const radio of session.likedRadios ?? []) {
@@ -41,7 +52,7 @@ export const magicRadioExclusions = (
     bucket.push(radio);
     recordings.set(key, bucket);
   }
-  for (const song of songs)
+  for (const song of songs) {
     if (
       (recordings.get(recordingMatchTitle(song.title)) ?? []).some((radio) =>
         recordingMatches(
@@ -55,8 +66,10 @@ export const magicRadioExclusions = (
       )
     )
       exclude.add(ytTrackId(song.videoId));
+    yield;
+  }
   return exclude;
-};
+}
 
 /**
  * The liked radios' songs a batch may take beside [seed]'s: a recording the
@@ -65,17 +78,26 @@ export const magicRadioExclusions = (
 export const magicLearnedExtras = <S extends Pick<RankedRadioSong, "trackId" | "song">>(
   seed: readonly S[],
   liked: readonly S[],
-): S[] => {
-  const ids = new Set(seed.map((song) => song.trackId));
+): S[] => finishSteps(magicLearnedExtrasSteps(seed, liked));
+
+/** `magicLearnedExtras`, a step per candidate. */
+export function* magicLearnedExtrasSteps<S extends Pick<RankedRadioSong, "trackId" | "song">>(
+  seed: readonly S[],
+  liked: readonly S[],
+): Generator<void, S[]> {
+  const ids = new Set<string>();
   const recordings = new Map<string, NonNullable<RankedRadioSong["song"]>[]>();
   for (const candidate of seed) {
-    if (candidate.song === null) continue;
-    const key = recordingMatchTitle(candidate.song.title);
+    ids.add(candidate.trackId);
+    yield;
+    const song = candidate.song;
+    if (song === null) continue;
+    const key = recordingMatchTitle(song.title);
     const bucket = recordings.get(key) ?? [];
-    bucket.push(candidate.song);
+    bucket.push(song);
     recordings.set(key, bucket);
   }
-  return liked.filter((candidate) => {
+  return yield* filterSteps(liked, (candidate) => {
     if (ids.has(candidate.trackId)) return false;
     const song = candidate.song;
     return (
@@ -94,36 +116,52 @@ export const magicLearnedExtras = <S extends Pick<RankedRadioSong, "trackId" | "
       )
     );
   });
-};
+}
 
 /** Whether a batch of [session] may take a song of [candidates]: one it hasn't played or learned from. */
 export const magicRadioEligible = <S extends Pick<RankedRadioSong, "trackId" | "song">>(
   session: MagicSession,
   candidates: readonly S[],
-): ((song: S) => boolean) => {
-  const exclude = magicRadioExclusions(
-    session,
-    candidates.flatMap((s) => s.song ?? []),
-  );
+): ((song: S) => boolean) => finishSteps(magicRadioEligibleSteps(session, candidates));
+
+/** `magicRadioEligible`, a step per candidate. */
+export function* magicRadioEligibleSteps<S extends Pick<RankedRadioSong, "trackId" | "song">>(
+  session: MagicSession,
+  candidates: Iterable<S>,
+): Generator<void, (song: S) => boolean> {
+  const songs: YtAlbumSong[] = [];
+  for (const candidate of candidates) {
+    const song = candidate.song;
+    if (song !== null) songs.push(song);
+    yield;
+  }
+  const exclude = yield* magicRadioExclusionsSteps(session, songs);
   return (song) =>
     !exclude.has(song.trackId) &&
     (song.song === null || !exclude.has(ytTrackId(song.song.videoId)));
-};
+}
 
 /** About a third from liked radios, filling shortages from the other pool. */
 export const magicRadioBatch = (
   seed: readonly RankedRadioSong[],
   liked: readonly RankedRadioSong[],
   options: { readonly size: number; readonly newMusicShare: number },
-): RankedRadioSong[] => {
-  const extra = magicLearnedExtras(seed, liked);
-  const learned = radioRankingBatch(extra, {
+): RankedRadioSong[] => finishSteps(magicRadioBatchSteps(seed, liked, options));
+
+/** `magicRadioBatch`, a step per candidate. */
+function* magicRadioBatchSteps(
+  seed: readonly RankedRadioSong[],
+  liked: readonly RankedRadioSong[],
+  options: { readonly size: number; readonly newMusicShare: number },
+): Generator<void, RankedRadioSong[]> {
+  const extra = yield* magicLearnedExtrasSteps(seed, liked);
+  const learned = yield* radioRankingBatchSteps(extra, {
     ...options,
     size: Math.max(Math.round(options.size / 3), options.size - seed.length),
   });
   const remaining = options.size - learned.length;
   const streams = Math.round(options.size * Math.max(0, Math.min(1, options.newMusicShare)));
-  const original = radioRankingBatch(seed, {
+  const original = yield* radioRankingBatchSteps(seed, {
     size: remaining,
     newMusicShare:
       remaining === 0
@@ -139,7 +177,7 @@ export const magicRadioBatch = (
     while (at < due) result.push(learned[at++]!);
   }
   return result;
-};
+}
 
 /** A seed song plays ahead of a session's first batch, except a continued queue's and DJ's. */
 const batchSize = (session: MagicSession): number =>
@@ -184,17 +222,37 @@ export const completeMagicRadioBatch = (
   session: MagicSession,
   seed: readonly RankedRadioSong[],
   liked: readonly RankedRadioSong[],
-  fallback?: () => {
-    readonly seed: readonly RankedRadioSong[];
-    readonly liked: readonly RankedRadioSong[];
-  },
-): {
+  fallback?: () => MagicRadioFallback,
+): CompletedMagicRadioBatch =>
+  finishSteps(completeMagicRadioBatchSteps(session, seed, liked, fallback));
+
+/** The rankings a short faithful batch fills its missing places from. */
+export interface MagicRadioFallback {
+  readonly seed: readonly RankedRadioSong[];
+  readonly liked: readonly RankedRadioSong[];
+}
+
+/** A completed batch: the session that took it, and its songs in order with their track ids. */
+export interface CompletedMagicRadioBatch {
   readonly session: MagicSession;
   readonly trackIds: readonly string[];
   readonly songs: readonly RankedRadioSong[];
-} => {
-  const eligible = magicRadioEligible(session, [...seed, ...liked]);
-  let primary = magicRadioBatch(seed.filter(eligible), liked.filter(eligible), {
+}
+
+/**
+ * `completeMagicRadioBatch`, a few candidates per step, for a background
+ * slice (#1448): a batch weighs the whole playable Library.
+ */
+export function* completeMagicRadioBatchSteps(
+  session: MagicSession,
+  seed: readonly RankedRadioSong[],
+  liked: readonly RankedRadioSong[],
+  fallback?: () => MagicRadioFallback,
+): Generator<void, CompletedMagicRadioBatch> {
+  const eligible = yield* magicRadioEligibleSteps(session, both(seed, liked));
+  const eligibleSeed = yield* filterSteps(seed, eligible);
+  const eligibleLiked = yield* filterSteps(liked, eligible);
+  let primary = yield* magicRadioBatchSteps(eligibleSeed, eligibleLiked, {
     size: batchSize(session),
     newMusicShare: session.ytShare,
   });
@@ -208,13 +266,15 @@ export const completeMagicRadioBatch = (
       (name) => !startedArtists.has(magicArtistKey(name)),
     );
     const byArtist = new Map<string, RankedRadioSong[]>();
-    for (const song of [...seed.filter(eligible), ...liked.filter(eligible)])
+    for (const song of both(eligibleSeed, eligibleLiked)) {
       for (const artist of song.artists) {
         if (!selectedArtists.some((name) => magicArtistKey(name) === artist)) continue;
         const songs = byArtist.get(artist) ?? [];
         if (!songs.some((candidate) => candidate.trackId === song.trackId)) songs.push(song);
         byArtist.set(artist, songs);
       }
+      yield;
+    }
     const chosen: RankedRadioSong[] = [];
     const limit = batchSize(session);
     for (const name of selectedArtists) {
@@ -268,14 +328,19 @@ export const completeMagicRadioBatch = (
   const fill =
     fills === undefined
       ? []
-      : magicRadioBatch(fills.seed.filter(isFill), fills.liked.filter(isFill), {
-          size: remaining,
-          newMusicShare: session.ytShare,
-        });
+      : yield* magicRadioBatchSteps(
+          yield* filterSteps(fills.seed, isFill),
+          yield* filterSteps(fills.liked, isFill),
+          { size: remaining, newMusicShare: session.ytShare },
+        );
   const selected = [...primary, ...fill];
   const trackIds = selected.map((song) => song.trackId);
   if (trackIds.length === 0) return { session, trackIds, songs: selected };
-  const used = new Set(session.used);
+  const used = new Set<string>();
+  for (const id of session.used) {
+    used.add(id);
+    yield;
+  }
   for (const song of selected) {
     used.add(song.trackId);
     if (song.song !== null) used.add(ytTrackId(song.song.videoId));
@@ -285,4 +350,10 @@ export const completeMagicRadioBatch = (
     songs: selected,
     session: { ...session, used: [...used], batches: session.batches + 1 },
   };
-};
+}
+
+/** [first]'s values, then [second]'s, without copying either. */
+function* both<A>(first: readonly A[], second: readonly A[]): Generator<A> {
+  yield* first;
+  yield* second;
+}

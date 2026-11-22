@@ -1361,4 +1361,6 @@ export const djMoodFeatures = sqliteTable("dj_mood_features", {
   acousticness: real("acousticness"),
   mode: integer("mode"),
   checkedAt: integer("checked_at").notNull(),
+  /** Lookups that failed in a row since the last answer (#1449): `DJ_MOOD_MAX_FAILURES` leaves it. */
+  failures: integer("failures").notNull().default(0),
 });

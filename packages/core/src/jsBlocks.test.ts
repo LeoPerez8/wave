@@ -106,6 +106,26 @@ describe("a long task names the work still running in it", () => {
     log.longTask(3000, 70);
     assert.deepEqual(lines, ["JS blocked 70 ms on /search by no background work"]);
   });
+
+  test("a turn held for its own task alone names that task and no block after it (#1449)", () => {
+    const { log, lines } = setup();
+    // The DJ mood lookup names its continuations as slices, so its turn keeps no window.
+    log.turnTaken("DJ mood lookup: ISRCs", 1000, 0);
+    log.longTask(990, 60);
+    log.longTask(1150, 70);
+    assert.deepEqual(lines, [
+      "JS blocked 60 ms on /search by DJ mood lookup: ISRCs",
+      "JS blocked 70 ms on /search by no background work",
+    ]);
+  });
+
+  test("its continuation, run as a slice, still names the block it held (#1449)", () => {
+    const { log, lines } = setup();
+    log.turnTaken("DJ mood lookup: ISRCs", 1000, 0);
+    log.sliceRan("DJ mood lookup: ISRCs", 1500, 12);
+    log.longTask(1490, 80);
+    assert.deepEqual(lines, ["JS blocked 80 ms on /search by DJ mood lookup: ISRCs"]);
+  });
 });
 
 describe("a long task before the first screen settles is startup's", () => {
@@ -296,6 +316,26 @@ describe("a long task that spans Wave leaving the screen is a pause, not a block
     show("/library");
     run();
     assert.deepEqual(lines, ["JS blocked 120 ms on /search by no background work"]);
+  });
+
+  test("a render that follows the lookup's turn is named as the render, though its commit came after the long task's report (#1449)", () => {
+    const { log, lines, run } = paused("/");
+    log.turnTaken("DJ mood lookup: ISRCs", 1000);
+    // HomeContent rendered from 1200 in one task; its commit's layout effects ran in the next,
+    // after the runtime had already reported the long task.
+    log.longTask(1200, 140);
+    log.renderRan("HomeContent", 1200, 160);
+    run();
+    assert.deepEqual(lines, ["JS blocked 140 ms on / by rendering HomeContent"]);
+  });
+
+  test("a render reported after the grace doesn't rename a block already written", () => {
+    const { log, lines, run } = paused("/");
+    log.turnTaken("DJ mood lookup: ISRCs", 1000);
+    log.longTask(1200, 140);
+    run();
+    log.renderRan("HomeContent", 1200, 160);
+    assert.deepEqual(lines, ["JS blocked 140 ms on / by DJ mood lookup: ISRCs"]);
   });
 
   test("a slice over 50 ms that spans a pause is marked paused too", () => {
