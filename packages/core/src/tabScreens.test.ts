@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { describeTabScreens, keepTabs, parseTabScreens } from "./index.ts";
+import { describeTabScreens, keepTabs, parseTabScreens, sameKeptTabs, warmTab } from "./index.ts";
 
 type Tab = "index" | "library" | "songs" | "albums" | "search";
 const bar: Tab[] = ["index", "library", "songs", "search"];
@@ -38,6 +38,46 @@ describe("tabs kept mounted", () => {
   test("showing the latest tab again keeps the same list (no re-render)", () => {
     const kept: readonly Tab[] = ["library", "index"];
     assert.equal(keepTabs(kept, "library", bar, 5), kept);
+  });
+});
+
+describe("a tab warmed before its first visit (#1438)", () => {
+  test("joins the kept tabs, after them, so the next to go is it", () => {
+    assert.deepEqual(warmTab(["library", "index"], "search", bar, 5), [
+      "library",
+      "index",
+      "search",
+    ]);
+  });
+
+  test("a tab already kept, off the bar, or past the limit changes nothing", () => {
+    const kept: readonly Tab[] = ["library", "index"];
+    assert.equal(warmTab(kept, "library", bar, 5), kept);
+    assert.equal(warmTab(kept, "albums", bar, 5), kept);
+    assert.equal(warmTab(kept, "search", bar, 2), kept);
+  });
+
+  test("a visit then puts it first, like any kept tab", () => {
+    const kept = warmTab<Tab>(["index"], "search", bar, 5);
+    assert.deepEqual(keepTabs(kept, "search", bar, 5), ["search", "index"]);
+  });
+});
+
+describe("the kept tabs as the tab navigator sees them (#1438)", () => {
+  test("switching between kept tabs keeps the same list, so the navigator isn't drawn for it", () => {
+    const shown: readonly Tab[] = ["index", "library"];
+    assert.equal(sameKeptTabs(shown, ["library", "index"]), shown);
+  });
+
+  test("a tab joining or leaving gives the new list", () => {
+    const shown: readonly Tab[] = ["index", "library"];
+    assert.deepEqual(sameKeptTabs(shown, ["search", "index", "library"]), [
+      "search",
+      "index",
+      "library",
+    ]);
+    assert.deepEqual(sameKeptTabs(shown, ["library"]), ["library"]);
+    assert.deepEqual(sameKeptTabs(shown, ["songs", "library"]), ["songs", "library"]);
   });
 });
 

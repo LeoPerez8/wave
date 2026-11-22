@@ -15,7 +15,7 @@ import {
   startTimingFrameCollection,
 } from "@/lib/timing";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { startTransition, useEffect } from "react";
 import type { GestureResponderEvent } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -55,7 +55,7 @@ import { settleFirstRun, startFirstRun } from "@/sync/signInInvitation";
 import { startSync } from "@/sync/startSync";
 import { startWhatsNew } from "@/updates/whatsNew";
 import { useThemeColor } from "@/theme/useThemeColor";
-import { useStackScreenOptions } from "@/chrome/tabScreens";
+import { useStackScreenOptions, warmTabScreen } from "@/chrome/tabScreens";
 
 /** Every touch holds background work; a perf build also notes its native timestamp. */
 const onRootTouchStart = (event: GestureResponderEvent): void => {
@@ -124,6 +124,13 @@ export default function RootLayout() {
       stopReady?.();
     };
   }, []);
+
+  // Search's screen, built hidden so its first tap shows a kept tab (#1438). A transition: a
+  // touch while it builds goes first.
+  useEffect(
+    () => afterFirstSettled("searchScreen", () => startTransition(() => warmTabScreen("search"))),
+    [],
+  );
 
   // The rest waits until the first screen has globally settled and quiet frames have passed, then goes one piece per free turn
   // (src/lib/backgroundWork.ts), in this order.

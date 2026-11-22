@@ -16,6 +16,7 @@ const harness = {
   pathname: "/",
   listeners: new Set<() => void>(),
   tabsRenders: 0,
+  chromeRenders: 0,
 };
 Object.assign(globalThis, { __tabsLayoutTest: harness });
 
@@ -54,22 +55,23 @@ const [{ default: TabsLayout }] = await loadWithStubs<[typeof import("../app/(ta
       `export const BACKDROP = { tabs: "tabs" };
        export const ChromeProvider = ({ children }) => children;`,
     ),
-    "@/chrome/TabBar": nothing("TabBar"),
+    "@/chrome/TabBar": stubModule(
+      `export const TabBar = () => { ${t}.chromeRenders++; return null; };`,
+    ),
     "@/chrome/tabEntry": stubModule(
       `const entry = { style: {}, enter: () => {} };
        export const useTabEntry = () => entry;`,
     ),
-    // As the app keeps them: the tab showing first, then the others visited.
+    // As the app keeps them: every tab visited, the same list while it holds the same tabs.
     "@/chrome/tabScreens": stubModule(
       `import { useState } from ${react};
        export const TAB_SCREENS = { detach: false, retain: 3 };
        export const renderTabScreens = () => () => null;
        export const useKeptTabs = (tab) => {
          const [kept, setKept] = useState([]);
-         const next = [...(tab === null ? [] : [tab]), ...kept.filter((other) => other !== tab)];
-         const same = next.length === kept.length && next.every((other, i) => other === kept[i]);
-         if (!same) setKept(next);
-         return same ? kept : next;
+         const same = tab === null || kept.includes(tab);
+         if (!same) setKept([tab, ...kept]);
+         return same ? kept : [tab, ...kept];
        };`,
     ),
     "@/chrome/tabSwitches": stubModule(
@@ -123,6 +125,21 @@ test("a push inside a section tab doesn't draw the tabs again; a tab switch does
     assert.equal(harness.tabsRenders, before);
     await act(() => go("/library"));
     assert.ok(harness.tabsRenders > before, "a new tab showing draws the tabs");
+  } finally {
+    await layout.close();
+  }
+});
+
+test("a switch back to a kept tab doesn't draw the tabs' chrome again (#1438)", async () => {
+  // expo-router's navigator follows the route itself; the mini player and tab bar around it
+  // stay as they were.
+  const layout = await drawn();
+  try {
+    await act(() => go("/library"));
+    const before = harness.chromeRenders;
+    await act(() => go("/"));
+    await act(() => go("/library"));
+    assert.equal(harness.chromeRenders, before);
   } finally {
     await layout.close();
   }
