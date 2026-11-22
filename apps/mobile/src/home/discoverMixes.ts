@@ -40,7 +40,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
-import { runSteps } from "@/lib/stepped";
+import { type BackgroundWorkName, namedWork, runSteps } from "@/lib/stepped";
 import { settledTurnEffect as settledTurn } from "@/lib/backgroundWork";
 import { recommendationTurnEffect as recommendationTurn } from "@/lib/recommendationWork";
 import { makeExternalStore, type ExternalStore } from "@wave/client/externalStore";
@@ -70,7 +70,7 @@ import {
 import { homeRecommendationSnapshot as recommendationSnapshot } from "./recommendationSnapshot";
 import { homeTurnOf } from "./homeWork";
 import { buildHomeMixes } from "./homeMixBuild";
-import { refreshKnownVideos, useKnownVideos } from "./mixKnown";
+import { refreshKnownVideos, sharedKnownVideos, useKnownVideos } from "./mixKnown";
 import { noteMixesShown } from "./mixPreDownload";
 import { similarOffline, withSimilar } from "./similarArtists";
 import { chartArtists } from "./ytChart";
@@ -78,6 +78,7 @@ import { artistRadioCacheId } from "./cachedArtistRadio";
 import { mixRadioPages, readMixArtistRadio } from "./mixArtistRadio";
 import { readMixRadios } from "./mixRadioReads";
 import { readMixBuildLibrary } from "./mixBuildLibrary";
+import { sharedRead } from "@/lib/sharedRead";
 import { knownLibraryFinder } from "@/ytmusic/libraryFinder";
 
 export type { MixSectionId } from "./discoverMixLevel";
@@ -142,11 +143,15 @@ const saveBuilt = (id: MixSectionId, built: DiscoverMixes): void => {
 };
 
 /** Builds use the last completed indexes; derivations warm separately on focus. */
-const mixBuildInputs = Effect.gen(function* () {
+const readMixBuildInputs = Effect.gen(function* () {
   const snapshot = recommendationSnapshot.peek();
+  const store = yield* LibraryStore;
   const { library, matchRadios } = yield* readMixBuildLibrary(
     snapshot.library,
-    yield* LibraryStore,
+    {
+      ...store,
+      knownVideos: sharedKnownVideos.pipe(Effect.provideService(LibraryStore, store)),
+    },
     recommendationTurnEffect,
     knownLibraryFinder(),
   );
@@ -161,7 +166,16 @@ const mixBuildInputs = Effect.gen(function* () {
   };
 });
 
-type MixBuildInputs = Effect.Success<typeof mixBuildInputs>;
+type MixBuildInputs = Effect.Success<typeof readMixBuildInputs>;
+
+/**
+ * The inputs rows building at the same time share: one read of the Library
+ * and its genre profiles for all of them, not one each (#1437). A build that
+ * starts after it finished reads them again.
+ */
+const sharedMixBuildInputs = sharedRead(readMixBuildInputs, { keepMs: 0 });
+const mixBuildInputs: Effect.Effect<MixBuildInputs, unknown, LibraryStore | BackgroundWorkName> =
+  sharedMixBuildInputs.get;
 
 /**
  * [saved] ranked again from cached radios: the build's
@@ -201,7 +215,12 @@ const rerank = (id: MixSectionId): void => {
   if (saved === null || sameSliders(mixSection.rankedWith, discoverSlidersNow())) return;
   mixSection.reranking = true;
   void appRuntime
-    .runPromise(settledTurnEffect.pipe(Effect.andThen(Effect.result(rerankedOf(saved)))))
+    .runPromise(
+      settledTurnEffect.pipe(
+        Effect.andThen(Effect.result(rerankedOf(saved))),
+        namedWork("Home mixes rerank"),
+      ),
+    )
     .then((result) => {
       if (!Result.isSuccess(result)) return;
       // A build, a refresh or an Undo saved others meanwhile: they say what they're ranked at.
@@ -693,13 +712,15 @@ const focusMixes = (played: boolean): void => {
     .then((library) => {
       // A newly completed index can provide seeds a cold or empty Library did not have.
       if (library !== previousLibrary) refresh(played);
-      void appRuntime.runPromise(tasteProfileForRecommendation(library)).catch(() => {});
+      void appRuntime
+        .runPromise(tasteProfileForRecommendation(library).pipe(namedWork("Taste profile")))
+        .catch(() => {});
     })
     .catch(() => {});
   const previousGraph = recommendationSnapshot.peek().graph;
   if (buildableRows().includes("genre-mixes"))
     void appRuntime
-      .runPromise(recommendationSnapshot.graph)
+      .runPromise(recommendationSnapshot.graph.pipe(namedWork("Artist graph")))
       .then((graph) => {
         const genre = SECTIONS["genre-mixes"];
         if (graph !== previousGraph && genre.saved.get() === null) {

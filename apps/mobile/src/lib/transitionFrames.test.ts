@@ -14,6 +14,7 @@ test("a real session collects only tap-to-settled frames, including the blocked 
     write: (line) => lines.push(line),
     context: () => ({ background: [], offline: false }),
     build: () => ({ version: "test", commit: "abc" }),
+    later: (_ms, run) => run(),
   });
   const reports: unknown[] = [];
   const collector = createTransitionFrames({
@@ -60,7 +61,6 @@ test("a real session collects only tap-to-settled frames, including the blocked 
 test("background cancellation, overlapping taps and stale callbacks cannot leak work into the next transition", async () => {
   let now = 0;
   let next = 0;
-  let observed = 0;
   const callbacks = new Map<number, () => void>();
   const reports: string[] = [];
   const stops: number[] = [];
@@ -79,12 +79,6 @@ test("background cancellation, overlapping taps and stale callbacks cannot leak 
       stops.push(id);
       return { count: 5, longestGapMs: 100 };
     },
-    observe: () => {
-      observed++;
-      return () => {
-        observed--;
-      };
-    },
     report: (event, lane) => reports.push(`${event.id}:${lane}`),
   });
   const event = (id: number, phase: "start" | "settled" | "cancelled") => ({
@@ -101,19 +95,16 @@ test("background cancellation, overlapping taps and stale callbacks cannot leak 
   collector.transition(event(2, "start"));
   stale();
   assert.equal(callbacks.size, 1);
-  assert.equal(observed, 1);
   collector.transition(event(1, "settled"));
   collector.transition(event(2, "cancelled")); // AppState background uses this same boundary.
   await collector.flush();
   assert.deepEqual(reports, []);
   assert.deepEqual(stops, [1, 2]);
   assert.equal(callbacks.size, 0);
-  assert.equal(observed, 0);
   collector.transition(event(3, "start"));
   collector.dispose();
   await collector.flush();
   assert.equal(callbacks.size, 0);
-  assert.equal(observed, 0);
   assert.deepEqual(reports, []);
 });
 
@@ -199,6 +190,7 @@ test("background summary waits for a settled UI report and cancels the next unfi
     write: (line) => lines.push(line),
     context: () => ({ background: [], offline: false }),
     build: () => ({ version: "test", commit: "abc" }),
+    later: (_ms, run) => run(),
   });
   const collector = createTransitionFrames({
     now: () => now,

@@ -24,6 +24,7 @@ import {
 import * as Effect from "effect/Effect";
 
 import { freeTurnEffect } from "@/lib/backgroundWork";
+import { namedWork } from "@/lib/stepped";
 import { appLog } from "@/log/appLog";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import { downloadsOnTheirWay, onDownloadsChanged } from "@/ytmusic/YtDownloads";
@@ -37,6 +38,9 @@ import { searchUnsearchedSong } from "./unsearchedEntries";
 
 /** The app log's tag, the search allowance's. */
 const TAG = "WaveSearch";
+
+/** The fill's background work, as its slices and the app log's JS block lines name it. */
+const FILL_WORK = "backgroundFill";
 
 /**
  * The playlists are read again at most this often while they change: the
@@ -64,6 +68,11 @@ let again = false;
 let searching: AbortController | null = null;
 let started = false;
 
+/**
+ * Reads the playlists on a free turn and indexes what it read in slices (#1453), as the fill's
+ * own background work: at startup it follows `startup backgroundFill`'s turn without holding
+ * the thread.
+ */
 const readPlaylists = async (): Promise<void> => {
   known = await appRuntime.runPromise(
     // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service.
@@ -78,8 +87,9 @@ const readPlaylists = async (): Promise<void> => {
             }),
           ),
         ),
+        freeTurnEffect,
       ),
-    ),
+    ).pipe(namedWork(FILL_WORK)),
   );
 };
 

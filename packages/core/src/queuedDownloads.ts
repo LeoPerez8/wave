@@ -95,6 +95,59 @@ export const queuedDownloads = <S extends YtSong>(
 };
 
 /**
+ * Each song on its way's line ([catalogue]'s language), by job id: what a row
+ * of the Downloading list follows on its own (#1441), so a progress tick
+ * renders that row and leaves the list alone (`sameDownloadingList`).
+ */
+export const queuedDownloadLines = <S extends YtSong>(
+  jobs: readonly YtDownloadJournalJob<S>[],
+  catalogue: Catalogue = en,
+): ReadonlyMap<string, string> => {
+  const lines = new Map<string, string>();
+  for (const job of jobs) {
+    const status = statusOf(job);
+    if (onItsWay(status)) lines.set(job.id, ytDownloadLine(status, catalogue) ?? "");
+  }
+  return lines;
+};
+
+/** Two songs show the same: their fields alike, lists item by item. */
+const sameSong = (a: YtSong, b: YtSong): boolean => {
+  if (a === b) return true;
+  const keys = Object.keys(a) as (keyof YtSong)[];
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => {
+      const x = a[key];
+      const y = b[key];
+      if (Array.isArray(x) && Array.isArray(y))
+        return x.length === y.length && x.every((item, index) => Object.is(item, y[index]));
+      return Object.is(x, y);
+    })
+  );
+};
+
+const sameIds = (a: readonly string[] | null, b: readonly string[] | null): boolean =>
+  a === b ||
+  (a !== null && b !== null && a.length === b.length && a.every((id, index) => id === b[index]));
+
+/**
+ * Two rows of songs on their way show the same apart from their lines, which
+ * rows follow on their own (`queuedDownloadLines`): the same job, song,
+ * place in the queue and Cancel. A job fresh from the journal on a progress
+ * tick, its song a new object, is still the same row.
+ */
+export const sameQueuedDownload = <S extends YtSong>(
+  a: QueuedDownload<S>,
+  b: QueuedDownload<S>,
+): boolean =>
+  a === b ||
+  (a.id === b.id &&
+    a.waiting === b.waiting &&
+    sameIds(a.cancel, b.cancel) &&
+    sameSong(a.song, b.song));
+
+/**
  * How many songs on their way are downloading, saving and waiting. Downloading
  * are the ones the queue started, which hold its slots (five, and at most ten
  * with the ones waiting on a peer, a pause or JS's answer); saving the ones

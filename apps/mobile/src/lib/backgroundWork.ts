@@ -14,7 +14,13 @@ import { AppState, type GestureResponderEvent } from "react-native";
 
 import { appLog } from "@/log/appLog";
 import { runLibraryWritesWith } from "@/library/libraryWrites";
-import { isScreenSettled, onScreenSettled, onTimingTransition, timingRoute } from "./timing";
+import {
+  isScreenSettled,
+  onScreenSettled,
+  onTimingTransition,
+  timingJsBlock,
+  timingRoute,
+} from "./timing";
 import { createFingerDown } from "./fingerDown";
 import { createStartupWork } from "./startupWork";
 import { BackgroundWorkName, shareSlicesWith } from "./stepped";
@@ -27,11 +33,25 @@ import { perfMark, registerPerfMeta } from "@/perf/perf";
 /**
  * A JS block over 50 ms while a screen is shown writes one app log line
  * naming the work (#1350, #1359): the slice it ran in, else the named work
- * still running, else "startup" before the first screen settled, else none.
+ * still running, else "startup" before the first screen settled, with the step
+ * startup had reached (#1434), else none.
  */
 const blocks = createJsBlockLog({
   write: (line) => appLog("warn", "WaveTiming", line),
   screen: () => (AppState.currentState === "active" ? timingRoute() : null),
+  // A block that spans Wave leaving the screen is a paused process (#1446); JS hears that only
+  // after the block, so each is judged a moment after it's reported.
+  later: (ms, run) => {
+    setTimeout(run, ms);
+  },
+});
+let active = (AppState.currentState ?? "active") === "active";
+AppState.addEventListener("change", (state) => {
+  const now = state === "active";
+  if (now === active) return;
+  active = now;
+  if (now) blocks.returned(performance.now());
+  else blocks.left(performance.now());
 });
 
 // Blocks before the first screen settles, with no named work, are startup's.
@@ -43,6 +63,9 @@ else {
     stop();
   });
 }
+
+/** Startup reached [name] (#1434): an unnamed block before the first settle says so. */
+export const startupStep = (name: string): void => blocks.startupStep(name, performance.now());
 
 /**
  * Runs [run] now as a slice of [name]'s work, for the block log: a continuation after an
@@ -65,7 +88,8 @@ export const inSlice = <A>(name: string, run: () => A): A => {
 export const renderRan = (name: string, startedAt: number, durationMs: number): void =>
   blocks.renderRan(name, startedAt, durationMs);
 
-// An off-thread read's replay maps its rows on the JS thread once its last answer is in.
+// An off-thread read's replay builds its queries and maps its rows on the JS thread, in passes
+// and in steps of 8 ms that yield to a new task between them (#1435); each is named here.
 runReplayPassesWith((run) => inSlice("Library read replay", run));
 // A Library write holds the JS thread for its whole transaction: a long one names itself.
 runLibraryWritesWith((operation, run) => inSlice(`Library write: ${operation}`, run));
@@ -123,7 +147,10 @@ const Observer = (
 ).PerformanceObserver;
 if (Observer?.supportedEntryTypes?.includes("longtask")) {
   const observer = new Observer((list) => {
-    for (const entry of list.getEntries()) blocks.longTask(entry.startTime, entry.duration);
+    for (const entry of list.getEntries()) {
+      blocks.longTask(entry.startTime, entry.duration);
+      timingJsBlock(entry.startTime, entry.duration);
+    }
   });
   try {
     observer.observe({ type: "longtask" });
@@ -132,9 +159,20 @@ if (Observer?.supportedEntryTypes?.includes("longtask")) {
   }
 }
 
-/** Gives [name] its free turn, marked for the block log (what runs on it may be awaited code). */
-const named = (name: string, run: () => void) => (): void => {
-  blocks.turnTaken(name, performance.now());
+/**
+ * Marks that [name] got its turn now: what runs next, and its awaited continuations, are its work
+ * in the block log, for [forMs] (`TURN_WORK_MS` by default). The scheduler's free turns mark
+ * themselves; frame-paced ones call it (#1447).
+ */
+export const workTurnTaken = (name: string, forMs?: number): void =>
+  blocks.turnTaken(name, performance.now(), forMs);
+
+/**
+ * Gives [name] its free turn, marked for the block log (what runs on it may be awaited code, for
+ * [forMs], `TURN_WORK_MS` by default).
+ */
+const named = (name: string, run: () => void, forMs?: number) => (): void => {
+  workTurnTaken(name, forMs);
   run();
 };
 
@@ -179,13 +217,16 @@ const startupWork = createStartupWork({
 });
 let startupStarted = 0;
 
-/** Startup starts keep their registration order, after global settlement and quiet frames. */
+/**
+ * Startup starts keep their registration order, after global settlement and quiet frames. A
+ * block in a start, or in the work it leaves running, names it as "startup <name>" (#1434).
+ */
 export const afterFirstSettled = (name: string, start: () => void): (() => void) =>
   startupWork.whenFree(
-    named(name, () => {
+    named(`startup ${name}`, () => {
       startupStarted++;
       perfMark("startup.started", name);
-      start();
+      inSlice(`startup ${name}`, start);
     }),
   );
 
@@ -195,6 +236,7 @@ let contentSeen = false;
 export const firstContentShown = (): void => {
   if (contentSeen) return;
   contentSeen = true;
+  startupStep("first content shown");
   requestAnimationFrame(() => {
     perfMark("startup.content");
     work.contentShown();
@@ -209,8 +251,16 @@ export const whenFree = (run: () => void, name: string): (() => void) =>
 export const freeTurn = (name: string): Promise<void> =>
   new Promise((resolve) => whenFree(resolve, name));
 
+/**
+ * Resolves on the next free turn for [name]'s work, which names its continuations after an
+ * `await` itself (`inSlice`): to the block log, only the turn's own task is [name]'s, so a render
+ * or a read in the second after it is not put down to it (#1449).
+ */
+export const freeTurnAlone = (name: string): Promise<void> =>
+  new Promise((resolve) => work.whenFree(named(name, resolve, 0)));
+
 /** Waits for the next free turn, for the fiber's `BackgroundWorkName`; interrupted, it gives the turn up. */
-export const freeTurnEffect: Effect.Effect<void> = Effect.flatMap(
+export const freeTurnEffect: Effect.Effect<void, never, BackgroundWorkName> = Effect.flatMap(
   Effect.service(BackgroundWorkName),
   (name) =>
     Effect.callback<void>((resume) => {
@@ -220,9 +270,9 @@ export const freeTurnEffect: Effect.Effect<void> = Effect.flatMap(
 );
 
 /** Startup jobs recheck global settlement/quietness at every resumable boundary. */
-export const startupTurn = (name = "startup work"): Promise<void> =>
+export const startupTurn = (name: string): Promise<void> =>
   new Promise((resolve) => startupWork.whenFree(named(name, resolve)));
-export const startupTurnEffect: Effect.Effect<void> = Effect.flatMap(
+export const startupTurnEffect: Effect.Effect<void, never, BackgroundWorkName> = Effect.flatMap(
   Effect.service(BackgroundWorkName),
   (name) =>
     Effect.callback<void>((resume) => {

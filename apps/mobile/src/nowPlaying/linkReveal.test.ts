@@ -19,6 +19,7 @@ const setup = (from: "Now Playing" | "menu" = "Now Playing") => {
     write: () => {},
     context: () => ({ background: [], offline: false }),
     build: () => ({ version: "test", commit: "test" }),
+    later: () => {},
   });
   const callbacks = new Map<number, () => void>();
   let nextFrame = 0;

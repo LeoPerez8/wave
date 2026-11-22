@@ -20,7 +20,7 @@ import {
   type YtSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { runSteps } from "../lib/stepped.ts";
+import { runSteps, type Turn } from "../lib/stepped.ts";
 import type { SkippedFile } from "@wave/client/db/skippedFiles";
 import type { LibraryStore } from "./LibraryStore.ts";
 import type { IndexedArtwork, IndexedKnownFile, IndexedTrack } from "@wave/client";
@@ -46,7 +46,7 @@ const slices = <A>(rows: readonly A[]): A[][] => {
 export const finishLinkImport = (
   store: LibraryStore["Service"],
   job: PlaylistImport<YtAlbumSong>,
-  turn: Effect.Effect<void>,
+  turn: Turn,
   current: () => boolean = () => true,
   saved: () => void = () => {},
   /** Hears how many of the songs going in have landed, of how many: before the first slice and after each. */
@@ -113,7 +113,7 @@ export const dispatchLibraryFavorites = async <S extends YtSong>(
 export const skipVoiceNoteFiles = (
   store: LibraryStore["Service"],
   files: readonly SkippedFile[],
-  turn: Effect.Effect<void>,
+  turn: Turn,
 ) =>
   Effect.gen(function* () {
     let left = 0;
@@ -128,7 +128,7 @@ export const skipVoiceNoteFiles = (
 export const forgetSkippedFiles = (
   store: LibraryStore["Service"],
   paths: readonly string[],
-  turn: Effect.Effect<void>,
+  turn: Turn,
 ) =>
   Effect.gen(function* () {
     for (const part of slices(paths)) {
@@ -147,7 +147,7 @@ export const forgetSkippedFiles = (
 export const readScanIndex = (
   store: LibraryStore["Service"],
   roots: readonly string[],
-  turn: Effect.Effect<void>,
+  turn: Turn,
   skipVoiceNotes = false,
 ) =>
   Effect.gen(function* () {
@@ -255,7 +255,7 @@ export const saveScanBatch = (
   store: LibraryStore["Service"],
   input: ScanReconcileInput<IndexedTrack>,
   artwork: readonly IndexedArtwork[],
-  turn: Effect.Effect<void>,
+  turn: Turn,
   saved: (batch: {
     readonly starred: readonly number[];
     readonly trackIds: readonly number[];
@@ -300,7 +300,7 @@ const saveSlice = (
 /** Pair source SQL and one pair's native audio read/atomic history merge are indivisible. */
 export const checkDuplicateFiles = (
   store: LibraryStore["Service"],
-  turn: Effect.Effect<void>,
+  turn: Turn,
   lengths: (paths: readonly string[]) => Effect.Effect<readonly (number | null)[], unknown>,
 ) =>
   Effect.gen(function* () {
@@ -332,7 +332,7 @@ export const checkDuplicateFiles = (
 /** Build the three native scanner columns in budgeted CPU steps, before its indivisible bridge call. */
 export const scanInputColumns = (
   known: readonly { path: string; sizeBytes: number; modifiedAt: number }[],
-  turn: Effect.Effect<void>,
+  turn: Turn,
 ) =>
   runSteps(
     (function* () {
@@ -358,7 +358,7 @@ export const scanInputColumns = (
 export const finishScanIndex = (
   store: LibraryStore["Service"],
   missing: readonly string[],
-  turn: Effect.Effect<void>,
+  turn: Turn,
 ) =>
   Effect.gen(function* () {
     yield* turn;
@@ -369,7 +369,7 @@ export const finishScanIndex = (
 export const readImportDownloadInput = (
   store: LibraryStore["Service"],
   playlistId: number,
-  turn: Effect.Effect<void>,
+  turn: Turn,
   current: () => boolean = () => true,
 ) =>
   Effect.gen(function* () {

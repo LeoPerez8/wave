@@ -67,7 +67,10 @@ import {
   playlistDownloadOrigin,
 } from "@wave/core";
 import { startupTurn, startupTurnEffect } from "@/lib/backgroundWork";
-import { runSteps } from "@/lib/stepped";
+import { namedWork, runSteps } from "@/lib/stepped";
+
+/** Every turn a YT Music library import takes is logged under this name (#1447). */
+const named = namedWork("YT Music library import");
 import { resumeLibraryReads } from "./libraryImportResume";
 import { dispatchLibraryFavorites, readImportDownloadInput } from "./startupJobs";
 
@@ -170,7 +173,7 @@ const downloadPlaylist = async (read: YtLibraryRead): Promise<void> => {
       isYtLibraryReadQueued(ytLibraryBatch.get(), read),
     ),
   );
-  const prepared = await appRuntime.runPromise(preparing);
+  const prepared = await appRuntime.runPromise(preparing.pipe(named));
   if (prepared === null) return;
   const { detail, inLibrary } = prepared;
   runYtPlaylistDownloadAction(
@@ -252,7 +255,9 @@ const libraryIndex = makeImportIndexCache<ImportLibraryIndex>(() => libraryVersi
 const buildLibraryIndex = async (timer: ImportPhaseTimer): Promise<ImportLibraryIndex> => {
   const library = await listLibrary();
   timer.mark("listing");
-  return appRuntime.runPromise(runSteps(importLibraryIndexSteps(library), startupTurnEffect));
+  return appRuntime.runPromise(
+    runSteps(importLibraryIndexSteps(library), startupTurnEffect).pipe(named),
+  );
 };
 
 /** Once no import reads, the index (the whole Library's keys) goes. */
@@ -302,13 +307,13 @@ const fill = async (read: YtLibraryRead): Promise<YtLibraryPauseReason | null> =
       // the wait for it is one phase here.
       timer.mark(built ? "indexing" : "joining");
       const plan = await appRuntime.runPromise(
-        runSteps(planLinkImportWithIndexSteps(answer.source, index), startupTurnEffect),
+        runSteps(planLinkImportWithIndexSteps(answer.source, index), startupTurnEffect).pipe(named),
       );
       if (!isYtLibraryReadQueued(ytLibraryBatch.get(), read)) return null;
       timer.mark("matching");
       // Before it leaves the batch: Wave stopped in between stars again, which changes nothing.
       const favorites = await appRuntime.runPromise(
-        runSteps(ytLibraryFavoritesSteps(read, plan), startupTurnEffect),
+        runSteps(ytLibraryFavoritesSteps(read, plan), startupTurnEffect).pipe(named),
       );
       await startupTurn("YT Music library import");
       if (!isYtLibraryReadQueued(ytLibraryBatch.get(), read)) return null;

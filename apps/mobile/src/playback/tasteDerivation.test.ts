@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
+import { runTestPromise, runTestSync } from "../lib/steppedTesting.ts";
 import {
   magicArtistKey,
   magicLibrarySongs,
@@ -54,17 +55,17 @@ test("sparse/deleted/tied/collaborative/multi-genre sources retain ti's complete
       sql`INSERT INTO track_artists (track_id,artist_id,position) VALUES (${fixture.songIds[1]!},${fixture.targets.large.artistId},1)`,
     );
     deleteTracksById(db, fixture.songIds.slice(600, 620));
-    const convert = magicLibrarySongs(Effect.runSync(store.listArtists));
-    const songs = Effect.runSync(store.listSongs);
+    const convert = magicLibrarySongs(runTestSync(store.listArtists));
+    const songs = runTestSync(store.listSongs);
     const magic = songs.map(convert);
     const playable = songs.filter((song) => song.path !== null).map(convert);
     const byId = new Map(magic.map((song) => [song.trackId, song]));
-    const history = Effect.runSync(store.tasteHistory);
+    const history = runTestSync(store.tasteHistory);
     const expected = tasteProfile(history, (id) => byId.get(id), fixture.now);
-    assert.deepEqual(Effect.runSync(readTasteHistory(store, Effect.void)), history);
-    const library = Effect.runSync(readTasteLibrary(store, Effect.void));
+    assert.deepEqual(runTestSync(readTasteHistory(store, Effect.void)), history);
+    const library = runTestSync(readTasteLibrary(store, Effect.void));
     assert.deepEqual(library.magic, magic);
-    const profile = Effect.runSync(deriveTaste(store, Effect.void, fixture.now, library));
+    const profile = runTestSync(deriveTaste(store, Effect.void, fixture.now, library));
     for (const key of ["songs", "artists", "genres"] as const)
       assert.deepEqual([...profile[key]], [...expected[key]]);
     const saved = {
@@ -73,7 +74,7 @@ test("sparse/deleted/tied/collaborative/multi-genre sources retain ti's complete
       shownToday: [],
     };
     for (const refresh of [false, true]) {
-      const picked = Effect.runSync(
+      const picked = runTestSync(
         buildHomeMagicQueue(store, saved, {
           now: fixture.now,
           random: seededRandom("sparse"),
@@ -110,9 +111,9 @@ test("cancelling a paged shared profile retains pending signals and releases the
         if (index >= 0) queue.splice(index, 1);
       });
     });
-    const convert = magicLibrarySongs(Effect.runSync(store.listArtists));
+    const convert = magicLibrarySongs(runTestSync(store.listArtists));
     const songs = new Map(
-      Effect.runSync(store.listSongs).map((song) => [String(song.id), convert(song)]),
+      runTestSync(store.listSongs).map((song) => [String(song.id), convert(song)]),
     );
     const remote = { ...songs.values().next().value!, trackId: ytTrackId("cancelled") };
     const live = makeLiveTaste({
@@ -124,29 +125,25 @@ test("cancelling a paged shared profile retains pending signals and releases the
         ),
     });
     const controller = new AbortController();
-    const first = Effect.runPromise(live.profile, { signal: controller.signal });
+    const first = runTestPromise(live.profile, { signal: controller.signal });
     for (let i = 0; i < 10; i++) {
       assert.equal(queue.length, 1);
       queue.shift()!();
       await new Promise((resolve) => setImmediate(resolve));
     }
     const id = String(fixture.songIds[9]!);
-    await Effect.runPromise(live.marked("favorite", [id, remote.trackId], fixture.now));
+    await runTestPromise(live.marked("favorite", [id, remote.trackId], fixture.now));
     controller.abort();
     await assert.rejects(first);
     assert.equal(queue.length, 0, "cancelled source work releases its pending turn");
-    Effect.runSync(store.setFavorites([Number(id)], true));
-    const actual = await Effect.runPromise(
+    runTestSync(store.setFavorites([Number(id)], true));
+    const actual = await runTestPromise(
       live.profileUsing((snapshot) =>
         deriveTaste(store, Effect.void, fixture.now, undefined, snapshot),
       ),
     );
     const expected = tasteLearned(
-      tasteProfile(
-        Effect.runSync(store.tasteHistory),
-        (trackId) => songs.get(trackId),
-        fixture.now,
-      ),
+      tasteProfile(runTestSync(store.tasteHistory), (trackId) => songs.get(trackId), fixture.now),
       { kind: "favorite", song: remote, at: fixture.now },
     );
     assert.deepEqual(actual, expected);
@@ -162,7 +159,7 @@ test("a write between taste pages restarts the snapshot instead of publishing mi
   try {
     const store = await loadLibraryStore(root, fixture.db);
     let turns = 0;
-    const profile = Effect.runSync(
+    const profile = runTestSync(
       deriveTaste(
         store,
         Effect.sync(() => {
@@ -174,13 +171,13 @@ test("a write between taste pages restarts the snapshot instead of publishing mi
         fixture.now,
       ),
     );
-    const convert = magicLibrarySongs(Effect.runSync(store.listArtists));
+    const convert = magicLibrarySongs(runTestSync(store.listArtists));
     const byId = new Map(
-      Effect.runSync(store.listSongs).map((song) => [String(song.id), convert(song)]),
+      runTestSync(store.listSongs).map((song) => [String(song.id), convert(song)]),
     );
     assert.deepEqual(
       profile,
-      tasteProfile(Effect.runSync(store.tasteHistory), (id) => byId.get(id), fixture.now),
+      tasteProfile(runTestSync(store.tasteHistory), (id) => byId.get(id), fixture.now),
     );
   } finally {
     fixture.close();
@@ -193,22 +190,22 @@ test("SQL bench observation covers actual taste statements and cleans up indepen
   try {
     const store = await loadLibraryStore(root, fixture.db);
     // The startup job sets up the taste write stamp once the first screen settles.
-    await Effect.runPromise(store.startupUpkeep);
+    await runTestPromise(store.startupUpkeep);
     const samples: { sql: string; ms: number }[] = [];
     const stop = observeSqlTasks(fixture.db, (statement, ms) =>
       samples.push({ sql: statement, ms }),
     );
     try {
-      Effect.runSync(store.tasteRevision);
-      Effect.runSync(store.mixSongsPage(0, { genres: false }));
-      Effect.runSync(store.tastePlaysPage([-Number.MAX_VALUE, 0]));
+      runTestSync(store.tasteRevision);
+      runTestSync(store.mixSongsPage(0, { genres: false }));
+      runTestSync(store.tastePlaysPage([-Number.MAX_VALUE, 0]));
     } finally {
       stop();
     }
     assert.equal(samples.length, 4);
     assert.ok(samples.every((sample) => Number.isFinite(sample.ms) && sample.ms >= 0));
     const before = samples.length;
-    Effect.runSync(store.tasteArtistsPage(0));
+    runTestSync(store.tasteArtistsPage(0));
     assert.equal(samples.length, before);
   } finally {
     fixture.close();
@@ -218,11 +215,11 @@ test("due Home's real store snapshot is read once and reused for the same full t
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
-    const convert = magicLibrarySongs(Effect.runSync(store.listArtists));
-    const expectedSongs = Effect.runSync(store.listSongs).map(convert);
+    const convert = magicLibrarySongs(runTestSync(store.listArtists));
+    const expectedSongs = runTestSync(store.listSongs).map(convert);
     const byId = new Map(expectedSongs.map((song) => [song.trackId, song]));
     const expected = tasteProfile(
-      Effect.runSync(store.tasteHistory),
+      runTestSync(store.tasteHistory),
       (id) => byId.get(id),
       fixture.now,
     );
@@ -231,7 +228,7 @@ test("due Home's real store snapshot is read once and reused for the same full t
       turns++;
     });
     const { result, queries } = traceQueries(fixture.db, () =>
-      Effect.runSync(
+      runTestSync(
         Effect.gen(function* () {
           const library = yield* readTasteLibrary(store, turn);
           const profile = yield* deriveTaste(store, turn, fixture.now, library);
@@ -259,7 +256,7 @@ test("due Home's real store snapshot is read once and reused for the same full t
       between: turn,
     });
     const due = traceQueries(fixture.db, () =>
-      Effect.runSync(
+      runTestSync(
         buildHomeMagicQueue(store, null, {
           now: fixture.now,
           random: () => 0.5,
@@ -276,7 +273,7 @@ test("due Home's real store snapshot is read once and reused for the same full t
       1000,
     );
     assert.ok(due.queries.every((q) => q.rows <= 128 && !/OFFSET/i.test(q.sql)));
-    const warm = traceQueries(fixture.db, () => Effect.runSync(live.profile));
+    const warm = traceQueries(fixture.db, () => runTestSync(live.profile));
     assert.deepEqual(warm.result, expected);
     assert.equal(warm.queries.length, 0, "mixes reuse Home's live profile without source reads");
     assert.deepEqual(
@@ -300,18 +297,18 @@ test("a Magic Queue's cold taste uses its recommendation Library without another
   try {
     const store = await loadLibraryStore(root, fixture.db);
     const library = {
-      songs: Effect.runSync(store.listSongs),
-      artists: Effect.runSync(store.listArtists),
+      songs: runTestSync(store.listSongs),
+      artists: runTestSync(store.listArtists),
     };
     const convert = magicLibrarySongs(library.artists);
     const byId = new Map(library.songs.map((song) => [String(song.id), convert(song)]));
     const expected = tasteProfile(
-      Effect.runSync(store.tasteHistory),
+      runTestSync(store.tasteHistory),
       (id) => byId.get(id),
       fixture.now,
     );
     const { result, queries } = traceQueries(fixture.db, () =>
-      Effect.runSync(deriveTasteFromLibrary(store, Effect.void, fixture.now, library)),
+      runTestSync(deriveTasteFromLibrary(store, Effect.void, fixture.now, library)),
     );
     assert.deepEqual(result, expected);
     assert.equal(queries.filter((query) => query.sql.includes('"tracks"."title"')).length, 0);
@@ -363,7 +360,7 @@ test("rebuilding the profile gives streamed songs the scores the live updates ga
         ),
       ),
   });
-  await Effect.runPromise(live.profile);
+  await runTestPromise(live.profile);
   for (const [at, end] of [
     [now - 40 * 24 * 60 * 60 * 1000, "completed"],
     [now - 1_000, "completed"],
@@ -371,10 +368,10 @@ test("rebuilding the profile gives streamed songs the scores the live updates ga
   ] as const) {
     const ended = endedPlay(streamed, at, end);
     recordPlay(db, ended, false, airbag);
-    await Effect.runPromise(live.played(ended));
+    await runTestPromise(live.played(ended));
   }
-  const learned = (await Effect.runPromise(live.profile))!;
-  const rebuilt = await Effect.runPromise(derive());
+  const learned = (await runTestPromise(live.profile))!;
+  const rebuilt = await runTestPromise(derive());
   assert.ok(learned.songs.has(streamed));
   assert.equal(rebuilt.songs.get(streamed), learned.songs.get(streamed));
   for (const artist of ["Radiohead", "Guest"].map(magicArtistKey))
@@ -396,19 +393,19 @@ test("a dislike counts against its song's artists, a song never played too, unti
     artists,
     durationMs: null,
   });
-  Effect.runSync(
+  runTestSync(
     store.setDislikes([listed(String(local), ["Radiohead"]), listed(never, ["Muse", "Guest"])]),
   );
-  const dislikedAt = Effect.runSync(store.listDislikes)[0]!.dislikedAt;
+  const dislikedAt = runTestSync(store.listDislikes)[0]!.dislikedAt;
   const derive = (now: number) =>
-    Effect.runPromise(deriveTaste(store, Effect.void, now, undefined, undefined, streamedSong));
+    runTestPromise(deriveTaste(store, Effect.void, now, undefined, undefined, streamedSong));
   const fresh = await derive(dislikedAt);
   for (const artist of ["Radiohead", "Muse", "Guest"])
     assert.equal(fresh.artists.get(magicArtistKey(artist)), -3, artist);
   assert.equal(fresh.songs.size, 0);
   const later = await derive(dislikedAt + 30 * day);
   assert.equal(later.artists.get(magicArtistKey("Muse")), -1.5);
-  Effect.runSync(store.removeDislikes([never]));
+  runTestSync(store.removeDislikes([never]));
   const removed = await derive(dislikedAt);
   assert.equal(removed.artists.get(magicArtistKey("Muse")), undefined);
   assert.equal(removed.artists.get(magicArtistKey("Radiohead")), -3);

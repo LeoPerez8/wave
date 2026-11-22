@@ -1,20 +1,27 @@
-import { indexFillPlaylists } from "@wave/core";
+import { indexFillPlaylistsSteps } from "@wave/core";
 import * as Effect from "effect/Effect";
+import { runSteps, type Turn } from "../lib/stepped.ts";
 import type { LibraryStore } from "./LibraryStore.ts";
 
-/** Read and index one playlist snapshot on a free turn. */
+/**
+ * Reads one playlist snapshot on a free turn ([turn]), then indexes it in background slices,
+ * each after [between] (#1453): an import's thousands of unsearched songs never hold the thread
+ * at startup.
+ */
 export const readBackgroundFillInput = (
   store: LibraryStore["Service"],
-  turn: Effect.Effect<void>,
+  turn: Turn,
+  between: Turn,
 ) =>
   Effect.gen(function* () {
     yield* turn;
     const playlists = yield* store.unsearchedEntries;
     const lastPlayed = yield* store.playlistsLastPlayed;
-    return {
-      entries: indexFillPlaylists(
+    const entries = yield* runSteps(
+      indexFillPlaylistsSteps(
         playlists.map(({ playlistId, songs }) => ({ id: playlistId, usedAt: null, songs })),
       ),
-      lastPlayed,
-    };
+      between,
+    );
+    return { entries, lastPlayed };
   });

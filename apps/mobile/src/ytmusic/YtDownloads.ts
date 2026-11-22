@@ -33,7 +33,6 @@ import {
   missingSongTags,
   missingSongVideo,
   missingSongsDownload,
-  downloadingList,
   failedReplacementFiles,
   moveQueuedJobs,
   NO_BETTER_COPY_FOUND,
@@ -72,7 +71,6 @@ import {
   type DownloadFailurePlan,
   type DownloadOrigin,
   type DownloadSource,
-  type DownloadingList,
   type FailedDownload,
   type FailedDownloadsInput,
   type MissingSongJob,
@@ -111,6 +109,8 @@ import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { appLog } from "@/log/appLog";
 
 import { askForNotifications } from "@/lib/askForNotifications";
+import { freeTurn } from "@/lib/backgroundWork";
+import { namedWork } from "@/lib/stepped";
 import { useLocalisation } from "@/localisation/localisation";
 import { persistedSetting } from "@/lib/persistedSetting";
 import {
@@ -165,7 +165,7 @@ import { readYtAlbum } from "./albumPages";
 import { failedJobsNow, journal, queuedCountsNow } from "./downloadJournal";
 import { followDownloadRuns } from "./downloadRun";
 import { createDownloadRecovery } from "./downloadRecovery";
-import { currentLibraryFinder, useLoadedLibraryFinder } from "./libraryFinder";
+import { currentLibraryFinderInSlices, useLoadedLibraryFinder } from "./libraryFinder";
 import { followYoutubeThrottle } from "./youtubeThrottle";
 import type { YtMusicError } from "./YtMusic";
 
@@ -1056,7 +1056,7 @@ const answerJob = async (id: string): Promise<void> => {
     renewing = setInterval(() => {
       WaveSoulseek.renewDecision(claim.id, claim.generation, claim.token).catch(() => {});
     }, RENEW_EVERY_MS);
-    const payload = await appRuntime.runPromise(answer(claim));
+    const payload = await appRuntime.runPromise(answer(claim).pipe(namedWork("Download decision")));
     clearInterval(renewing);
     const accepted = await WaveSoulseek.submitDecision(
       claim.id,
@@ -1190,7 +1190,7 @@ const removeFailedReplacementFiles = (jobs: readonly NativeDownloadJob[]): void 
         const store = yield* LibraryStore;
         yield* store.recordFileDeletions(fresh);
         yield* finishFileDeletions("failedReplacement");
-      }),
+      }).pipe(namedWork("Failed replacement files")),
     )
     .catch(() => {
       for (const path of fresh) removedReplacementFiles.delete(path);
@@ -1274,6 +1274,12 @@ const starAsked = persistedSetting<ReadonlySet<string>>({
 const ownerAsked = (jobIds: readonly string[]): void =>
   starAsked.set(starAskedAfter(starAsked.get(), { kind: "ownerAsked", ids: jobIds }));
 
+/**
+ * The resume's own work after `startup downloads` (#1453): each step starts on a free turn of
+ * its own and builds the Library finder in slices, so none holds the thread at startup.
+ */
+const RESUME_WORK = "downloads resume";
+
 let forgotSettled = false;
 /**
  * Has the journal forget the failures that settled another way since (Core's
@@ -1286,12 +1292,13 @@ const forgetSettledFailures = (): void => {
   forgotSettled = true;
   requests = requests
     .then(async () => {
+      await freeTurn(RESUME_WORK);
       const jobs = await WaveSoulseek.jobsSnapshot();
       if (!jobs.some(hasFailed)) return;
       // A replacement with no better copy settles here once what it found is recorded: while
       // that can't be written, the journal keeps it, so the song isn't offered again.
       const recorded = await rememberNoBetterCopies(jobs);
-      const find = await currentLibraryFinder();
+      const find = await currentLibraryFinderInSlices(RESUME_WORK);
       const missing = await appRuntime.runPromise(
         Effect.gen(function* () {
           const store = yield* LibraryStore;
@@ -1322,10 +1329,11 @@ const requeueThrottledFailures = (): void => {
   if (Storage.getItemSync(THROTTLED_REQUEUE_KEY) !== null || !ytMusicEnabled()) return;
   requests = requests
     .then(async () => {
+      await freeTurn(RESUME_WORK);
       if (Storage.getItemSync(THROTTLED_REQUEUE_KEY) !== null) return;
       const jobs = await WaveSoulseek.jobsSnapshot();
       const session = await sessionNow();
-      const find = await currentLibraryFinder();
+      const find = await currentLibraryFinderInSlices(RESUME_WORK);
       const library = await appRuntime.runPromise(
         Effect.gen(function* () {
           const store = yield* LibraryStore;
@@ -1769,7 +1777,7 @@ const qualityReplacementRequests = async (
       yield* finishFileDeletions("replacementRun");
       const store = yield* LibraryStore;
       return yield* Effect.forEach(trackIds, (id) => store.replacedTrack(id));
-    }),
+    }).pipe(namedWork("Quality replacements")),
   );
   const source: DownloadSource = direction === "upgrade" ? "soulseek" : "youtube";
   return tracks.flatMap((track) => {
@@ -1820,10 +1828,6 @@ export const cancelQualityReplacements = (direction: QualityDirection): void => 
     .catch(() => undefined);
 };
 
-/** The download journal as JS last followed it, following it (Core's `qualityUpgradeSongs` reads it). */
-export const useDownloadJournal = (): readonly NativeDownloadJob[] =>
-  useSyncExternalStore(journal.subscribe, journal.get);
-
 /** The download journal as JS last followed it. */
 export const downloadJournal = (): readonly NativeDownloadJob[] => journal.get();
 
@@ -1837,16 +1841,6 @@ export const useMissingSongsDownload = (): MissingSongsDownload<MissingSongJob> 
     [songs, strings],
   );
   return useStoreSelector(journal, select, sameListDownload);
-};
-
-/**
- * Settings › Downloads' Downloading list (Core's `downloadingList`), following the journal: the
- * songs downloading now, then the waiting ones grouped by the playlist, album or mix they're from.
- */
-export const useDownloadingList = (): DownloadingList<NativeYtSong> => {
-  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
-  const { language } = useLocalisation();
-  return useMemo(() => downloadingList(jobs, language), [jobs, language]);
 };
 
 /** Whether any download is queued or downloading (Core's `queuedDownloads`), as the journal last said. */

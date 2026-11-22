@@ -126,6 +126,61 @@ export const slowTapLine = (tap: TimingTap): string | null => {
   return `Slow ${KIND_NAMES[tap.kind]} to ${tap.to} from ${tap.from}: response ${timingDuration(tap.responseMs)}, first frame ${timingDuration(tap.firstFrameMs)}, settled ${timingDuration(tap.settledMs)} (budget ${limits}); ${context}`;
 };
 
+/**
+ * How long a slow tap's line waits after it settled for the runtime to report the JS blocks of its
+ * window: a block it settled in is reported only after that block ends (#1446).
+ */
+export const TAP_BLOCKS_WAIT_MS = 500;
+
+export interface SlowTapLines {
+  /**
+   * [tap] began at [from] and settled at [to] (on the long tasks' clock): its line, if it's slow,
+   * waits `TAP_BLOCKS_WAIT_MS` for the blocks of [from, to] still to be reported.
+   */
+  readonly settled: (tap: TimingTap, from: number, to: number) => void;
+  /** The runtime reported a long task: a waiting tap whose window it touches may name it. */
+  readonly block: (startTime: number, durationMs: number) => void;
+  /** Writes every waiting line now (Wave left the screen, before its speed summary). */
+  readonly flush: () => void;
+}
+
+/** Slow taps' lines, each written once the JS blocks of its window have been reported. */
+export const createSlowTapLines = (ports: {
+  readonly write: (line: string) => void;
+  readonly later: (ms: number, run: () => void) => void;
+}): SlowTapLines => {
+  const waiting: { tap: TimingTap; readonly from: number; readonly to: number }[] = [];
+  const writeLine = (entry: (typeof waiting)[number]) => {
+    const line = slowTapLine(entry.tap);
+    if (line !== null) ports.write(line);
+  };
+  const write = (entry: (typeof waiting)[number]) => {
+    const index = waiting.indexOf(entry);
+    if (index === -1) return;
+    waiting.splice(index, 1);
+    writeLine(entry);
+  };
+  return {
+    settled: (tap, from, to) => {
+      if (!timingBudgetExceeded(tap)) return;
+      const entry = { tap, from, to };
+      waiting.push(entry);
+      ports.later(TAP_BLOCKS_WAIT_MS, () => write(entry));
+    },
+    block: (startTime, durationMs) => {
+      for (const entry of waiting)
+        if (startTime <= entry.to && startTime + durationMs >= entry.from)
+          entry.tap = {
+            ...entry.tap,
+            longestJsBlockMs: Math.max(entry.tap.longestJsBlockMs ?? 0, durationMs),
+          };
+    },
+    flush: () => {
+      for (const entry of waiting.splice(0)) writeLine(entry);
+    },
+  };
+};
+
 export const slowScreenLine = (screen: TimingScreen): string | null => {
   const budget = TIMING_BUDGETS.screen;
   if (screen.firstFrameMs <= budget.firstFrameMs && screen.contentMs <= budget.contentMs)

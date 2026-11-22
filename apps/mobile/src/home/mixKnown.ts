@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import { useSyncExternalStore } from "react";
 
 import { settledTurnEffect } from "@/lib/backgroundWork";
+import { namedWork } from "@/lib/stepped";
 import { makeExternalStore } from "@wave/client/externalStore";
 import { LibraryStore } from "@/library/LibraryStore";
 import { type ArtistRow, type SongRow } from "@wave/client";
@@ -50,9 +51,15 @@ const videoRead = createKnownVideosRead(
   }),
 );
 onLibraryChange(videoRead.change);
+
+/**
+ * The videos the owner knows, from the read re-blends share: a mix build
+ * reads the 20,000-odd rows again only after a source of them changed (#1437).
+ */
+export const sharedKnownVideos = videoRead.get;
 export const refreshKnownVideos = (): void => {
   void appRuntime
-    .runPromise(videoRead.get)
+    .runPromise(videoRead.get.pipe(namedWork("Home known videos")))
     .then((videos) => {
       const previous = knownVideos.get();
       if (

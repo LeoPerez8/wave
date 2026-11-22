@@ -69,3 +69,21 @@ test("the Library's layer build leaves its upkeep for after the first screen set
     assert.doesNotMatch(onBuild, new RegExp(`\b${step}\b`), `${step} runs while the layer builds`);
   assert.match(read("app/_layout.tsx"), /afterFirstSettled\("libraryUpkeep", runLibraryUpkeep\)/);
 });
+
+test("the downloads' resume and the background fill leave no Library-sized step to one task (#1453)", () => {
+  // The resume's finder is built in slices before its first use: built there, it held the
+  // thread for the whole Library in `startup downloads`.
+  const downloads = read("ytmusic/YtDownloads.ts");
+  assert.doesNotMatch(downloads, /\bcurrentLibraryFinder\(/);
+  for (const resume of ["forgetSettledFailures", "requeueThrottledFailures"]) {
+    const body = downloads.slice(downloads.indexOf(`const ${resume} = `));
+    const step = body.slice(0, body.indexOf("\n};\n"));
+    assert.match(step, /await freeTurn\(RESUME_WORK\)/, `${resume} starts on a free turn`);
+    assert.match(step, /currentLibraryFinderInSlices\(RESUME_WORK\)/, `${resume}'s finder`);
+  }
+  // The fill indexes what it read in slices, and names them.
+  const input = read("library/backgroundFillInput.ts");
+  assert.match(input, /runSteps\(\s*indexFillPlaylistsSteps\(/);
+  assert.doesNotMatch(input, /\bindexFillPlaylists\(/);
+  assert.match(read("library/backgroundFill.ts"), /namedWork\(FILL_WORK\)/);
+});

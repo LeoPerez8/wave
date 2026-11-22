@@ -8,9 +8,10 @@
  */
 import {
   compareAlbumTracks,
+  finishSteps,
   leavingSongEntry,
   missingSongYtSong,
-  planMissingSongs,
+  planMissingSongsSteps,
   signOutPlan,
   vanishedFile,
   writePlaylistEntrySong,
@@ -18,7 +19,7 @@ import {
   type MissingTrack,
   type SyncSongFields,
 } from "@wave/core";
-import { and, eq, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 
 import { chunks } from "./chunks.ts";
 import { readCredits, type CreditSplits } from "./credits.ts";
@@ -36,56 +37,178 @@ import { deleteTracks, deleteTracksById } from "./tracks.ts";
  * Track has come in, missing songs take tags changed on another phone, and
  * those the account no longer has leave. True when the Library changed.
  */
-export const syncMissingSongs = (
+export const syncMissingSongs = (db: LibraryDatabase, splits: CreditSplits, now: number): boolean =>
+  db.transaction((tx) => finishSteps(syncMissingSongsSteps(tx, splits, now)));
+
+/** Rows one step of `syncMissingSongsSteps` reads, and songs it saves or deletes a step. */
+const READ_AT_ONCE = 250;
+const WRITE_AT_ONCE = 10;
+
+/** The account's live songs, `READ_AT_ONCE` a step. */
+function* selectAccountSongsSteps(
+  db: LibraryDatabase,
+): Generator<void, { recordingKey: string; song: SyncSongFields }[]> {
+  const { accountSongs } = schema;
+  const account: { recordingKey: string; song: SyncSongFields }[] = [];
+  for (let after: string | null = null; ;) {
+    const rows = db
+      .select({ recordingKey: accountSongs.recordingKey, song: accountSongs.song })
+      .from(accountSongs)
+      .where(
+        and(
+          eq(accountSongs.deleted, false),
+          isNotNull(accountSongs.song),
+          after === null ? undefined : gt(accountSongs.recordingKey, after),
+        ),
+      )
+      .orderBy(asc(accountSongs.recordingKey))
+      .limit(READ_AT_ONCE)
+      .all();
+    for (const { recordingKey, song } of rows) {
+      if (song !== null) account.push({ recordingKey, song: JSON.parse(song) as SyncSongFields });
+      after = recordingKey;
+    }
+    if (rows.length < READ_AT_ONCE) return account;
+    yield;
+  }
+}
+
+/** Every Track's recording key, missing songs' too, `READ_AT_ONCE` a step. */
+function* selectHeldKeysSteps(db: LibraryDatabase): Generator<void, string[]> {
+  const { tracks } = schema;
+  const held: string[] = [];
+  for (let after: string | null = null; ;) {
+    const keys: string[] = db
+      .selectDistinct({ key: sql<string>`${tracks.recordingKey}` })
+      .from(tracks)
+      .where(
+        and(
+          isNotNull(tracks.recordingKey),
+          after === null ? undefined : gt(tracks.recordingKey, after),
+        ),
+      )
+      .orderBy(asc(tracks.recordingKey))
+      .limit(READ_AT_ONCE)
+      .all()
+      .map((row) => row.key);
+    held.push(...keys);
+    const last: string | undefined = keys[keys.length - 1];
+    if (last === undefined || keys.length < READ_AT_ONCE) return held;
+    after = last;
+    yield;
+  }
+}
+
+/** The missing songs as `planMissingSongs` reads them, `READ_AT_ONCE` a step. */
+function* selectShownMissingSteps(db: LibraryDatabase) {
+  const { tracks, albums, genres } = schema;
+  const read = (after: number) =>
+    db
+      .select({
+        id: tracks.id,
+        recordingKey: tracks.recordingKey,
+        title: tracks.title,
+        artist: tracks.artistCredit,
+        album: albums.title,
+        albumArtist: albums.albumArtistCredit,
+        genre: genres.name,
+        releaseDate: tracks.releaseDate,
+        year: tracks.year,
+        trackNumber: tracks.trackNumber,
+        discNumber: tracks.discNumber,
+        durationMs: tracks.durationMs,
+        videoId: tracks.videoId,
+      })
+      .from(tracks)
+      .innerJoin(albums, eq(tracks.albumId, albums.id))
+      .leftJoin(genres, eq(tracks.genreId, genres.id))
+      .where(and(isNull(tracks.path), gt(tracks.id, after)))
+      .orderBy(asc(tracks.id))
+      .limit(READ_AT_ONCE)
+      .all();
+  const missing: ReturnType<typeof read> = [];
+  for (let after = 0; ;) {
+    const rows = read(after);
+    missing.push(...rows);
+    const last = rows[rows.length - 1];
+    if (last === undefined || rows.length < READ_AT_ONCE) return missing;
+    after = last.id;
+    yield;
+  }
+}
+
+/**
+ * `syncMissingSongs` as steps for work that runs in slices (#1450): the account's songs and
+ * the Library's read a few hundred rows a step, then planned, then saved and deleted
+ * `WRITE_AT_ONCE` songs a step, each step one transaction. What a scan changed meanwhile
+ * stays: a song a Track now holds with its file isn't saved or deleted as a missing one.
+ * The albums, artists and genres left empty go in one last step (`pruneOrphans`).
+ */
+export function* syncMissingSongsSteps(
   db: LibraryDatabase,
   splits: CreditSplits,
   now: number,
-): boolean => {
-  const { accountSongs, tracks, albums, genres } = schema;
-  const account = db
-    .select({ recordingKey: accountSongs.recordingKey, song: accountSongs.song })
-    .from(accountSongs)
-    .where(and(eq(accountSongs.deleted, false), isNotNull(accountSongs.song)))
-    .all()
-    .flatMap(({ recordingKey, song }) =>
-      song === null ? [] : [{ recordingKey, song: JSON.parse(song) as SyncSongFields }],
-    );
-  const held = db
-    .selectDistinct({ key: tracks.recordingKey })
-    .from(tracks)
-    .where(isNotNull(tracks.recordingKey))
-    .all()
-    .flatMap((row) => row.key ?? []);
-  const missing = db
-    .select({
-      id: tracks.id,
-      recordingKey: tracks.recordingKey,
-      title: tracks.title,
-      artist: tracks.artistCredit,
-      album: albums.title,
-      albumArtist: albums.albumArtistCredit,
-      genre: genres.name,
-      releaseDate: tracks.releaseDate,
-      year: tracks.year,
-      trackNumber: tracks.trackNumber,
-      discNumber: tracks.discNumber,
-      durationMs: tracks.durationMs,
-      videoId: tracks.videoId,
-    })
-    .from(tracks)
-    .innerJoin(albums, eq(tracks.albumId, albums.id))
-    .leftJoin(genres, eq(tracks.genreId, genres.id))
-    .where(isNull(tracks.path))
-    .all();
-  const plan = planMissingSongs({ account, held, missing });
+): Generator<void, boolean> {
+  const account = yield* selectAccountSongsSteps(db);
+  yield;
+  const held = yield* selectHeldKeysSteps(db);
+  yield;
+  const missing = yield* selectShownMissingSteps(db);
+  yield;
+  const plan = yield* planMissingSongsSteps({ account, held, missing });
   if (plan.save.length === 0 && plan.leave.length === 0) return false;
-  db.transaction((tx) => {
-    saveMissingSongs(tx, splits, plan.save, now);
-    deleteTracksById(tx, plan.leave);
-    if (plan.prune) pruneOrphans(tx, splits);
-  });
+  const { tracks } = schema;
+  for (let start = 0; start < plan.save.length; start += WRITE_AT_ONCE) {
+    yield;
+    const piece = plan.save.slice(start, start + WRITE_AT_ONCE);
+    db.transaction((tx) => {
+      const retagged = piece.flatMap((song) => (song.trackId === null ? [] : [song.trackId]));
+      const stillMissing = new Set(
+        retagged.length === 0
+          ? []
+          : tx
+              .select({ id: tracks.id })
+              .from(tracks)
+              .where(and(inArray(tracks.id, retagged), isNull(tracks.path)))
+              .all()
+              .map((row) => row.id),
+      );
+      const keys = piece.flatMap((song) => (song.trackId === null ? [song.recordingKey] : []));
+      const heldNow = new Set(
+        keys.length === 0
+          ? []
+          : tx
+              .select({ key: sql<string>`${tracks.recordingKey}` })
+              .from(tracks)
+              .where(inArray(tracks.recordingKey, keys))
+              .all()
+              .map((row) => row.key),
+      );
+      const save = piece.filter((song) =>
+        song.trackId === null ? !heldNow.has(song.recordingKey) : stillMissing.has(song.trackId),
+      );
+      saveMissingSongs(tx, splits, save, now);
+    });
+  }
+  for (let start = 0; start < plan.leave.length; start += WRITE_AT_ONCE) {
+    yield;
+    const piece = plan.leave.slice(start, start + WRITE_AT_ONCE);
+    db.transaction((tx) => {
+      const leaving = tx
+        .select({ id: tracks.id })
+        .from(tracks)
+        .where(and(inArray(tracks.id, piece), isNull(tracks.path)))
+        .all()
+        .map((row) => row.id);
+      deleteTracksById(tx, leaving);
+    });
+  }
+  if (plan.prune) {
+    yield;
+    db.transaction((tx) => pruneOrphans(tx, splits));
+  }
   return true;
-};
+}
 
 /**
  * The missing songs, as downloading them takes them (Core's `MissingTrack`):

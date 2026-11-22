@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
+import { runTestPromise } from "../lib/steppedTesting.ts";
 import * as Data from "effect/Data";
 import { shareArtistGraph } from "./sharedArtistGraph.ts";
 import type { ArtistGraphReads } from "./artistGraph.ts";
@@ -33,9 +34,9 @@ test("a failed graph read is an error, and Try Again can obtain a fresh graph", 
     Effect.void,
   );
   t.after(shared.dispose);
-  await assert.rejects(Effect.runPromise(shared.get));
+  await assert.rejects(runTestPromise(shared.get));
   broken = false;
-  assert.ok(await Effect.runPromise(shared.get));
+  assert.ok(await runTestPromise(shared.get));
 });
 
 test("last-result readers stay available while a new graph derives beyond the old deadline", async (t) => {
@@ -57,10 +58,10 @@ test("last-result readers stay available while a new graph derives beyond the ol
   );
   t.after(shared.dispose);
   assert.equal(shared.peek(), null);
-  const first = await Effect.runPromise(shared.get);
+  const first = await runTestPromise(shared.get);
   versions = { catalog: 1 };
   paused = true;
-  const warming = Effect.runPromise(shared.get);
+  const warming = runTestPromise(shared.get);
   await new Promise<void>((resolve) => setImmediate(resolve));
   t.mock.timers.tick(120_000);
   assert.equal(shared.peek(), first);

@@ -302,3 +302,65 @@ test("settling an indexed fill song removes every occurrence without revisiting 
   index.drop(untouched);
   assert.equal(index.empty(), true);
 });
+
+describe("the background fill's work at startup, in slices (#1453)", () => {
+  /** [count] songs whose titles count their reads in [reads]. */
+  const counted = (count: number, reads: { n: number }): UnsearchedSong[] =>
+    Array.from({ length: count }, (_, n) => ({
+      ...song(`Song ${n}`),
+      get title() {
+        reads.n++;
+        return `Song ${n}`;
+      },
+    }));
+
+  test("indexing a read takes one step per song, and indexes as the whole build does", async () => {
+    const { indexFillPlaylists, indexFillPlaylistsSteps, finishSteps } = await import("./index.ts");
+    const playlists = [
+      playlist(1, 100, ["Touch", "Contact", "Touch"]),
+      playlist(2, null, ["Touch"]),
+    ];
+    const steps = indexFillPlaylistsSteps(playlists);
+    let yields = 0;
+    let next = steps.next();
+    while (next.done !== true) {
+      yields++;
+      next = steps.next();
+    }
+    assert.ok(yields >= 4, `${yields} steps for 4 songs`);
+    const stepped = next.value;
+    const whole = indexFillPlaylists(playlists);
+    assert.deepEqual(stepped.playlists(), whole.playlists());
+    stepped.drop(song("Touch"));
+    assert.deepEqual(
+      stepped.playlists().map((p) => p.songs.map((s) => s.title)),
+      [["Contact"], []],
+    );
+    assert.deepEqual(finishSteps(indexFillPlaylistsSteps([])).playlists(), []);
+  });
+
+  test("the next song is found without reading the rest of a long playlist", () => {
+    const reads = { n: 0 };
+    const long = { id: 1, usedAt: 100, songs: counted(5000, reads) };
+    const next = nextFillStep(NO_FILL, world([long]), 0);
+    assert.equal(searched(next.step), "Song 0");
+    assert.ok(reads.n <= 2, `${reads.n} title reads for one step`);
+  });
+
+  test("with a song failed, the next one is found without reading past it", () => {
+    const reads = { n: 0 };
+    const long = { id: 1, usedAt: 100, songs: counted(5000, reads) };
+    const first = nextFillStep(NO_FILL, world([long]), 0);
+    assert.equal(first.step.kind, "search");
+    const failed = fillAnswered(
+      first.fill,
+      song("Song 0"),
+      { kind: "failed", reason: "failed" },
+      0,
+    );
+    reads.n = 0;
+    const next = nextFillStep(failed.fill, world([long]), 1000);
+    assert.equal(searched(next.step), "Song 1");
+    assert.ok(reads.n <= 4, `${reads.n} title reads for one step`);
+  });
+});

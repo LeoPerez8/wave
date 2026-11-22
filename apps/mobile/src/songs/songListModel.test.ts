@@ -160,6 +160,17 @@ test("a queue row has no star or length cell; History fades its cover and title,
   assert.equal(model.row(sources[0]!).trailing, true);
 });
 
+test("a queue row built again with the same entry keeps its presentation (#1441)", () => {
+  const model = createSongListModel();
+  const track = { title: "Song", artist: "Artist", thumbPath: null };
+  // The Queue builds each row's source, its entry too, afresh on every render.
+  const row = (trackId: string) =>
+    model.row({ kind: "queue", entry: { key: "a", trackId }, track }, {}, "a");
+  const first = row("1");
+  assert.equal(row("1"), first);
+  assert.notEqual(row("2"), first);
+});
+
 test("a song row's cover follows the artwork helper's order: the thumbnail derived from the original wins over another medium file", () => {
   const hash = "0123456789abcdef0123456789abcdef01234567";
   const presented = songRowPresentation({

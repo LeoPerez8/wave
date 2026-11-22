@@ -6,6 +6,7 @@ import {
   blackPlayerPlayId,
   missingSongTrack,
   planMissingSongs,
+  planMissingSongsSteps,
   planSongSync,
 } from "./index.ts";
 import type { AccountSongState, SyncSong, SyncSongFields } from "./index.ts";
@@ -264,6 +265,26 @@ describe("missingSongTrack", () => {
 });
 
 describe("planMissingSongs", () => {
+  test("in steps, plans a few hundred songs a step and comes to the same plan", () => {
+    const account = Array.from({ length: 1_000 }, (_, at) => ({
+      recordingKey: `song-${at}`,
+      song: fields(`Song ${at}`),
+    }));
+    const input = { account, held: ["song-0"], missing: [] };
+    const steps = planMissingSongsSteps(input);
+    let yields = 0;
+    for (let step = steps.next(); ; step = steps.next()) {
+      if (step.done === true) {
+        assert.deepEqual(step.value, planMissingSongs(input));
+        assert.equal(step.value.save.length, 999);
+        break;
+      }
+      yields += 1;
+    }
+    // A step for each 250 songs read, at least: none plans the whole account at once.
+    assert.equal(yields >= 4, true);
+  });
+
   test("an account song no Track has comes in as a missing song", () => {
     const plan = planMissingSongs({
       account: [

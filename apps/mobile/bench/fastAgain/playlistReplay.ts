@@ -1,5 +1,6 @@
 /** Desktop replay of actual store/Core and the production visit/source lifetime seams. */
 import * as Effect from "effect/Effect";
+import { runTestPromise, runTestSync } from "../../src/lib/steppedTesting.ts";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { setImmediate } from "node:timers/promises";
@@ -55,8 +56,8 @@ export const createPlaylistReplay = async (
   const store = { ...rawStore };
   const note = <A>(read: Effect.Effect<A, unknown>) =>
     Effect.sync(() => {
-      if (!measuring || !tracing) return Effect.runSync(read);
-      const traced = traceQueries(fixture.db, () => Effect.runSync(read));
+      if (!measuring || !tracing) return runTestSync(read);
+      const traced = traceQueries(fixture.db, () => runTestSync(read));
       const rows = traced.queries.reduce((sum, q) => sum + q.rows, 0);
       work.rowsRead += rows;
       work.statements += traced.queries.length;
@@ -115,12 +116,11 @@ export const createPlaylistReplay = async (
           "apps/mobile/src/home/artistGraph.ts",
         );
   let graph: import("@wave/core").ArtistGraph | null = null;
-  if (graphMode === "warm")
-    graph = await Effect.runPromise(graphModule!.readArtistGraph(store, turn));
+  if (graphMode === "warm") graph = await runTestPromise(graphModule!.readArtistGraph(store, turn));
   const graphRead = async (signal?: AbortSignal) => {
     if (graphMode === "null" || graph !== null) return graph;
     // Same shared graph input/build as the selected revision; one build per replay.
-    const next = await Effect.runPromise(graphModule!.readArtistGraph(store, turn), { signal });
+    const next = await runTestPromise(graphModule!.readArtistGraph(store, turn), { signal });
     if (!signal?.aborted) graph = next;
     return next;
   };
@@ -156,8 +156,8 @@ export const createPlaylistReplay = async (
     input: (signal?: AbortSignal) => {
       if (measuring) work.reads++;
       return source === undefined
-        ? Effect.runPromise(store.playlistRecommendationInput(fixture.playlistId))
-        : Effect.runPromise(source.get(fixture.playlistId), { signal });
+        ? runTestPromise(store.playlistRecommendationInput(fixture.playlistId))
+        : runTestPromise(source.get(fixture.playlistId), { signal });
     },
     /** The next input reads everything again: a forget before the snapshot, writes since. */
     forget: () => {
@@ -181,7 +181,7 @@ export const createPlaylistReplay = async (
         ytMusicEnabled: false,
       };
       return modern
-        ? Effect.runPromise(
+        ? runTestPromise(
             steps!.runSteps(core.playlistRecommendationsSteps(input.playlist, sources), turn),
           )
         : core.playlistRecommendations(input.playlist, sources);
@@ -212,8 +212,8 @@ export const createPlaylistReplay = async (
           if (measuring) work.reads++;
           const input =
             source === undefined
-              ? await Effect.runPromise(store.playlistRecommendationInput(playlistId))
-              : await Effect.runPromise(source.get(playlistId), { signal });
+              ? await runTestPromise(store.playlistRecommendationInput(playlistId))
+              : await runTestPromise(source.get(playlistId), { signal });
           const inputGraph = await graphRead(signal);
           // Ti ranks once after each successful read, not once per renewal request.
           if (!modern && measuring) work.ranks++;
@@ -231,7 +231,7 @@ export const createPlaylistReplay = async (
         rank: modern
           ? async (input, signal) => {
               if (measuring) work.ranks++;
-              return Effect.runPromise(
+              return runTestPromise(
                 steps!.runSteps(
                   core.playlistRecommendationsSteps(input.playlist, input.sources),
                   turn,
@@ -241,10 +241,10 @@ export const createPlaylistReplay = async (
             }
           : undefined,
         dismiss: async (offer) => {
-          await Effect.runPromise(store.dismissPlaylistRecommendation(playlistId, offer));
+          await runTestPromise(store.dismissPlaylistRecommendation(playlistId, offer));
         },
         accept: async (offer) => {
-          await Effect.runPromise(store.acceptPlaylistRecommendation(playlistId, offer));
+          await runTestPromise(store.acceptPlaylistRecommendation(playlistId, offer));
         },
       });
       const renew = session.renew;
@@ -292,7 +292,7 @@ export const createPlaylistReplay = async (
         const visit = visitModule.followPlaylistRecommendations(session, {
           playlistId,
           sight,
-          start: (signal) => Effect.runPromise(start, { signal }),
+          start: (signal) => runTestPromise(start, { signal }),
           subscribe: bus.onLibraryChange,
           wait: async () => {
             await setImmediate();

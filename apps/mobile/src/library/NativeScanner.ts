@@ -8,6 +8,7 @@ import * as Stream from "effect/Stream";
 
 import { scanInputColumns } from "./startupJobs";
 import { startupTurnEffect } from "@/lib/backgroundWork";
+import { namedWork } from "@/lib/stepped";
 
 import {
   WaveNative,
@@ -124,7 +125,7 @@ const scan = (
             if (!finished) void started.then((queued) => queued && WaveNative.cancelScan(scanId));
           },
         };
-      }),
+      }).pipe(namedWork("Library scan start")),
       (handle) => Effect.sync(handle.release),
     ),
   );

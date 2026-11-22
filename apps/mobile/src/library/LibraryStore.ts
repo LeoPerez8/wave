@@ -28,12 +28,7 @@ import {
   databaseLayer,
   type LibraryDatabase,
 } from "@wave/client";
-import {
-  NotReplayable,
-  replayRead,
-  type ReadConnection,
-  type ReplayedRead,
-} from "@wave/client/db/offThreadReads";
+import { NotReplayable, sharedReplays, type ReplayedRead } from "@wave/client/db/offThreadReads";
 import { SyncLibraryReads } from "./syncLibraryReads.ts";
 import { sqliteDriverLayer } from "./sqliteDriver.ts";
 import { collaborationStore, type CollaborationStore } from "@/collaboration/collaborationStore";
@@ -1612,6 +1607,8 @@ const make = Effect.gen(function* () {
   const db = yield* ClientDatabase;
   // Library reads leave the JS thread on the read connections (#1348).
   const { reads } = yield* SqliteDriver;
+  // Callers asking for the same read at once share one replay (#1452).
+  const replays = reads === undefined ? undefined : sharedReplays(reads, now);
 
   // A read on this connection, on the JS thread: tests and desktop benches, the reads
   // that must finish in their task (`SyncLibraryReads`) and the few that can't replay.
@@ -1622,14 +1619,14 @@ const make = Effect.gen(function* () {
   ): A => timeLibraryRead(operation, () => run(db), rows);
 
   const readOffThread = async <A>(
-    connection: ReadConnection,
+    replay: NonNullable<typeof replays>,
     operation: string,
     run: (db: LibraryDatabase) => A,
     rows?: (result: A) => number,
   ): Promise<A> => {
     let replayed: ReplayedRead<A>;
     try {
-      replayed = await replayRead(connection, run, now);
+      replayed = await replay(run);
     } catch (cause) {
       // The synchronous read is the reference: it gives the result, or the error, it
       // always did. A read that can't replay is named once in the app log.
@@ -1650,13 +1647,13 @@ const make = Effect.gen(function* () {
     rows?: (result: A) => number,
   ): Effect.Effect<A, LibraryStoreError> =>
     Effect.flatMap(Effect.service(SyncLibraryReads), (here) =>
-      here || reads === undefined
+      here || replays === undefined
         ? Effect.try({
             try: () => readHere(operation, run, rows),
             catch: (cause) => new LibraryStoreError({ operation, cause }),
           })
         : Effect.tryPromise({
-            try: () => readOffThread(reads, operation, run, rows),
+            try: () => readOffThread(replays, operation, run, rows),
             catch: (cause) => new LibraryStoreError({ operation, cause }),
           }),
     );
@@ -2275,7 +2272,12 @@ const make = Effect.gen(function* () {
     keepStreamedGenre: (videoId, genre) =>
       writeAttempt("save a streamed genre", () => keepStreamedGenre(db, videoId, genre)),
     pendingDjMoodSongs: (after, now) =>
-      attempt("read pending DJ mood songs", (db) => pendingDjMoodSongs(db, after, now)),
+      attempt(
+        "read pending DJ mood songs",
+        (db) => pendingDjMoodSongs(db, after, now),
+        // The page's songs, not the page: an empty one logged as "1 row" looked like a stuck song.
+        (page) => page.songs.length + page.unreadable.length,
+      ),
     keepDjMoodFeatures: (writes) =>
       writeAttempt("save DJ mood features", () => keepDjMoodFeatures(db, writes)),
     djMoodFeatures: (videoIds) =>

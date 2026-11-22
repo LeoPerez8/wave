@@ -20,7 +20,13 @@ import type { GestureResponderEvent } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { afterFirstSettled, touchEnded, touchStarted, touchTakenOver } from "@/lib/backgroundWork";
+import {
+  afterFirstSettled,
+  startupStep,
+  touchEnded,
+  touchStarted,
+  touchTakenOver,
+} from "@/lib/backgroundWork";
 import { followFixSongsSummary } from "@/library/findLyricsAndGenre";
 import { startKeptPlayTotals } from "@/library/keptPlayTotals";
 import { useAllFilesAccess } from "@/library/hooks";
@@ -247,6 +253,10 @@ export default function RootLayout() {
 
   // A whole-Library lyrics and genre run that ended in the background says how it went.
   useEffect(() => afterFirstSettled("lookupSummary", followFixSongsSummary), []);
+
+  // The root's effects run after every screen's: from here, an unnamed block before the first
+  // screen settles is no longer the first mount's (#1434).
+  useEffect(() => startupStep("after the first mount"), []);
 
   return (
     <GestureHandlerRootView
