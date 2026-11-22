@@ -12,6 +12,9 @@ import { loadWithStubs, nativeStubs, stubModule } from "../perf/renderHarness.ts
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
+const preloaded: string[] = [];
+Object.assign(globalThis, { __keptTabsTest: { preloaded } });
+
 const [{ useKeptTabs, warmTabScreen }] = await loadWithStubs<[typeof import("./tabScreens.tsx")]>(
   [import.meta.resolve("./tabScreens.tsx")],
   {
@@ -24,6 +27,9 @@ const [{ useKeptTabs, warmTabScreen }] = await loadWithStubs<[typeof import("./t
        export const registerPerfMeta = () => {};`,
     ),
     "@/theme/useThemeColor": stubModule(`export const useThemeColor = () => "#000000";`),
+    "@/lib/timingRouter": stubModule(
+      `export const router = { prefetch: (href) => globalThis.__keptTabsTest.preloaded.push(href) };`,
+    ),
   },
 );
 
@@ -73,6 +79,17 @@ test("a tab warmed before its first tap is kept, built hidden", async () => {
   } finally {
     await tabs.close();
   }
+});
+
+test("warming a tab preloads its route, once: the tab navigator lists only visited tabs", async () => {
+  // expo-router's Tabs keeps only visited routes in its state, so a kept tab that was never
+  // visited has no route to render until it's preloaded.
+  warmTabScreen("albums");
+  warmTabScreen("albums");
+  assert.deepEqual(
+    preloaded.filter((href) => href === "/albums"),
+    ["/albums"],
+  );
 });
 
 test("a tab off the bar isn't warmed", async () => {

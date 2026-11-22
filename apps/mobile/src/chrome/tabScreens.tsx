@@ -22,6 +22,7 @@ import { StyleSheet } from "react-native";
 import { Screen } from "react-native-screens";
 
 import { RenderCost } from "@/lib/renderCost";
+import { router } from "@/lib/timingRouter";
 import { PERF_ENABLED, perfMark, registerPerfMeta } from "@/perf/perf";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -72,11 +73,14 @@ const readWarmed = () => warmed;
 /**
  * Builds [tab] hidden before its first visit, when it's on the bar and the kept tabs have room,
  * so its first tap shows a kept tab (#1438). Started in idle time (`afterFirstSettled`).
+ * expo-router's tab navigator holds only visited tabs' routes, so the tab's route is preloaded
+ * too (`router.prefetch`, applied in a transition); `renderTabScreens` then builds it hidden.
  */
 export const warmTabScreen = (tab: TabBarTab): void => {
   if (warmed.includes(tab)) return;
   warmed = [...warmed, tab];
   for (const listener of warmedListeners) listener();
+  router.prefetch(TAB_PATH[tab]);
 };
 
 /**
