@@ -399,5 +399,8 @@ test("an owner's whole listening ranks in about the time it takes to key each na
     }
   });
   const ranking = median(() => followSuggestions({ recent, allTime, excluded, shown: 5 }));
-  assert.ok(ranking < keying * 3, `ranking took ${ranking} ms, keying every name once ${keying} ms`);
+  assert.ok(
+    ranking < keying * 3,
+    `ranking took ${ranking} ms, keying every name once ${keying} ms`,
+  );
 });

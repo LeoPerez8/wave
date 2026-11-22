@@ -180,15 +180,15 @@ const fromKept = <A>(
     [...artists.values()].filter((artist) => score(artist) > 0 || artist.countedPlays > 0),
     (a, b) => score(b) - score(a) || b.countedPlays - a.countedPlays,
   ).map((artist) => ({
-      key: artist.key,
-      name: artist.name,
-      item: artist.item,
-      countedPlays: artist.countedPlays,
-      line:
-        score(artist) > 0
-          ? strings.shows.keptSongs(artist.library, artist.playlists)
-          : strings.shows.allTimePlays(artist.countedPlays),
-    }));
+    key: artist.key,
+    name: artist.name,
+    item: artist.item,
+    countedPlays: artist.countedPlays,
+    line:
+      score(artist) > 0
+        ? strings.shows.keptSongs(artist.library, artist.playlists)
+        : strings.shows.allTimePlays(artist.countedPlays),
+  }));
 };
 
 /**
