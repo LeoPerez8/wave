@@ -5,7 +5,7 @@
  * Never edit a migration that has shipped; add a new one.
  */
 
-import { mKeptPlayTotals } from "./keptTotalsMigration.ts";
+import { mKeptPlayTotals, mQuietKeptTriggers } from "./keptTotalsMigration.ts";
 
 const m0000 = `
 CREATE TABLE \`artists\` (
@@ -1657,6 +1657,7 @@ export default {
       },
       { idx: 69, when: 1_797_768_000_000, tag: "0069_kept_play_totals", breakpoints: true },
       { idx: 70, when: 1_797_854_400_000, tag: "0070_dj_mood_failures", breakpoints: true },
+      { idx: 71, when: 1_797_940_800_000, tag: "0071_quiet_kept_triggers", breakpoints: true },
     ],
   },
   migrations: {
@@ -1731,5 +1732,6 @@ export default {
     m0068,
     m0069: mKeptPlayTotals,
     m0070,
+    m0071: mQuietKeptTriggers,
   },
 };
