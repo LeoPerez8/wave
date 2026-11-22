@@ -11,7 +11,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import { runSteps } from "../lib/stepped.ts";
+import { type BackgroundWorkName, runSteps, type Turn } from "../lib/stepped.ts";
 
 /** A pool song's popularity, from 0 (a deep cut) to 1. */
 export type PopularityLookup = (id: MagicQueueSeedId) => number;
@@ -27,7 +27,7 @@ export interface PopularityLibrary {
 export interface PopularitySources<L extends PopularityLibrary, R> {
   readonly library: Effect.Effect<L, unknown, R>;
   readonly catalog: Effect.Effect<readonly CatalogSong[], unknown, R>;
-  readonly between: Effect.Effect<void>;
+  readonly between: Turn;
 }
 
 const deepCuts: PopularityLookup = () => 0;
@@ -40,7 +40,7 @@ const deepCuts: PopularityLookup = () => 0;
  */
 export const magicQueuePopularity = <L extends PopularityLibrary, R = never>(
   sources: PopularitySources<L, R>,
-): Effect.Effect<PopularityLookup, never, R> => {
+): Effect.Effect<PopularityLookup, never, R | BackgroundWorkName> => {
   const built = new WeakMap<object, WeakMap<object, PopularityLookup>>();
   return Effect.gen(function* () {
     const library = yield* sources.library;

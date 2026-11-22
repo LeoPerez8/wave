@@ -18,8 +18,12 @@ const [{ SwipeableRow, ClearRowsContext }] = await loadWithStubs<
 >([import.meta.resolve("./SwipeableRow.tsx")], {
   ...nativeStubs(),
   "react-native-gesture-handler": stubModule(`
-      export const usePanGesture = config => config;
+      export const usePanGesture = config => (globalThis.__wavePan = config);
       export const GestureDetector = ({ children }) => children;
+    `),
+  "expo-haptics": stubModule(`
+      export const impactAsync = async () => { globalThis.__waveTicks = (globalThis.__waveTicks ?? 0) + 1; };
+      export const ImpactFeedbackStyle = { Light: "light" };
     `),
   "react-native-worklets": stubModule(`export const scheduleOnRN = (fn, ...args) => fn(...args);`),
   "@/playback/actionIcons": stubModule(`
@@ -80,7 +84,7 @@ test(`mounting ${ROWS} swipeable rows draws only a static backdrop until one is 
       ROWS * 2,
       "every row draws a static backdrop on both edges, so a swipe never slides over blank",
     );
-    assert.deepEqual(atMount, { sharedValues: ROWS * 3, animatedStyles: ROWS });
+    assert.deepEqual(atMount, { sharedValues: ROWS * 2, animatedStyles: ROWS });
     await act(() => rowViews(renderer!)[7]!.props.onTouchStart?.({ nativeEvent: {} }));
     assert.deepEqual(
       labels(renderer!).map((node) => node.props.children),
@@ -136,6 +140,50 @@ test("a clear row draws its edges at mount, since a backdrop would show through 
   });
   try {
     assert.equal(labels(renderer!).length, 2);
+  } finally {
+    await act(() => renderer?.unmount());
+  }
+});
+
+interface PanConfig {
+  readonly onUpdate: (event: { translationX: number }) => void;
+  readonly onDeactivate: (event: {
+    translationX: number;
+    velocityX: number;
+    canceled: boolean;
+  }) => void;
+}
+const scope = globalThis as unknown as { __wavePan?: PanConfig; __waveTicks?: number };
+
+test("a swipe ticks once each time it arms, and again after it backs off and arms again", async () => {
+  let renderer: ReactTestRenderer | undefined;
+  await act(() => {
+    renderer = create(
+      createElement(
+        SwipeableRow,
+        { swipe } as unknown as RowProps,
+        createElement("text", null, "x"),
+      ),
+    );
+  });
+  try {
+    await act(() =>
+      rowViews(renderer!)[0]!.props.onLayout({ nativeEvent: { layout: { width: 300 } } }),
+    );
+    const pan = scope.__wavePan!;
+    scope.__waveTicks = 0;
+    for (const x of [20, 60, 90]) pan.onUpdate({ translationX: x });
+    assert.equal(scope.__waveTicks, 0, "no tick before a third of the row");
+    for (const x of [120, 160, 200]) pan.onUpdate({ translationX: x });
+    assert.equal(scope.__waveTicks, 1, "one tick as it arms, none while it stays armed");
+    pan.onUpdate({ translationX: 50 });
+    pan.onUpdate({ translationX: 140 });
+    assert.equal(scope.__waveTicks, 2, "backing off and arming again ticks again");
+    pan.onUpdate({ translationX: -150 });
+    assert.equal(scope.__waveTicks, 3, "arming the other side ticks");
+    pan.onDeactivate({ translationX: 0, velocityX: 0, canceled: true });
+    pan.onUpdate({ translationX: 130 });
+    assert.equal(scope.__waveTicks, 4, "a new swipe arms afresh");
   } finally {
     await act(() => renderer?.unmount());
   }

@@ -29,6 +29,7 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
 `)}`;
 const hooks = registerHooks({
   resolve(specifier, context, next) {
+    if (specifier === "@/lib/storeWhile") return next("../lib/storeWhile.ts", context);
     if (specifier.startsWith("@/")) return { url: boundary, shortCircuit: true };
     if (specifier === "./lyricsQueries") return next("./lyricsQueries.ts", context);
     return next(specifier, context);
@@ -47,7 +48,9 @@ const NO_SKIPS = new Set<number>();
 type Shown = ReturnType<typeof useLocalLyricsSearch>;
 const mount = async (query: string, skipIds: ReadonlySet<number> = NO_SKIPS) => {
   let shown: Shown = { hits: [], submit: () => {} };
+  let renders = 0;
   function Lyrics(props: { query: string; skipIds: ReadonlySet<number> }) {
+    renders++;
     const value = useLocalLyricsSearch(props.query, SONGS, props.skipIds);
     useLayoutEffect(() => {
       shown = value;
@@ -60,6 +63,7 @@ const mount = async (query: string, skipIds: ReadonlySet<number> = NO_SKIPS) => 
   });
   return {
     lines: () => shown.hits.map((hit) => hit.line),
+    renders: () => renders,
     submit: (q: string) => act(async () => shown.submit(q)),
     update: (q: string, skips: ReadonlySet<number> = NO_SKIPS) =>
       act(async () => renderer?.update(createElement(Lyrics, { query: q, skipIds: skips }))),
@@ -170,6 +174,34 @@ test("clearing the field clears Lyrics", async (t) => {
     assert.deepEqual(view.lines(), []);
     await view.update("x");
     assert.deepEqual(view.lines(), [], "an old query's answer doesn't come back for a new one");
+  } finally {
+    await view.unmount();
+  }
+});
+
+test("with nothing typed, the filling index changing renders nothing", async (t) => {
+  // A scan bumps the index's version every 350 ms: an empty field has nothing to read again,
+  // so Search doesn't render for it (#1438).
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  io.reads.length = 0;
+  io.answerWith(() => Promise.resolve([{ trackId: 1, lyrics: "I love you" }]));
+  const view = await mount("");
+  try {
+    const before = view.renders();
+    for (let bump = 0; bump < 3; bump++)
+      await act(async () => {
+        io.bumpVersion();
+      });
+    assert.equal(view.renders(), before, "no render per version bump");
+
+    await view.update("love");
+    await act(async () => t.mock.timers.tick(LYRICS_TYPING_PAUSE_MS));
+    assert.deepEqual(io.reads, ["love"], "typing then reads once, after the pause");
+    assert.deepEqual(view.lines(), ["I love you"]);
+    await act(async () => {
+      io.bumpVersion();
+    });
+    assert.deepEqual(io.reads, ["love", "love"], "with a query, a bump reads it again");
   } finally {
     await view.unmount();
   }

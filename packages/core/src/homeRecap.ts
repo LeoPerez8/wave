@@ -39,8 +39,18 @@ export const startHomeRecap = ({ available, opened, visible }: HomeRecapInput): 
   period: recapToAnnounce(available ?? [], opened),
 });
 
-/** Only returning to Home adopts newly available Recaps. Pending reads reserve no space. */
+/**
+ * Only returning to Home adopts newly available Recaps. Pending reads reserve
+ * no space. A return announcing the Recap Home already shows keeps the same
+ * period, so Home has nothing new to draw.
+ */
 export const homeRecapVisibility = (state: HomeRecap, input: HomeRecapInput): HomeRecap => {
   if (state.visible === input.visible) return state;
-  return input.visible ? startHomeRecap(input) : { ...state, visible: false };
+  if (!input.visible) return { ...state, visible: false };
+  const next = startHomeRecap(input);
+  const same =
+    next.period === null
+      ? state.period === null
+      : state.period !== null && recapId(next.period) === recapId(state.period);
+  return same ? { visible: true, period: state.period } : next;
 };

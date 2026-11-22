@@ -293,7 +293,6 @@ export function SwipeableRow({
 
   const offsetX = useSharedValue(0);
   const width = useSharedValue(1);
-  const armed = useSharedValue<RowSwipeSide | null>(null);
   const widthRef = useRef(1);
   // The latest actions, for a swipe that ends after the row re-rendered.
   const swipeRef = useRef(swipe);
@@ -360,6 +359,13 @@ export function SwipeableRow({
     );
   };
 
+  /** The side the row arms at [moved]: a sample arms only towards a side with an action to uncover. */
+  const armedSide = (moved: number): RowSwipeSide | null => {
+    "worklet";
+    const reached = rowSwipeArmed({ translationX: moved, width: width.get() });
+    return reached === null || (reached === "right" ? canRight : canLeft) ? reached : null;
+  };
+
   const pan = usePanGesture({
     enabled: active,
     hitSlop: handleSwipeSlop(handleWidth),
@@ -371,18 +377,15 @@ export function SwipeableRow({
       "worklet";
       const x = event.translationX;
       const shown = (x > 0 && movesRight) || (x < 0 && movesLeft) ? x : 0;
+      // The side armed before this move follows from where the row was, so a row
+      // keeps no shared value of its own for it (#1441).
+      const was = armedSide(offsetX.get());
       offsetX.set(shown);
-      // A sample arms only towards a side with an action to uncover.
-      const reached = rowSwipeArmed({ translationX: shown, width: width.get() });
-      const now = reached === null || (reached === "right" ? canRight : canLeft) ? reached : null;
-      if (now !== armed.get()) {
-        armed.set(now);
-        if (now !== null) scheduleOnRN(tick);
-      }
+      const now = armedSide(shown);
+      if (now !== null && now !== was) scheduleOnRN(tick);
     },
     onDeactivate: (event) => {
       "worklet";
-      armed.set(null);
       scheduleOnRN(finish, event.translationX, event.velocityX, event.canceled);
     },
   });

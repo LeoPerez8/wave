@@ -5,7 +5,7 @@
  * Never edit a migration that has shipped; add a new one.
  */
 
-import { mKeptPlayTotals } from "./keptTotalsMigration.ts";
+import { mKeptPlayTotals, mQuietKeptTriggers } from "./keptTotalsMigration.ts";
 
 const m0000 = `
 CREATE TABLE \`artists\` (
@@ -1526,6 +1526,9 @@ const m0064 = `UPDATE sync_state SET cursor = NULL;`;
 
 const m0067 = `ALTER TABLE playlist_items ADD COLUMN restored_at integer;`;
 
+// A DJ mood lookup that keeps failing is left after \`DJ_MOOD_MAX_FAILURES\` tries in a row (#1449).
+const m0070 = `ALTER TABLE dj_mood_features ADD COLUMN failures integer DEFAULT 0 NOT NULL;`;
+
 const m0068 = `ALTER TABLE playlist_items ADD COLUMN added_by text;
 --> statement-breakpoint
 ALTER TABLE playlist_items ADD COLUMN library_entry text;
@@ -1653,6 +1656,8 @@ export default {
         breakpoints: true,
       },
       { idx: 69, when: 1_797_768_000_000, tag: "0069_kept_play_totals", breakpoints: true },
+      { idx: 70, when: 1_797_854_400_000, tag: "0070_dj_mood_failures", breakpoints: true },
+      { idx: 71, when: 1_797_940_800_000, tag: "0071_quiet_kept_triggers", breakpoints: true },
     ],
   },
   migrations: {
@@ -1726,5 +1731,7 @@ export default {
     m0067,
     m0068,
     m0069: mKeptPlayTotals,
+    m0070,
+    m0071: mQuietKeptTriggers,
   },
 };

@@ -15,6 +15,8 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import type { Spine } from "@/library/useSpine";
 import { useRenderCount } from "@/perf/perf";
+import { useStagedCount } from "@/lib/stagedCount";
+import { listMounts } from "@wave/core";
 
 import { useSongRows, type SongRowsOptions } from "./useSongRows";
 
@@ -156,16 +158,25 @@ export function SongList<T>({
   );
 }
 
+/** How many of a song preview's rows mount in one frame: a row of Home's Favorites takes about 15 ms on the emulator. */
+const SONG_PREVIEW_PER_FRAME = 3;
+
 /**
  * A short, capped run of song rows (Home's shelves, Stats' top songs, an
  * artist's Most played), not virtualised: the same rows, subscriptions and
- * handlers as the song list. Its See all uses `SongList`.
+ * handlers as the song list. Its See all uses `SongList`. Its rows mount
+ * `SONG_PREVIEW_PER_FRAME` a frame (#1440), so a screen's first frame doesn't
+ * pay for every row of every preview at once.
  */
 export function SongPreview<T>(props: SongRowsOptions<T>) {
   const { render } = useSongRows(props);
+  const count = props.data.length;
+  const shown = useStagedCount(
+    listMounts({ count, perFrame: SONG_PREVIEW_PER_FRAME, screen: count }),
+  );
   return (
     <View>
-      {props.data.map((item, index) => (
+      {props.data.slice(0, shown).map((item, index) => (
         <Fragment key={props.keyExtractor(item, index)}>{render(item, index)}</Fragment>
       ))}
     </View>

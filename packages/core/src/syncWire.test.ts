@@ -5,11 +5,12 @@ import {
   EMPTY_SYNC_TABLES,
   SYNC_PUSH_BATCH,
   pushBatches,
+  pullPagePieces,
   pushBody,
   readPullPage,
   readPushAnswer,
 } from "./index.ts";
-import type { SyncPlayRow, SyncTables } from "./index.ts";
+import type { SyncPlayRow, SyncPullPage, SyncTables } from "./index.ts";
 
 const KEY = "abbey road\u001fthe beatles\u001fsomething\u001f1.2";
 
@@ -478,5 +479,79 @@ describe("readPushAnswer", () => {
       }),
     );
     assert.deepEqual(answer.corrected, [{ table: "playlists", id: "p2", changedAt: 3 }]);
+  });
+});
+
+describe("pullPagePieces", () => {
+  const page = (tables: Partial<SyncTables>): SyncPullPage => ({
+    ...EMPTY_SYNC_TABLES,
+    ...tables,
+    cursor: "c9",
+    more: false,
+  });
+  const ids = (piece: { readonly rows: SyncTables }) =>
+    Object.entries(piece.rows).flatMap(([table, rows]) =>
+      (rows as readonly { id: string }[]).map((row) => `${table}:${row.id}`),
+    );
+
+  test("a page that fits is one piece, with its cursor", () => {
+    const plays = [play(1), play(2)];
+    const pieces = pullPagePieces(page({ plays }), 25);
+
+    assert.equal(pieces.length, 1);
+    assert.deepEqual(pieces[0]?.rows.plays, plays);
+    assert.equal(pieces[0]?.cursor, "c9");
+  });
+
+  test("an empty page is one piece, so its cursor is still kept", () => {
+    const pieces = pullPagePieces(page({}), 25);
+
+    assert.deepEqual(pieces, [{ rows: EMPTY_SYNC_TABLES, cursor: "c9" }]);
+  });
+
+  test("a large page goes in pieces of at most the rows given, the cursor with the last alone", () => {
+    const plays = Array.from({ length: 60 }, (_, n) => play(n));
+    const pieces = pullPagePieces(page({ plays }), 25);
+
+    assert.deepEqual(
+      pieces.map((piece) => piece.rows.plays.length),
+      [25, 25, 10],
+    );
+    assert.deepEqual(
+      pieces.map((piece) => piece.cursor),
+      [null, null, "c9"],
+    );
+    assert.deepEqual(
+      pieces.flatMap((piece) => piece.rows.plays),
+      plays,
+    );
+  });
+
+  test("pieces keep the order a page is applied in: songs and playlists before what points at them", () => {
+    const song = (id: string) => ({ id, changedAt: 1, phoneId: "p", deleted: true }) as const;
+    const pieces = pullPagePieces(
+      page({
+        plays: [play(1)],
+        favorites: [song("f1")],
+        playlistEntries: [song("e1")],
+        playlists: [song("l1")],
+        songs: [song("s1"), song("s2")],
+        dislikes: [song("d1")],
+        follows: [song("w1")],
+      }),
+      2,
+    );
+
+    assert.deepEqual(pieces.flatMap(ids), [
+      "songs:s1",
+      "songs:s2",
+      "playlists:l1",
+      "playlistEntries:e1",
+      "favorites:f1",
+      "dislikes:d1",
+      `plays:${play(1).id}`,
+      "follows:w1",
+    ]);
+    assert.ok(pieces.every((piece) => ids(piece).length <= 2));
   });
 });

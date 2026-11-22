@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
+import { runTestPromise } from "./steppedTesting.ts";
 import { createRecommendationWork } from "./recommendationTurn.ts";
-import { runSteps } from "./stepped.ts";
+import { namedWork, runSteps } from "./stepped.ts";
 
 test("pages and ranking share a frame budget without queuing a turn per page or slice", async () => {
   let now = 0;
@@ -17,7 +18,7 @@ test("pages and ranking share a frame budget without queuing a turn per page or 
   });
   let pages = 0;
   let ranked = 0;
-  const result = Effect.runPromise(
+  const result = runTestPromise(
     Effect.gen(function* () {
       for (; pages < 3; pages++) {
         yield* turn;
@@ -63,8 +64,8 @@ test("concurrent readers share rendering frames and cancellation releases the la
   now = 8;
   const a = new AbortController();
   const b = new AbortController();
-  const first = Effect.runPromise(turn, { signal: a.signal });
-  const second = Effect.runPromise(turn, { signal: b.signal });
+  const first = runTestPromise(turn, { signal: a.signal });
+  const second = runTestPromise(turn, { signal: b.signal });
   const stopped = assert.rejects(first);
   assert.equal(frames.size, 1, "readers share the upcoming frame, not serial turns");
   a.abort();
@@ -74,7 +75,7 @@ test("concurrent readers share rendering frames and cancellation releases the la
   await second;
   assert.equal(frames.size, 0);
   now = 16;
-  const pending = Effect.runPromise(turn, { signal: b.signal });
+  const pending = runTestPromise(turn, { signal: b.signal });
   const cancelled = assert.rejects(pending);
   b.abort();
   await cancelled;
@@ -100,13 +101,13 @@ test("recommendation turns wait out a tap's transition; work someone waits for d
     },
   });
   let turned = false;
-  const background = Effect.runPromise(work.turn).then(() => {
+  const background = runTestPromise(work.turn).then(() => {
     turned = true;
   });
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(turned, false);
   assert.equal(after.length, 1);
-  const awaited = await Effect.runPromise(
+  const awaited = await runTestPromise(
     work.steps(
       (function* () {
         yield;
@@ -120,4 +121,38 @@ test("recommendation turns wait out a tap's transition; work someone waits for d
   after.shift()!();
   await background;
   assert.equal(turned, true);
+});
+
+test("a recommendation turn hands the block log to the work that takes it (#1447)", async () => {
+  let now = 0;
+  const frames: (() => void)[] = [];
+  const marks: string[] = [];
+  const { turn } = createRecommendationWork({
+    now: () => now,
+    intervalMs: () => 1000 / 120,
+    request: (run) => {
+      frames.push(run);
+      return () => {};
+    },
+    turnTaken: (name) => marks.push(`${name} at ${now}`),
+  });
+  // Pages read after a frame-paced turn run outside any slice: the mark is what names them.
+  const pages = runTestPromise(
+    Effect.gen(function* () {
+      for (let page = 0; page < 2; page++) {
+        yield* turn.pipe(namedWork("Discover mixes"));
+        now += 1;
+      }
+    }),
+  );
+  assert.deepEqual(marks, ["Discover mixes at 0", "Discover mixes at 1"]);
+  assert.equal(frames.length, 0);
+  now = 20;
+  const waiting = runTestPromise(turn.pipe(namedWork("Similar artists")));
+  assert.deepEqual(marks.slice(2), [], "not marked before the frame it waits for");
+  now = 30;
+  frames.shift()!();
+  await waiting;
+  await pages;
+  assert.deepEqual(marks.slice(2), ["Similar artists at 30"]);
 });

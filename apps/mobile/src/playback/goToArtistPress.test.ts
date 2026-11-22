@@ -12,6 +12,7 @@ const settledPage = () => {
     write: () => {},
     context: () => ({ background: [], offline: false }),
     build: () => ({ version: "test", commit: "test" }),
+    later: () => {},
   });
   const page = session.routeCommitted("/library/artist/3")!;
   session.frame(page);

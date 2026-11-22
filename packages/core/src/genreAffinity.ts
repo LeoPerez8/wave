@@ -3,7 +3,8 @@ import { artistPhotoName } from "./artistPhoto.ts";
 import type { DiscoverLibrarySong, DiscoverSeedArtist } from "./discoverMixes.ts";
 import { songFamilies } from "./genreMixes.ts";
 import { isRecord, readStoredRecord } from "./storedJson.ts";
-import { libraryArtistFinderSteps, libraryArtistFinder } from "./ytArtist.ts";
+import { finishSteps } from "./buildSteps.ts";
+import { libraryArtistFinderSteps } from "./ytArtist.ts";
 
 /**
  * An artist's genre profile: each genre family's share of their songs (by
@@ -64,27 +65,24 @@ export interface GenreProfileLibrary {
  */
 export type GenreProfileOf = (artist: string) => GenreProfile | null | undefined;
 
-/** Each Library artist's songs' genre tags, by artist id. */
-const songsByArtist = (library: GenreProfileLibrary): Map<number, GenreTagged[]> => {
-  const songs = new Map<number, GenreTagged[]>();
-  for (const song of library.songs)
-    for (const id of song.artistIds) {
-      const of = songs.get(id) ?? [];
-      of.push(song);
-      songs.set(id, of);
-    }
-  return songs;
-};
-
 /**
  * The Library artists' genre profiles (`genreProfile` of the songs that
  * credit them), by name as YouTube Music writes it (as `libraryArtistFinder`
  * finds an artist): null for a Library artist whose songs have no genre,
  * undefined for an artist the Library doesn't have.
  */
-export const libraryGenreProfiles = (library: GenreProfileLibrary): GenreProfileOf => {
-  const songs = songsByArtist(library);
-  const find = libraryArtistFinder(library.artists);
+export const libraryGenreProfiles = (library: GenreProfileLibrary): GenreProfileOf =>
+  finishSteps(libraryGenreProfilesSteps(library));
+
+/**
+ * `libraryGenreProfiles`, a song or an artist per step, for a background
+ * slice (#1448): a Magic Queue batch builds it over the whole Library.
+ */
+export function* libraryGenreProfilesSteps(
+  library: GenreProfileLibrary,
+): Generator<void, GenreProfileOf> {
+  const songs = yield* songsByArtistSteps(library);
+  const find = yield* libraryArtistFinderSteps(library.artists);
   const profiles = new Map<number, GenreProfile | null>();
   return (name) => {
     const artist = find(name);
@@ -92,7 +90,7 @@ export const libraryGenreProfiles = (library: GenreProfileLibrary): GenreProfile
     if (!profiles.has(artist.id)) profiles.set(artist.id, genreProfile(songs.get(artist.id) ?? []));
     return profiles.get(artist.id) ?? null;
   };
-};
+}
 
 /** Whether a radio song's artist suits a mix: alike enough, not alike, or no genre known. */
 

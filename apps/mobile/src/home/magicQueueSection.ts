@@ -113,7 +113,9 @@ const usePoolPages = (enabled: boolean) => {
       libraryQuery(
         read.key,
         read.reads,
-        Effect.flatMap(LibraryStore, (store) => read.read(store, sources)),
+        Effect.flatMap(LibraryStore, (store) => read.read(store, sources)).pipe(
+          namedWork("Magic Queue pages"),
+        ),
       ),
     [read],
   );

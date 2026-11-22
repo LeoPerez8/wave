@@ -98,12 +98,97 @@ export const scanEnd = ({
   announce: gone > 0 ? "removed" : saved > 0 ? "added" : firstScan ? "scanned" : null,
 });
 
+/** What one scan did and where its time went, for its app log line (#1436). */
+export interface ScanTimings {
+  readonly kind: "full" | "incremental";
+  readonly found: number;
+  readonly read: number;
+  readonly saved: number;
+  readonly batches: number;
+  /** From the scan's start to its end. */
+  readonly ms: number;
+  /** The save transactions, all together, and the longest one. */
+  readonly savingMs: number;
+  readonly longestSaveMs: number;
+  /** Telling the app of each batch's songs (`LibraryChange`), all together, and the longest. */
+  readonly announcingMs: number;
+  readonly longestAnnounceMs: number;
+  /** The files the next save slice takes (`nextScanSaveSlice`). */
+  readonly slice: number;
+}
+
+// not UI text: the app log's line
+const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
+
+/**
+ * The app log's line once a scan ends: its files, its time, and how much of it
+ * went to saving, to telling the app, and to waiting for free turns (the rest:
+ * reading files, reconciling, other work ahead of it). Holds no path or title.
+ */
+// not UI text: the app log's line
+export const scanTimingsLogLine = (t: ScanTimings): string =>
+  `Scan done (${t.kind}): ${t.found} found, ${t.read} read, ${t.saved} saved in ${t.batches} batches, ` +
+  `${seconds(t.ms)}; saves ${seconds(t.savingMs)} (longest ${Math.round(t.longestSaveMs)} ms, ` +
+  `slice now ${t.slice}), Library changes ${seconds(t.announcingMs)} ` +
+  `(longest ${Math.round(t.longestAnnounceMs)} ms), ` +
+  `waiting ${seconds(Math.max(0, t.ms - t.savingMs - t.announcingMs))}`;
+
 /**
  * Files a scan batch's slice saves per transaction: the scanner hands over
  * up to 500 at once, and saving them in one go holds the JavaScript thread
  * for as long. Measured in docs/performance/315-startup-scheduling.md.
  */
 export const SCAN_SAVE_SLICE = 100;
+
+/**
+ * How long one save slice should hold the JavaScript thread (#1436): under
+ * the 50 ms a block is logged at, with room for the work around it.
+ */
+export const SCAN_SLICE_BUDGET_MS = 30;
+
+/**
+ * The files the next save slice takes, after one that saved `files` in
+ * `ms`. Over the budget it shrinks to what fits at that pace, never under one
+ * file, so a slow phone still gets through. Under it, it grows: twofold when
+ * the slice took half the budget or less (one quick slice can be luck), else
+ * by one file, since each save has a cost of its own whatever its files
+ * (about 17 ms on the emulator, #1436) and a pace measured per file would
+ * never let a one-file slice grow. Never past `SCAN_SAVE_SLICE`.
+ */
+export const nextScanSaveSlice = (last: {
+  readonly files: number;
+  readonly ms: number;
+}): number => {
+  const next =
+    last.ms > SCAN_SLICE_BUDGET_MS
+      ? Math.floor((last.files * SCAN_SLICE_BUDGET_MS) / last.ms)
+      : last.ms * 2 <= SCAN_SLICE_BUDGET_MS
+        ? last.files * 2
+        : last.files + 1;
+  return Math.max(1, Math.min(next, SCAN_SAVE_SLICE));
+};
+
+/**
+ * A scan's saved batches are told to the app at most this often (#1436,
+ * #1457): each Library change has every screen in sight read again and the
+ * kept play totals settle again, about 50 s of JS on the emulator, and a
+ * scan that announced each batch of 100 waited that long for each. The
+ * scan's end names every song it saved, so none waits longer than the scan.
+ */
+export const SCAN_ANNOUNCE_MS = 15_000;
+
+/**
+ * Whether a scan announces the songs it saved so far (with any that waited)
+ * at `now`, the last announcement having been at `lastAt` (none yet:
+ * undefined, so a first scan's first songs show at once).
+ */
+export const scanAnnounceDue = ({
+  lastAt,
+  now,
+}: {
+  readonly lastAt: number | undefined;
+  readonly now: number;
+}): boolean => lastAt === undefined || now - lastAt >= SCAN_ANNOUNCE_MS;
 
 /** One transaction's worth of a scan batch: its files, and the moves to them. */
 export interface ScanSaveSlice<T> {
@@ -121,22 +206,32 @@ export interface ScanSaveSlice<T> {
 export const scanSaveSlices = <T extends IndexedFile>(
   changes: ScanChanges<T>,
   size: number = SCAN_SAVE_SLICE,
-): ScanSaveSlice<T>[] => {
+): ScanSaveSlice<T>[] => [...scanSaveSliceSteps(changes, () => size)];
+
+/**
+ * `scanSaveSlices` one slice at a time, asking [size] for each slice's size
+ * once the one before it was taken: the caller times each save and sizes the
+ * next by it (`nextScanSaveSlice`).
+ */
+export function* scanSaveSliceSteps<T extends IndexedFile>(
+  changes: ScanChanges<T>,
+  size: () => number,
+): Generator<ScanSaveSlice<T>, void> {
   const tracks = [...changes.added, ...changes.updated, ...changes.moved.map((move) => move.to)];
   const movedFrom = new Map(changes.moved.map((move) => [move.to, move.from]));
-  const slices: ScanSaveSlice<T>[] = [];
-  for (let start = 0; start < tracks.length; start += Math.max(1, size)) {
-    const slice = tracks.slice(start, start + Math.max(1, size));
-    slices.push({
+  let start = 0;
+  while (start < tracks.length) {
+    const slice = tracks.slice(start, start + Math.max(1, size()));
+    start += slice.length;
+    yield {
       tracks: slice,
       moves: slice.flatMap((track) => {
         const from = movedFrom.get(track);
         return from === undefined ? [] : [{ from, to: track.path }];
       }),
-    });
+    };
   }
-  return slices;
-};
+}
 
 /** Same reconciliation, with a resumable boundary per input file. */
 export function* reconcileScanSteps<T extends IndexedFile>(

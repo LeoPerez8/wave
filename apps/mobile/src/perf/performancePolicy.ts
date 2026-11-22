@@ -37,6 +37,7 @@ export const LIBRARY_SEEDS = [
   "library/hooks.ts#useLoadedArtists",
   ...[
     "currentLibraryFinder",
+    "currentLibraryFinderInSlices",
     "useLoadedLibraryFinder",
     "useLibraryFinder",
     "useLoadedInLibrary",
@@ -395,6 +396,13 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
   },
 
+  "playback/magicQueueRadio.ts#magicQueueYtCandidates": {
+    howOften:
+      "Once per Magic Queue batch, and only when the recommendation snapshot hasn't indexed the Library's recordings yet (a cold session).",
+    reason:
+      "#1448: a cold batch indexes its playable songs once, a song per step on free turns, so each radio song looks up its title instead of matching the whole Library. Covered by Core's ytMusic finder tests and magicBatchSlices.test.ts.",
+    capabilities: ["../../../packages/core/src/ytMusic.ts#libraryFinderSteps"],
+  },
   "ytmusic/libraryFinder.ts#finderOver": {
     howOften:
       "Lazily on first lookup per rows identity; weakly cached while those rows remain reachable.",
@@ -448,17 +456,17 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
 
   "ytmusic/YtDownloads.ts#forgetSettledFailures": {
     howOften:
-      "Once per launch when failures exist; uses the current shared finder, never per journal event.",
+      "Once per launch when failures exist; uses the current shared finder, built in background slices, never per journal event.",
     reason:
       "Download recovery runs on explicit/background work; the failed-download UI follows only while shown.",
-    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinderInSlices"],
   },
   "ytmusic/YtDownloads.ts#requeueThrottledFailures": {
     howOften:
-      "Once per install migration, retried next launch on failure; uses the current shared finder.",
+      "Once per install migration, retried next launch on failure; uses the current shared finder, built in background slices.",
     reason:
       "Download recovery runs on explicit/background work; the failed-download UI follows only while shown.",
-    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinder"],
+    capabilities: ["ytmusic/libraryFinder.ts#currentLibraryFinderInSlices"],
   },
   "ytmusic/YtDownloads.ts#useFailedDownloadsInput": {
     howOften: FOLLOWED_FINDER,
@@ -925,13 +933,10 @@ export const WHOLE_SET_HOOKS = [
     "usePendingFavoriteVideos",
     "useLivePendingFavoriteVideos",
   ].map((name) => `library/favorites.ts#${name}`),
-  ...[
-    "useSongListDownloads",
-    "useDownloadJournal",
-    "useMissingSongDownloadStatuses",
-    "useDownloadingList",
-    "useFailedDownloads",
-  ].map((name) => `ytmusic/YtDownloads.ts#${name}`),
+  ...["useSongListDownloads", "useMissingSongDownloadStatuses", "useFailedDownloads"].map(
+    (name) => `ytmusic/YtDownloads.ts#${name}`,
+  ),
+  "ytmusic/downloadingRows.ts#useDownloadingList",
   "library/hooks.ts#useScanProgress",
 ];
 /** Whole stores a row may not name itself (a narrow hook may read them for it). */
@@ -1047,7 +1052,7 @@ export const OWN_PRESS: Record<string, Exception> = {
   },
   "stats/StatsViews.tsx#RecapCard": { reason: "A Recap's card on Stats opens that Recap." },
   "stats/StatsViews.tsx#RecapsRow": { reason: "The row of Recap cards on Stats, each a target." },
-  "chrome/TabBar.tsx#Tab": {
+  "chrome/TabBar.tsx#TabFace": {
     reason: "A tab bar control: selected state and the long press that edits the tab bar.",
   },
   "nowPlaying/CoverPress.tsx#CoverPress": {
@@ -1143,6 +1148,10 @@ export const OWN_DEFERRALS: Record<string, { readonly reason: string }> = {
   "ytmusic/listDownloadProgressStore.ts": {
     reason:
       "Coalesces a list's download progress into one update per microtask for its rows: UI state, no work of its own.",
+  },
+  "@wave/client/db/offThreadReads.ts": {
+    reason:
+      "A Library read's replay yields a new task between its 8 ms steps of mapping rows (#1435): a screen waits for the read, so it gives frames and touches their turn without queuing behind background work.",
   },
   "@wave/client/db/matchingSong.ts": {
     reason:

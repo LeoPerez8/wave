@@ -16,7 +16,7 @@ import { test } from "node:test";
  */
 const ALLOWED: Record<string, string> = {
   "app/(tabs)/_layout.tsx":
-    "TabsLayout needs the tab in the commit that shows it (entry motion); its chrome is memoized",
+    "TabsLayout needs the tab in the commit that shows it (entry motion); the navigator under it is memoized",
   "chrome/chrome.tsx": "useFloatingChromeHeight: overlay cards and toasts, mounted while shown",
   "library/routes.ts": "FollowCurrentRoute: a leaf that renders nothing and republishes the route",
   "perf/PerfProbe.tsx": "perf builds only, a leaf",

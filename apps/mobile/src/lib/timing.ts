@@ -26,6 +26,9 @@ const session = createTimingSession({
     offline: !online(),
   }),
   build: timingBuild,
+  later: (ms, run) => {
+    setTimeout(run, ms);
+  },
 });
 
 const linkTaps = createLinkTapMonitor({
@@ -177,32 +180,16 @@ AppState.addEventListener("change", (state) => {
   appState = state;
 });
 
-/** RN reports actual JS blocks when supported; absent support is not a measured zero. */
-type LongTask = { startTime: number; duration: number };
-type LongTaskObserver = { observe: (options: { type: string }) => void; disconnect: () => void };
-const Observer = (
-  globalThis as {
-    PerformanceObserver?: {
-      new (callback: (list: { getEntries(): LongTask[] }) => void): LongTaskObserver;
-      supportedEntryTypes?: readonly string[];
-    };
-  }
-).PerformanceObserver;
-const observeTransitionTasks = (): (() => void) => {
-  if (!Observer?.supportedEntryTypes?.includes("longtask")) return () => {};
-  const observer = new Observer((list) => {
-    for (const entry of list.getEntries()) session.jsBlock(entry.startTime, entry.duration);
-  });
-  try {
-    observer.observe({ type: "longtask" });
-  } catch {
-    observer.disconnect();
-  }
-  return () => observer.disconnect();
-};
+/**
+ * A long task the runtime reported (the block log's observer in `backgroundWork.ts` passes each
+ * on): the tap under way, or a slow tap's line still waiting, names it as its longest JS block.
+ * One observer for the app's lifetime, so a block reported after its tap settled still counts
+ * (#1446); absent support is not a measured zero.
+ */
+export const timingJsBlock = session.jsBlock;
 
 let frameCollection: ReturnType<typeof createTransitionFrames> | null = null;
-/** Root lifetime only. The subscription is idle; callbacks and long-task observation are tap-scoped. */
+/** Root lifetime only. The subscription is idle; frame callbacks are tap-scoped. */
 export const startTimingFrameCollection = (): (() => void) => {
   const frames = createTransitionFrames({
     now: () => performance.now(),
@@ -244,7 +231,6 @@ export const startTimingFrameCollection = (): (() => void) => {
         }
       });
     },
-    observe: observeTransitionTasks,
     report: (event, lane, totals) => {
       session.frames(event.id, totals.count);
       const line = missedFramesLine(event, lane, totals);

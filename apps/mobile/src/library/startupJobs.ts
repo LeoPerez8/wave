@@ -7,7 +7,8 @@ import {
   reconcileScanSteps,
   replacementDuplicatesSteps,
   replacementDuplicateFixSteps,
-  scanSaveSlices,
+  nextScanSaveSlice,
+  scanSaveSliceSteps,
   SCAN_SAVE_SLICE,
   type ScanReconcileInput,
   type DuplicateOutcome,
@@ -19,7 +20,7 @@ import {
   type YtSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { runSteps } from "../lib/stepped.ts";
+import { runSteps, type Turn } from "../lib/stepped.ts";
 import type { SkippedFile } from "@wave/client/db/skippedFiles";
 import type { LibraryStore } from "./LibraryStore.ts";
 import type { IndexedArtwork, IndexedKnownFile, IndexedTrack } from "@wave/client";
@@ -45,7 +46,7 @@ const slices = <A>(rows: readonly A[]): A[][] => {
 export const finishLinkImport = (
   store: LibraryStore["Service"],
   job: PlaylistImport<YtAlbumSong>,
-  turn: Effect.Effect<void>,
+  turn: Turn,
   current: () => boolean = () => true,
   saved: () => void = () => {},
   /** Hears how many of the songs going in have landed, of how many: before the first slice and after each. */
@@ -112,7 +113,7 @@ export const dispatchLibraryFavorites = async <S extends YtSong>(
 export const skipVoiceNoteFiles = (
   store: LibraryStore["Service"],
   files: readonly SkippedFile[],
-  turn: Effect.Effect<void>,
+  turn: Turn,
 ) =>
   Effect.gen(function* () {
     let left = 0;
@@ -127,7 +128,7 @@ export const skipVoiceNoteFiles = (
 export const forgetSkippedFiles = (
   store: LibraryStore["Service"],
   paths: readonly string[],
-  turn: Effect.Effect<void>,
+  turn: Turn,
 ) =>
   Effect.gen(function* () {
     for (const part of slices(paths)) {
@@ -146,7 +147,7 @@ export const forgetSkippedFiles = (
 export const readScanIndex = (
   store: LibraryStore["Service"],
   roots: readonly string[],
-  turn: Effect.Effect<void>,
+  turn: Turn,
   skipVoiceNotes = false,
 ) =>
   Effect.gen(function* () {
@@ -212,46 +213,110 @@ export const readScanIndex = (
   });
 
 /**
- * Reconciliation in steps, then Core's save slices (`SCAN_SAVE_SLICE`, 100
- * files, the batch's artwork with the first) as one transaction per turn.
+ * How many files a scan save slice takes (#1436): each save's time sizes the
+ * next to Core's slice budget (`nextScanSaveSlice`), so a slow phone saves
+ * fewer files per turn and a fast one up to `SCAN_SAVE_SLICE`.
+ */
+export interface ScanSavePace {
+  readonly size: () => number;
+  readonly took: (files: number, ms: number) => void;
+  readonly now: () => number;
+}
+
+/** A pace that starts at [first] files and times saves on [now]. */
+export const scanSavePace = (
+  now: () => number = () => performance.now(),
+  first: number = FIRST_SCAN_SAVE_SLICE,
+): ScanSavePace => {
+  let size = first;
+  return {
+    size: () => size,
+    took: (files, ms) => {
+      if (files > 0) size = nextScanSaveSlice({ files, ms });
+    },
+    now,
+  };
+};
+
+/**
+ * The first slice of the app's pace: two files, under Core's slice budget on
+ * the emulator even before the connection is warm (25 took 314 ms there);
+ * the pace doubles it while saves stay well under the budget
+ * (docs/performance/1436-scan-js.md).
+ */
+const FIRST_SCAN_SAVE_SLICE = 2;
+
+/** The app's pace, kept from batch to batch and scan to scan. */
+const appScanSavePace = scanSavePace();
+
+/**
+ * Reconciliation in steps, then save slices sized by [pace] (the batch's
+ * artwork with the first) as one transaction per turn.
  */
 export const saveScanBatch = (
   store: LibraryStore["Service"],
   input: ScanReconcileInput<IndexedTrack>,
   artwork: readonly IndexedArtwork[],
-  turn: Effect.Effect<void>,
+  turn: Turn,
   saved: (batch: {
     readonly starred: readonly number[];
     readonly trackIds: readonly number[];
   }) => void = () => {},
+  pace: ScanSavePace = appScanSavePace,
 ) =>
   Effect.gen(function* () {
     const changes = yield* runSteps(reconcileScanSteps(input), turn);
-    const parts = scanSaveSlices(changes);
-    // New artwork alone (files that were read but saved nothing) still gets saved.
-    if (parts.length === 0 && artwork.length > 0) parts.push({ tracks: [], moves: [] });
     let count = 0;
     const ids: number[] = [];
-    for (const [index, slice] of parts.entries()) {
+    let index = 0;
+    // The save transactions' time, for the scan's log line.
+    const timed = { savingMs: 0, longestSaveMs: 0 };
+    for (const slice of scanSaveSliceSteps(changes, pace.size)) {
       yield* turn;
-      const result = yield* store.saveBatch(
-        slice.tracks,
-        // Before any file that shows it.
-        index === 0 ? artwork : [],
-        slice.moves,
-        { linkEntries: false },
-      );
+      const result = yield* saveSlice(store, slice, index === 0 ? artwork : [], pace, timed);
       saved(result);
       ids.push(...result.trackIds);
       count += slice.tracks.length;
+      index++;
     }
-    return { changes, count, ids };
+    // New artwork alone (files that were read but saved nothing) still gets saved.
+    if (index === 0 && artwork.length > 0) {
+      yield* turn;
+      saved(yield* saveSlice(store, { tracks: [], moves: [] }, artwork, pace, timed));
+    }
+    return { changes, count, ids, ...timed };
   });
+
+/** One slice's transaction, timed for [pace] and [timed]. Its artwork goes before any file that shows it. */
+const saveSlice = (
+  store: LibraryStore["Service"],
+  slice: {
+    readonly tracks: readonly IndexedTrack[];
+    readonly moves: readonly { from: string; to: string }[];
+  },
+  artwork: readonly IndexedArtwork[],
+  pace: ScanSavePace,
+  timed: { savingMs: number; longestSaveMs: number },
+) =>
+  Effect.gen(function* () {
+    const start = pace.now();
+    const result = yield* store.saveBatch(slice.tracks, artwork, slice.moves, {
+      linkEntries: false,
+    });
+    const ms = pace.now() - start;
+    pace.took(slice.tracks.length, ms);
+    timed.savingMs += ms;
+    timed.longestSaveMs = Math.max(timed.longestSaveMs, ms);
+    return result;
+  });
+
+/** The files the app's next scan save slice takes, for the scan's log line. */
+export const scanSaveSlice = (): number => appScanSavePace.size();
 
 /** Pair source SQL and one pair's native audio read/atomic history merge are indivisible. */
 export const checkDuplicateFiles = (
   store: LibraryStore["Service"],
-  turn: Effect.Effect<void>,
+  turn: Turn,
   lengths: (paths: readonly string[]) => Effect.Effect<readonly (number | null)[], unknown>,
 ) =>
   Effect.gen(function* () {
@@ -283,7 +348,7 @@ export const checkDuplicateFiles = (
 /** Build the three native scanner columns in budgeted CPU steps, before its indivisible bridge call. */
 export const scanInputColumns = (
   known: readonly { path: string; sizeBytes: number; modifiedAt: number }[],
-  turn: Effect.Effect<void>,
+  turn: Turn,
 ) =>
   runSteps(
     (function* () {
@@ -309,7 +374,7 @@ export const scanInputColumns = (
 export const finishScanIndex = (
   store: LibraryStore["Service"],
   missing: readonly string[],
-  turn: Effect.Effect<void>,
+  turn: Turn,
 ) =>
   Effect.gen(function* () {
     yield* turn;
@@ -320,7 +385,7 @@ export const finishScanIndex = (
 export const readImportDownloadInput = (
   store: LibraryStore["Service"],
   playlistId: number,
-  turn: Effect.Effect<void>,
+  turn: Turn,
   current: () => boolean = () => true,
 ) =>
   Effect.gen(function* () {

@@ -411,3 +411,39 @@ END;
 CREATE TRIGGER kept_album_artist_delete AFTER DELETE ON album_artists BEGIN
   ${ONLINE_CHANGED}
 END;`;
+
+/** `WHEN` for an update trigger: fires only when one of [columns] holds a different value. */
+const changed = (columns: readonly string[]) =>
+  columns.map((column) => `old.${column} IS NOT new.${column}`).join(" OR ");
+
+/**
+ * The change triggers again, firing only when a credit column's value changes. A scan saves every
+ * touched file through an upsert that names those columns, so without the guard a rescan of songs
+ * whose tags didn't change owed every streamed song and every saved song's plays (#1436).
+ */
+export const mQuietKeptTriggers = `DROP TRIGGER kept_track_change;
+--> statement-breakpoint
+DROP TRIGGER kept_artist_change;
+--> statement-breakpoint
+DROP TRIGGER kept_album_change;
+--> statement-breakpoint
+CREATE TRIGGER kept_track_change
+AFTER UPDATE OF album_id, artist_id, artist_credit, artist_credits, video_id, recording_key ON tracks
+WHEN ${changed(["album_id", "artist_id", "artist_credit", "artist_credits", "video_id", "recording_key"])} BEGIN
+  ${owe("song = 't:' || new.id")}
+  ${owe("song_track = new.id")}
+  ${owe("video_id IN (old.video_id, new.video_id)")}
+  ${owe("recording_key IN (old.recording_key, new.recording_key)")}
+  ${ONLINE_CHANGED}
+END;
+--> statement-breakpoint
+CREATE TRIGGER kept_artist_change AFTER UPDATE OF name, sort ON artists
+WHEN ${changed(["name", "sort"])} BEGIN
+  ${ONLINE_CHANGED}
+END;
+--> statement-breakpoint
+CREATE TRIGGER kept_album_change
+AFTER UPDATE OF title, title_sort, album_artist_id, album_artist_credit, album_artist_credits ON albums
+WHEN ${changed(["title", "title_sort", "album_artist_id", "album_artist_credit", "album_artist_credits"])} BEGIN
+  ${ONLINE_CHANGED}
+END;`;

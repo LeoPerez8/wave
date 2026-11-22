@@ -8,6 +8,7 @@
 import {
   checkPlaylistName,
   compareStrings,
+  finishSteps,
   graveyardRemovalsOf,
   graveyardRestoreIndex,
   graveyardSongs,
@@ -15,7 +16,7 @@ import {
   planPlaylistSongs,
   planShazamAdd,
   playlistArtwork,
-  playlistEntryLinks,
+  playlistEntryLinkSteps,
   playlistMosaic,
   readPlaylistEntrySong,
   sortKey,
@@ -26,11 +27,14 @@ import {
   recentWindowStart,
   writePlaylistEntrySong,
   type AppLanguage,
+  type HeldPlaylistTrack,
   type OrderedEntry,
+  type PlaylistEntryLinks,
   type PlaylistItem,
   type PlaylistPlays,
   type PlaylistSong,
   type StoredPlaylistSong,
+  type StreamedPlaylistEntry,
   type TryAgainAnswered,
   type UnsearchedSong,
   type YtAlbumSong,
@@ -51,7 +55,7 @@ import { keptPlaylistPlays } from "./keptPlayTotals.ts";
 import * as schema from "./schema.ts";
 import { stamped } from "./sync.ts";
 import { filePath, hasFile, inScope, songColumns, type TrackScope } from "./tracks.ts";
-import { VIDEO_PAGE_ROWS, videoIdsOf, type VideoPage } from "./videoPages.ts";
+import { uniqueVideosSteps, VIDEO_PAGE_ROWS, videoIdsOf, type VideoPage } from "./videoPages.ts";
 
 /** Playlist order: by order key, then by entry id for entries two phones gave one key (Core's `compareOrderKeys`). */
 const IN_ORDER = [asc(schema.playlistItems.orderKey), asc(schema.playlistItems.syncId)] as const;
@@ -70,6 +74,13 @@ const decode = (playlistId: number, stored: string): StoredSong | null => {
   countDecoded(playlistId);
   return readPlaylistEntrySong(stored);
 };
+
+/**
+ * A stored song as `decode` reads it, uncounted: a column decoder, so a replayed read decodes
+ * each entry once, in steps, and ahead the next time it runs (#1452). Its caller counts.
+ */
+const readStoredSong = (stored: unknown): StoredSong | null =>
+  readPlaylistEntrySong(stored as string);
 
 /** A playlist's Library tracks in [scope] with their playlist item. */
 const playlistTracks = (
@@ -156,7 +167,7 @@ const streamedSongs = (
       .select({
         id: playlistItems.id,
         changedAt: playlistItems.changedAt,
-        ytSong: sql<string>`${playlistItems.ytSong}`,
+        song: sql`${playlistItems.ytSong}`.mapWith(readStoredSong),
       })
       .from(playlistItems)
       .where(
@@ -166,9 +177,8 @@ const streamedSongs = (
         ),
       )
       .all();
-    for (const row of rows) {
-      songs.set(row.id, { changedAt: row.changedAt, song: decode(playlistId, row.ytSong) });
-    }
+    countDecoded(playlistId, rows.length);
+    for (const row of rows) songs.set(row.id, { changedAt: row.changedAt, song: row.song });
   }
   if (whole) decodedSongs.set(db, { playlistId, songs });
   return songs;
@@ -185,14 +195,10 @@ const LOOKUP_CHUNK = 2_000;
  * Reading the whole playlist again decodes only the stored songs added or
  * changed since (`streamedSongs`).
  */
-export const selectPlaylistEntries = (
-  db: LibraryDatabase,
-  playlistId: number,
-  page?: RowPage,
-  scope: TrackScope = "library",
-): PlaylistEntry[] => {
+/** [playlistId]'s entries in [scope] in playlist order, before their songs are read. */
+const entryItems = (db: LibraryDatabase, playlistId: number, scope: TrackScope) => {
   const { playlistItems } = schema;
-  const query = db
+  return db
     .select({
       id: playlistItems.id,
       addedAt: playlistItems.addedAt,
@@ -217,6 +223,46 @@ export const selectPlaylistEntries = (
       ),
     )
     .orderBy(...IN_ORDER);
+};
+
+/** A playlist entry as `entryItems` reads it. */
+type EntryItem = Awaited<ReturnType<ReturnType<typeof entryItems>["all"]>>[number];
+
+/**
+ * [items] as a playlist lists them, an entry per step: a streamed one with its stored song
+ * ([songOf]), a Library one with its track in [tracks]. An entry whose song can't be read, or
+ * whose track isn't in the scope read, is left out.
+ */
+function* entriesSteps(
+  items: readonly EntryItem[],
+  songOf: (itemId: number) => StoredSong | null,
+  tracks: ReadonlyMap<number, PlaylistTrack>,
+): Generator<void, PlaylistEntry[]> {
+  const entries: PlaylistEntry[] = [];
+  for (const item of items) {
+    yield;
+    // Only a collaborative playlist's entries carry who added them.
+    const adder = item.addedBy === null ? {} : { addedBy: item.addedBy };
+    if (item.streamed) {
+      const stored = songOf(item.id);
+      if (stored !== null)
+        entries.push({ itemId: item.id, addedAt: item.addedAt, ...adder, ...stored });
+      continue;
+    }
+    const track = tracks.get(item.id);
+    if (track !== undefined)
+      entries.push({ itemId: item.id, addedAt: item.addedAt, ...adder, source: "library", track });
+  }
+  return entries;
+}
+
+export const selectPlaylistEntries = (
+  db: LibraryDatabase,
+  playlistId: number,
+  page?: RowPage,
+  scope: TrackScope = "library",
+): PlaylistEntry[] => {
+  const query = entryItems(db, playlistId, scope);
   const items =
     page === undefined ? query.all() : query.limit(page.limit).offset(page.offset).all();
   const songs = streamedSongs(
@@ -235,20 +281,7 @@ export const selectPlaylistEntries = (
       scope,
     ).map(({ itemId, ...track }) => [itemId, track]),
   );
-  return items.flatMap((item): PlaylistEntry[] => {
-    // Only a collaborative playlist's entries carry who added them.
-    const adder = item.addedBy === null ? {} : { addedBy: item.addedBy };
-    if (item.streamed) {
-      const stored = songs.get(item.id)?.song ?? null;
-      return stored === null
-        ? []
-        : [{ itemId: item.id, addedAt: item.addedAt, ...adder, ...stored }];
-    }
-    const track = tracks.get(item.id);
-    return track === undefined
-      ? []
-      : [{ itemId: item.id, addedAt: item.addedAt, ...adder, source: "library", track }];
-  });
+  return finishSteps(entriesSteps(items, (id) => songs.get(id)?.song ?? null, tracks));
 };
 
 /**
@@ -698,29 +731,43 @@ export const selectInPlaylists = (db: LibraryDatabase, trackIds: readonly number
 };
 
 /**
- * Turns the YT Music and unavailable entries of every playlist that the
- * Library tracks [trackIds] (just downloaded; the whole Library when not
- * given, as a scan does once it ends) positively are (Core's
- * `playlistEntryLinks`) into those tracks, in the same place; an entry whose
- * track its playlist already holds is removed instead (a tombstone). Each
- * change is stamped at [now]. Returns how many entries it changed. Does
- * nothing (one small query) while no playlist holds such an entry. Run it
- * inside the caller's transaction.
+ * What linking playlists' YT Music entries reads (`readPlaylistLinks`): the
+ * entries as stored, the Library songs with a file, and the tracks the
+ * entries' playlists hold. Plain rows, so the read can leave the JS thread.
  */
-export const linkPlaylistEntries = (
+export interface PlaylistLinkRead {
+  readonly entries: readonly {
+    readonly itemId: number;
+    readonly playlistId: number;
+    readonly ytSong: string;
+  }[];
+  readonly library: readonly {
+    readonly id: number;
+    readonly title: string;
+    readonly artist: string;
+    readonly durationMs: number;
+  }[];
+  readonly held: readonly HeldPlaylistTrack[];
+}
+
+/**
+ * What `linkPlaylistEntries` reads, for the Library tracks [trackIds] (the
+ * whole Library when not given); null when no playlist holds a YT Music or
+ * unavailable entry (one small query).
+ */
+export const readPlaylistLinks = (
   db: LibraryDatabase,
-  now: number,
   trackIds?: readonly number[],
-): number => {
+): PlaylistLinkRead | null => {
   const { playlistItems, tracks } = schema;
-  if (trackIds?.length === 0) return 0;
+  if (trackIds?.length === 0) return null;
   const anyEntry = db
     .select({ id: playlistItems.id })
     .from(playlistItems)
     .where(and(isNotNull(playlistItems.ytSong), live))
     .limit(1)
     .get();
-  if (anyEntry === undefined) return 0;
+  if (anyEntry === undefined) return null;
   const entries = db
     .select({
       itemId: playlistItems.id,
@@ -731,11 +778,10 @@ export const linkPlaylistEntries = (
     .where(and(isNotNull(playlistItems.ytSong), live))
     .orderBy(asc(playlistItems.playlistId), ...IN_ORDER)
     .all()
-    .flatMap(({ itemId, playlistId, ytSong }) => {
-      const stored = ytSong === null ? null : decode(playlistId, ytSong);
-      return stored === null ? [] : [{ itemId, playlistId, song: stored.song }];
-    });
-  if (entries.length === 0) return 0;
+    .flatMap(({ itemId, playlistId, ytSong }) =>
+      ytSong === null ? [] : [{ itemId, playlistId, ytSong }],
+    );
+  if (entries.length === 0) return null;
   const columns = {
     id: tracks.id,
     title: tracks.title,
@@ -766,21 +812,90 @@ export const linkPlaylistEntries = (
     )
     .all()
     .flatMap(({ playlistId, trackId }) => (trackId === null ? [] : [{ playlistId, trackId }]));
-  const { links, drops } = playlistEntryLinks(entries, library, held);
-  for (const { itemId, trackId } of links) {
+  return { entries, library, held };
+};
+
+/**
+ * Which of [read]'s entries become Library songs and which are removed
+ * (Core's `playlistEntryLinkSteps`), each entry's stored song decoded in a
+ * step of its own.
+ */
+export function* playlistLinkSteps(
+  read: PlaylistLinkRead | null,
+): Generator<void, PlaylistEntryLinks> {
+  if (read === null) return { links: [], drops: [] };
+  const entries: StreamedPlaylistEntry[] = [];
+  for (const { itemId, playlistId, ytSong } of read.entries) {
+    const stored = decode(playlistId, ytSong);
+    if (stored !== null) entries.push({ itemId, playlistId, song: stored.song });
+    yield;
+  }
+  return yield* playlistEntryLinkSteps(entries, read.library, read.held);
+}
+
+/**
+ * Writes what linking found ([found]), stamped at [now]; returns how many
+ * entries it changed. An entry already a Library song isn't written again,
+ * and none becomes a song that has since left the Library or lost its file.
+ * Run it inside the caller's transaction.
+ */
+export const writePlaylistLinks = (
+  db: LibraryDatabase,
+  now: number,
+  found: PlaylistEntryLinks,
+): number => {
+  const { playlistItems, tracks } = schema;
+  const linked = [...new Set(found.links.map(({ trackId }) => trackId))];
+  const kept = new Set<number>();
+  for (let i = 0; i < linked.length; i += LINK_CHUNK) {
+    for (const { id } of db
+      .select({ id: tracks.id })
+      .from(tracks)
+      .where(and(inArray(tracks.id, linked.slice(i, i + LINK_CHUNK)), hasFile))
+      .all())
+      kept.add(id);
+  }
+  let changed = 0;
+  for (const { itemId, trackId } of found.links) {
+    if (!kept.has(trackId)) continue;
     db.update(playlistItems)
       .set({ trackId, ytSong: null, ...stamped(playlistItems, now) })
-      .where(and(eq(playlistItems.id, itemId), isNull(playlistItems.trackId)))
+      .where(and(eq(playlistItems.id, itemId), isNull(playlistItems.trackId), live))
       .run();
+    changed++;
   }
-  for (let i = 0; i < drops.length; i += LINK_CHUNK) {
+  for (let i = 0; i < found.drops.length; i += LINK_CHUNK) {
     db.update(playlistItems)
       .set({ deleted: true, ...stamped(playlistItems, now) })
-      .where(inArray(playlistItems.id, drops.slice(i, i + LINK_CHUNK)))
+      .where(
+        and(
+          inArray(playlistItems.id, found.drops.slice(i, i + LINK_CHUNK)),
+          isNull(playlistItems.trackId),
+        ),
+      )
       .run();
   }
-  return links.length + drops.length;
+  return changed + found.drops.length;
 };
+
+/**
+ * Turns the YT Music and unavailable entries of every playlist that the
+ * Library tracks [trackIds] (just downloaded; the whole Library when not
+ * given, as a scan does once it ends) positively are (Core's
+ * `playlistEntryLinks`) into those tracks, in the same place; an entry whose
+ * track its playlist already holds is removed instead (a tombstone). Each
+ * change is stamped at [now]. Returns how many entries it changed. Does
+ * nothing (one small query) while no playlist holds such an entry. Run it
+ * inside the caller's transaction. A scan's whole-library link runs these
+ * same parts apart (`readPlaylistLinks`, `playlistLinkSteps`,
+ * `writePlaylistLinks`), its read and steps off the JS thread's long holds.
+ */
+export const linkPlaylistEntries = (
+  db: LibraryDatabase,
+  now: number,
+  trackIds?: readonly number[],
+): number =>
+  writePlaylistLinks(db, now, finishSteps(playlistLinkSteps(readPlaylistLinks(db, trackIds))));
 
 /**
  * Settles what Try Again's [answered] searches found in [playlistId] (Core's
@@ -962,8 +1077,17 @@ export const selectPlaylistEntryVideoIdsPage = (
   after: number,
   whole = false,
 ): VideoPage<number> => {
+  const rows = playlistEntryVideoRows(db, after, whole);
+  return {
+    videos: videoIdsOf(rows),
+    next: whole ? null : (rows.at(-1)?.id ?? null),
+  };
+};
+
+/** The rows `selectPlaylistEntryVideoIdsPage` reads. */
+const playlistEntryVideoRows = (db: LibraryDatabase, after: number, whole: boolean) => {
   const { playlists, playlistItems, tracks } = schema;
-  const rows = db.all<{ id: number; videoId: unknown }>(sql`
+  return db.all<{ id: number; videoId: unknown }>(sql`
     SELECT ${playlistItems.id} AS id, CASE
       WHEN ${playlistItems.ytSong} IS NOT NULL AND ${live} AND ${livePlaylist}
         AND NOT EXISTS (SELECT 1 FROM ${tracks}
@@ -972,15 +1096,18 @@ export const selectPlaylistEntryVideoIdsPage = (
     FROM ${playlistItems} JOIN ${playlists} ON ${playlists.id} = ${playlistItems.playlistId}
     WHERE ${playlistItems.id} > ${after}
     ORDER BY ${playlistItems.id} ${whole ? sql`` : sql`LIMIT ${VIDEO_PAGE_ROWS}`}`);
-  return {
-    videos: videoIdsOf(rows),
-    next: whole ? null : (rows.at(-1)?.id ?? null),
-  };
 };
 
 /** Every page of `selectPlaylistEntryVideoIdsPage` in one statement, each video once (#1351). */
-export const selectPlaylistEntryVideoIds = (db: LibraryDatabase): string[] => [
-  ...new Set(selectPlaylistEntryVideoIdsPage(db, 0, true).videos),
+export const selectPlaylistEntryVideoIds = (db: LibraryDatabase): string[] =>
+  finishSteps(uniqueVideosSteps(playlistEntryVideoIdRows(db)));
+
+/**
+ * What `selectPlaylistEntryVideoIds` reads, one statement, its rows left to
+ * `uniqueVideosSteps` (#1452).
+ */
+export const playlistEntryVideoIdRows = (db: LibraryDatabase) => [
+  playlistEntryVideoRows(db, 0, true),
 ];
 
 /**
@@ -1386,16 +1513,17 @@ const playlistArt = (
  * How many songs [entries] are, how long they play (one of unknown length
  * adds nothing) and how many are unavailable.
  */
-const entriesTotals = (entries: readonly PlaylistEntry[]): PlaylistTotals => {
+function* entriesTotalsSteps(entries: readonly PlaylistEntry[]): Generator<void, PlaylistTotals> {
   let durationMs = 0;
   let unavailableCount = 0;
   for (const entry of entries) {
+    yield;
     durationMs +=
       entry.source === "library" ? entry.track.durationMs : (entry.song.durationMs ?? 0);
     if (entry.source === "unavailable") unavailableCount += 1;
   }
   return { trackCount: entries.length, durationMs, unavailableCount };
-};
+}
 
 /** Playlists the owner has: not deleted (tombstones). */
 const livePlaylist = eq(schema.playlists.deleted, false);
@@ -1509,15 +1637,11 @@ export const selectPlaylists = (db: LibraryDatabase): PlaylistRow[] => {
   );
 };
 
-/** A playlist with its entries in playlist order; null when it's gone (or deleted). */
-export const selectPlaylist = (
-  db: LibraryDatabase,
-  id: number,
-  scope: TrackScope = "library",
-): PlaylistDetail | null => {
+/** Playlist [id]'s own row, counted as a page read; undefined when it's gone (or deleted). */
+const playlistHead = (db: LibraryDatabase, id: number) => {
   const { playlists } = schema;
   countPageRead(id);
-  const row = db
+  return db
     .select({
       id: playlists.id,
       syncId: playlists.syncId,
@@ -1528,12 +1652,113 @@ export const selectPlaylist = (
     .from(playlists)
     .where(and(eq(playlists.id, id), livePlaylist))
     .get();
+};
+
+/** A playlist with its entries in playlist order; null when it's gone (or deleted). */
+export const selectPlaylist = (
+  db: LibraryDatabase,
+  id: number,
+  scope: TrackScope = "library",
+): PlaylistDetail | null => {
+  const row = playlistHead(db, id);
   if (row === undefined) return null;
-  const { imagePath, imageThumbPath, ...playlist } = row;
   const items = selectPlaylistEntries(db, id, undefined, scope);
   // As Library › Playlists counts it, and shared with it. Every Library song
   // is among the entries, as is every readable YT Music song: counted from them.
-  const counted = scope === "library" ? new Map([[id, entriesTotals(items)]]) : undefined;
+  return playlistDetail(
+    db,
+    row,
+    items,
+    scope === "library" ? finishSteps(entriesTotalsSteps(items)) : undefined,
+  );
+};
+
+/**
+ * What opening playlist [id] reads (`selectPlaylist`), with no work on its rows: its own row,
+ * its entries, their stored songs and their Library tracks, each one statement however many
+ * entries it holds. A replayed read maps the rows in steps; `playlistOpeningSteps` works them
+ * into the playlist's entries in steps too, and `finishPlaylistOpening` reads its summary
+ * (#1452): opening a playlist of thousands never holds the JS thread for all of them at once.
+ */
+export const readPlaylistOpening = (
+  db: LibraryDatabase,
+  id: number,
+  scope: TrackScope = "library",
+) => {
+  const row = playlistHead(db, id);
+  if (row === undefined) return null;
+  const { playlistItems } = schema;
+  return {
+    scope,
+    row,
+    items: entryItems(db, id, scope).all(),
+    songs: db
+      .select({
+        id: playlistItems.id,
+        song: sql`${playlistItems.ytSong}`.mapWith(readStoredSong),
+      })
+      .from(playlistItems)
+      .where(and(eq(playlistItems.playlistId, id), live, isNotNull(playlistItems.ytSong)))
+      .all(),
+    tracks: playlistTracks(db, id, undefined, scope),
+  };
+};
+
+/** What `readPlaylistOpening` read. */
+export type PlaylistOpening = ReturnType<typeof readPlaylistOpening>;
+
+/** A playlist's entries as `playlistOpeningSteps` worked them out, for `finishPlaylistOpening`. */
+export interface OpenedPlaylist {
+  readonly row: NonNullable<PlaylistOpening>["row"];
+  readonly items: PlaylistEntry[];
+  readonly totals: PlaylistTotals | undefined;
+}
+
+/**
+ * [opening]'s entries as `selectPlaylist` lists them, and their totals in the Library's scope,
+ * worked out a row per step (#1452). [opening] is left as it was.
+ */
+export function* playlistOpeningSteps(
+  opening: PlaylistOpening,
+): Generator<void, OpenedPlaylist | null> {
+  if (opening === null) return null;
+  const { scope, row } = opening;
+  countDecoded(row.id, opening.songs.length);
+  const songs = new Map<number, StoredSong | null>();
+  for (const { id, song } of opening.songs) {
+    yield;
+    songs.set(id, song);
+  }
+  const tracks = new Map<number, PlaylistTrack>();
+  for (const { itemId, ...track } of opening.tracks) {
+    yield;
+    tracks.set(itemId, track);
+  }
+  const items = yield* entriesSteps(opening.items, (id) => songs.get(id) ?? null, tracks);
+  return {
+    row,
+    items,
+    totals: scope === "library" ? yield* entriesTotalsSteps(items) : undefined,
+  };
+}
+
+/** [opened] as `selectPlaylist` gives it, with its summary read. */
+export const finishPlaylistOpening = (
+  db: LibraryDatabase,
+  opened: OpenedPlaylist | null,
+): PlaylistDetail | null =>
+  opened === null ? null : playlistDetail(db, opened.row, opened.items, opened.totals);
+
+/** Playlist [row] with [items], its entries, and its summary, with the [totals] counted from them. */
+const playlistDetail = (
+  db: LibraryDatabase,
+  row: NonNullable<ReturnType<typeof playlistHead>>,
+  items: PlaylistEntry[],
+  totals: PlaylistTotals | undefined,
+): PlaylistDetail => {
+  const { imagePath, imageThumbPath, ...playlist } = row;
+  const id = playlist.id;
+  const counted = totals === undefined ? undefined : new Map([[id, totals]]);
   const summary = playlistSummaries(db, [id], counted).get(id);
   const covers = summary?.covers ?? NO_COVERS;
   const { trackCount, durationMs, unavailableCount } = summary?.totals ?? NO_SONGS;

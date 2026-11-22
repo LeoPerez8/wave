@@ -101,15 +101,42 @@ EXPO_PUBLIC_WAVE_PERF=1` bundles 10,222 modules with 833 compiled memo caches, a
   body is now a declaration wrapped apart, and it compiles.
 - The existing compiled-versus-as-written tests pass (47 tests).
 
+## 6. Download ticks and queue changes (#1441)
+
+| Change                               | Re-rendered before                          | Re-rendered after                          |
+| ------------------------------------ | ------------------------------------------- | ------------------------------------------ |
+| 4 progress ticks of 1 of 4 downloads | The downloads list 4 times, the ticking row | The ticking row only (the list 0 times)    |
+| A download tick, Downloads settings  | The section, through `useQualityOffer`      | Only when the quality offer itself changes |
+| The next song plays (9 Up Next rows) | 9 rows                                      | 2 (the song gone to History, the new top)  |
+| A song removed from the middle       | 8 rows                                      | 0                                          |
+| The last song moved to the top       | 8 rows                                      | 3 (rows whose move buttons changed)        |
+
+- **Downloads**: `ytmusic/downloadingRows.ts`'s `useDownloadingList` selects the list from the
+  journal and compares it with Core's `sameDownloadingList`, which ignores progress. Each row
+  reads its own line through `useQueuedDownloadLine`, from a map Core's `queuedDownloadLines`
+  builds once per journal change. `settings/downloadTickRenders.test.ts` checks it.
+- **Queue**: `UpNextRow` is `memo` and ignores its index. The drag learns a row's new index
+  through `placeRow` (`catalog/rowDrag.ts`), on the UI thread, without a render. The song-list
+  model's row cache also compared the queue entry by identity, so every rebuilt queue redrew
+  every row; it now compares plain-object sources field by field.
+  `nowPlaying/queueMoveRenders.test.ts` checks it, including that a drag lifted after two
+  unrendered moves starts from the row's new place.
+- **Swipeable rows**, measured on #1409's last `SwipeableRow` (a static backdrop from mount, the
+  animated edges on first touch): 150 rows made 450 shared values, 150 animated styles and 300
+  backdrop icons, and mounted in about 67 ms in node. The armed side was a shared value only so
+  the gesture could tick once as a row arms; it now follows from the row's offset before each
+  move, so 150 rows make 300 shared values (`offsetX` and `width`), with the same 150 styles and
+  a mount of about 72 ms (within node's noise). `catalog/swipeRowMountCost.test.ts` checks the
+  count and that the tick still comes once per arming.
+
 ## What's left
 
 - **A phone run.** The counts above are node counts; the effect on the reference phone's taps and
   freezes needs the `reference-taps` scenario before and after.
-- **`SwipeableRow` still makes 3 shared values per row** (offset, width and the armed side), 450 for
-  150 rows. The pan gesture needs them from its first frame, so they'd move only if the gesture itself mounted on first touch.
-- **`useDownloadingList` and the Settings download pages follow the whole journal**, because they
-  show progress. Splitting progress from membership in the journal would let rows follow only
-  their own progress.
-- **The Queue's list follows the whole queue** (`useQueue`); a position change re-renders it.
+- **`SwipeableRow` still makes 2 shared values and 1 animated style per row** (offset and width).
+  The pan gesture moves the row from its first frame, so they'd go only if the gesture itself
+  mounted on first touch.
+- **The Queue's list still follows the whole queue** (`useQueue`): a position change renders
+  the list, though its rows now skip.
 - **`IconButton` and `TextButton` aren't `memo`**, and most callers pass inline closures. The
   React Compiler would cover this if adopted; otherwise it needs callers to pass stable handlers.

@@ -1,7 +1,7 @@
 /** Shared radio ranking for Magic Queue, mixes and playlist suggestions. */
 import { artistNeighbourhood, type ArtistGraph } from "./artistGraph.ts";
 import { finishSteps, sortSteps } from "./buildSteps.ts";
-import { NO_DISLIKES, withoutDisliked, type DislikedSongs } from "./dislikes.ts";
+import { isDisliked, NO_DISLIKES, type DislikedSongs } from "./dislikes.ts";
 import {
   GENRE_AFFINITY_THRESHOLD,
   genreAffinity,
@@ -157,18 +157,20 @@ export function* rankRadioSongsSteps(
     yield;
   }
   // Stable, as Array.sort: equal scores keep their input order.
-  const sorted = withoutDisliked(
-    yield* sortSteps([...ranked.values()], (a, b) => b.score - a.score),
-    sources.disliked ?? NO_DISLIKES,
-    (candidate) => ({
-      id: candidate.source === "library" ? candidate.trackId : null,
-      videoId: candidate.song?.videoId,
-    }),
-  );
+  const sorted = yield* sortSteps([...ranked.values()], (a, b) => b.score - a.score);
+  const disliked = sources.disliked ?? NO_DISLIKES;
   const recordings = new Map<string, YtAlbumSong[]>();
   const kept: RankedRadioSong[] = [];
   for (const candidate of sorted) {
     yield;
+    // The disliked are left out a candidate per step, not all at once after the sort (#1448).
+    if (
+      isDisliked(disliked, {
+        id: candidate.source === "library" ? candidate.trackId : null,
+        videoId: candidate.song?.videoId,
+      })
+    )
+      continue;
     if (candidate.song === null) {
       kept.push(candidate);
       continue;
@@ -199,10 +201,21 @@ export function* rankRadioSongsSteps(
 /** Blend ranked pools at New music's share, filling either short pool from the other. */
 export const radioRankingBatch = (
   ranked: readonly RankedRadioSong[],
+  options: { readonly size: number; readonly newMusicShare: number },
+): RankedRadioSong[] => finishSteps(radioRankingBatchSteps(ranked, options));
+
+/** `radioRankingBatch`, a step per ranked song, for a background slice (#1448). */
+export function* radioRankingBatchSteps(
+  ranked: readonly RankedRadioSong[],
   { size, newMusicShare }: { readonly size: number; readonly newMusicShare: number },
-): RankedRadioSong[] => {
-  const fresh = ranked.filter((song) => song.source === "stream");
-  const library = ranked.filter((song) => song.source === "library");
+): Generator<void, RankedRadioSong[]> {
+  const fresh: RankedRadioSong[] = [];
+  const library: RankedRadioSong[] = [];
+  for (const song of ranked) {
+    if (song.source === "stream") fresh.push(song);
+    else if (song.source === "library") library.push(song);
+    yield;
+  }
   const target = Math.round(size * Math.max(0, Math.min(1, newMusicShare)));
   const local = library.slice(0, size - Math.min(fresh.length, target));
   const streams = fresh.slice(0, size - local.length);
@@ -215,4 +228,4 @@ export const radioRankingBatch = (
   }
   if (streams.length === 0) return local;
   return result;
-};
+}

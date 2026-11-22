@@ -25,7 +25,7 @@ import {
   type YtAlbumSong,
 } from "@wave/core";
 
-import { runSteps } from "@/lib/stepped";
+import { namedWork, runSteps } from "@/lib/stepped";
 import { startupTurnEffect, startupTurn } from "@/lib/backgroundWork";
 import { finishLinkImport } from "./startupJobs";
 
@@ -91,7 +91,7 @@ const give = async (job: Job, resumed: boolean): Promise<void> => {
         },
       ),
     );
-    done = await appRuntime.runPromise(giving);
+    done = await appRuntime.runPromise(giving.pipe(namedWork("Playlist import")));
     // Replaced or deleted meanwhile, its progress already went (`cancelPlaylistImport`).
     if (done !== null) endImportProgress(job.playlistId);
     await startupTurn("playlist imports");
@@ -108,7 +108,9 @@ const give = async (job: Job, resumed: boolean): Promise<void> => {
   }
   perfMark("import.done", String(job.songs.length - job.added));
   const completion = await appRuntime.runPromise(
-    runSteps(playlistImportCompletionSteps(done, resumed), startupTurnEffect),
+    runSteps(playlistImportCompletionSteps(done, resumed), startupTurnEffect).pipe(
+      namedWork("Playlist import completion"),
+    ),
   );
   appLog("info", LOG_TAG, completion.line);
   // Replaced or dismissed meanwhile: nothing left to keep.

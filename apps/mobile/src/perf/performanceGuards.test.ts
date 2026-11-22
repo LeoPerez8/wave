@@ -368,6 +368,16 @@ test("Home's sections render again only when their own props change (#1423)", ()
   assert.match(sources["home/HomeSection.tsx"] ?? "", /export const HomeSection = memo\(/);
 });
 
+test("Followed artists mounts only the follows on screen, however many there are (#1442)", () => {
+  // Mounting every follow row a screen a frame held JS for seconds with 300 follows.
+  const page = sources["app/settings/followed-artists.tsx"] ?? "";
+  assert.match(page, /<LegendList/);
+  assert.doesNotMatch(page, /follows\.map\(\([^)]*\) => \(?\s*</);
+  assert.doesNotMatch(page, /StagedSections/);
+  // A level change redraws only the rows whose follow changed.
+  assert.match(page, /const FollowedArtistItem = memo\(/);
+});
+
 test("artwork URIs come from the one helper (#726)", () => {
   assert.deepEqual(shared.fileUriCallers, listed(ARTWORK_URI_BUILDERS));
   assert.deepEqual(
@@ -401,6 +411,10 @@ test("planted offenders fail each shared-component guard, through the real APIs 
       queueState.get();
       return useFavoriteIds().has(id) ? 'starred' : null;
     }`,
+    "planted/DownloadingRow.tsx": `
+    import { useDownloadingList } from '@/ytmusic/downloadingRows';
+    export const DownloadingRow = ({ id }: { id: string }) =>
+      useDownloadingList().downloading.some((row) => row.id === id) ? 'downloading' : null;`,
     "planted/useRowPlaying.ts": `
     import { useCurrentPlayingIds } from '@/playback/hooks';
     export const useRowPlaying = (id: string) => useCurrentPlayingIds().has(id);`,
@@ -438,6 +452,7 @@ test("planted offenders fail each shared-component guard, through the real APIs 
   assert.deepEqual(found.songRowViews, ["planted/OwnSongs.tsx#OwnSongs"]);
   assert.deepEqual(found.retiredRows, ["planted/OwnSongs.tsx#YtSongRow"]);
   assert.deepEqual(found.rowSubscriptions, [
+    "planted/DownloadingRow.tsx#DownloadingRow > ytmusic/downloadingRows.ts#useDownloadingList",
     "planted/PlayingRow.tsx#PlayingRow > planted/useRowPlaying.ts#useRowPlaying > playback/hooks.ts#useCurrentPlayingIds",
     "planted/StarredRow.tsx#StarredRow > library/favorites.ts#useFavoriteIds",
     "planted/StarredRow.tsx#StarredRow > playback/Queue.ts#queueState",

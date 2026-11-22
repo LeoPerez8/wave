@@ -17,8 +17,10 @@ const SOURCE_NAMES: Readonly<Record<RecognizeSource, string>> = {
 
 /**
  * The session's one app log line: the source, the seconds heard, the outcome (with a
- * refusal's HTTP status) and how many requests failed before it, when any did. Never
- * the song, the audio or the signature.
+ * refusal's HTTP status), how many requests failed before it, when any did, and which
+ * attempt since Wave started it was. Attempts that reach the schedule's end hear the
+ * same 28 seconds and can fail the same requests, so the number is what tells two of
+ * them apart. Never the song, the audio or the signature.
  */
 export const recognizeLogLine = (session: {
   readonly source: RecognizeSource;
@@ -26,6 +28,8 @@ export const recognizeLogLine = (session: {
   readonly outcome: RecognizeLogOutcome;
   readonly failedAsks?: number;
   readonly lookup?: RecognizeLookup;
+  /** Which attempt since Wave started this session was, counting from 1. */
+  readonly attempt?: number;
 }): string => {
   const { outcome, failedAsks = 0 } = session;
   const after = `after ${(session.heardMs / 1000).toFixed(1)} s`;
@@ -53,5 +57,5 @@ export const recognizeLogLine = (session: {
     failedAsks === 0
       ? ""
       : `, ${failedAsks} ${failedAsks === 1 ? "request" : "requests"} failed before it`;
-  return `Recognize through ${SOURCE_NAMES[session.source]}: ${what}${failedBefore}${session.lookup === undefined ? "" : `, YT Music lookup: ${session.lookup}`}`;
+  return `Recognize through ${SOURCE_NAMES[session.source]}: ${what}${failedBefore}${session.lookup === undefined ? "" : `, YT Music lookup: ${session.lookup}`}${session.attempt === undefined ? "" : ` (attempt ${session.attempt})`}`;
 };

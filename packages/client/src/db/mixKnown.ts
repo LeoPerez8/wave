@@ -6,6 +6,7 @@
  * Expo for the store tests.
  */
 import {
+  finishSteps,
   readPlaylistEntrySong,
   readPlaylistYtSong,
   writePlaylistYtSong,
@@ -17,7 +18,7 @@ import { sql, type SQL } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
-import { VIDEO_PAGE_ROWS, videoIdsOf, type VideoPage } from "./videoPages.ts";
+import { uniqueVideosSteps, VIDEO_PAGE_ROWS, videoIdsOf, type VideoPage } from "./videoPages.ts";
 
 /**
  * Notes that the owner started streaming [song] at [at]: once more, and first
@@ -154,10 +155,12 @@ export const selectKnownVideosPage = (
  * All the videos the owner knows at once, each once, in the order every page
  * of `selectKnownVideosPage` gives them: one statement a source (#1351).
  */
-export const selectKnownVideos = (db: LibraryDatabase): string[] => [
-  ...new Set(
-    KNOWN_SOURCES.flatMap(({ start, page }) =>
-      videoIdsOf(db.all<{ videoId: unknown }>(page(start, sql``))),
-    ),
-  ),
-];
+export const selectKnownVideos = (db: LibraryDatabase): string[] =>
+  finishSteps(uniqueVideosSteps(knownVideoRows(db)));
+
+/**
+ * What `selectKnownVideos` reads, one statement a source, its rows left to
+ * `uniqueVideosSteps` (#1452).
+ */
+export const knownVideoRows = (db: LibraryDatabase): { readonly videoId: unknown }[][] =>
+  KNOWN_SOURCES.map(({ start, page }) => db.all<{ videoId: unknown }>(page(start, sql``)));

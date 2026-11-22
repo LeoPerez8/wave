@@ -9,11 +9,14 @@ import {
   planAddRoot,
   planExclusion,
   scanEnd,
+  scanAnnounceDue,
+  scanTimingsLogLine,
   type IndexedFile,
   type LibraryChange,
 } from "@wave/core";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import { refreshDownloadPolicy } from "./downloadPolicy";
 import { finishFileDeletions } from "./fileDeletions";
 import * as Stream from "effect/Stream";
@@ -22,12 +25,14 @@ import { namedWork, runSteps } from "@/lib/stepped";
 import {
   readScanIndex,
   saveScanBatch,
+  scanSaveSlice,
   finishScanIndex,
   forgetSkippedFiles,
   skipVoiceNoteFiles,
 } from "./startupJobs";
 
-import { startupTurnEffect } from "@/lib/backgroundWork";
+import { inSlice, startupTurnEffect } from "@/lib/backgroundWork";
+import { appLog } from "@/log/appLog";
 import { makeExternalStore } from "@wave/client/externalStore";
 import { argbToHex, type NativeArtwork, type NativeScannedTrack } from "@/native/waveNative";
 import { skipVoiceNotes } from "@/settings/skipVoiceNotes";
@@ -74,12 +79,16 @@ let editsVersion = 0;
  */
 export const libraryEditsVersion = (): number => editsVersion;
 
-/** Bumps `libraryVersion` and announces [changes] to shared queries; [landing]: downloads landed. */
-const changeLibrary = (changes: readonly LibraryChange[], landing: boolean): void => {
-  if (!landing) editsVersion++;
-  libraryVersion.update((version) => version + 1);
-  for (const change of changes) publishLibraryChange(change);
-};
+/**
+ * Bumps `libraryVersion` and announces [changes] to shared queries; [landing]: downloads landed.
+ * What follows the Library hears it synchronously, in one slice named for the block log.
+ */
+const changeLibrary = (changes: readonly LibraryChange[], landing: boolean): void =>
+  inSlice("Library change", () => {
+    if (!landing) editsVersion++;
+    libraryVersion.update((version) => version + 1);
+    for (const change of changes) publishLibraryChange(change);
+  });
 
 const bumpLibraryVersion = (...changes: readonly LibraryChange[]): void =>
   changeLibrary(changes, false);
@@ -221,6 +230,9 @@ const scanFolders = (roots: readonly string[]) =>
     // Music folders shows a folder no scan finished yet without its song count.
     yield* startupTurnEffect;
     const firstScan = yield* store.hasUnscannedRoot(roots);
+    // The first save would otherwise read and build the credit splitter in one hold.
+    yield* startupTurnEffect;
+    yield* store.warmCreditSplits;
 
     // Indexed files the scan didn't find that no batch has matched yet.
     let missing: readonly IndexedFile[] = [];
@@ -230,6 +242,30 @@ const scanFolders = (roots: readonly string[]) =>
     let saved = 0;
     const savedTrackIds: number[] = [];
     const startedAt = Date.now();
+    // Where the scan's time goes, for its log line (#1436).
+    const timings = {
+      read: 0,
+      batches: 0,
+      savingMs: 0,
+      longestSaveMs: 0,
+      announcingMs: 0,
+      longestAnnounceMs: 0,
+    };
+    const scanStart = performance.now();
+    // Saved songs not yet told to the app, and when it last was: batches are told together at
+    // Core's pace (`scanAnnounceDue`), and the scan's end names every song it saved.
+    let unannounced: number[] = [];
+    let announcedAt: number | undefined;
+    const announceSaved = () => {
+      announcedAt = Date.now();
+      if (unannounced.length === 0) return;
+      const announcing = performance.now();
+      bumpLibraryVersion(scanBatchChange(unannounced));
+      unannounced = [];
+      const ms = performance.now() - announcing;
+      timings.announcingMs += ms;
+      timings.longestAnnounceMs = Math.max(timings.longestAnnounceMs, ms);
+    };
     scanState.set({
       status: "scanning",
       kind,
@@ -325,6 +361,8 @@ const scanFolders = (roots: readonly string[]) =>
               changes,
               count,
               ids: batchTrackIds,
+              savingMs,
+              longestSaveMs,
             } = yield* saveScanBatch(
               store,
               { missing, read, isIndexed: (path) => indexed.has(path) },
@@ -334,6 +372,10 @@ const scanFolders = (roots: readonly string[]) =>
             );
             missing = changes.unmatched;
             saved += count;
+            timings.read += event.tracks.length;
+            timings.batches++;
+            timings.savingMs += savingMs;
+            timings.longestSaveMs = Math.max(timings.longestSaveMs, longestSaveMs);
             savedTrackIds.push(...batchTrackIds);
             yield* runSteps(
               (function* () {
@@ -349,7 +391,10 @@ const scanFolders = (roots: readonly string[]) =>
               })(),
               startupTurnEffect,
             );
-            if (count > 0) bumpLibraryVersion(scanBatchChange(batchTrackIds));
+            if (count > 0) {
+              unannounced.push(...batchTrackIds);
+              if (scanAnnounceDue({ lastAt: announcedAt, now: Date.now() })) announceSaved();
+            }
             return;
           }
           case "Complete":
@@ -365,6 +410,8 @@ const scanFolders = (roots: readonly string[]) =>
         if (event._tag === "Complete") completed = event;
         return handleEvent(event);
       }),
+      // A scan that fails or is stopped still has its saved songs shown.
+      Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : Effect.sync(announceSaved))),
     );
 
     const finished = completed !== undefined && !completed.cancelled;
@@ -383,6 +430,7 @@ const scanFolders = (roots: readonly string[]) =>
       linkedAtRevision = yield* store.playlistEntriesRevision;
     }
     if (completed === undefined || completed.cancelled) {
+      announceSaved();
       if (linked > 0) bumpLibraryVersion(ENTRIES_LINKED);
       scanState.set({ status: "idle" });
       return;
@@ -419,6 +467,18 @@ const scanFolders = (roots: readonly string[]) =>
     }
     scanState.set({ status: "done", filesFound: completed.filesFound });
     publishScanFinished();
+    appLog(
+      "info",
+      "WaveScan",
+      scanTimingsLogLine({
+        kind,
+        found: completed.filesFound,
+        saved,
+        ms: performance.now() - scanStart,
+        slice: scanSaveSlice(),
+        ...timings,
+      }),
+    );
   }).pipe(namedWork("scan"));
 
 /** Scans every scan root: in full the first time, incrementally afterwards. */
@@ -430,7 +490,7 @@ export const runRescan = Effect.gen(function* () {
   yield* startupTurnEffect;
   const roots = yield* store.ensureDefaultRoot(folder);
   yield* scanFolders(roots.map((root) => root.path));
-}).pipe(reportFailures);
+}).pipe(reportFailures, namedWork("scan"));
 
 /** Scans a newly added root. */
 export const runFolderScan = (path: string) => scanFolders([path]).pipe(reportFailures);

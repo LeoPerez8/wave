@@ -1,6 +1,8 @@
 /// <reference types="node" />
 import {
   EMPTY_SYNC_TABLES,
+  finishSteps,
+  normalizeTrack,
   readPullPage,
   statsWindow,
   type FollowRelease,
@@ -13,10 +15,12 @@ import { test } from "node:test";
 
 import { sql } from "drizzle-orm";
 
+import type { IndexedTrack } from "../types.ts";
 import { saveImportedPlays } from "./blackPlayer.ts";
 import { creditSplits, relinkCredits } from "./credits.ts";
 import { followReleaseListening } from "./followReleases.ts";
 import { selectPlaylistPlays } from "./playlists.ts";
+import { removeTracks, saveBatch } from "./save.ts";
 import {
   keptCreditedPlayTotals,
   keptPlayedTotals,
@@ -27,7 +31,10 @@ import {
 } from "./keptPlayTotals.ts";
 import { homePlays, recordPlay, updatePlay } from "./playHistory.ts";
 import {
+  playedArtistTotals,
   playedEntityTotals,
+  playedTotalsRead,
+  playedTotalsSteps,
   summedPlayedTotals,
   type PlayedEntityTotal,
   type PlayedEntityTotals,
@@ -39,7 +46,7 @@ import { deleteTracksById } from "./tracks.ts";
 import { migrateDatabase } from "../database.ts";
 import migrations from "./migrations.ts";
 import type { LibraryDatabase } from "./database.ts";
-import { readConnections, replayRead } from "./offThreadReads.ts";
+import { finishReplaySteps, readConnections, replayRead } from "./offThreadReads.ts";
 import {
   addTrack,
   asyncReadClient,
@@ -494,6 +501,120 @@ test("the kept reads replay off the JS thread with the same totals", async () =>
   }
 });
 
+/** How many steps `playedTotalsSteps` takes over [window]'s read. */
+const stepsOf = (db: LibraryDatabase, window: StatsWindow) => {
+  const steps = playedTotalsSteps(playedTotalsRead(db, window, true));
+  let count = 0;
+  while (!steps.next().done) count++;
+  return count;
+};
+
+test("while the kept totals settle, the summed totals in steps equal the settled ones", async () => {
+  const { db } = await library();
+  // A streamed song downloaded later: its plays count through the Library song's links.
+  const downloaded = addTrack(db, {
+    title: "Song online-1",
+    artist: "D, E",
+    album: "Online album",
+  });
+  db.run(sql`UPDATE tracks SET video_id = 'online-1' WHERE id = ${downloaded}`);
+  relinkCredits(db, creditSplits());
+  const downloadedAlbum = db.get<{ albumId: number }>(
+    sql`SELECT album_id AS "albumId" FROM tracks WHERE id = ${downloaded}`,
+  )!.albumId;
+  settle(db);
+  const settled = WINDOWS.map((window) => keptPlayedTotals(db, window, true)!);
+  const settledArtists = WINDOWS.map((window) => keptPlayedTotals(db, window, false)!.artists);
+  unsettle(db);
+  assert.equal(keptTotalsSettled(db), false);
+  WINDOWS.forEach((window, index) => {
+    const label = JSON.stringify(window);
+    const stepped = finishSteps(playedTotalsSteps(playedTotalsRead(db, window, true)));
+    assert.deepEqual(comparable(stepped), comparable(settled[index]!), label);
+    assert.deepEqual(
+      comparable({ albums: [], artists: playedArtistTotals(db, window) }),
+      comparable({ albums: [], artists: settledArtists[index]! }),
+      label,
+    );
+  });
+  // Online albums and the downloaded song's Library album are both in it.
+  assert.ok(settled.some((totals) => totals.albums.some((album) => typeof album.id === "string")));
+  assert.ok(settled.some((totals) => totals.albums.some((album) => album.id === downloadedAlbum)));
+});
+
+test("the summed totals' read replays off the JS thread, its steps in slices, with the same totals", async () => {
+  const { db } = await library();
+  const reads = readConnections(async () => asyncReadClient(db));
+  for (const settled of [false, true]) {
+    if (settled) settle(db);
+    else unsettle(db);
+    for (const window of [statsWindow("month", NOW), statsWindow("all", NOW)])
+      for (const withAlbums of [true, false]) {
+        const read = (d: LibraryDatabase) => playedTotalsRead(d, window, withAlbums);
+        const replayed = await replayRead(reads, read, () => 0);
+        const stepped = await finishReplaySteps(playedTotalsSteps(replayed.value), () => 0);
+        const whole = playedEntityTotals(db, window);
+        assert.deepEqual(
+          stepped.value,
+          withAlbums ? whole : { albums: [], artists: playedArtistTotals(db, window) },
+        );
+        // The shared read is left as it was: a second caller's steps give the same.
+        assert.deepEqual(finishSteps(playedTotalsSteps(replayed.value)), stepped.value);
+      }
+  }
+});
+
+test("the summed totals work out each streamed song on a step of its own", async () => {
+  const db = await openTestDatabase();
+  addTrack(db, { title: "Solo", artist: "A", album: "First" });
+  const window = statsWindow("all", NOW);
+  const streams = (from: number, count: number) => {
+    for (let index = from; index < from + count; index++)
+      recordPlay(
+        db,
+        play(`yt:v${index}`, NOW - index * 60_000),
+        false,
+        streamed(`v${index}`, ["A"], "First", null),
+      );
+  };
+  streams(0, 20);
+  unsettle(db);
+  const before = stepsOf(db, window);
+  streams(20, 20);
+  unsettle(db);
+  // Each new song adds its merge, its resolve and its rank, a step each, and more as it's learned.
+  assert.ok(stepsOf(db, window) - before >= 20 * 3, `${stepsOf(db, window)} - ${before}`);
+});
+
+test("the summed totals' read is its statements alone, the same however many songs streamed", async () => {
+  const db = await openTestDatabase();
+  addTrack(db, { title: "Solo", artist: "A", album: "First" });
+  const window = statsWindow("all", NOW);
+  const streams = (from: number, count: number) => {
+    for (let index = from; index < from + count; index++)
+      recordPlay(
+        db,
+        play(`yt:v${index}`, NOW - index * 60_000),
+        false,
+        streamed(`v${index}`, ["A"], "First", null),
+      );
+  };
+  // A replayed read runs in every pass whatever it does between statements (#1451): no list
+  // of the songs it read, made here to read more by, only statements.
+  const statements = () => {
+    unsettle(db);
+    return traceQueries(db, () => playedTotalsRead(db, window, true)).queries.map(({ sql }) => sql);
+  };
+  streams(0, 3);
+  const few = statements();
+  streams(3, 40);
+  assert.deepEqual(statements(), few);
+  assert.ok(
+    few.every((statement) => !statement.includes("json_each(?)")),
+    few.join("\n"),
+  );
+});
+
 test("marking songs owed looks them up by their key, never through every settled song", async () => {
   const db = await openTestDatabase();
   const owing = (body: string) =>
@@ -516,4 +637,43 @@ test("marking songs owed looks them up by their key, never through every settled
     if (!/song_track (=|IN)/.test(plain))
       assert.doesNotMatch(plan, /song_track_idx/, `${name}: ${plan}`);
   }
+});
+
+test("a rescan that changes no song's tags leaves the kept totals settled; a changed tag owes them", async () => {
+  const db = await openTestDatabase();
+  const splits = creditSplits();
+  const file = (title: string, artist: string, album: string): IndexedTrack => ({
+    ...normalizeTrack({ path: `/Music/${album}/${title}.mp3`, title, artist, album }),
+    sizeBytes: 1_000,
+    modifiedAt: 0,
+    sampleRate: null,
+    bitrateKbps: null,
+    artworkHash: null,
+    hasLyrics: false,
+    explicit: "unknown",
+  });
+  const files = [
+    file("Solo", "A", "First"),
+    file("Duet", "A & B", "First"),
+    file("Mix", "C", "Hits"),
+  ];
+  const { trackIds } = saveBatch(db, splits, files, [], [], NOW);
+  removeTracks(db, splits, []);
+  const online = streamed("online-1", ["D", "E"], "Online album", "MPREb_online");
+  for (let index = 0; index < 40; index++) {
+    const id = index % 4 === 3 ? "yt:online-1" : String(trackIds[index % 3]);
+    recordPlay(db, play(id, NOW - index * DAY), false, id === "yt:online-1" ? online : undefined);
+  }
+  settle(db);
+
+  // A scan saves the touched files again, tags as they were.
+  saveBatch(db, splits, files, [], [], NOW + 1, { linkEntries: false });
+  removeTracks(db, splits, []);
+  assert.equal(keptTotalsSettled(db), true);
+
+  saveBatch(db, splits, [file("Solo", "A", "First (Deluxe)")], [], [], NOW + 2);
+  removeTracks(db, splits, []);
+  assert.equal(keptTotalsSettled(db), false);
+  settle(db);
+  assertSameTotals(db);
 });

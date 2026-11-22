@@ -68,6 +68,17 @@ describe("Version History's store", () => {
     assert.ok(told >= 2);
   });
 
+  it("names why the fetch failed, past Effect's wrapper", async () => {
+    const { history, logged } = store([
+      Effect.tryPromise(() => Promise.reject(new TypeError("Network request failed"))),
+    ]);
+    history.load();
+    await settle();
+    assert.deepEqual(logged, [
+      "The version history fetch failed: TypeError: Network request failed",
+    ]);
+  });
+
   it("fails to the log, and Try Again reads again", async () => {
     const { history, logged, reads } = store([
       Effect.fail(new Error("offline")),
@@ -76,7 +87,7 @@ describe("Version History's store", () => {
     history.load();
     await settle();
     assert.deepEqual(history.get(), { status: "failed", releases: null });
-    assert.deepEqual(logged, ["The version history fetch failed: offline"]);
+    assert.deepEqual(logged, ["The version history fetch failed: Error: offline"]);
 
     history.load();
     await settle();
@@ -134,6 +145,6 @@ describe("Version History's store", () => {
     await settle();
     assert.deepEqual(history.get(), { status: "failed", releases: [older] });
     assert.deepEqual(phone.kept, [older]);
-    assert.deepEqual(logged, ["The version history fetch failed: offline"]);
+    assert.deepEqual(logged, ["The version history fetch failed: Error: offline"]);
   });
 });

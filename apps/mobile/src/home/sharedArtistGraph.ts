@@ -7,6 +7,7 @@ import {
 import * as Effect from "effect/Effect";
 import { snapshotRead } from "../lib/snapshotRead.ts";
 import { readArtistGraph, type ArtistGraphReads } from "./artistGraph.ts";
+import type { Turn } from "../lib/stepped.ts";
 
 /**
  * The artist graph, read as the recommendation snapshot's graph part: kept
@@ -19,7 +20,7 @@ import { readArtistGraph, type ArtistGraphReads } from "./artistGraph.ts";
 export const shareArtistGraph = <R, C extends ArtistGraphCatalogEntry = never, RC = never>(
   store: Effect.Effect<ArtistGraphReads, never, R>,
   start: Effect.Effect<void>,
-  between: Effect.Effect<void>,
+  between: Turn,
   {
     catalog,
     versions = () => ({}),

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { setImmediate } from "node:timers/promises";
 import * as Effect from "effect/Effect";
+import { runTestPromise, runTestSync } from "../lib/steppedTesting.ts";
 import { sql } from "drizzle-orm";
 import {
   artistMixSeeds,
@@ -65,7 +66,7 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
       SELECT id, ${now} - id * 200000, 180000, 180000, 'completed', 1, 'phone', '621-play-' || id
       FROM tracks`);
     const store = await loadLibraryStore(root, db);
-    const trackIds = new Set(Effect.runSync(store.listSongs).map((track) => track.id));
+    const trackIds = new Set(runTestSync(store.listSongs).map((track) => track.id));
     let pages = 0;
     const reads = {
       ...store,
@@ -91,13 +92,13 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
       between,
     );
     try {
-      const library = await Effect.runPromise(indexes.get);
+      const library = await runTestPromise(indexes.get);
       assert.deepEqual(new Set(library.songs.map((track) => track.id)), trackIds);
       assert.equal(library.songs.length, 2531, "every Track appears once");
       assert.equal(library.artists.length, 900);
       assert.equal(pages, 1, "the complete Library is one songs read (#1351)");
       const mixPages = pages;
-      assert.equal(await Effect.runPromise(indexes.get), library);
+      assert.equal(await runTestPromise(indexes.get), library);
       assert.equal(pages, mixPages, "a kept derivation never starts paging again");
       const artist = library.topArtists[0]!;
       const seed = library.songs.find((song) => song.artistId === artist.id)!;
@@ -135,14 +136,14 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
           { seed: played.name, songs: radioSongs(played.name, String(played.id)) },
           now,
         );
-      const graph = await Effect.runPromise(readArtistGraph(store, between));
+      const graph = await runTestPromise(readArtistGraph(store, between));
       const playlistId = createPlaylist(
         db,
         "621",
         [{ source: "library", trackId: seed.id }],
         now,
       ).playlistId;
-      const input = await Effect.runPromise(recommendations.get(playlistId));
+      const input = await runTestPromise(recommendations.get(playlistId));
       assert.deepEqual(new Set(input.library.map((track) => Number(track.id))), trackIds);
       assert.equal(input.library.length, 2531, "playlist inputs contain every Track once");
       const offers = playlistRecommendations(input.playlist, {
@@ -153,7 +154,7 @@ test("2,531 Tracks and 900 artists finish paging, refill a Magic Queue online, a
       assert.ok(offers.length > 0, "the playlist footer receives recommendations");
       assert.equal(pages, mixPages, "playlist inputs share the mixes' Library read");
       const completedPages = pages;
-      assert.deepEqual(await Effect.runPromise(recommendations.get(playlistId)), input);
+      assert.deepEqual(await runTestPromise(recommendations.get(playlistId)), input);
       assert.equal(pages, completedPages, "a warm playlist read reuses the Library source");
       for (const seeds of [
         artistMixSeeds(
@@ -236,7 +237,7 @@ test("scan writes while a playlist reads neither fail nor restart its read; the 
       newId: () => String(++offered),
       read: async (signal) => {
         reads++;
-        const input = await Effect.runPromise(source.get(fixture.playlistId), { signal });
+        const input = await runTestPromise(source.get(fixture.playlistId), { signal });
         return {
           playlist: input.playlist,
           sources: { ...input, graph: null, online: false },

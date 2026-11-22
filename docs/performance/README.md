@@ -96,8 +96,9 @@ JavaScript thread that long (a busy loop in the root view's touch handler), a co
 for an import's work. What still moves in the window is what doesn't wait for JavaScript. The
 run's `app` metadata records it as `stallMs` (0 in a plain perf build).
 
-For the **React Compiler** comparison, add `EXPO_PUBLIC_WAVE_REACT_COMPILER=1`: the bundle is built
-with the compiler, and the run's first line says so (`728-react-compiler.md`).
+Builds use the **React Compiler** (#1433). For a comparison without it, add
+`EXPO_PUBLIC_WAVE_REACT_COMPILER=0`: the run's first line says which a build is
+(`728-react-compiler.md`).
 
 Delete Metro's cache too (`$TMPDIR/metro-cache`) when switching between perf and plain builds. The
 run's first line says whether the app on the phone is a perf build. A perf build has the same
@@ -113,13 +114,14 @@ version, package and signature as the release it's built from, so it installs ov
 - `importLink`: a public playlist link for the large import, shared to Wave as a share sheet would.
   **Not set yet.** Pick a YouTube Music or Spotify playlist of at least 2,000 songs and commit its
   link here. The import variant can't run without it.
-- `artist`: the artist `push-artist` opens, by name as Library › Artists shows it. **Not set
-  yet.** Pick an artist with a long play history that shows on the list's first screen without
-  scrolling, and commit the name here. `push-artist` can't run without it. `--artist` overrides it.
-- `playlist`: the playlist `push-playlist` opens by its visible name on Library › Playlists.
-  **Not set yet.** Set it from the actual test Library, or pass `--playlist`. A missing or blank
-  name records a scenario error and allows the other scenarios to continue. Keep its contents,
-  layout and sort order comparable; the name alone does not establish equal workloads.
+- `artist`: the artist `push-artist` opens, by name as Library › Artists shows it: `Amber Ainsley`,
+  the first artist of the emulator seed (`scripts/perf/seed.ts`, see
+  `docs/agents/emulator-checks.md`). On a phone, pass `--artist` with an artist that has a long
+  play history and shows on the list's first screen without scrolling.
+- `playlist`: the playlist `push-playlist` opens by its visible name on Library › Playlists:
+  `Archive`, the seed's first and biggest playlist. On a phone, pass `--playlist`. A missing or
+  blank name records a scenario error and allows the other scenarios to continue. Keep its
+  contents, layout and sort order comparable; the name alone does not establish equal workloads.
 - `settleMs`, `windowMs`, `launchSettleMs`, `memoryIdleMs`, `flushTimeoutMs`: timing (below).
 
 The phone, for runs that compare:

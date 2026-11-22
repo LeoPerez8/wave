@@ -1,4 +1,5 @@
 import {
+  describeCause,
   mergeReleaseNotes,
   nextWhatsNewStep,
   type LogLevel,
@@ -46,8 +47,6 @@ export interface WhatsNewRunnerOptions {
   /** Opens Settings › Version History. */
   readonly openVersionHistory: () => void;
 }
-
-const reason = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /**
  * Carries out Core's `nextWhatsNewStep`. It acts when told something changed (`reconsider`) and
@@ -110,7 +109,7 @@ export const createWhatsNewRunner = ({
         Effect.catch((error) =>
           Effect.sync(() => {
             lastFailureAt = now();
-            log("warn", `The release notes fetch failed: ${reason(error)}`);
+            log("warn", `The release notes fetch failed: ${describeCause(error)}`);
             // An offline launch, or the service down, doesn't hold up what waits for the card.
             release();
           }),

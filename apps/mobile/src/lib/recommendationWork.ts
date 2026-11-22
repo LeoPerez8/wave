@@ -7,7 +7,8 @@ import { AppState } from "react-native";
 import { WaveAppLog } from "../native/waveAppLog";
 import { createRecommendationWork } from "./recommendationTurn.ts";
 import { checkRadioDeadlines } from "./radioDeadline.ts";
-import { backgroundTransition } from "./backgroundWork";
+import { backgroundTransition, workTurnTaken } from "./backgroundWork";
+import { namedWork } from "./stepped.ts";
 
 AppState.addEventListener("change", (state) => {
   if (state === "active") checkRadioDeadlines();
@@ -17,6 +18,7 @@ const work = createRecommendationWork({
   now: () => performance.now(),
   // Frame-paced, not touch-paced, but it still waits out a tap's transition.
   transition: backgroundTransition,
+  turnTaken: workTurnTaken,
   intervalMs: () => {
     try {
       return WaveAppLog?.timingFrameIntervalMs?.() ?? 0;
@@ -52,5 +54,6 @@ export const recommendationTurnEffect = work.turn;
 /** Ranking steps that may have someone waiting for them: see `createRecommendationWork`. */
 export const recommendationSteps = work.steps;
 
-/** Promise boundary for playlist replacement work. */
-export const recommendationTurn = (): Promise<void> => Effect.runPromise(recommendationTurnEffect);
+/** Promise boundary for playlist replacement work, taken under [name]. */
+export const recommendationTurn = (name: string): Promise<void> =>
+  Effect.runPromise(recommendationTurnEffect.pipe(namedWork(name)));

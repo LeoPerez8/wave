@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
+import { runTestPromise, runTestSync } from "../lib/steppedTesting.ts";
 import { planLinkImport, startPlaylistImport, type YtAlbumSong } from "@wave/core";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
 import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
@@ -13,7 +14,7 @@ test("link imports append ti's songs in 100-song transactions, one per turn, kee
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
-    const made = Effect.runSync(store.createPlaylist("Resume", []));
+    const made = runTestSync(store.createPlaylist("Resume", []));
     const titles = Array.from({ length: 250 }, (_, i) => `Song ${i}`);
     const plan = planLinkImport<YtAlbumSong, never>(
       {
@@ -49,7 +50,7 @@ test("link imports append ti's songs in 100-song transactions, one per turn, kee
     });
     let published = 0;
     const stopped = traceQueries(fixture.db, () =>
-      Effect.runSync(
+      runTestSync(
         finishLinkImport(
           counted,
           job,
@@ -62,19 +63,19 @@ test("link imports append ti's songs in 100-song transactions, one per turn, kee
     assert.equal(stopped.result, null);
     assert.deepEqual(appends, [100]);
     assert.equal(published, 1); // A partial import is visible even when cancellation prevents completion.
-    assert.equal(Effect.runSync(store.getPlaylist(made.playlistId))!.items.length, 100);
+    assert.equal(runTestSync(store.getPlaylist(made.playlistId))!.items.length, 100);
     active = true;
     appends.length = 0;
-    const done = Effect.runSync(finishLinkImport(counted, job, Effect.void, () => active));
+    const done = runTestSync(finishLinkImport(counted, job, Effect.void, () => active));
     assert.equal(done?.state.kind, "done");
     assert.deepEqual(appends, [100, 100, 50]);
-    const songs = Effect.runSync(store.getPlaylist(made.playlistId))!.items;
+    const songs = runTestSync(store.getPlaylist(made.playlistId))!.items;
     assert.deepEqual(
       songs.map((item) => (item.source === "library" ? "library" : item.song.title)),
       titles,
     );
-    Effect.runSync(finishLinkImport(store, job, Effect.void, () => active));
-    assert.equal(Effect.runSync(store.getPlaylist(made.playlistId))!.items.length, 250);
+    runTestSync(finishLinkImport(store, job, Effect.void, () => active));
+    assert.equal(runTestSync(store.getPlaylist(made.playlistId))!.items.length, 250);
   } finally {
     fixture.close();
   }
@@ -84,7 +85,7 @@ test("a link import tells how many of its songs have landed, before the first sl
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
-    const made = Effect.runSync(store.createPlaylist("Counted", []));
+    const made = runTestSync(store.createPlaylist("Counted", []));
     const titles = Array.from({ length: 250 }, (_, i) => `Song ${i}`);
     const plan = planLinkImport<YtAlbumSong, never>(
       {
@@ -101,7 +102,7 @@ test("a link import tells how many of its songs have landed, before the first sl
     );
     const job = startPlaylistImport(plan, { playlistId: made.playlistId, name: made.name });
     const told: [number, number][] = [];
-    Effect.runSync(
+    runTestSync(
       finishLinkImport(
         store,
         job,
@@ -202,6 +203,7 @@ test("actual startup jobs cannot read before global settlement; navigation pause
       write: () => {},
       context: () => ({ background: [], offline: true }),
       build: () => ({ version: "test", commit: "test" }),
+      later: () => {},
     });
     const work = createStartupWork({
       now: () => now,
@@ -229,7 +231,7 @@ test("actual startup jobs cannot read before global settlement; navigation pause
     const controller = new AbortController();
     const cold = session.routeCommitted("/")!;
     const first = traceQueries(fixture.db, () =>
-      Effect.runPromise(readScanIndex(store, ["/Music"], turn), { signal: controller.signal }),
+      runTestPromise(readScanIndex(store, ["/Music"], turn), { signal: controller.signal }),
     );
     assert.equal(first.queries.length, 0);
     assert.equal(frames.size, 0);
@@ -254,7 +256,7 @@ test("actual startup jobs cannot read before global settlement; navigation pause
     session.content(navigation);
     session.end(navigation);
     let finished = false;
-    const result = Effect.runPromise(
+    const result = runTestPromise(
       Effect.gen(function* () {
         const index = yield* readScanIndex(store, ["/Music"], turn);
         const duplicates = yield* checkDuplicateFiles(store, turn, () =>
@@ -313,13 +315,12 @@ const scanned = async (
 
 test("scan saves 100-file slices, one transaction per turn with artwork first, keeping moved identity and a retry after interruption", async () => {
   const { saveScanBatch } = await import("./startupJobs.ts");
+  const hundred = { size: () => 100, took: () => {}, now: () => 0 };
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
     const old = await scanned("/Startup/old.mp3", "Moved");
-    const [movedId] = Effect.runSync(
-      store.saveBatch([old], [], [], { linkEntries: false }),
-    ).trackIds;
+    const [movedId] = runTestSync(store.saveBatch([old], [], [], { linkEntries: false })).trackIds;
     const read = [
       ...(await Promise.all(
         Array.from({ length: 249 }, (_, i) => scanned(`/Startup/added-${i}.mp3`, `Added ${i}`)),
@@ -345,8 +346,15 @@ test("scan saves 100-file slices, one transaction per turn with artwork first, k
       });
     });
     const controller = new AbortController();
-    const saving = Effect.runPromise(
-      saveScanBatch(counted, { missing: [old], read, isIndexed: () => false }, [art], turn),
+    const saving = runTestPromise(
+      saveScanBatch(
+        counted,
+        { missing: [old], read, isIndexed: () => false },
+        [art],
+        turn,
+        undefined,
+        hundred,
+      ),
       { signal: controller.signal },
     );
     // Reconciliation's CPU steps take their own turns before any write.
@@ -356,12 +364,12 @@ test("scan saves 100-file slices, one transaction per turn with artwork first, k
     }
     // One transaction per turn: the first 100-file slice, with the batch's artwork.
     assert.deepEqual(saves, [{ tracks: 100, artwork: 1, moves: 0 }]);
-    assert.equal(Effect.runSync(store.knownFiles(["/Startup"])).length, 101);
+    assert.equal(runTestSync(store.knownFiles(["/Startup"])).length, 101);
     controller.abort();
     await assert.rejects(saving);
     assert.equal(turns.length, 0);
     saves.length = 0;
-    const retried = Effect.runSync(
+    const retried = runTestSync(
       saveScanBatch(
         counted,
         {
@@ -371,6 +379,8 @@ test("scan saves 100-file slices, one transaction per turn with artwork first, k
         },
         [],
         Effect.void,
+        undefined,
+        hundred,
       ),
     );
     assert.equal(retried.count, 250);
@@ -379,14 +389,63 @@ test("scan saves 100-file slices, one transaction per turn with artwork first, k
       { tracks: 100, artwork: 0, moves: 0 },
       { tracks: 50, artwork: 0, moves: 1 },
     ]);
-    assert.equal(Effect.runSync(store.songsByIds([movedId!]))[0]!.path, "/Startup/moved.mp3");
-    assert.equal(Effect.runSync(store.knownFiles(["/Startup"])).length, 250);
+    assert.equal(runTestSync(store.songsByIds([movedId!]))[0]!.path, "/Startup/moved.mp3");
+    assert.equal(runTestSync(store.knownFiles(["/Startup"])).length, 250);
     // Artwork alone (read files that saved nothing) still gets its own transaction.
     saves.length = 0;
-    Effect.runSync(
+    runTestSync(
       saveScanBatch(counted, { missing: [], read: [], isIndexed: () => true }, [art], Effect.void),
     );
     assert.deepEqual(saves, [{ tracks: 0, artwork: 1, moves: 0 }]);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("a slow scan save makes the next slice smaller, so each stays near Core's slice budget", async () => {
+  const { saveScanBatch, scanSavePace } = await import("./startupJobs.ts");
+  const { SCAN_SLICE_BUDGET_MS } = await import("@wave/core");
+  const fixture = await createFastAgainFixture();
+  try {
+    const store = await loadLibraryStore(root, fixture.db);
+    const read = await Promise.all(
+      Array.from({ length: 60 }, (_, i) => scanned(`/Paced/${i}.mp3`, `Paced ${i}`)),
+    );
+    // Each file takes a quarter of the budget to save, on this clock.
+    let clock = 0;
+    const sizes: number[] = [];
+    const slow: typeof store = {
+      ...store,
+      saveBatch: (tracks, artwork, moves = [], options) => {
+        sizes.push(tracks.length);
+        clock += (tracks.length * SCAN_SLICE_BUDGET_MS) / 4;
+        return store.saveBatch(tracks, artwork, moves, options);
+      },
+    };
+    const pace = scanSavePace(() => clock, 20);
+    runTestSync(
+      saveScanBatch(
+        slow,
+        { missing: [], read, isIndexed: () => false },
+        [],
+        Effect.void,
+        undefined,
+        pace,
+      ),
+    );
+    // 20 files take 150 ms: the next slice is the 4 the budget holds, then it keeps within a
+    // file of the budget (a 5-file slice takes 37.5 ms, a 4-file one exactly the budget).
+    assert.equal(sizes[0], 20);
+    assert.equal(sizes[1], 4);
+    assert.ok(
+      sizes.slice(1).every((size) => size === 4 || size === 5),
+      `${sizes}`,
+    );
+    assert.equal(
+      sizes.reduce((sum, size) => sum + size, 0),
+      60,
+    );
+    assert.ok(pace.size() === 4 || pace.size() === 5);
   } finally {
     fixture.close();
   }
@@ -401,13 +460,13 @@ test("duplicate jobs read audio pair by pair, retain the older track and recover
       await scanned("/Startup/pair.mp3", "Pair"),
       await scanned("/Startup/pair.m4a", "Pair"),
     ];
-    const saved = Effect.runSync(store.saveBatch(files, [], [], { linkEntries: false }));
+    const saved = runTestSync(store.saveBatch(files, [], [], { linkEntries: false }));
     const failing = checkDuplicateFiles(store, Effect.void, () => Effect.fail("native failure"));
-    assert.throws(() => Effect.runSync(failing), /native failure/);
-    assert.equal(Effect.runSync(store.songsByIds(saved.trackIds)).length, 2);
+    assert.throws(() => runTestSync(failing), /native failure/);
+    assert.equal(runTestSync(store.songsByIds(saved.trackIds)).length, 2);
     const paths: (readonly string[])[] = [];
     let turns = 0;
-    const checked = Effect.runSync(
+    const checked = runTestSync(
       checkDuplicateFiles(
         store,
         Effect.sync(() => {
@@ -421,10 +480,10 @@ test("duplicate jobs read audio pair by pair, retain the older track and recover
     );
     assert.deepEqual(paths, [["/Startup/pair.m4a", "/Startup/pair.mp3"]]);
     assert.deepEqual(checked.changed, saved.trackIds);
-    assert.equal(Effect.runSync(store.songsByIds(saved.trackIds)).length, 1);
+    assert.equal(runTestSync(store.songsByIds(saved.trackIds)).length, 1);
     assert.ok(turns >= 5);
     assert.deepEqual(
-      Effect.runSync(checkDuplicateFiles(store, Effect.void, () => Effect.die("unexpected read"))),
+      runTestSync(checkDuplicateFiles(store, Effect.void, () => Effect.die("unexpected read"))),
       { outcomes: [], changed: [] },
     );
   } finally {
@@ -438,7 +497,7 @@ test("a completed scan that saved nothing still prunes what other saves left, sk
   try {
     const store = await loadLibraryStore(root, fixture.db);
     const ariana = () =>
-      Effect.runSync(store.listArtists)
+      runTestSync(store.listArtists)
         .filter((artist) => /Ariana|Social House/.test(artist.name))
         .map((artist) => ({
           name: artist.name,
@@ -452,7 +511,7 @@ test("a completed scan that saved nothing still prunes what other saves left, sk
       turns++;
     });
     // A scan brings in a collaboration and completes (a changed scan prunes).
-    Effect.runSync(
+    runTestSync(
       store.saveBatch(
         [await file("/Startup/boyfriend.mp3", "boyfriend", "Ariana Grande & Social House", null)],
         [],
@@ -460,9 +519,9 @@ test("a completed scan that saved nothing still prunes what other saves left, sk
         { linkEntries: false },
       ),
     );
-    Effect.runSync(finishScanIndex(store, [], turn));
+    runTestSync(finishScanIndex(store, [], turn));
     // A download lands outside any scan (saveBatch, no prune).
-    Effect.runSync(
+    runTestSync(
       store.saveBatch(
         [await file("/Startup/7 rings.mp3", "7 rings", "Ariana Grande", "cover")],
         [{ hash: "cover", path: "/covers/1.jpg", thumbPath: "/covers/1.t.jpg", palette: {} }],
@@ -470,10 +529,10 @@ test("a completed scan that saved nothing still prunes what other saves left, sk
         { linkEntries: false },
       ),
     );
-    const roots = Effect.runSync(store.ensureDefaultRoot("/Startup")).map((row) => row.path);
+    const roots = runTestSync(store.ensureDefaultRoot("/Startup")).map((row) => row.path);
     // The next rescan finds nothing new or gone; as on ti, its end re-files credits and images.
     turns = 0;
-    Effect.runSync(finishScanIndex(store, [], turn));
+    runTestSync(finishScanIndex(store, [], turn));
     assert.equal(turns, 1);
     assert.deepEqual(ariana(), [
       { name: "Ariana Grande", songs: 2, image: "/covers/1.t.jpg" },
@@ -481,20 +540,18 @@ test("a completed scan that saved nothing still prunes what other saves left, sk
     ]);
     // Then it records the scan. Nothing else wrote since that prune: the next unchanged scan
     // has nothing to clean up.
-    const recorded = traceQueries(fixture.db, () => Effect.runSync(store.markScanned(roots, 1)));
+    const recorded = traceQueries(fixture.db, () => runTestSync(store.markScanned(roots, 1)));
     assert.ok(recorded.queries.some((query) => /^\s*update/i.test(query.sql)));
-    const unchanged = traceQueries(fixture.db, () =>
-      Effect.runSync(finishScanIndex(store, [], turn)),
-    );
+    const unchanged = traceQueries(fixture.db, () => runTestSync(finishScanIndex(store, [], turn)));
     assert.ok(unchanged.queries.every((query) => /^\s*select/i.test(query.sql)));
     assert.ok(unchanged.queries.length <= 1);
     // A changed scan prunes on its own turn.
     turns = 0;
     const gone = await scanned("/Startup/gone.mp3", "Gone");
-    const saved = Effect.runSync(store.saveBatch([gone], [], [], { linkEntries: false }));
-    Effect.runSync(finishScanIndex(store, [gone.path], turn));
+    const saved = runTestSync(store.saveBatch([gone], [], [], { linkEntries: false }));
+    runTestSync(finishScanIndex(store, [gone.path], turn));
     assert.equal(turns, 1);
-    assert.equal(Effect.runSync(store.songsByIds(saved.trackIds)).length, 0);
+    assert.equal(runTestSync(store.songsByIds(saved.trackIds)).length, 0);
   } finally {
     fixture.close();
   }
@@ -506,20 +563,20 @@ test("a new process's first completed scan prunes even when it saved nothing, as
   try {
     const before = await loadLibraryStore(root, fixture.db);
     const save = async (title: string, artist: string) =>
-      Effect.runSync(
+      runTestSync(
         before.saveBatch([await scanned(`/Startup/${title}.mp3`, title, { artist })], [], [], {
           linkEntries: false,
         }),
       );
     await save("boyfriend", "Ariana Grande & Social House");
-    Effect.runSync(finishScanIndex(before, [], Effect.void));
+    runTestSync(finishScanIndex(before, [], Effect.void));
     // A download lands, then Wave stops before any scan.
     await save("7 rings", "Ariana Grande");
     // The next launch's scan finds nothing changed; its end still re-files the credits.
     const after = await loadLibraryStore(root, fixture.db);
-    Effect.runSync(finishScanIndex(after, [], Effect.void));
+    runTestSync(finishScanIndex(after, [], Effect.void));
     assert.deepEqual(
-      Effect.runSync(after.listArtists)
+      runTestSync(after.listArtists)
         .filter((artist) => /Ariana|Social House/.test(artist.name))
         .map((artist) => [artist.name, artist.trackCount]),
       [
@@ -544,7 +601,7 @@ test("native scan input preparation yields before work and at its operation cap,
     turns.push(() => resume(Effect.void));
   });
   let done = false;
-  const promise = Effect.runPromise(scanInputColumns(rows, turn)).then((result) => {
+  const promise = runTestPromise(scanInputColumns(rows, turn)).then((result) => {
     done = true;
     return result;
   });
@@ -571,7 +628,7 @@ test("resuming filled import downloads builds its Library matches in steps and i
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
-    Effect.runSync(
+    runTestSync(
       store.saveBatch([await scanned("/Startup/present.mp3", "Present")], [], [], {
         linkEntries: false,
       }),
@@ -587,14 +644,14 @@ test("resuming filled import downloads builds its Library matches in steps and i
     });
     const present = song("Present", "present"),
       absent = song("Absent", "absent");
-    const made = Effect.runSync(
+    const made = runTestSync(
       store.createPlaylist("Download resume", [
         { source: "stream", song: present },
         { source: "stream", song: absent },
       ]),
     );
     let turns = 0;
-    const ready = Effect.runSync(
+    const ready = runTestSync(
       readImportDownloadInput(
         store,
         made.playlistId,
@@ -608,7 +665,7 @@ test("resuming filled import downloads builds its Library matches in steps and i
     assert.equal(ready?.inLibrary(present), true);
     assert.equal(ready?.inLibrary(absent), false);
     let current = true;
-    const stopped = Effect.runSync(
+    const stopped = runTestSync(
       readImportDownloadInput(
         store,
         made.playlistId,
@@ -631,33 +688,33 @@ test("with Skip voice notes on, indexed voice notes leave the Library before a s
     const store = await loadLibraryStore(root, fixture.db);
     const note = await scanned("/Startup/PTT-20260412-WA0017.opus", "PTT-20260412-WA0017");
     const song = await scanned("/Startup/Airbag.mp3", "Airbag", { artist: "Radiohead" });
-    Effect.runSync(store.saveBatch([note, song], [], [], { linkEntries: false }));
+    runTestSync(store.saveBatch([note, song], [], [], { linkEntries: false }));
     const paths = (files: readonly { readonly path: string }[]) => files.map((file) => file.path);
 
-    const off = Effect.runSync(readScanIndex(store, ["/Startup"], Effect.void));
+    const off = runTestSync(readScanIndex(store, ["/Startup"], Effect.void));
     assert.deepEqual(paths(off.known).toSorted(), [note.path, song.path].toSorted());
     assert.equal(off.left, 0);
 
-    const on = Effect.runSync(readScanIndex(store, ["/Startup"], Effect.void, true));
+    const on = runTestSync(readScanIndex(store, ["/Startup"], Effect.void, true));
     assert.equal(on.left, 1);
     assert.deepEqual(paths(on.known), [song.path]);
     assert.deepEqual([...on.indexed], [song.path]);
     assert.deepEqual([...on.skipped], [note.path]);
     // The native scan compares the skipped file too, so it isn't read while unchanged.
     assert.deepEqual(paths(on.scanKnown).toSorted(), [note.path, song.path].toSorted());
-    assert.deepEqual(paths(Effect.runSync(store.knownFiles(["/Startup"]))), [song.path]);
+    assert.deepEqual(paths(runTestSync(store.knownFiles(["/Startup"]))), [song.path]);
 
-    const again = Effect.runSync(readScanIndex(store, ["/Startup"], Effect.void, true));
+    const again = runTestSync(readScanIndex(store, ["/Startup"], Effect.void, true));
     assert.equal(again.left, 0);
     assert.deepEqual([...again.skipped], [note.path]);
 
     // A file skipped once that a scan with the switch off indexed, music by the rule now
     // (retagged), is compared once, as the indexed file it is, and no longer skipped.
-    Effect.runSync(store.skipFiles([{ path: song.path, sizeBytes: 1, modifiedAt: 1 }]));
-    Effect.runSync(store.saveBatch([song], [], [], { linkEntries: false }));
-    const retagged = Effect.runSync(readScanIndex(store, ["/Startup"], Effect.void, true));
+    runTestSync(store.skipFiles([{ path: song.path, sizeBytes: 1, modifiedAt: 1 }]));
+    runTestSync(store.saveBatch([song], [], [], { linkEntries: false }));
+    const retagged = runTestSync(readScanIndex(store, ["/Startup"], Effect.void, true));
     assert.deepEqual(paths(retagged.scanKnown).toSorted(), [note.path, song.path].toSorted());
-    assert.deepEqual(paths(Effect.runSync(store.skippedFiles(["/Startup"]))), [note.path]);
+    assert.deepEqual(paths(runTestSync(store.skippedFiles(["/Startup"]))), [note.path]);
   } finally {
     fixture.close();
   }

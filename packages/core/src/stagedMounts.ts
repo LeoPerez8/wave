@@ -68,3 +68,28 @@ export const pagerMounts = ({
   }
   return { order, counts };
 };
+
+export type ListMountsInput = {
+  /** How many rows the list holds. */
+  readonly count: number;
+  /** How many rows one frame can mount within its budget. */
+  readonly perFrame: number;
+  /** About how many rows fill the screen. */
+  readonly screen: number;
+};
+
+/**
+ * How many of a virtualized list's rows it is given in each frame, cumulative,
+ * ending with all of them (#1442). The list mounts only the rows on screen,
+ * but its first frame would mount a whole screen of them at once; so it grows
+ * by `perFrame` rows a frame until about a screen's worth is there, then takes
+ * the rest, which it leaves unmounted until a scroll reaches them.
+ */
+export const listMounts = ({ count, perFrame, screen }: ListMountsInput): number[] => {
+  const step = Math.max(1, perFrame);
+  const counts: number[] = [];
+  for (let mounted = step; mounted < count && mounted < screen; mounted += step)
+    counts.push(mounted);
+  counts.push(Math.max(0, count));
+  return counts;
+};

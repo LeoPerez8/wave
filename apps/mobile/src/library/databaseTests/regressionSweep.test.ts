@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Effect from "effect/Effect";
+import { runTestSync } from "../../lib/steppedTesting.ts";
 
 import { createPlaylistReplay } from "../../../bench/fastAgain/playlistReplay.ts";
 import { fileURLToPath } from "node:url";
@@ -54,7 +55,7 @@ test("shared Recap availability reads bounded pages once and no SQL on unchanged
     home.setActive(false);
     peer.setActive(false);
     for (let i = 0; i < 3; i++)
-      Effect.runSync(
+      runTestSync(
         replay.store.saveImportedPlays([
           { trackId: fixture.songIds[0]!, startedAt: fixture.now - i },
         ]),
@@ -167,7 +168,7 @@ test("two requested artist rows seek only their indexed credits with complete me
   try {
     const store = await loadLibraryStore(CURRENT_ROOT, fixture.db);
     const ids = [fixture.targets.small.artistId, fixture.targets.large.artistId];
-    const scoped = traceQueries(fixture.db, () => Effect.runSync(store.artistsByIds(ids)));
+    const scoped = traceQueries(fixture.db, () => runTestSync(store.artistsByIds(ids)));
     assert.deepEqual(scoped.result, selectArtistsBefore600(fixture.db, { ids }));
     assert.deepEqual(
       scoped.result.map((row) => row.trackCount).toSorted((a, b) => a - b),
@@ -193,7 +194,7 @@ test("a genre opening replaces full hydration with a header and 50 indexed summa
   try {
     const store = await loadLibraryStore(CURRENT_ROOT, fixture.db);
     const opening = traceQueries(fixture.db, () =>
-      Effect.runSync(store.openGenre(fixture.genreId, { key: "title", descending: false })),
+      runTestSync(store.openGenre(fixture.genreId, { key: "title", descending: false })),
     );
     assert.equal(opening.result!.genre.trackCount, 334);
     assert.equal(opening.result!.songs.length, 50);
@@ -220,7 +221,7 @@ test("the shared Artist graph reads each source once and yields through its CPU 
     >(CURRENT_ROOT, "apps/mobile/src/home/artistGraph.ts");
     let yields = 0;
     const traced = traceQueries(fixture.db, () =>
-      Effect.runSync(
+      runTestSync(
         readArtistGraph(
           store,
           Effect.sync(() => {
@@ -229,7 +230,7 @@ test("the shared Artist graph reads each source once and yields through its CPU 
         ),
       ),
     );
-    assert.deepEqual(traced.result, Effect.runSync(readArtistGraph(store)));
+    assert.deepEqual(traced.result, runTestSync(readArtistGraph(store)));
     assert.ok(yields > fixture.playEvents / 512, `only ${yields} yields`);
     // One read a source, whatever the Library's size (#1351); the build's steps still yield.
     assert.ok(traced.queries.every((query) => !/OFFSET/.test(query.sql)));
@@ -289,7 +290,7 @@ test("a real paged read overtaken by a playlist edit cannot republish the added 
       session.get().slots.some((x) => x?.track.id === offer.track.id),
       false,
     );
-    const feedback = Effect.runSync(
+    const feedback = runTestSync(
       replay.store.playlistRecommendationInput(fixture.playlistId),
     ).feedback;
     assert.equal(feedback.filter((signal) => signal.track.id === offer.track.id).length, 1);

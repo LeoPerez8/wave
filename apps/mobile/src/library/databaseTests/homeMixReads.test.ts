@@ -8,6 +8,7 @@ import { test } from "node:test";
 import { setImmediate } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
+import { runTestPromise, runTestSync } from "../../lib/steppedTesting.ts";
 import type { PlayEvent, YtAlbumSong } from "@wave/core";
 import { sql } from "drizzle-orm";
 import { addCandidates } from "@wave/client/db/candidateCatalog";
@@ -103,7 +104,7 @@ const measure = async (size: FastAgainSize) => {
     const radio = seed(fixture);
     const { store, reads } = counting(await loadLibraryStore(root, fixture.db));
     const traced = traceQueries(fixture.db, () =>
-      Effect.runSync(
+      runTestSync(
         Effect.gen(function* () {
           yield* readMixInputs(store, Effect.void, fixture.now);
           yield* readMixCatalog(store, Effect.void);
@@ -148,7 +149,7 @@ test("off Home, a mix build stops after the read or slice under way and finishes
   try {
     seed(fixture);
     const raw = await loadLibraryStore(root, fixture.db);
-    const expected = Effect.runSync(readMixInputs(raw, Effect.void, fixture.now));
+    const expected = runTestSync(readMixInputs(raw, Effect.void, fixture.now));
     const { store, reads } = counting(raw);
     const work = createHomeWork();
     let visible = true;
@@ -168,7 +169,7 @@ test("off Home, a mix build stops after the read or slice under way and finishes
       Effect.promise(() => setImmediate()),
       work.turn,
     );
-    const built = Effect.runPromise(readMixInputs(store, between, fixture.now));
+    const built = runTestPromise(readMixInputs(store, between, fixture.now));
     while (reads.length < 3) await setImmediate();
     // Settings is shown.
     show(false);

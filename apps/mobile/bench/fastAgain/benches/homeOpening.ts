@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { setImmediate } from "node:timers/promises";
 import * as Effect from "effect/Effect";
+import { runTestPromise, runTestSync } from "../../../src/lib/steppedTesting.ts";
 import type { DiscoverMixes, MagicSong, TasteProfile } from "@wave/core";
 
 import { traceQueries } from "@wave/client/testing";
@@ -104,8 +105,8 @@ export const bench: FastAgainBench = {
         : [];
     };
     // Saved choices are setup, outside measurement. No day's build is due in this case.
-    const toMagic = core.magicLibrarySongs(Effect.runSync(store.listArtists));
-    const magic = Effect.runSync(store.listSongs)
+    const toMagic = core.magicLibrarySongs(runTestSync(store.listArtists));
+    const magic = runTestSync(store.listSongs)
       .filter((song) => song.path !== null)
       .map(toMagic);
     const picks = core.magicQueuePicks(null, magic, {
@@ -118,30 +119,30 @@ export const bench: FastAgainBench = {
     let displayedPicks = picks;
     let dueLibrary: readonly MagicSong[] = [];
     const steps: readonly [string, () => unknown][] = [
-      ["homeAdded", () => Effect.runSync(store.homeAdded)],
-      ["homePlays", () => Effect.runSync(store.homePlays)],
-      ["homeFavorites", () => Effect.runSync(store.homeFavorites)],
+      ["homeAdded", () => runTestSync(store.homeAdded)],
+      ["homePlays", () => runTestSync(store.homePlays)],
+      ["homeFavorites", () => runTestSync(store.homeFavorites)],
       // The remaining Home readers are intentionally included, not attributed to this ticket's fix.
       [
         "recapAvailability",
-        () => core.availableRecaps(Effect.runSync(store.countedListening), fixture.now),
+        () => core.availableRecaps(runTestSync(store.countedListening), fixture.now),
       ],
       [
         "mostPlayedOfAllTime",
-        () => Effect.runSync(stats.topAlbumsAndArtists(store, "all", core.STATS_TOP, 5)),
+        () => runTestSync(stats.topAlbumsAndArtists(store, "all", core.STATS_TOP, 5)),
       ],
-      ["libraryCounts", () => Effect.runSync(store.countLibrary)],
-      ["listeningSums", () => Effect.runSync(store.listeningSums)],
+      ["libraryCounts", () => runTestSync(store.countLibrary)],
+      ["listeningSums", () => runTestSync(store.listeningSums)],
       [
         "magicQueueLibraryAndDueCheck",
         () => {
           if (reads !== null) {
-            return Effect.runSync(reads.magicQueueRead(displayedPicks.trackIds).read(store)).map(
+            return runTestSync(reads.magicQueueRead(displayedPicks.trackIds).read(store)).map(
               (song) => song.id,
             );
           }
-          const songs = Effect.runSync(store.listSongs).filter((song) => song.path !== null);
-          const convert = core.magicLibrarySongs(Effect.runSync(store.listArtists));
+          const songs = runTestSync(store.listSongs).filter((song) => song.path !== null);
+          const convert = core.magicLibrarySongs(runTestSync(store.listArtists));
           const library = {
             songs: new Map(songs.map((song) => [String(song.id), song])),
             magic: songs.map(convert),
@@ -161,8 +162,8 @@ export const bench: FastAgainBench = {
             savedMixes.map(async (saved) => {
               const videos =
                 knownRead === undefined
-                  ? Effect.runSync(store.knownVideos)
-                  : await Effect.runPromise(knownRead.get);
+                  ? runTestSync(store.knownVideos)
+                  : await runTestPromise(knownRead.get);
               assert.equal(core.discoverMixesDue(saved, { now: fixture.now, played: true }), false);
               return { videos, mixes: shownMixes(saved, videos) };
             }),
@@ -199,7 +200,7 @@ export const bench: FastAgainBench = {
         const startupTasks: number[] = [];
         const { turn, end } = freeTurnTasks((ms) => startupTasks.push(ms));
         if (trace) {
-          const measured = traceQueries(fixture.db, () => Effect.runSync(startup.run(Effect.void)));
+          const measured = traceQueries(fixture.db, () => runTestSync(startup.run(Effect.void)));
           results.push(measured.result);
           work.push({
             read: "startupScanImportsYtResumeDuplicates",
@@ -207,7 +208,7 @@ export const bench: FastAgainBench = {
             statements: measured.queries.length,
           });
         } else {
-          results.push(await Effect.runPromise(startup.run(turn)));
+          results.push(await runTestPromise(startup.run(turn)));
           end();
         }
         durations.push(startupTasks.reduce((sum, ms) => sum + ms, 0));
@@ -384,7 +385,7 @@ export const bench: FastAgainBench = {
                 visible.push(
                   knownRead === undefined
                     ? savedMixes.map((saved) => {
-                        const videos = Effect.runSync(store.knownVideos);
+                        const videos = runTestSync(store.knownVideos);
                         return { videos, mixes: shownMixes(saved, videos) };
                       })
                     : visibleReturn,
