@@ -8,9 +8,10 @@ import type { DjVariety } from "./djSettings.ts";
 import { isDisliked, NO_DISLIKES, type DislikedSongs } from "./dislikes.ts";
 import type { GenreProfileOf } from "./genreAffinity.ts";
 import { magicArtistKey, type MagicSession } from "./magicQueue.ts";
+import { finishSteps, sortSteps } from "./buildSteps.ts";
 import {
-  magicLearnedExtras,
-  magicRadioEligible,
+  magicLearnedExtrasSteps,
+  magicRadioEligibleSteps,
   magicRadioExclusions,
 } from "./magicRadioLearning.ts";
 import type { RankedRadioSong } from "./radioRanking.ts";
@@ -75,48 +76,74 @@ export const djVarietyCandidates = <S extends RankedRadioSong>(
   graph: ArtistGraph | null,
   pools: DjCandidatePools<S>,
   size = 0,
-): DjCandidatePools<S> => {
+): DjCandidatePools<S> => finishSteps(djVarietyCandidatesSteps(session, graph, pools, size));
+
+/** A pool's songs, each one's hops and whether a batch can take it, and the pass that took it. */
+interface VarietyPool<S> {
+  readonly songs: readonly S[];
+  readonly distances: readonly number[];
+  readonly usable: readonly boolean[];
+  /** The pass that took each song, by its place in [songs]. */
+  readonly taken: Map<number, number>;
+}
+
+/** `djVarietyCandidates`, a step per candidate and pass, for a background slice (#1448). */
+export function* djVarietyCandidatesSteps<S extends RankedRadioSong>(
+  session: MagicSession,
+  graph: ArtistGraph | null,
+  pools: DjCandidatePools<S>,
+  size = 0,
+): Generator<void, DjCandidatePools<S>> {
   if (session.dj === undefined) return pools;
   const hopsOf = djArtistHops(session, graph);
-  const distance = (song: S): number => hopsOf(song.artists);
-  const eligible = magicRadioEligible(session, [...pools.seed, ...pools.liked]);
-  const extras = new Set(magicLearnedExtras(pools.seed, pools.liked));
+  const eligible = yield* magicRadioEligibleSteps(session, [...pools.seed, ...pools.liked]);
+  const extras = new Set(yield* magicLearnedExtrasSteps(pools.seed, pools.liked));
   const reach = REACH[session.dj.variety];
   const once = session.dj.variety === "high";
   const held = new Set<string>();
-  const pool = (songs: readonly S[], usable: (song: S) => boolean) => ({
-    songs,
-    distances: songs.map(distance),
-    usable: songs.map(usable),
-    /** The pass that took each song, by its place in [songs]. */
-    taken: new Map<number, number>(),
-  });
-  const seed = pool(pools.seed, eligible);
-  const liked = pool(pools.liked, (song) => eligible(song) && extras.has(song));
+  function* pool(
+    songs: readonly S[],
+    usable: (song: S) => boolean,
+  ): Generator<void, VarietyPool<S>> {
+    const distances: number[] = [];
+    const usables: boolean[] = [];
+    for (const song of songs) {
+      distances.push(hopsOf(song.artists));
+      usables.push(usable(song));
+      yield;
+    }
+    return { songs, distances, usable: usables, taken: new Map() };
+  }
+  const seed = yield* pool(pools.seed, eligible);
+  const liked = yield* pool(pools.liked, (song) => eligible(song) && extras.has(song));
   let pass = 0;
   let count = 0;
   /** Takes the songs from [from] to [to] hops out, in ranked order, while fewer than [limit] usable ones are taken. */
-  const take = (from: number, to: number, limit: number, unique: boolean): void => {
+  function* take(from: number, to: number, limit: number, unique: boolean): Generator<void> {
     pass++;
     for (const each of [seed, liked])
       for (const [at, song] of each.songs.entries()) {
         if (count >= limit) return;
+        yield;
         if (each.taken.has(at) || each.distances[at]! < from || each.distances[at]! > to) continue;
         if (unique && song.artists.some((artist) => held.has(artist))) continue;
         each.taken.set(at, pass);
         if (each.usable[at]) count++;
         for (const artist of song.artists) held.add(artist);
       }
-  };
-  take(0, reach, Infinity, once);
-  for (let hop = reach + 1; hop <= OUTSIDE; hop++) take(hop, hop, size, once);
-  if (once) for (let hop = 0; hop <= OUTSIDE; hop++) take(hop, hop, size, false);
-  const kept = (each: typeof seed): S[] =>
-    [...each.taken.entries()]
-      .sort(([a, passA], [b, passB]) => passA - passB || a - b)
-      .map(([at]) => each.songs[at]!);
-  return { seed: kept(seed), liked: kept(liked) };
-};
+  }
+  yield* take(0, reach, Infinity, once);
+  for (let hop = reach + 1; hop <= OUTSIDE; hop++) yield* take(hop, hop, size, once);
+  if (once) for (let hop = 0; hop <= OUTSIDE; hop++) yield* take(hop, hop, size, false);
+  function* kept(each: VarietyPool<S>): Generator<void, S[]> {
+    const order = yield* sortSteps(
+      [...each.taken.entries()],
+      ([a, passA], [b, passB]) => passA - passB || a - b,
+    );
+    return order.map(([at]) => each.songs[at]!);
+  }
+  return { seed: yield* kept(seed), liked: yield* kept(liked) };
+}
 
 /**
  * The song of the radio [radioId]'s page [songs] that starts a DJ queue

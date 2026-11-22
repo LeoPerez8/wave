@@ -199,10 +199,21 @@ export function* rankRadioSongsSteps(
 /** Blend ranked pools at New music's share, filling either short pool from the other. */
 export const radioRankingBatch = (
   ranked: readonly RankedRadioSong[],
+  options: { readonly size: number; readonly newMusicShare: number },
+): RankedRadioSong[] => finishSteps(radioRankingBatchSteps(ranked, options));
+
+/** `radioRankingBatch`, a step per ranked song, for a background slice (#1448). */
+export function* radioRankingBatchSteps(
+  ranked: readonly RankedRadioSong[],
   { size, newMusicShare }: { readonly size: number; readonly newMusicShare: number },
-): RankedRadioSong[] => {
-  const fresh = ranked.filter((song) => song.source === "stream");
-  const library = ranked.filter((song) => song.source === "library");
+): Generator<void, RankedRadioSong[]> {
+  const fresh: RankedRadioSong[] = [];
+  const library: RankedRadioSong[] = [];
+  for (const song of ranked) {
+    if (song.source === "stream") fresh.push(song);
+    else if (song.source === "library") library.push(song);
+    yield;
+  }
   const target = Math.round(size * Math.max(0, Math.min(1, newMusicShare)));
   const local = library.slice(0, size - Math.min(fresh.length, target));
   const streams = fresh.slice(0, size - local.length);
@@ -215,4 +226,4 @@ export const radioRankingBatch = (
   }
   if (streams.length === 0) return local;
   return result;
-};
+}
