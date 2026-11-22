@@ -171,6 +171,10 @@ type Print = readonly unknown[];
 const decoderOf = (decoder: { mapFromDriverValue: unknown }): unknown =>
   Object.getPrototypeOf(decoder) === Object.prototype ? decoder.mapFromDriverValue : decoder;
 
+/** A SQL value's decoder, which drizzle keeps off its public type. */
+const sqlDecoder = (value: SQL): unknown =>
+  decoderOf((value as unknown as { decoder: { mapFromDriverValue: unknown } }).decoder);
+
 const printOf = (fields: Fields, joins: Record<string, boolean> | undefined): Print => {
   const print: unknown[] = [joins === undefined ? "" : JSON.stringify(joins)];
   for (const { path, field } of fields as unknown as readonly {
@@ -179,9 +183,9 @@ const printOf = (fields: Fields, joins: Record<string, boolean> | undefined): Pr
   }[]) {
     print.push(path.join("\u0000"));
     if (is(field, Column)) print.push(field);
-    else if (is(field, SQL)) print.push(decoderOf(field.decoder));
-    else if (is(field, Subquery)) print.push(decoderOf(field._.sql.decoder));
-    else print.push(decoderOf((field as SQL.Aliased).sql.decoder));
+    else if (is(field, SQL)) print.push(sqlDecoder(field));
+    else if (is(field, Subquery)) print.push(sqlDecoder(field._.sql));
+    else print.push(sqlDecoder((field as SQL.Aliased).sql));
   }
   return print;
 };

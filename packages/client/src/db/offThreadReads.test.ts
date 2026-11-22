@@ -171,10 +171,10 @@ test("a failed read rolls back and frees its connection for the next", async () 
 
 // A decoder that costs [time] 1 ms a value, so a test sees how long mapping held the thread.
 const slow = { time: clock(), decoded: 0 };
-const slowly = (value: unknown) => {
+const slowly = (value: unknown): number => {
   slow.time.pass(1);
   slow.decoded++;
-  return value;
+  return value as number;
 };
 const slowIds = (d: LibraryDatabase, where?: ReturnType<typeof inArray>) =>
   d
