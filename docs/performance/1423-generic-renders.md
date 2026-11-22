@@ -121,18 +121,21 @@ EXPO_PUBLIC_WAVE_PERF=1` bundles 10,222 modules with 833 compiled memo caches, a
   every row; it now compares plain-object sources field by field.
   `nowPlaying/queueMoveRenders.test.ts` checks it, including that a drag lifted after two
   unrendered moves starts from the row's new place.
-- **Swipeable rows**, measured on #1409's `SwipeableRow` (edges drawn from mount): 150 rows make
-  450 shared values, 150 animated styles and 300 backdrop icons, and mount in about 90 ms in
-  node. Each row holds `offsetX`, `width` and `armed`. `width` and `armed` could share one shared
-  value (300 for 150 rows); left until the integration branch carries #1409's file.
+- **Swipeable rows**, measured on #1409's last `SwipeableRow` (a static backdrop from mount, the
+  animated edges on first touch): 150 rows made 450 shared values, 150 animated styles and 300
+  backdrop icons, and mounted in about 67 ms in node. The armed side was a shared value only so
+  the gesture could tick once as a row arms; it now follows from the row's offset before each
+  move, so 150 rows make 300 shared values (`offsetX` and `width`), with the same 150 styles and
+  a mount of about 72 ms (within node's noise). `catalog/swipeRowMountCost.test.ts` checks the
+  count and that the tick still comes once per arming.
 
 ## What's left
 
 - **A phone run.** The counts above are node counts; the effect on the reference phone's taps and
   freezes needs the `reference-taps` scenario before and after.
-- **`SwipeableRow` still makes 3 shared values per row** (offset, width and the armed side), 450 for
-  150 rows. The pan gesture needs them from its first frame; merging `width` and `armed` into one
-  would bring it to 2 (section 6).
+- **`SwipeableRow` still makes 2 shared values and 1 animated style per row** (offset and width).
+  The pan gesture moves the row from its first frame, so they'd go only if the gesture itself
+  mounted on first touch.
 - **The Queue's list still follows the whole queue** (`useQueue`): a position change renders
   the list, though its rows now skip.
 - **`IconButton` and `TextButton` aren't `memo`**, and most callers pass inline closures. The
