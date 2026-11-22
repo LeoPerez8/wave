@@ -17,6 +17,7 @@ import {
 import { useFollowSuggestionPlayed } from "@/library/followSuggestions";
 import { useFollowsRead } from "@/library/follows";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
+import { useRenderCost } from "@/lib/renderCost";
 import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
 import { IconButton } from "@/components/IconButton";
@@ -83,6 +84,7 @@ export function FollowSuggestions({
   hidden: boolean;
   follows: readonly FollowedArtist[];
 }) {
+  useRenderCost("FollowSuggestions");
   const { strings } = useLocalisation();
   const [shown, setShown] = useState(FOLLOW_SUGGESTIONS_PAGE);
   const played = useFollowSuggestionPlayed(enabled);
