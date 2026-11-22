@@ -121,6 +121,25 @@ describe("a long task before the first screen settles is startup's", () => {
     ]);
   });
 
+  test("with a startup step begun, it names the latest step begun before the block ended", () => {
+    const lines: string[] = [];
+    const log = createJsBlockLog({ write: (line) => lines.push(line), screen: () => "/" });
+    log.startupStep("first mount's effects", 50);
+    log.startupStep("waiting for Home's content", 300);
+    log.startupStep("later step", 600);
+    log.longTask(100, 400);
+    assert.deepEqual(lines, ["JS blocked 400 ms on / by startup (waiting for Home's content)"]);
+  });
+
+  test("after the first screen settles, a startup step names nothing", () => {
+    const lines: string[] = [];
+    const log = createJsBlockLog({ write: (line) => lines.push(line), screen: () => "/" });
+    log.startupStep("waiting for Home's content", 50);
+    log.firstSettled(90);
+    log.longTask(100, 400);
+    assert.deepEqual(lines, ["JS blocked 400 ms on / by no background work"]);
+  });
+
   test("named work running then still names it", () => {
     const lines: string[] = [];
     const log = createJsBlockLog({ write: (line) => lines.push(line), screen: () => "/" });
