@@ -3,7 +3,6 @@ import {
   albumPlayTotalsSteps,
   artistPlayTotalsSteps,
   finishSteps,
-  mergeCountedPlays,
   mergeCountedPlaysSteps,
   rankEntityPlaysSteps,
   recentlyPlayedAlbums,
@@ -788,24 +787,90 @@ export interface PlayedArtistSongs extends ArtistPlays {
 }
 
 /**
- * Keep the artist's indexed Library read; add per-video summaries without
- * scanning their events. The all-time streamed totals are the plays up to
- * [now] as well, unless one started after [now] (a phone whose clock ran ahead).
+ * What `playedArtistSongsSteps` works [artistId]'s listening out from, statements only, the
+ * same ones however many songs were streamed (#1452): a replayed read runs each in every pass,
+ * and the steps after it build the Library-wide credit resolver.
  */
-export const playedArtistSongs = (
+export interface PlayedArtistSongsRows {
+  readonly base: ArtistPlays;
+  /** `streamedListeningTotals`' all-time read. */
+  readonly streams: readonly StreamedListeningTotal[];
+  /** Its read up to [now], when a stream was played after [now]; otherwise null. */
+  readonly upToNow: readonly StreamedListeningTotal[] | null;
+  /** What the streams' songs are made from (`streamedSongsSteps`). */
+  readonly songRows: StreamedSongRows;
+  /** What the credit resolver matches against: the Library's artists, albums and stored credits. */
+  readonly artists: readonly ArtistRow[];
+  readonly albums: readonly AlbumRow[];
+  readonly creditRows: readonly { readonly credit: string; readonly stored: string | null }[];
+  /** The title sort of each of the artist's Library songs. */
+  readonly titles: readonly { readonly id: number; readonly titleSort: string }[];
+}
+
+/** What `playedArtistSongs` reads of [artistId]'s listening, statements only. */
+export const playedArtistSongsRead = (
   db: LibraryDatabase,
   artistId: number,
   now: number,
-): PlayedArtistSongs => {
+): PlayedArtistSongsRows => {
   const base = artistPlays(db, artistId, now);
-  const streams = streamedListeningTotals(db);
+  const streamed = streamedTotalsQuery(db);
+  const streams = db.all<StreamedListeningTotal>(streamed);
+  if (streams.length === 0)
+    return {
+      base,
+      streams,
+      upToNow: null,
+      songRows: { kept: [], snapshots: [] },
+      artists: [],
+      albums: [],
+      creditRows: [],
+      titles: [],
+    };
+  return {
+    base,
+    streams,
+    // Read when any stream ran past [now]: the steps use it only when one of the artist's did.
+    upToNow: streams.some((entry) => entry.lastPlayedAt > now)
+      ? streamedListeningTotals(db, { from: null, to: now })
+      : null,
+    // The streams' own statement picks their songs, not a list made here.
+    songRows: streamedSongRows(db, sql`SELECT "videoId" FROM (${streamed})`),
+    artists: selectArtists(db, {}),
+    albums: selectAlbums(db, undefined),
+    creditRows: libraryCreditRows(db),
+    // A Library song the merged plays name is one of the artist's: the streams count for those alone.
+    titles: db.all<{ id: number; titleSort: string }>(sql`
+      SELECT id, title_sort AS "titleSort" FROM tracks
+      WHERE id IN (SELECT value FROM json_each(${JSON.stringify(base.songIds)}))`),
+  };
+};
+
+/**
+ * `playedArtistSongs` for [artistId] from [rows] (`playedArtistSongsRead`), worked out a step
+ * at a time: the credit resolver a credit, artist or album per step, the streams and merged
+ * plays one per step (#1452). [rows] is left as it is.
+ */
+export function* playedArtistSongsSteps(
+  rows: PlayedArtistSongsRows,
+  artistId: number,
+  now: number,
+): Generator<void, PlayedArtistSongs> {
+  const { base, streams } = rows;
   if (streams.length === 0) return { ...base, streamedListening: [], streamedSongPlays: [] };
-  const library = playedLibrary(db);
+  const songs = yield* streamedSongsSteps(streams, rows.songRows);
+  const credits: string[] = [];
+  for (const { credit, stored } of rows.creditRows) {
+    credits.push(...readCredits(credit, stored));
+    yield;
+  }
+  const library = yield* streamedCreditResolverSteps({
+    artists: rows.artists,
+    albums: rows.albums,
+    credits,
+    releases: [],
+  });
   const ids = new Set(base.songIds);
-  const songs = streamedSongsOf(
-    db,
-    streams.map((entry) => entry.videoId),
-  );
   const credited = (entry: StreamedListeningTotal): boolean => {
     if (entry.trackId !== null) return ids.has(entry.trackId);
     const song = songs.get(entry.videoId);
@@ -813,12 +878,21 @@ export const playedArtistSongs = (
       song !== undefined && library.resolve(song).artists.some((artist) => artist.id === artistId)
     );
   };
-  const theirs = streams.filter(credited);
-  const upToNow = theirs.some((entry) => entry.lastPlayedAt > now)
-    ? streamedListeningTotals(db, { from: null, to: now }).filter(credited)
-    : theirs;
+  function* creditedOf(entries: readonly StreamedListeningTotal[]) {
+    const kept: StreamedListeningTotal[] = [];
+    for (const entry of entries) {
+      if (credited(entry)) kept.push(entry);
+      yield;
+    }
+    return kept;
+  }
+  const theirs = yield* creditedOf(streams);
+  const upToNow =
+    rows.upToNow !== null && theirs.some((entry) => entry.lastPlayedAt > now)
+      ? yield* creditedOf(rows.upToNow)
+      : theirs;
   // Listening sums every play's time and takes the latest play, skipped ones included.
-  const listened = mergeCountedPlays({
+  const listened = yield* mergeCountedPlaysSteps({
     library: base.listening.map((song) => ({
       id: song.trackId,
       countedPlays: song.countedPlays,
@@ -833,21 +907,17 @@ export const playedArtistSongs = (
       latestPlayAt: entry.lastPlayedAt,
     })),
   });
-  const played = mergeCountedPlays({
+  const played = yield* mergeCountedPlaysSteps({
     library: base.songPlays,
     streamed: upToNow.filter((entry) => entry.countedPlays > 0).map(countedSums),
   });
   const ownListening = new Map(base.listening.map((song) => [song.trackId, song]));
   const ownPlays = new Map(base.songPlays.map((song) => [song.id, song]));
-  const titles = new Map(
-    db
-      .all<{ id: number; titleSort: string }>(
-        sql`
-    SELECT id, title_sort AS "titleSort" FROM tracks WHERE id IN
-      (SELECT value FROM json_each(${JSON.stringify([...played.library.keys()].filter((id) => !ownPlays.has(id)))}))`,
-      )
-      .map((row) => [row.id, row.titleSort]),
-  );
+  const titles = new Map<number, string>();
+  for (const row of rows.titles) {
+    titles.set(row.id, row.titleSort);
+    yield;
+  }
   const listening = (trackId: number, sums: PlaySums): SongListening => {
     const own = ownListening.get(trackId);
     return {
@@ -878,7 +948,19 @@ export const playedArtistSongs = (
       ...sums,
     })),
   };
-};
+}
+
+/**
+ * Keep the artist's indexed Library read; add per-video summaries without
+ * scanning their events. The all-time streamed totals are the plays up to
+ * [now] as well, unless one started after [now] (a phone whose clock ran ahead).
+ */
+export const playedArtistSongs = (
+  db: LibraryDatabase,
+  artistId: number,
+  now: number,
+): PlayedArtistSongs =>
+  finishSteps(playedArtistSongsSteps(playedArtistSongsRead(db, artistId, now), artistId, now));
 
 /** Each of [ids]' current credits, by song id, in credit order. */
 const songArtists = (db: LibraryDatabase, ids: Iterable<number>): Map<number, number[]> => {

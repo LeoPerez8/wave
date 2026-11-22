@@ -112,7 +112,8 @@ import type { ListDownloadsScope } from "@wave/core";
 import {
   playedTotalsRead,
   playedTotalsSteps,
-  playedArtistSongs,
+  playedArtistSongsRead,
+  playedArtistSongsSteps,
   keptArtistSongs,
   streamedLibraryPlays,
   recapPlays,
@@ -2375,7 +2376,12 @@ const make = Effect.gen(function* () {
       streamedLibraryPlays(db),
     ),
     playedArtistSongs: (artistId, now) =>
-      attempt("read the artist listening", (db) => playedArtistSongs(db, artistId, now)),
+      attemptStepped(
+        "read the artist listening",
+        LIBRARY_READ_REPLAY,
+        (db) => playedArtistSongsRead(db, artistId, now),
+        (read) => playedArtistSongsSteps(read, artistId, now),
+      ),
     recapPlays: (window, includeStreamedGenres = true) =>
       attempt("sum up a Recap's plays", (db) => recapPlays(db, window, includeStreamedGenres)),
     creditedPlayTotals: (window) =>
