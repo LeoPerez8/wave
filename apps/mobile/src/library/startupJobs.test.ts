@@ -437,7 +437,10 @@ test("a slow scan save makes the next slice smaller, so each stays near Core's s
     // file of the budget (a 5-file slice takes 37.5 ms, a 4-file one exactly the budget).
     assert.equal(sizes[0], 20);
     assert.equal(sizes[1], 4);
-    assert.ok(sizes.slice(1).every((size) => size === 4 || size === 5), `${sizes}`);
+    assert.ok(
+      sizes.slice(1).every((size) => size === 4 || size === 5),
+      `${sizes}`,
+    );
     assert.equal(
       sizes.reduce((sum, size) => sum + size, 0),
       60,

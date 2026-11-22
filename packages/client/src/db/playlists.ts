@@ -839,7 +839,10 @@ export const writePlaylistLinks = (
     db.update(playlistItems)
       .set({ deleted: true, ...stamped(playlistItems, now) })
       .where(
-        and(inArray(playlistItems.id, found.drops.slice(i, i + LINK_CHUNK)), isNull(playlistItems.trackId)),
+        and(
+          inArray(playlistItems.id, found.drops.slice(i, i + LINK_CHUNK)),
+          isNull(playlistItems.trackId),
+        ),
       )
       .run();
   }
@@ -862,7 +865,8 @@ export const linkPlaylistEntries = (
   db: LibraryDatabase,
   now: number,
   trackIds?: readonly number[],
-): number => writePlaylistLinks(db, now, finishSteps(playlistLinkSteps(readPlaylistLinks(db, trackIds))));
+): number =>
+  writePlaylistLinks(db, now, finishSteps(playlistLinkSteps(readPlaylistLinks(db, trackIds))));
 
 /**
  * Settles what Try Again's [answered] searches found in [playlistId] (Core's

@@ -8,7 +8,13 @@
  * `album_artist_id` hold the primary (first) one. Kept free of Expo so the
  * store tests run it against a real SQLite.
  */
-import { creditSplitter, creditSplitterSteps, identityKey, respreadDeletedSongs, sortKey } from "@wave/core";
+import {
+  creditSplitter,
+  creditSplitterSteps,
+  identityKey,
+  respreadDeletedSongs,
+  sortKey,
+} from "@wave/core";
 import { sql } from "drizzle-orm";
 
 import { refreshArtistImages } from "./artists.ts";

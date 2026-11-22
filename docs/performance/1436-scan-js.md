@@ -74,7 +74,7 @@ Every stepped run is named (#1447): "playlist links", "credit splits", "save sca
 | + credits warm, first slice 2 |    48.4 s | 1.9 s (384 ms)  | saves 384, 167, 54 ms; scan 50 ms                         |
 | + quiet triggers              |    19.0 s | 0.5 s (31 ms)   | lyrics 55 ms on Home; none on Settings, Library or Search |
 
-The before build logged no scan summary (it came with this ticket). "Waiting" is the native
+The lyrics index change came after the last run and has no emulator number; its node test checks that an unchanged song writes nothing. The before build logged no scan summary (it came with this ticket). "Waiting" is the native
 scanner reading files: 18.5 of the last run's 19.0 s.
 
 ### Full rescan of the 3,000-song seed (emulator)
