@@ -8,6 +8,7 @@
  */
 
 import { unsearchedTrackId, type UnsearchedSong } from "./playlistEntries.ts";
+import { finishSteps } from "./buildSteps.ts";
 import { logDuration, type SearchFailure } from "./searchAllowance.ts";
 
 /** The fill asks at most one search a second. */
@@ -103,22 +104,23 @@ const inOrder = (playlists: readonly FillPlaylist[]): FillPlaylist[] =>
         b.id - a.id,
     );
 
-/** One song of a playlist's line, and when its search failed, if it did. */
-interface InLine {
-  readonly song: UnsearchedSong;
-  readonly failedAt: number | undefined;
-}
-
-/** [playlist]'s line: its songs never failed, top to bottom, then those that failed, as they failed. */
-const lineOf = (playlist: FillPlaylist, failedAt: BackgroundFill["failedAt"]): InLine[] => {
-  const songs = playlist.songs.map((song) => ({
-    song,
-    failedAt: failedAt[unsearchedTrackId(song)],
-  }));
-  const failed = songs.filter((entry) => entry.failedAt !== undefined);
-  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
-  failed.sort((a, b) => (a.failedAt ?? 0) - (b.failedAt ?? 0));
-  return [...songs.filter((entry) => entry.failedAt === undefined), ...failed];
+/**
+ * The first song of [playlist]'s line: its first song never failed, else the one that failed
+ * first, with when it did. Reads the songs only up to its first one never failed, and works out
+ * no key with nothing failed, so a step costs the same whatever a playlist holds.
+ */
+const headOf = (
+  playlist: FillPlaylist,
+  failedAt: BackgroundFill["failedAt"],
+  anyFailed: boolean,
+): { readonly song: UnsearchedSong; readonly failedAt: number | undefined } | null => {
+  let earliest: { song: UnsearchedSong; failedAt: number } | null = null;
+  for (const song of playlist.songs) {
+    const at = anyFailed ? failedAt[unsearchedTrackId(song)] : undefined;
+    if (at === undefined) return { song, failedAt: undefined };
+    if (earliest === null || at < earliest.failedAt) earliest = { song, failedAt: at };
+  }
+  return earliest;
 };
 
 /**
@@ -138,17 +140,19 @@ export const nextFillStep = (
   if (world.downloading) return { fill, step: { kind: "idle" } };
   if (!world.ytMusicOn) return { fill, step: { kind: "wait", until: now + FILL_LOOK_AGAIN_MS } };
   let retryAt = Number.POSITIVE_INFINITY;
+  const anyFailed = Object.keys(fill.failedAt).length > 0;
   for (const playlist of inOrder(world.playlists)) {
-    for (const entry of lineOf(playlist, fill.failedAt)) {
-      const due = entry.failedAt === undefined ? now : entry.failedAt + FILL_RETRY_MS;
-      if (due > now) {
-        retryAt = Math.min(retryAt, due);
-        continue;
-      }
-      const paced = Math.max(fill.pausedUntil, (fill.askedAt ?? now - FILL_PACE_MS) + FILL_PACE_MS);
-      if (now < paced) return { fill, step: { kind: "wait", until: paced } };
-      return { fill: { ...fill, askedAt: now }, step: { kind: "search", song: entry.song } };
+    // The rest of the line is due no sooner than its head: those that failed later come after.
+    const entry = headOf(playlist, fill.failedAt, anyFailed);
+    if (entry === null) continue;
+    const due = entry.failedAt === undefined ? now : entry.failedAt + FILL_RETRY_MS;
+    if (due > now) {
+      retryAt = Math.min(retryAt, due);
+      continue;
     }
+    const paced = Math.max(fill.pausedUntil, (fill.askedAt ?? now - FILL_PACE_MS) + FILL_PACE_MS);
+    if (now < paced) return { fill, step: { kind: "wait", until: paced } };
+    return { fill: { ...fill, askedAt: now }, step: { kind: "search", song: entry.song } };
   }
   if (retryAt !== Number.POSITIVE_INFINITY) return { fill, step: { kind: "wait", until: retryAt } };
   return { fill, step: { kind: "idle" } };
@@ -209,7 +213,24 @@ export const fillPauseLine = (pause: FillPause): string =>
   `The background fill pauses for ${logDuration(pause.until - pause.at)}: YouTube Music refused ${pause.refused.toLocaleString("en")} different searches in a row; it goes on at ${clock(pause.until)} UTC`;
 
 /** A read of the fill's playlists, indexed once so an answer removes only its own occurrences. */
-export const indexFillPlaylists = (playlists: readonly FillPlaylist[]) => {
+export interface FillPlaylistsIndex {
+  /** Whether the read held the playlist [id]. */
+  readonly has: (id: number) => boolean;
+  /** Whether no song of the read is left. */
+  readonly empty: () => boolean;
+  /** Leaves out [song], which a search settled, from every playlist that held it. */
+  readonly drop: (song: UnsearchedSong) => void;
+  /** The playlists with what's left of their songs. */
+  readonly playlists: () => readonly FillPlaylist[];
+}
+
+/**
+ * `indexFillPlaylists` one song a step (#1453): the app indexes a read of thousands of songs in
+ * background slices, and Wave's startup holds the thread for none of it.
+ */
+export function* indexFillPlaylistsSteps(
+  playlists: readonly FillPlaylist[],
+): Generator<void, FillPlaylistsIndex> {
   type Entry = {
     readonly original: Omit<FillPlaylist, "songs">;
     readonly songs: Map<number, UnsearchedSong>;
@@ -217,22 +238,24 @@ export const indexFillPlaylists = (playlists: readonly FillPlaylist[]) => {
   };
   const byKey = new Map<string, { entry: Entry; position: number }[]>();
   let remaining = 0;
-  const entries = playlists.map((playlist): Entry => {
+  const entries: Entry[] = [];
+  for (const playlist of playlists) {
     const entry: Entry = {
       original: { id: playlist.id, usedAt: playlist.usedAt },
       songs: new Map(),
       current: playlist,
     };
-    playlist.songs.forEach((song, position) => {
+    entries.push(entry);
+    for (const [position, song] of playlist.songs.entries()) {
+      yield;
       entry.songs.set(position, song);
       const key = unsearchedTrackId(song);
       let occurrences = byKey.get(key);
       if (occurrences === undefined) byKey.set(key, (occurrences = []));
       occurrences.push({ entry, position });
       remaining++;
-    });
-    return entry;
-  });
+    }
+  }
   const playlistIds = new Set(playlists.map((playlist) => playlist.id));
   return {
     has: (id: number): boolean => playlistIds.has(id),
@@ -251,4 +274,8 @@ export const indexFillPlaylists = (playlists: readonly FillPlaylist[]) => {
         (entry) => (entry.current ??= { ...entry.original, songs: [...entry.songs.values()] }),
       ),
   };
-};
+}
+
+/** `indexFillPlaylistsSteps` at once, for a read small enough or a caller with no slices. */
+export const indexFillPlaylists = (playlists: readonly FillPlaylist[]): FillPlaylistsIndex =>
+  finishSteps(indexFillPlaylistsSteps(playlists));

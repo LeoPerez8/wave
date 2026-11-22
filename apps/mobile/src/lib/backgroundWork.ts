@@ -13,7 +13,13 @@ import * as Effect from "effect/Effect";
 import { AppState, type GestureResponderEvent } from "react-native";
 
 import { appLog } from "@/log/appLog";
-import { isScreenSettled, onScreenSettled, onTimingTransition, timingRoute } from "./timing";
+import {
+  isScreenSettled,
+  onScreenSettled,
+  onTimingTransition,
+  timingJsBlock,
+  timingRoute,
+} from "./timing";
 import { createFingerDown } from "./fingerDown";
 import { createStartupWork } from "./startupWork";
 import { BackgroundWorkName, shareSlicesWith } from "./stepped";
@@ -32,6 +38,19 @@ import { perfMark, registerPerfMeta } from "@/perf/perf";
 const blocks = createJsBlockLog({
   write: (line) => appLog("warn", "WaveTiming", line),
   screen: () => (AppState.currentState === "active" ? timingRoute() : null),
+  // A block that spans Wave leaving the screen is a paused process (#1446); JS hears that only
+  // after the block, so each is judged a moment after it's reported.
+  later: (ms, run) => {
+    setTimeout(run, ms);
+  },
+});
+let active = (AppState.currentState ?? "active") === "active";
+AppState.addEventListener("change", (state) => {
+  const now = state === "active";
+  if (now === active) return;
+  active = now;
+  if (now) blocks.returned(performance.now());
+  else blocks.left(performance.now());
 });
 
 // Blocks before the first screen settles, with no named work, are startup's.
@@ -125,7 +144,10 @@ const Observer = (
 ).PerformanceObserver;
 if (Observer?.supportedEntryTypes?.includes("longtask")) {
   const observer = new Observer((list) => {
-    for (const entry of list.getEntries()) blocks.longTask(entry.startTime, entry.duration);
+    for (const entry of list.getEntries()) {
+      blocks.longTask(entry.startTime, entry.duration);
+      timingJsBlock(entry.startTime, entry.duration);
+    }
   });
   try {
     observer.observe({ type: "longtask" });
@@ -134,9 +156,12 @@ if (Observer?.supportedEntryTypes?.includes("longtask")) {
   }
 }
 
-/** Gives [name] its free turn, marked for the block log (what runs on it may be awaited code). */
-const named = (name: string, run: () => void) => (): void => {
-  blocks.turnTaken(name, performance.now());
+/**
+ * Gives [name] its free turn, marked for the block log (what runs on it may be awaited code, for
+ * [forMs], `TURN_WORK_MS` by default).
+ */
+const named = (name: string, run: () => void, forMs?: number) => (): void => {
+  blocks.turnTaken(name, performance.now(), forMs);
   run();
 };
 
@@ -214,6 +239,14 @@ export const whenFree = (run: () => void, name: string): (() => void) =>
 /** Resolves on the next free turn, for [name]'s work. */
 export const freeTurn = (name: string): Promise<void> =>
   new Promise((resolve) => whenFree(resolve, name));
+
+/**
+ * Resolves on the next free turn for [name]'s work, which names its continuations after an
+ * `await` itself (`inSlice`): to the block log, only the turn's own task is [name]'s, so a render
+ * or a read in the second after it is not put down to it (#1449).
+ */
+export const freeTurnAlone = (name: string): Promise<void> =>
+  new Promise((resolve) => work.whenFree(named(name, resolve, 0)));
 
 /** Waits for the next free turn, for the fiber's `BackgroundWorkName`; interrupted, it gives the turn up. */
 export const freeTurnEffect: Effect.Effect<void> = Effect.flatMap(

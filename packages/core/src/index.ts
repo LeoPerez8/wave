@@ -944,7 +944,14 @@ export type {
   LibraryReads,
 } from "./libraryQueries.ts";
 export { BACKGROUND_WORK_LIMITS, createBackgroundWork, runStepSlice } from "./backgroundWork.ts";
-export { JS_BLOCK_MS, TURN_WORK_MS, createJsBlockLog, jsBlockLine } from "./jsBlocks.ts";
+export {
+  JS_BLOCK_MS,
+  PAUSE_HEARD_MS,
+  TURN_WORK_MS,
+  createJsBlockLog,
+  jsBlockLine,
+  jsPausedLine,
+} from "./jsBlocks.ts";
 export type { JsBlockLog, JsBlockLogPorts } from "./jsBlocks.ts";
 export type {
   BackgroundWork,
@@ -1771,6 +1778,8 @@ export {
   fillPauseLine,
   nextFillStep,
   indexFillPlaylists,
+  indexFillPlaylistsSteps,
+  type FillPlaylistsIndex,
 } from "./backgroundFill.ts";
 export type {
   BackgroundFill,
@@ -2360,6 +2369,7 @@ export {
   genreAffinity,
   genreProfile,
   libraryGenreProfiles,
+  libraryGenreProfilesSteps,
 } from "./genreAffinity.ts";
 export type {
   ArtistProfiles,
@@ -2805,6 +2815,9 @@ export {
   timingDuration,
   timingBudgetExceeded,
   slowTapLine,
+  TAP_BLOCKS_WAIT_MS,
+  createSlowTapLines,
+  type SlowTapLines,
   slowScreenLine,
   speedSummaryLine,
   type TimingKind,
@@ -2820,7 +2833,7 @@ export type { LostLinkTap, LostTapReason } from "./lostTap.ts";
 export { createArtistGraphBuild, type ArtistGraphCatalogEntry } from "./artistGraphBuild.ts";
 export { mixKnownSongsSteps } from "./mixKnownSongs.ts";
 export { genreMixDjCandidatesSteps, genreMixSeedsSteps } from "./genreMixes.ts";
-export { mapSteps, sortSteps, finishSteps } from "./buildSteps.ts";
+export { mapSteps, sortSteps, finishSteps, filterSteps } from "./buildSteps.ts";
 export { libraryMixProfilesSteps } from "./genreAffinity.ts";
 export { rankPlaysSteps } from "./stats.ts";
 
@@ -2865,9 +2878,11 @@ export {
 export { homeMixBuildsDue } from "./homeMixBuilds.ts";
 export {
   completeMagicRadioBatch,
+  completeMagicRadioBatchSteps,
   magicRadioReadPlan,
   magicRadioBatch,
   magicRadioExclusions,
+  magicRadioExclusionsSteps,
 } from "./magicRadioLearning.ts";
 export {
   rankRadioSongs,
@@ -3348,7 +3363,7 @@ export {
 export type { DjDiscovery, DjPopularity, DjSettings, DjVariety } from "./djSettings.ts";
 export { djAdjustGroups, djAdjustSheetHeight, djAdjustSheetSwipeCloses } from "./djAdjust.ts";
 export type { DjAdjustGroup, DjAdjustOption, DjAdjustSheetSwipe } from "./djAdjust.ts";
-export { djFirstRadioSong, djVarietyCandidates } from "./djVariety.ts";
+export { djFirstRadioSong, djVarietyCandidates, djVarietyCandidatesSteps } from "./djVariety.ts";
 export type { DjCandidatePools } from "./djVariety.ts";
 export {
   DJ_REMEMBERED_SETTING,
@@ -3367,13 +3382,14 @@ export {
   djToggleMood,
 } from "./djSettings.ts";
 export type { DjFilter, DjMood } from "./djSettings.ts";
-export { djMedianAudioFeatures, djMoodRanked, djMoodScore } from "./djMood.ts";
+export { djMedianAudioFeatures, djMoodRanked, djMoodRankedSteps, djMoodScore } from "./djMood.ts";
 export type { DjAudioFeatures, DjMoodRankable } from "./djMood.ts";
 export { djAudioFeaturesByIsrc, isrcFromTag } from "./isrcTag.ts";
 export {
   DJ_NEW_RELEASE_BOOST,
   DJ_RELEASE_PAGES,
   djNewReleasesRanked,
+  djNewReleasesRankedSteps,
   djReleaseArtists,
 } from "./djNewReleases.ts";
 export type { DjReleasePage } from "./djNewReleases.ts";
