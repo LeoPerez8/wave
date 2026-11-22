@@ -331,22 +331,30 @@ export const songGenres = (
 ): RecapSongGenre[] => {
   const libraryIds = ids.filter((id): id is number => typeof id === "number");
   const streamedIds = ids.filter((id): id is string => typeof id === "string");
-  const { tracks, genres } = schema;
   return [
     ...(includeStreamed ? streamedSongGenres(db, streamedIds) : []),
-    ...chunks(libraryIds).flatMap((only) =>
-      db
-        .select({ id: tracks.id, genre: genres.name, genres: tracks.genres })
-        .from(tracks)
-        .leftJoin(genres, eq(tracks.genreId, genres.id))
-        .where(inArray(tracks.id, only))
-        .all()
-        .map((row) => {
-          const values = readStoredGenres(row.genres);
-          return { id: row.id, genre: row.genre, genres: values.length === 0 ? null : values };
-        }),
-    ),
+    // One statement however many songs, its rows decoded once: a replayed read runs this whole
+    // in every pass, and decodes the rows in steps between them (#1452).
+    ...(libraryIds.length === 0
+      ? []
+      : decodedRows(
+          db,
+          sql`SELECT tracks.id, genres.name AS genre, tracks.genres FROM tracks
+            LEFT JOIN genres ON genres.id = tracks.genre_id
+            WHERE tracks.id IN (SELECT value FROM json_each(${JSON.stringify(libraryIds)}))`,
+          songGenreRow,
+        )),
   ];
+};
+
+/** A Library song's genre tags as `songGenres` reads them. */
+const songGenreRow = (row: {
+  readonly id: number;
+  readonly genre: string | null;
+  readonly genres: string | null;
+}): RecapSongGenre => {
+  const values = readStoredGenres(row.genres);
+  return { id: row.id, genre: row.genre, genres: values.length === 0 ? null : values };
 };
 
 /**

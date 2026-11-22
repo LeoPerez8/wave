@@ -314,7 +314,8 @@ import { selectLinkRows, type LinkIds, type LinkRows } from "@wave/client/db/lin
 import {
   homeAdded,
   homeFavorites,
-  homePlays,
+  homePlaysRead,
+  homePlaysSteps,
   homeSections,
   latestPlay,
   listFavorites,
@@ -2267,9 +2268,12 @@ const make = Effect.gen(function* () {
       (db) => homeAdded(db),
       (result) => result.recentlyAdded.length,
     ),
-    homePlays: attempt(
+    // While the kept totals settle, Recently Played's streamed songs resolve in steps.
+    homePlays: attemptStepped(
       "read Home's plays",
-      (db) => homePlays(db),
+      PLAY_TOTALS_FALLBACK,
+      (db) => homePlaysRead(db),
+      homePlaysSteps,
       (result) => result.recentlyPlayed.length + result.mostPlayed.length,
     ),
     homeFavorites: attempt(

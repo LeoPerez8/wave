@@ -499,8 +499,9 @@ export const finishReplaySteps = async <A>(
       return step;
     }, name);
     heldMs += now() - start;
-    if (next.done) return { value: next.value, heldMs };
+    // The caller's work after it starts a task of its own, not one the last slice is blamed for.
     await yieldReplay();
+    if (next.done) return { value: next.value, heldMs };
   }
 };
 

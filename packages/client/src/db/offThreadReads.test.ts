@@ -243,8 +243,8 @@ test("work in steps runs in slices of a replay step at most, yielding between th
   );
   assert.equal(value.value, 100);
   assert.ok(Math.max(...held) <= 8, `no slice held the thread over 8 ms: ${Math.max(...held)}`);
-  assert.equal(held.length, yields + 1, "a yield between each two slices");
-  assert.ok(yields >= 100 / 8 - 1, `yielded between slices: ${yields}`);
+  assert.equal(held.length, yields, "a yield after each slice, the last one included");
+  assert.ok(yields >= 100 / 8, `yielded between slices: ${yields}`);
   assert.equal(
     value.heldMs,
     held.reduce((a, b) => a + b, 0),
