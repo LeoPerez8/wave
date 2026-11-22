@@ -156,9 +156,12 @@ if (Observer?.supportedEntryTypes?.includes("longtask")) {
   }
 }
 
-/** Gives [name] its free turn, marked for the block log (what runs on it may be awaited code). */
-const named = (name: string, run: () => void) => (): void => {
-  blocks.turnTaken(name, performance.now());
+/**
+ * Gives [name] its free turn, marked for the block log (what runs on it may be awaited code, for
+ * [forMs], `TURN_WORK_MS` by default).
+ */
+const named = (name: string, run: () => void, forMs?: number) => (): void => {
+  blocks.turnTaken(name, performance.now(), forMs);
   run();
 };
 
@@ -236,6 +239,14 @@ export const whenFree = (run: () => void, name: string): (() => void) =>
 /** Resolves on the next free turn, for [name]'s work. */
 export const freeTurn = (name: string): Promise<void> =>
   new Promise((resolve) => whenFree(resolve, name));
+
+/**
+ * Resolves on the next free turn for [name]'s work, which names its continuations after an
+ * `await` itself (`inSlice`): to the block log, only the turn's own task is [name]'s, so a render
+ * or a read in the second after it is not put down to it (#1449).
+ */
+export const freeTurnAlone = (name: string): Promise<void> =>
+  new Promise((resolve) => work.whenFree(named(name, resolve, 0)));
 
 /** Waits for the next free turn, for the fiber's `BackgroundWorkName`; interrupted, it gives the turn up. */
 export const freeTurnEffect: Effect.Effect<void> = Effect.flatMap(
