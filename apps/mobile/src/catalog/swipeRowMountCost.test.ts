@@ -13,22 +13,19 @@ import {
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-const [{ SwipeableRow }] = await loadWithStubs<[typeof import("./SwipeableRow.tsx")]>(
-  [import.meta.resolve("./SwipeableRow.tsx")],
-  {
-    ...nativeStubs(),
-    "react-native-gesture-handler": stubModule(`
+const [{ SwipeableRow, ClearRowsContext }] = await loadWithStubs<
+  [typeof import("./SwipeableRow.tsx")]
+>([import.meta.resolve("./SwipeableRow.tsx")], {
+  ...nativeStubs(),
+  "react-native-gesture-handler": stubModule(`
       export const usePanGesture = config => config;
       export const GestureDetector = ({ children }) => children;
     `),
-    "react-native-worklets": stubModule(
-      `export const scheduleOnRN = (fn, ...args) => fn(...args);`,
-    ),
-    "@/playback/actionIcons": stubModule(`
+  "react-native-worklets": stubModule(`export const scheduleOnRN = (fn, ...args) => fn(...args);`),
+  "@/playback/actionIcons": stubModule(`
       export const ACTION_ICONS = new Proxy({}, { get: () => "ActionIcon" });
     `),
-  },
-);
+});
 
 type RowProps = Parameters<typeof SwipeableRow>[0];
 
@@ -61,8 +58,10 @@ const rowViews = (renderer: ReactTestRenderer) =>
   );
 const labels = (renderer: ReactTestRenderer) =>
   renderer.root.findAll((node) => node.type === "text" && node.props.numberOfLines === 1);
+const icons = (renderer: ReactTestRenderer) =>
+  renderer.root.findAll((node) => node.type === "ActionIcon");
 
-test(`mounting ${ROWS} swipeable rows leaves what a swipe uncovers until one is touched`, async () => {
+test(`mounting ${ROWS} swipeable rows draws only a static backdrop until one is touched`, async () => {
   resetAnimationCounts();
   let renderer: ReactTestRenderer | undefined;
   const started = performance.now();
@@ -72,10 +71,15 @@ test(`mounting ${ROWS} swipeable rows leaves what a swipe uncovers until one is 
   const mountMs = performance.now() - started;
   const atMount = { ...animationCounts() };
   console.log(
-    `[1423] ${ROWS} swipeable rows: ${atMount.sharedValues} shared values, ${atMount.animatedStyles} animated styles, ${labels(renderer!).length} uncovered labels, mount ${mountMs.toFixed(1)} ms`,
+    `[1423] ${ROWS} swipeable rows: ${atMount.sharedValues} shared values, ${atMount.animatedStyles} animated styles, ${labels(renderer!).length} uncovered labels, ${icons(renderer!).length} backdrop icons, mount ${mountMs.toFixed(1)} ms`,
   );
   try {
-    assert.equal(labels(renderer!).length, 0, "no row draws its swipe actions before a touch");
+    assert.equal(labels(renderer!).length, 0, "no row draws its swipe labels before a touch");
+    assert.equal(
+      icons(renderer!).length,
+      ROWS * 2,
+      "every row draws a static backdrop on both edges, so a swipe never slides over blank",
+    );
     assert.deepEqual(atMount, { sharedValues: ROWS * 3, animatedStyles: ROWS });
     await act(() => rowViews(renderer!)[7]!.props.onTouchStart?.({ nativeEvent: {} }));
     assert.deepEqual(
@@ -84,6 +88,11 @@ test(`mounting ${ROWS} swipeable rows leaves what a swipe uncovers until one is 
       "the touched row is ready to swipe both ways",
     );
     assert.equal(animationCounts().animatedStyles, ROWS + 2);
+    assert.equal(
+      icons(renderer!).length,
+      ROWS * 2,
+      "the touched row swaps its backdrop for its edges",
+    );
   } finally {
     await act(() => renderer?.unmount());
   }
@@ -102,7 +111,30 @@ test("a demo swipe draws what it uncovers", async () => {
   });
   try {
     assert.equal(labels(renderer!).length, 0);
+    assert.equal(icons(renderer!).length, 2);
     await act(() => renderer!.update(row(1)));
+    assert.equal(labels(renderer!).length, 2);
+  } finally {
+    await act(() => renderer?.unmount());
+  }
+});
+
+test("a clear row draws its edges at mount, since a backdrop would show through it", async () => {
+  let renderer: ReactTestRenderer | undefined;
+  await act(() => {
+    renderer = create(
+      createElement(
+        ClearRowsContext,
+        { value: true },
+        createElement(
+          SwipeableRow,
+          { swipe } as unknown as RowProps,
+          createElement("text", null, "x"),
+        ),
+      ),
+    );
+  });
+  try {
     assert.equal(labels(renderer!).length, 2);
   } finally {
     await act(() => renderer?.unmount());
