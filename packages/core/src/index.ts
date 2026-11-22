@@ -152,10 +152,22 @@ export type {
 } from "./libraryDetails.ts";
 export { spineEntries, spineLayout, spineSection, spineSlotAt, spineStep } from "./spine.ts";
 export type { SpineLayout, SpineSlot, SpineSpace } from "./spine.ts";
-export { SCAN_SAVE_SLICE, reconcileScan, scanEnd, scanSaveSlices } from "./scanReconcile.ts";
+export {
+  SCAN_SAVE_SLICE,
+  SCAN_SLICE_BUDGET_MS,
+  nextScanSaveSlice,
+  SCAN_ANNOUNCE_MS,
+  scanAnnounceDue,
+  reconcileScan,
+  scanEnd,
+  scanSaveSliceSteps,
+  scanSaveSlices,
+  scanTimingsLogLine,
+} from "./scanReconcile.ts";
 export type {
   IndexedFile,
   ScanChanges,
+  ScanTimings,
   ScanEnd,
   ScanReconcileInput,
   ScanSaveSlice,
@@ -1655,6 +1667,7 @@ export {
   stepPlaylistAddVisit,
   planPlaylistSongs,
   playlistEntryLinks,
+  playlistEntryLinkSteps,
   playlistPlayback,
   playlistSongKey,
   playlistSongsLine,

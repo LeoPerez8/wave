@@ -6,12 +6,13 @@
  * the same recording.
  */
 
+import { finishSteps } from "./buildSteps.ts";
 import { splitCredit } from "./credits.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { pagePlayback, skipMissingSongs, type PagePlayback } from "./pagePlayback.ts";
 import { planPlaylistAdd, type PlaylistAdd } from "./playlists.ts";
 import type { MixedSong, YtAlbumSong } from "./ytDiscover.ts";
-import { libraryFinder, ytTrackId, type LibrarySongKey, type YtSong } from "./ytMusic.ts";
+import { libraryFinderSteps, ytTrackId, type LibrarySongKey, type YtSong } from "./ytMusic.ts";
 
 /**
  * Why an imported song is unavailable: no match on YouTube Music or in the
@@ -344,14 +345,30 @@ export const playlistEntryLinks = (
   entries: readonly StreamedPlaylistEntry[],
   library: readonly (LibrarySongKey & { readonly id: number })[],
   held: readonly HeldPlaylistTrack[],
-): PlaylistEntryLinks => {
+): PlaylistEntryLinks => finishSteps(playlistEntryLinkSteps(entries, library, held));
+
+/**
+ * `playlistEntryLinks` in steps: the Library's index, then a step per entry,
+ * so a scan's whole-library link (thousands of entries and songs) runs in the
+ * scheduler's slices (#1436).
+ */
+export function* playlistEntryLinkSteps(
+  entries: readonly StreamedPlaylistEntry[],
+  library: readonly (LibrarySongKey & { readonly id: number })[],
+  held: readonly HeldPlaylistTrack[],
+): Generator<void, PlaylistEntryLinks> {
   if (entries.length === 0 || library.length === 0) return { links: [], drops: [] };
-  const find = libraryFinder(library);
+  const find = yield* libraryFinderSteps(library);
   const key = (playlistId: number, trackId: number) => `${playlistId}:${trackId}`;
-  const holds = new Set(held.map(({ playlistId, trackId }) => key(playlistId, trackId)));
+  const holds = new Set<string>();
+  for (const { playlistId, trackId } of held) {
+    holds.add(key(playlistId, trackId));
+    yield;
+  }
   const links: PlaylistEntryLink[] = [];
   const drops: number[] = [];
   for (const { itemId, playlistId, song } of entries) {
+    yield;
     const track = find(song);
     if (track === null) continue;
     const holding = key(playlistId, track.id);
@@ -363,7 +380,7 @@ export const playlistEntryLinks = (
     links.push({ itemId, trackId: track.id });
   }
   return { links, drops };
-};
+}
 
 /**
  * A YT Music entry's song as the playlist stores it: its id, title, artists,
