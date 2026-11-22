@@ -7,17 +7,21 @@ const setup = (
     background: [],
     offline: false,
   }),
+  /** Slow tap lines wait for late JS blocks until `waited`; otherwise they're written at once. */
+  { deferred = false }: { deferred?: boolean } = {},
 ) => {
   let now = 0;
   let wall = new Date(2026, 9, 22, 14, 2).getTime();
   const lines: string[] = [];
   const events: string[] = [];
+  const timers: (() => void)[] = [];
   const session = createTimingSession({
     now: () => now,
     wallNow: () => wall,
     write: (line) => lines.push(line),
     context,
     build: () => ({ version: "test", commit: "abc1234" }),
+    later: (_ms, run) => (deferred ? timers.push(run) : run()),
   });
   session.onTransition((event) => events.push(`${event.id}:${event.phase}`));
   return {
@@ -31,6 +35,10 @@ const setup = (
       wall = time;
     },
     wall: () => wall,
+    /** The slow tap lines' wait for late JS blocks runs out. */
+    waited: () => {
+      for (const timer of timers.splice(0)) timer();
+    },
   };
 };
 
@@ -477,4 +485,21 @@ test("a touch JS heard over a minute ago, still held, makes nothing that begins 
   const id = h.session.beginTouched("pop", "/playlists");
   finishPop(h, id, 60_100);
   assert.deepEqual(h.lines, []);
+});
+
+test("a slow tap's line names a JS block reported after the tap settled (#1446)", () => {
+  const { session, at, lines, waited } = setup(undefined, { deferred: true });
+  const id = session.begin("tab", "/");
+  at(363);
+  session.response(id);
+  session.frame(id);
+  session.content(id);
+  session.end(id);
+  const taps = () => lines.filter((line) => line.startsWith("Slow tab"));
+  assert.deepEqual(taps(), []);
+  // The render the tap settled in is reported as a long task only once it ended.
+  session.jsBlock(150, 237);
+  waited();
+  assert.equal(taps().length, 1);
+  assert.match(taps()[0]!, /^Slow tab to \/ .*longest JS block 237 ms$/);
 });

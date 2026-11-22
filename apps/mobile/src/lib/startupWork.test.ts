@@ -15,6 +15,7 @@ const setup = (intervalMs = 1000 / 60) => {
     write: () => {},
     context: () => ({ background: [], offline: true }),
     build: () => ({ version: "test", commit: "test" }),
+    later: () => {},
   });
   const background = createBackgroundWork({
     now: () => now,
