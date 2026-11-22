@@ -5,7 +5,7 @@ import {
   type FollowedArtist,
   type FollowSuggestion,
 } from "@wave/core";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Text, View } from "react-native";
 
 import type { PlayedArtist } from "@wave/client/db/playedEntities";
@@ -17,6 +17,7 @@ import {
 import { useFollowSuggestionPlayed } from "@/library/followSuggestions";
 import { useFollowsRead } from "@/library/follows";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
+import { useRenderCost } from "@/lib/renderCost";
 import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
 import { IconButton } from "@/components/IconButton";
@@ -83,20 +84,28 @@ export function FollowSuggestions({
   hidden: boolean;
   follows: readonly FollowedArtist[];
 }) {
+  useRenderCost("FollowSuggestions");
   const { strings } = useLocalisation();
   const [shown, setShown] = useState(FOLLOW_SUGGESTIONS_PAGE);
   const played = useFollowSuggestionPlayed(enabled);
   const followsRead = useFollowsRead();
   const dismissed = useDismissedFollowSuggestions();
-  if (!enabled || hidden || played === undefined || !followsRead || dismissed === undefined)
-    return null;
-  const { suggestions, more } = followSuggestions({
-    ...played,
-    excluded: follows.map((follow) => follow.key),
-    dismissed,
-    shown,
-    strings,
-  });
+  // Ranked again only when what it ranks changes, not on each render of the page (#1442).
+  const ranked = useMemo(
+    () =>
+      played === undefined || dismissed === undefined
+        ? null
+        : followSuggestions({
+            ...played,
+            excluded: follows.map((follow) => follow.key),
+            dismissed,
+            shown,
+            strings,
+          }),
+    [played, follows, dismissed, shown, strings],
+  );
+  if (!enabled || hidden || ranked === null || !followsRead) return null;
+  const { suggestions, more } = ranked;
   if (suggestions.length === 0) return null;
   return (
     <View className="pb-3">
