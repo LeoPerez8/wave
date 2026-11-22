@@ -18,6 +18,8 @@ import {
   magicLibrarySongs,
   magicListSeedSongs,
   completeMagicRadioBatch,
+  completeMagicRadioBatchSteps,
+  filterSteps,
   djSessionWithAlbumSongs,
   continueMagicQueue,
   queueContinuation,
@@ -56,13 +58,13 @@ import * as Layer from "effect/Layer";
 import { Storage } from "expo-sqlite/kv-store";
 import { useSyncExternalStore } from "react";
 
-import { magicProfileOf } from "@/home/artistGenres";
+import { magicProfileOf, magicProfileOfSteps } from "@/home/artistGenres";
 import { recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
 import { makeExternalStore, subscribeAll } from "@wave/client/externalStore";
 import { oneAtATime } from "@/lib/oneAtATime";
 import { freeTurnEffect } from "@/lib/backgroundWork";
-import { namedWork } from "@/lib/stepped";
+import { namedWork, runSteps } from "@/lib/stepped";
 import { dislikedSongsNow, onDislikesChanged } from "@/library/dislikes";
 import { onStarred, onYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
@@ -549,9 +551,12 @@ const batchQueueTracks = (
   batch: ReturnType<typeof completeMagicRadioBatch>,
   library: readonly SongRow[],
 ): QueueTrack[] => {
-  const tracks = new Map<string, QueueTrack>(
-    library.filter(songHasFile).map((song) => [String(song.id), toQueueTrack(song)]),
-  );
+  // Only the batch's own songs become tracks: the Library may hold thousands (#1448).
+  const wanted = new Set(batch.trackIds);
+  const tracks = new Map<string, QueueTrack>();
+  for (const song of library)
+    if (wanted.has(String(song.id)) && songHasFile(song))
+      tracks.set(String(song.id), toQueueTrack(song));
   // The batch's own songs, so a stream that only the Close fill ranked has its track too.
   for (const candidate of batch.songs)
     if (candidate.source === "stream" && candidate.song !== null)
@@ -937,7 +942,8 @@ export const layer = Layer.effectDiscard(
         const taste = latestTasteProfile();
         // A DJ session ranks with its own choices, whatever Discover's sliders say.
         const sliders = magicSessionSliders(wanted, discoverSliders.get());
-        const profileOf = magicProfileOf(library);
+        // Built over the whole Library, so in slices too (#1448).
+        const profileOf = yield* runSteps(magicProfileOfSteps(library), freeTurnEffect);
         // This batch's radios, drawn once for it and saved before they're read.
         const live = activeMagicSession();
         const drawn = magicBatchRadios(live?.id === wanted.id ? live : wanted, Math.random);
@@ -965,17 +971,21 @@ export const layer = Layer.effectDiscard(
           !wantsMagicBatch(session, queueState.get(), sleepTimerState.get())
         )
           return { kind: "dropped" } satisfies MagicBatchOutcome;
-        const playable = library.songs.filter(songHasFile);
         const candidates = yt.candidates;
         const likedCandidates = yt.likedCandidates;
-        const batch = completeMagicRadioBatch(session, candidates, likedCandidates, yt.fallback);
+        // Completed in slices (#1448): the Close fill re-ranks every candidate.
+        const batch = yield* runSteps(
+          completeMagicRadioBatchSteps(session, candidates, likedCandidates, yt.fallback),
+          freeTurnEffect,
+        );
         if (batch.trackIds.length === 0)
           return {
             kind: "empty",
             seedGenre: session.seedProfile !== null,
             step: sliderStepLabel(GENRE_FAITHFULNESS_STEPS, sliders.faithfulness),
             library: {
-              weighed: playable.length,
+              weighed: (yield* runSteps(filterSteps(library.songs, songHasFile), freeTurnEffect))
+                .length,
               admitted: candidates.filter((song) => song.source === "library").length,
             },
             yt: { ranked: yt.ranked, eligible: yt.eligible },

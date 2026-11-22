@@ -1,4 +1,5 @@
 /** DJ's sound filters, ranked from cached ReccoBeats features without waiting on the network. */
+import { finishSteps, mapSteps, sortSteps } from "./buildSteps.ts";
 import { genreStyle } from "./genreMixes.ts";
 import type { DjMood } from "./djSettings.ts";
 
@@ -66,9 +67,18 @@ export const djMoodRanked = <S extends DjMoodRankable>(
   genres: ReadonlyMap<string, string | null>,
   /** Features found by Library files' ISRC tags, by Track id. */
   libraryFeatures: ReadonlyMap<string, DjAudioFeatures> = new Map(),
-): S[] => {
+): S[] => finishSteps(djMoodRankedSteps(songs, mood, features, genres, libraryFeatures));
+
+/** `djMoodRanked`, a step per song, for a background slice (#1448). */
+export function* djMoodRankedSteps<S extends DjMoodRankable>(
+  songs: readonly S[],
+  mood: DjMood | null,
+  features: ReadonlyMap<string, DjAudioFeatures>,
+  genres: ReadonlyMap<string, string | null>,
+  libraryFeatures: ReadonlyMap<string, DjAudioFeatures> = new Map(),
+): Generator<void, S[]> {
   if (mood === null) return [...songs];
-  const ranked = songs.map((candidate) => {
+  const ranked = yield* mapSteps(songs, (candidate): S => {
     const videoId = candidate.song?.videoId;
     const library =
       candidate.source === "library" && candidate.trackId !== undefined
@@ -83,5 +93,5 @@ export const djMoodRanked = <S extends DjMoodRankable>(
     const adjustment = djMoodScore(mood, features.get(videoId) ?? library, genre);
     return adjustment === 0 ? candidate : { ...candidate, score: candidate.score + adjustment };
   });
-  return ranked.sort((a, b) => b.score - a.score);
-};
+  return yield* sortSteps(ranked, (a, b) => b.score - a.score);
+}
