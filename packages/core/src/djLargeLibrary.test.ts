@@ -132,13 +132,19 @@ test("a large Library's genre families, grid and candidates are the ones they we
   assert.equal(tilesDigest(djGrid(sources)), "2e11e57b");
   assert.equal(tilesDigest(djGridCandidates(sources)), "e09dca74");
   assert.equal(
-    tilesDigest(djGrid({ ...sources, taste: null, played: [{ id: 3, name: "Artist 3", countedPlays: 4 }] })),
+    tilesDigest(
+      djGrid({ ...sources, taste: null, played: [{ id: 3, name: "Artist 3", countedPlays: 4 }] }),
+    ),
     "d338cb9",
   );
   const grid = djGrid(sources);
   const reopened = djReopened({
     grid,
-    remembered: [grid[5]!, ...djGridCandidates(sources).slice(-2), grid.find((t) => t.kind === "genre")!],
+    remembered: [
+      grid[5]!,
+      ...djGridCandidates(sources).slice(-2),
+      grid.find((t) => t.kind === "genre")!,
+    ],
     artists: fixture.artists,
     albums: fixture.albums,
     genreCandidates: families,
@@ -178,7 +184,10 @@ test("the families and the grid are worked out in steps that give the same resul
 test("DJ's opening takes a grid worked out beforehand in place of ranking again", () => {
   const grid = djGrid(sources);
   const mixes = { kind: "skeleton", failed: false } as const;
-  assert.deepEqual(djOpeningGrid({ ...sources, artistMixes: mixes, grid }), djOpeningGrid({ ...sources, artistMixes: mixes }));
+  assert.deepEqual(
+    djOpeningGrid({ ...sources, artistMixes: mixes, grid }),
+    djOpeningGrid({ ...sources, artistMixes: mixes }),
+  );
   assert.deepEqual(
     djOpeningGrid({ ...sources, artistMixes: mixes, grid: [] }),
     djOpeningGrid({ ...sources, taste: null, artistMixes: mixes }),
@@ -194,8 +203,15 @@ test("DJ reopens in steps with the selection it reopened with before", () => {
     genreCandidates: families,
     taste: fixture.taste,
   };
-  const remembered = [grid[5]!, ...djGridCandidates(sources).slice(-2), grid.find((t) => t.kind === "genre")!];
-  assert.deepEqual(finishSteps(djReopenedSteps({ ...at, remembered })), djReopened({ ...at, remembered }));
+  const remembered = [
+    grid[5]!,
+    ...djGridCandidates(sources).slice(-2),
+    grid.find((t) => t.kind === "genre")!,
+  ];
+  assert.deepEqual(
+    finishSteps(djReopenedSteps({ ...at, remembered })),
+    djReopened({ ...at, remembered }),
+  );
   assert.deepEqual(finishSteps(djReopenedSteps({ ...at, remembered: [] })), {
     tiles: grid,
     selected: [],

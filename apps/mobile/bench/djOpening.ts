@@ -69,14 +69,17 @@ const songs = Array.from({ length: SONGS }, (_, i) => {
     genre: TAGS[artist.id % TAGS.length]!,
   };
 });
-const plays = songs.filter((_, i) => i % 3 === 0).map((song) => ({ id: song.id, countedPlays: 1 + (song.id % 7) }));
+const plays = songs
+  .filter((_, i) => i % 3 === 0)
+  .map((song) => ({ id: song.id, countedPlays: 1 + (song.id % 7) }));
 const edges = new Map<string, Map<string, number>>();
 const names = new Map<string, string>();
 for (let i = 0; i < ARTISTS + 600; i++) {
   const key = `artist ${i + 1}`;
   names.set(key, `Artist ${i + 1}`);
   const of = new Map<string, number>();
-  for (let n = 0; n < 12; n++) of.set(`artist ${1 + Math.floor(random() * (ARTISTS + 600))}`, random());
+  for (let n = 0; n < 12; n++)
+    of.set(`artist ${1 + Math.floor(random() * (ARTISTS + 600))}`, random());
   edges.set(key, of);
 }
 const graph: ArtistGraph = { edges, names };
@@ -85,10 +88,9 @@ const taste: TasteProfile = {
   songs: new Map(),
   artists: new Map(artists.map((artist) => [artist.name.toLowerCase(), random()])),
   genres: new Map(
-    ["rock", "pop", "hip hop", "jazz", "electronic", "metal", "soul", "country", "folk"].map((g) => [
-      g,
-      random(),
-    ]),
+    ["rock", "pop", "hip hop", "jazz", "electronic", "metal", "soul", "country", "folk"].map(
+      (g) => [g, random()],
+    ),
   ),
 };
 const albums: DjAlbum[] = Array.from({ length: ALBUMS }, (_, i) => ({
@@ -138,7 +140,14 @@ for (let round = 0; round < 2; round++) {
   const grid: DjTile[] = time("djGrid", () => djGrid(sources));
   sliced("djGridCandidatesSteps (full)", djGridCandidatesSteps(sources));
   sliced("djGridCandidatesSteps (opening page)", djGridCandidatesSteps(sources, 24));
-  const remembered = { grid, remembered: grid.slice(0, 3), artists, albums, genreCandidates: families, taste };
+  const remembered = {
+    grid,
+    remembered: grid.slice(0, 3),
+    artists,
+    albums,
+    genreCandidates: families,
+    taste,
+  };
   time("djReopened", () => djReopened(remembered));
   sliced("djReopenedSteps", djReopenedSteps(remembered));
 }
