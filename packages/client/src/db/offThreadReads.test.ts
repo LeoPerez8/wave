@@ -5,6 +5,7 @@ import { inArray, sql } from "drizzle-orm";
 import { libraryCounts } from "./counts.ts";
 import { countTracks, listSongs } from "./libraryQueries.ts";
 import {
+  finishReplaySteps,
   NotReplayable,
   readConnections,
   replayRead,
@@ -221,6 +222,28 @@ test("a large result is mapped in short steps that yield between them", async ()
   assert.ok(expected.length >= 600);
   assert.ok(Math.max(...held) <= 8, `no step held the thread over 8 ms: ${Math.max(...held)}`);
   assert.ok(yields >= expected.length / 8 - 1, `yielded between steps: ${yields}`);
+  assert.equal(
+    value.heldMs,
+    held.reduce((a, b) => a + b, 0),
+  );
+});
+
+test("work in steps runs in slices of a replay step at most, yielding between them", async () => {
+  const time = clock();
+  function* counted(steps: number): Generator<void, number> {
+    for (let step = 0; step < steps; step++) {
+      time.pass(1);
+      yield;
+    }
+    return steps;
+  }
+  const { value, held, yields } = await steps(time.now, () =>
+    finishReplaySteps(counted(100), time.now),
+  );
+  assert.equal(value.value, 100);
+  assert.ok(Math.max(...held) <= 8, `no slice held the thread over 8 ms: ${Math.max(...held)}`);
+  assert.equal(held.length, yields + 1, "a yield between each two slices");
+  assert.ok(yields >= 100 / 8 - 1, `yielded between slices: ${yields}`);
   assert.equal(
     value.heldMs,
     held.reduce((a, b) => a + b, 0),

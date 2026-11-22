@@ -16,6 +16,7 @@
     "bench:home-totals": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/homeTotals.ts",
     "bench:kept-play-totals": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/keptPlayTotals.ts",
     "bench:kept-totals-triggers": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/keptTotalsTriggers.ts",
+    "bench:played-totals-fallback": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/playedTotalsFallback.ts",
     "bench:playlist-fill": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/playlistFill.ts",
     "bench:queue-covers": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/queueCovers.ts",
     "bench:scan-batch": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON bench/scanBatch.ts",

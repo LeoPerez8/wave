@@ -130,3 +130,21 @@ export const createFastAgainFixture = async (
     throw error;
   }
 };
+
+/**
+ * Four counted plays of each of [videos] streamed songs the Library hasn't,
+ * a minute apart back from [now]: each credits an online artist (seven songs
+ * each) and a Library-named one, on an online album of eleven songs. For the
+ * reads that resolve streamed songs (#1451).
+ */
+export const addStreamedPlays = (db: TestDatabase, videos: number, now: number) =>
+  db.run(sql`WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x + 1 FROM n WHERE x < ${videos * 4 - 1})
+    INSERT INTO play_events (video_id, streamed_song, started_at, listened_ms, duration_ms,
+      end_reason, counted, source, recording_key, sync_id)
+    SELECT printf('v%010d', x % ${videos}),
+      json_object('videoId', printf('v%010d', x % ${videos}), 'title', 'Streamed ' || (x % ${videos}),
+        'artists', json_array('Online artist ' || (x % ${videos} / 7), 'Library artist ' || (x % 37)),
+        'album', 'Online album ' || (x % ${videos} / 11), 'albumId', NULL, 'artworkUrl', NULL,
+        'durationMs', 180000, 'explicit', json('false')),
+      ${now} - x * 60000, 180000, 180000, 'completed', 1, 'phone',
+      'online-recording-' || (x % ${videos}), 'fast-again-stream-' || x FROM n`);
