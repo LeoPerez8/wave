@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { LibraryChange } from "@wave/core";
 import * as Effect from "effect/Effect";
+import { runTestPromise, runTestSync } from "../lib/steppedTesting.ts";
 import { fileURLToPath } from "node:url";
 import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
 import { traceQueries } from "@wave/client/testing";
@@ -32,7 +33,7 @@ test("snapshot-backed input equals historical input, reads in bounded turns, and
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
-    const expected = Effect.runSync(store.playlistRecommendationInput(fixture.playlistId));
+    const expected = runTestSync(store.playlistRecommendationInput(fixture.playlistId));
     let turns = 0;
     let maxRows = 0;
     let rows = 0;
@@ -48,7 +49,7 @@ test("snapshot-backed input equals historical input, reads in bounded turns, and
       const read = store[name] as unknown as (...args: never[]) => Effect.Effect<unknown, unknown>;
       wrapped[name] = ((...args: never[]) =>
         Effect.sync(() => {
-          const traced = traceQueries(fixture.db, () => Effect.runSync(read(...args)));
+          const traced = traceQueries(fixture.db, () => runTestSync(read(...args)));
           const count = traced.queries.reduce((sum, q) => sum + q.rows, 0);
           rows += count;
           totalRows += count;
@@ -56,14 +57,14 @@ test("snapshot-backed input equals historical input, reads in bounded turns, and
         })) as never;
     }
     const source = snapshotOf(wrapped, between);
-    const input = await Effect.runPromise(source.get(fixture.playlistId));
+    const input = await runTestPromise(source.get(fixture.playlistId));
     const { songById, ...historical } = input;
     assert.deepEqual(historical, expected);
     assert.equal(songById.size, 1000);
     assert.ok(turns > 20);
     assert.ok(maxRows <= 256, `SQL rows per turn: ${maxRows}`);
     const before = totalRows;
-    const again = await Effect.runPromise(source.get(fixture.playlistId));
+    const again = await runTestPromise(source.get(fixture.playlistId));
     assert.ok(totalRows - before < 60, "warm reads only scoped membership/feedback");
     assert.equal(
       again.library,
@@ -95,7 +96,7 @@ test("suggestion inputs never page the candidate catalog: the radios replace it"
       }),
     };
     const source = snapshotOf(counted, Effect.void);
-    const input = await Effect.runPromise(source.get(fixture.playlistId));
+    const input = await runTestPromise(source.get(fixture.playlistId));
     assert.equal(catalogPages, 0);
     assert.equal("catalog" in input, false);
     source.dispose();
@@ -119,15 +120,15 @@ test("a star reaches the next suggestions without paging the Library again", asy
     };
     const source = snapshotOf(counted, Effect.void);
     const [one, two] = await Promise.all([
-      Effect.runPromise(source.get(fixture.playlistId)),
-      Effect.runPromise(source.get(fixture.playlistId)),
+      runTestPromise(source.get(fixture.playlistId)),
+      runTestPromise(source.get(fixture.playlistId)),
     ]);
     assert.equal(one.library, two.library);
     const id = fixture.songIds.at(-1)!;
     const oldStar = one.library.find((track) => track.id === String(id))!.favorite;
     setFavorites(fixture.db, [id], !oldStar, 1);
     source.write("favorites");
-    const changed = await Effect.runPromise(source.get(fixture.playlistId));
+    const changed = await runTestPromise(source.get(fixture.playlistId));
     assert.equal(changed.library.find((track) => track.id === String(id))!.favorite, !oldStar);
     assert.equal(songPasses, 1);
     source.dispose();
@@ -150,21 +151,21 @@ test("a write that leaves the Library's tracks as they were keeps its array, and
       }),
     };
     const source = snapshotOf(counted, Effect.void);
-    const first = await Effect.runPromise(source.get(fixture.playlistId));
+    const first = await runTestPromise(source.get(fixture.playlistId));
     // An Add writes the playlist, and a counted play the plays: the Library part reads again.
     source.write("playlists");
-    const read = await Effect.runPromise(source.get(fixture.playlistId));
+    const read = await runTestPromise(source.get(fixture.playlistId));
     assert.equal(songPasses, 2, "the Library part read again");
     assert.equal(read.library, first.library);
     source.write("plays");
-    assert.equal((await Effect.runPromise(source.get(fixture.playlistId))).library, first.library);
+    assert.equal((await runTestPromise(source.get(fixture.playlistId))).library, first.library);
     assert.equal(songPasses, 3);
     // A star changes a track: a new array, with the star.
     const id = fixture.songIds.at(-1)!;
     const oldStar = first.library.find((track) => track.id === String(id))!.favorite;
     setFavorites(fixture.db, [id], !oldStar, 1);
     source.write("favorites");
-    const starred = await Effect.runPromise(source.get(fixture.playlistId));
+    const starred = await runTestPromise(source.get(fixture.playlistId));
     assert.notEqual(starred.library, first.library);
     assert.equal(starred.library.find((track) => track.id === String(id))!.favorite, !oldStar);
     source.dispose();
@@ -236,7 +237,7 @@ test("paged input preserves stream/missing membership, multi-genres and playlist
   );
   const store = await loadLibraryStore(root, db);
   const source = snapshotOf(store, Effect.void);
-  const input = await Effect.runPromise(source.get(id));
+  const input = await runTestPromise(source.get(id));
   const { songById: _rows, ...plain } = input;
   const historical = selectPlaylistRecommendationInput(db, id);
   assert.deepEqual(plain, historical);
@@ -250,7 +251,7 @@ test("paged input preserves stream/missing membership, multi-genres and playlist
       playlistRecommendations(input.playlist, { ...input, pages, graph: null, online }),
       playlistRecommendations(historical.playlist, { ...historical, pages, graph: null, online }),
     );
-  const second = await Effect.runPromise(source.get(other));
+  const second = await runTestPromise(source.get(other));
   assert.equal(second.library, input.library);
   assert.deepEqual(second.feedback, []);
   assert.equal(second.playlist.length, 1);
@@ -261,7 +262,7 @@ test("recommendation pages use indexed seeks at nonzero cursors and stay bounded
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
-    const entries = Effect.runSync(store.recommendationEntriesPage(fixture.playlistId, null));
+    const entries = runTestSync(store.recommendationEntriesPage(fixture.playlistId, null));
     const cursor = entries[9]!;
     for (const read of [
       store.recommendationFlagsPage(10),
@@ -270,7 +271,7 @@ test("recommendation pages use indexed seeks at nonzero cursors and stay bounded
       store.recommendationFeedbackPage(fixture.playlistId, "offer-10"),
     ]) {
       const traced = traceQueries(fixture.db, () =>
-        Effect.runSync(read as Effect.Effect<unknown, unknown>),
+        runTestSync(read as Effect.Effect<unknown, unknown>),
       );
       assert.ok(traced.queries.every((q) => q.rows <= 128));
       assert.ok(traced.queries.every((q) => !q.sql.includes("OFFSET")));
@@ -291,8 +292,8 @@ test("playlists asking at once share one derivation of the Library's tracks", as
     const between = Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
     const source = snapshotOf(store, between);
     const [first, second] = await Promise.all([
-      Effect.runPromise(source.get(fixture.playlistId)),
-      Effect.runPromise(source.get(fixture.playlistId)),
+      runTestPromise(source.get(fixture.playlistId)),
+      runTestPromise(source.get(fixture.playlistId)),
     ]);
     assert.ok(
       second.library === first.library,
@@ -319,10 +320,8 @@ test("cold suggestions use playlist seeds while Library and stars derive in the 
     },
     Effect.void,
   );
-  const input = await Effect.runPromise(
-    source.latest(fixture.playlistId).pipe(Effect.timeout(1000)),
-  );
-  const expected = Effect.runSync(store.playlistRecommendationInput(fixture.playlistId));
+  const input = await runTestPromise(source.latest(fixture.playlistId).pipe(Effect.timeout(1000)));
+  const expected = runTestSync(store.playlistRecommendationInput(fixture.playlistId));
   assert.deepEqual(input.playlist, expected.playlist);
   assert.deepEqual(input.library, []);
   assert.deepEqual(input.feedback, expected.feedback);
@@ -335,8 +334,8 @@ test("a cold visit warms reusable Library tracks as soon as its background input
   const fixture = await createFastAgainFixture();
   t.after(() => fixture.close());
   const store = await loadLibraryStore(root, fixture.db);
-  const library = Effect.runSync(readMixInputs(store, Effect.void, fixture.now));
-  const favorites = Effect.runSync(readRecommendationFavorites(store, Effect.void));
+  const library = runTestSync(readMixInputs(store, Effect.void, fixture.now));
+  const favorites = runTestSync(readRecommendationFavorites(store, Effect.void));
   let completed: typeof library | null = null;
   let finish!: () => void;
   const started = Promise.withResolvers<void>();
@@ -355,13 +354,13 @@ test("a cold visit warms reusable Library tracks as soon as its background input
     },
     Effect.void,
   );
-  assert.deepEqual((await Effect.runPromise(source.latest(fixture.playlistId))).library, []);
+  assert.deepEqual((await runTestPromise(source.latest(fixture.playlistId))).library, []);
   await started.promise;
   finish();
   await new Promise<void>((resolve) => setImmediate(resolve));
-  const next = await Effect.runPromise(source.latest(fixture.playlistId));
+  const next = await runTestPromise(source.latest(fixture.playlistId));
   assert.deepEqual(
     next.library,
-    Effect.runSync(store.playlistRecommendationInput(fixture.playlistId)).library,
+    runTestSync(store.playlistRecommendationInput(fixture.playlistId)).library,
   );
 });

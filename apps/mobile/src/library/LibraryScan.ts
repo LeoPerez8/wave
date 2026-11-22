@@ -430,7 +430,7 @@ export const runRescan = Effect.gen(function* () {
   yield* startupTurnEffect;
   const roots = yield* store.ensureDefaultRoot(folder);
   yield* scanFolders(roots.map((root) => root.path));
-}).pipe(reportFailures);
+}).pipe(reportFailures, namedWork("scan"));
 
 /** Scans a newly added root. */
 export const runFolderScan = (path: string) => scanFolders([path]).pipe(reportFailures);

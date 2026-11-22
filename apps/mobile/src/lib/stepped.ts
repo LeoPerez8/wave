@@ -4,8 +4,8 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 
 /** One slice of stepped work, and what comes before it. */
-export interface StepPace {
-  readonly between: Effect.Effect<void>;
+export interface StepPace<R = never> {
+  readonly between: Effect.Effect<void, never, R>;
   readonly sliceMs: number;
   /** A work cap also bounds deterministic tests and exceptionally cheap operations. */
   readonly maxSteps: number;
@@ -21,16 +21,20 @@ export const GENTLE_STEPS = { sliceMs: 6, maxSteps: 512 };
 /**
  * The background work a fiber runs, for its slices' perf stats and for the
  * app log's line on a JS block over 50 ms. Inherited by the fibers it starts.
+ * It has no default (#1447): stepped work and its turns need it, so a run of
+ * work nobody named doesn't typecheck, rather than logging as "unnamed".
  */
-export const BackgroundWorkName = Context.Reference<string>(
+export class BackgroundWorkName extends Context.Service<BackgroundWorkName, string>()(
   "@wave/mobile/lib/stepped/BackgroundWorkName",
-  { defaultValue: () => "unnamed background work" },
-);
+) {}
+
+/** A turn between slices, taken under the name of the work that waits for it. */
+export type Turn = Effect.Effect<void, never, BackgroundWorkName>;
 
 /** Names the background work [effect] does (`BackgroundWorkName`). */
 export const namedWork =
   (name: string) =>
-  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, Exclude<R, BackgroundWorkName>> =>
     effect.pipe(Effect.provideService(BackgroundWorkName, name));
 
 type SliceRunner = <A>(
@@ -49,11 +53,11 @@ export const shareSlicesWith = (runner: SliceRunner): (() => void) => {
 };
 
 /** Runs [steps] in slices, each paced as [pace] says when it comes up. */
-export const pacedSteps = <A>(
+export const pacedSteps = <A, R = never>(
   steps: Generator<void, A>,
-  pace: () => StepPace,
+  pace: () => StepPace<R>,
   now: () => number = () => performance.now(),
-): Effect.Effect<A> =>
+): Effect.Effect<A, never, BackgroundWorkName | R> =>
   Effect.gen(function* () {
     const name = yield* BackgroundWorkName;
     for (;;) {
@@ -74,11 +78,12 @@ export const pacedSteps = <A>(
     ),
   );
 
-export const runSteps = <A>(
+export const runSteps = <A, R = never>(
   steps: Generator<void, A>,
-  between: Effect.Effect<void>,
+  between: Effect.Effect<void, never, R>,
   now?: () => number,
-): Effect.Effect<A> => pacedSteps(steps, () => ({ ...GENTLE_STEPS, between }), now);
+): Effect.Effect<A, never, BackgroundWorkName | R> =>
+  pacedSteps(steps, () => ({ ...GENTLE_STEPS, between }), now);
 
 /**
  * One gentle slice of [steps] for the background work [name], for work driven outside an

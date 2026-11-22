@@ -448,6 +448,30 @@ const mapInSteps = async (
   return { rows: out, heldMs };
 };
 
+/**
+ * Runs [steps] (a read's working out, built as Core's steps) in slices of
+ * `REPLAY_STEP_MS` at most, as replay steps, yielding between them, so the
+ * work after a replayed read holds the thread no longer than its mapping.
+ * Gives the value and the JS thread's time in the slices.
+ */
+export const finishReplaySteps = async <A>(
+  steps: Generator<void, A>,
+  now: () => number,
+): Promise<{ readonly value: A; readonly heldMs: number }> => {
+  let heldMs = 0;
+  for (;;) {
+    const start = now();
+    const next = replayPass(() => {
+      let step = steps.next();
+      while (!step.done && now() - start < REPLAY_STEP_MS) step = steps.next();
+      return step;
+    });
+    heldMs += now() - start;
+    if (next.done) return { value: next.value, heldMs };
+    await yieldReplay();
+  }
+};
+
 /** What a read fetches before its first pass: what it asked for last time, and before that. */
 interface Plan {
   /** The statements the read's last run asked for. */

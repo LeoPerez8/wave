@@ -4,9 +4,11 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import { sql } from "drizzle-orm";
 
 import { loadLibraryStore, loadWorktreeModule } from "../../../bench/fastAgain/store.ts";
-import { createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
+import { keptTotalsSettled } from "@wave/client/db/keptPlayTotals";
+import { addStreamedPlays, createFastAgainFixture } from "@wave/client/testing/fastAgainFixture";
 import { traceQueries } from "@wave/client/testing";
 
 const root = fileURLToPath(new URL("../../../../../", import.meta.url));
@@ -79,6 +81,47 @@ test("every read gives what the synchronous store gives, without a statement on 
       log.lines.filter((line) => line.includes("runs on the JS thread")),
       [],
       "every read replays",
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
+test("while the kept totals settle, the played totals sum off the thread with the same totals", async () => {
+  const fixture = await createFastAgainFixture();
+  try {
+    addStreamedPlays(fixture.db, 300, fixture.now);
+    const log = await appLog();
+    const here = await loadLibraryStore(root, fixture.db);
+    const away = await loadLibraryStore(root, fixture.db, { offThreadReads: true });
+    // Every song owed, as after an upgrade: the totals are summed from the history (#1451).
+    fixture.db.run(sql`UPDATE played_songs SET state = 1`);
+    assert.equal(keptTotalsSettled(fixture.db), false);
+    for (const window of [
+      { from: null, to: fixture.now },
+      { from: fixture.now - 30 * 86_400_000, to: fixture.now },
+    ]) {
+      const reads: [string, (store: typeof here) => Effect.Effect<unknown, unknown>][] = [
+        ["playedEntityTotals", (s) => s.playedEntityTotals(window)],
+        ["playedArtistTotals", (s) => s.playedArtistTotals(window)],
+      ];
+      for (const [name, read] of reads) {
+        const expected = Effect.runSync(read(here));
+        const traced = await traceAsync(fixture.db, () => Effect.runPromise(read(away)));
+        assert.deepEqual(traced.result, expected, name);
+        assert.equal(traced.mainStatements, 0, `${name} read on the main connection`);
+      }
+    }
+    const totals = Effect.runSync(here.playedEntityTotals({ from: null, to: fixture.now }));
+    assert.ok(
+      totals.artists.some((artist) => typeof artist.id === "string"),
+      "online artists",
+    );
+    log.flush();
+    assert.deepEqual(
+      log.lines.filter((line) => line.includes("runs on the JS thread")),
+      [],
+      "both reads replay",
     );
   } finally {
     fixture.close();

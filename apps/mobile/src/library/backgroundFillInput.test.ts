@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
+import { runTestPromise, runTestSync } from "../lib/steppedTesting.ts";
 import { loadLibraryStore } from "../../bench/fastAgain/store.ts";
 import { openTestDatabase, closeTestDatabase, observeSqlTasks } from "@wave/client/testing";
 import { readBackgroundFillInput } from "./backgroundFillInput.ts";
@@ -13,7 +14,7 @@ test("background fill waits for a free turn before reading playlists", async () 
   let stop: (() => void) | undefined;
   try {
     const store = await loadLibraryStore(root, db);
-    Effect.runSync(
+    runTestSync(
       store.createPlaylist("Fill", [
         {
           source: "unsearched",
@@ -33,7 +34,7 @@ test("background fill waits for a free turn before reading playlists", async () 
     const turn = Effect.callback<void>((resume) => {
       release = () => resume(Effect.void);
     });
-    const reading = Effect.runPromise(readBackgroundFillInput(store, turn, Effect.void));
+    const reading = runTestPromise(readBackgroundFillInput(store, turn, Effect.void));
     for (let i = 0; i < 10; i++) await Promise.resolve();
     assert.deepEqual(queries, []);
     assert.ok(release);
@@ -55,7 +56,7 @@ test("background fill indexes a long read in slices, each after a free turn (#14
   try {
     const store = await loadLibraryStore(root, db);
     const count = 1500;
-    Effect.runSync(
+    runTestSync(
       store.createPlaylist(
         "Long fill",
         Array.from({ length: count }, (_, n) => ({
@@ -72,7 +73,7 @@ test("background fill indexes a long read in slices, each after a free turn (#14
     );
     let reads = 0;
     let slices = 0;
-    const result = await Effect.runPromise(
+    const result = await runTestPromise(
       readBackgroundFillInput(
         store,
         Effect.sync(() => reads++),

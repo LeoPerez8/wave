@@ -23,7 +23,7 @@ test("CPU work stays within its 6 ms of the 8 ms slice and operation cap with an
         turns++;
       }),
       () => clock++,
-    ),
+    ).pipe(namedWork("test")),
   );
   assert.equal(result, "done");
   assert.ok(turns > 60);
@@ -42,7 +42,7 @@ test("CPU work stays within its 6 ms of the 8 ms slice and operation cap with an
         cappedTurns.push(capped);
       }),
       () => 0,
-    ),
+    ).pipe(namedWork("test")),
   );
   assert.deepEqual(cappedTurns, [0, 512, 1024]);
 });
@@ -69,10 +69,9 @@ test("cancelling stepped work closes its iterator and releases the scheduled tur
         );
   });
   const abort = new AbortController();
-  const pending = Effect.runPromise(
-    runSteps(steps, between, () => 0),
-    { signal: abort.signal },
-  );
+  const pending = Effect.runPromise(runSteps(steps, between, () => 0).pipe(namedWork("test")), {
+    signal: abort.signal,
+  });
   const rejected = assert.rejects(pending);
   abort.abort();
   await rejected;
@@ -95,8 +94,23 @@ test("each slice goes to the shared scheduler under the name of the work running
     const result = Effect.runSync(namedWork("Magic Queue batch")(runSteps(steps, Effect.void)));
     assert.equal(result, "ranked");
     assert.deepEqual(names, ["Magic Queue batch", "Magic Queue batch"]);
-    Effect.runSync(runSteps((function* () {})(), Effect.void));
-    assert.equal(names.at(-1), "unnamed background work");
+  } finally {
+    stop();
+  }
+});
+
+test("stepped work that no caller names doesn't run (#1447)", () => {
+  const names: string[] = [];
+  const stop = shareSlicesWith((name, steps) => {
+    names.push(name);
+    const next = steps.next();
+    return next.done === true ? { done: true, value: next.value } : { done: false };
+  });
+  try {
+    const unnamed = runSteps((function* () {})(), Effect.void);
+    // @ts-expect-error -- a run needs the work's name: the type keeps an unnamed call site out.
+    assert.throws(() => Effect.runSync(unnamed));
+    assert.deepEqual(names, []);
   } finally {
     stop();
   }

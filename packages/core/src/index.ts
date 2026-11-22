@@ -37,7 +37,7 @@ export { rankEntityPlays, rankEntityPlaysSteps } from "./stats.ts";
 export type { EntityPlayTotals } from "./stats.ts";
 export { KEPT_BLOCK_DAYS, KEPT_DAY_MS, keptTotalsPlan, playBuckets } from "./keptPlayTotals.ts";
 export type { KeptRange, KeptTotalsPlan } from "./keptPlayTotals.ts";
-export { mergeCountedPlays } from "./countedPlays.ts";
+export { mergeCountedPlays, mergeCountedPlaysSteps } from "./countedPlays.ts";
 export type {
   CountedPlays,
   LibraryPlaySums,
@@ -413,7 +413,12 @@ export { compareRefIds, compareTrackRefs } from "./refOrder.ts";
 export type { LibraryIdOrder, RefId } from "./refOrder.ts";
 export { rankMostPlayed } from "./mostPlayed.ts";
 export type { KeptPlays, LibraryKeptPlays, MostPlayed, StreamedKeptPlays } from "./mostPlayed.ts";
-export { albumPlayTotals, artistPlayTotals } from "./stats.ts";
+export {
+  albumPlayTotals,
+  albumPlayTotalsSteps,
+  artistPlayTotals,
+  artistPlayTotalsSteps,
+} from "./stats.ts";
 export type { CreditedPlayTotals } from "./stats.ts";
 export { STATS_RANKINGS, statsSeeAll } from "./statsSeeAll.ts";
 export type { StatsRanking, StatsSeeAll } from "./statsSeeAll.ts";
@@ -3417,8 +3422,10 @@ export { djSeedFull, djSessionWithAlbumSongs } from "./dj.ts";
 export type { DjSearchFound } from "./djSearch.ts";
 
 export {
+  listMounts,
   pagerMounts,
   stagedMounts,
+  type ListMountsInput,
   type PagerMountsInput,
   type StagedMountsInput,
 } from "./stagedMounts.ts";
