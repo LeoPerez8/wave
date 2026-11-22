@@ -316,7 +316,10 @@ describe("the background fill's work at startup, in slices (#1453)", () => {
 
   test("indexing a read takes one step per song, and indexes as the whole build does", async () => {
     const { indexFillPlaylists, indexFillPlaylistsSteps, finishSteps } = await import("./index.ts");
-    const playlists = [playlist(1, 100, ["Touch", "Contact", "Touch"]), playlist(2, null, ["Touch"])];
+    const playlists = [
+      playlist(1, 100, ["Touch", "Contact", "Touch"]),
+      playlist(2, null, ["Touch"]),
+    ];
     const steps = indexFillPlaylistsSteps(playlists);
     let yields = 0;
     let next = steps.next();
@@ -349,7 +352,12 @@ describe("the background fill's work at startup, in slices (#1453)", () => {
     const long = { id: 1, usedAt: 100, songs: counted(5000, reads) };
     const first = nextFillStep(NO_FILL, world([long]), 0);
     assert.equal(first.step.kind, "search");
-    const failed = fillAnswered(first.fill, song("Song 0"), { kind: "failed", reason: "failed" }, 0);
+    const failed = fillAnswered(
+      first.fill,
+      song("Song 0"),
+      { kind: "failed", reason: "failed" },
+      0,
+    );
     reads.n = 0;
     const next = nextFillStep(failed.fill, world([long]), 1000);
     assert.equal(searched(next.step), "Song 1");
