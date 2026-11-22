@@ -11,6 +11,8 @@ import { DJ_GRID_TILES, djArtistTile, djGrid, type DjGridSources, type DjTile } 
 export interface DjOpeningSources extends DjGridSources {
   /** What Discover's Artist mixes row shows (`discoverMixesSection`). */
   readonly artistMixes: DiscoverMixesSection;
+  /** `djGrid` over these sources, worked out beforehand (#1437): used in place of ranking again. */
+  readonly grid?: readonly DjTile[];
 }
 
 /** What DJ's grid draws as it opens. */
@@ -55,8 +57,12 @@ export const djOpeningWork = ({
  * out. A skeleton while the first mixes build; nothing to pick when the row
  * has no chart-seeded mix and none is coming.
  */
-export const djOpeningGrid = ({ artistMixes, ...sources }: DjOpeningSources): DjOpeningGrid => {
-  const taste = djGrid(sources);
+export const djOpeningGrid = ({
+  artistMixes,
+  grid,
+  ...sources
+}: DjOpeningSources): DjOpeningGrid => {
+  const taste = grid ?? djGrid(sources);
   if (taste.length > 0) return { kind: "tiles", tiles: taste };
   if (artistMixes.kind === "skeleton") return { kind: "skeleton" };
   if (artistMixes.kind !== "mixes") return { kind: "nothing" };
