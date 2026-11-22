@@ -35,6 +35,12 @@ import { moveShownPlaylist } from "./playlistOrder";
 const GRIP_TARGET = grid.stateCell + CELL * 2;
 /** Room a tile's name leaves at its end for the handle drawn over it. */
 export const TILE_GRIP_INSET = CELL * 4;
+/**
+ * Playlists the list's first mount draws in a frame (#1440), whole rows: the
+ * first frame shows the head and the first of them, and the rest of the first
+ * window follows a few a frame.
+ */
+const PLAYLISTS_PER_FRAME = 2;
 
 /** Where the playlists sit: a cell per playlist, [columns] to a row. */
 interface Cells extends DragCells {
@@ -218,6 +224,7 @@ export function ArrangeablePlaylists({
     cells,
     bottomInset,
     move: (from, to) => moveShownPlaylist(idsRef.current, from, to),
+    perFrame: PLAYLISTS_PER_FRAME,
   });
   useLayoutEffect(() => {
     scrolling.current = listDrag;

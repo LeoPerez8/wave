@@ -1,4 +1,5 @@
 import {
+  listMounts,
   reorderGridShift,
   reorderGridTarget,
   reorderScrollSpeed,
@@ -29,6 +30,7 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL, grid } from "@/catalog/grid";
+import { useStagedCount } from "@/lib/stagedCount";
 import { handleHold } from "@/motion/handleHold";
 
 /**
@@ -97,18 +99,22 @@ export interface ListDrag extends DragHandlers {
  * The drag machinery of a list of [count] items laid out in [cells]: [move]
  * takes a drop (from, to), true once it reorders the items, which then land
  * in place in the frame the new order renders. [bottomInset] is the chrome
- * the list scrolls under.
+ * the list scrolls under. The first mount takes about [perFrame] items a
+ * frame (whole rows, at least one) until its first window is there (#1440),
+ * so no frame pays for a screen and a half of items at once.
  */
 export const useListDrag = ({
   count,
   cells,
   bottomInset,
   move,
+  perFrame = Number.POSITIVE_INFINITY,
 }: {
   count: number;
   cells: DragCells;
   bottomInset: number;
   move: (from: number, to: number) => boolean;
+  perFrame?: number;
 }): ListDrag => {
   const { columns } = cells;
   const rowHeight = cells.height;
@@ -157,6 +163,15 @@ export const useListDrag = ({
   );
   // Layout and length changes apply at once; scrolling moves the window in `follow`.
   const rows = rowWindow(viewAt(shown.scroll), shown.rows);
+  // The first window (a screen and a half of rows, as the screen's height puts it) mounts a
+  // few rows a frame; once it's there, every row of the window mounts as it comes.
+  const staged = useStagedCount(
+    listMounts({
+      count: Number.POSITIVE_INFINITY,
+      perFrame: Math.max(1, Math.floor(perFrame / columns)),
+      screen: Math.ceil((screenHeight * 2) / rowHeight),
+    }),
+  );
   const follow = useCallback(
     (scroll: number) =>
       setShown((previous) => {
@@ -268,7 +283,7 @@ export const useListDrag = ({
   };
 
   // The dragged item's row stays mounted however far auto-scroll takes the list.
-  const indices = windowRows(rows, shown.keep).flatMap((row) =>
+  const indices = windowRows(rows, shown.keep, staged).flatMap((row) =>
     Array.from({ length: columns }, (_, column) => row * columns + column),
   );
 
