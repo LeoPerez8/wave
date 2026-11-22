@@ -395,6 +395,13 @@ export const WHOLE_LIBRARY: Record<string, WholeLibraryException> = {
     capabilities: ["ytmusic/libraryFinder.ts#useLoadedLibraryFinder"],
   },
 
+  "playback/magicQueueRadio.ts#magicQueueYtCandidates": {
+    howOften:
+      "Once per Magic Queue batch, and only when the recommendation snapshot hasn't indexed the Library's recordings yet (a cold session).",
+    reason:
+      "#1448: a cold batch indexes its playable songs once, a song per step on free turns, so each radio song looks up its title instead of matching the whole Library. Covered by Core's ytMusic finder tests and magicBatchSlices.test.ts.",
+    capabilities: ["../../../packages/core/src/ytMusic.ts#libraryFinderSteps"],
+  },
   "ytmusic/libraryFinder.ts#finderOver": {
     howOften:
       "Lazily on first lookup per rows identity; weakly cached while those rows remain reachable.",
