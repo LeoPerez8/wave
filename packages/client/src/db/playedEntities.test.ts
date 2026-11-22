@@ -220,7 +220,8 @@ test("the artist's Stats block reads the streamed totals once, unless a stream i
   recordPlay(db, play("yt:collaboration", 1_000), false, song);
   const streamedReads = () =>
     traceQueries(db, () => playedArtistSongs(db, artistId, 10_000)).queries.filter((query) =>
-      /\bstreamed_totals\b/.test(query.sql),
+      // The totals' own read: the streamed songs' reads select their videos from it.
+      /^\s*WITH streamed AS\b/.test(query.sql),
     ).length;
   assert.equal(streamedReads(), 1);
   // A play started after now (a phone whose clock ran ahead) is listening, not a play up to now.

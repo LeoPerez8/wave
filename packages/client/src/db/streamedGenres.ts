@@ -1,9 +1,8 @@
 /** Phone-local Deezer answers, including permanent misses, keyed by video id. */
-import { and, eq, gt, inArray, isNotNull, isNull, asc } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, asc, sql } from "drizzle-orm";
 import type { RecapSongGenre } from "@wave/core";
 import type { LibraryDatabase } from "./database.ts";
 import { playEvents, streamedGenres } from "./schema.ts";
-import { chunks } from "./chunks.ts";
 
 /** Bounded keyset page of videos in history that have never received an answer. */
 export const pendingStreamedGenres = (db: LibraryDatabase, after: string, limit = 32): string[] =>
@@ -36,10 +35,10 @@ export const streamedSongGenres = (
   db: LibraryDatabase,
   videoIds: readonly string[],
 ): RecapSongGenre[] =>
-  chunks(videoIds).flatMap((ids) =>
-    db
-      .select({ id: streamedGenres.videoId, genre: streamedGenres.genre })
-      .from(streamedGenres)
-      .where(inArray(streamedGenres.videoId, ids))
-      .all(),
-  );
+  videoIds.length === 0
+    ? []
+    : // One statement however many songs: a replayed read runs this in every pass (#1452).
+      db.all<RecapSongGenre>(
+        sql`SELECT video_id AS id, genre FROM streamed_genres
+          WHERE video_id IN (SELECT value FROM json_each(${JSON.stringify(videoIds)}))`,
+      );

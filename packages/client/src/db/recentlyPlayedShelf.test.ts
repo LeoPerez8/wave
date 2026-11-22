@@ -5,8 +5,17 @@ import { test } from "node:test";
 
 import { sql } from "drizzle-orm";
 import { creditSplits, relinkCredits } from "./credits.ts";
-import { homePlays, recordPlay } from "./playHistory.ts";
-import { addTrack, openTestDatabase, traceQueries, type TestDatabase } from "./testDatabase.ts";
+import { finishSteps } from "@wave/core";
+import { keptTotalsSettled, settleKeptTotals } from "./keptPlayTotals.ts";
+import { finishReplaySteps, readConnections, replayRead } from "./offThreadReads.ts";
+import { homePlays, homePlaysRead, homePlaysSteps, recordPlay } from "./playHistory.ts";
+import {
+  addTrack,
+  asyncReadClient,
+  openTestDatabase,
+  traceQueries,
+  type TestDatabase,
+} from "./testDatabase.ts";
 
 const play = (id: string, at: number, counted = true): PlayEvent => ({
   trackId: id,
@@ -125,4 +134,44 @@ test("a tie where the latest songs stop goes to the album first by id, whichever
     homePlays(db).recentlyPlayed.map((played) => played.title),
     ["B02", "B01", "B00", "B10", "B09", "B08", "B07", "B06", "B05", "B04", "B03", "Tie a"],
   );
+});
+
+/** The kept totals as an upgrade leaves them before they settle: the history sums them. */
+const unsettle = (db: TestDatabase) => db.run(sql`UPDATE played_songs SET state = 1`);
+
+test("Home's plays read for a replay, then worked out in steps, are homePlays' (#1452)", async () => {
+  const db = await seed();
+  const reads = readConnections(async () => asyncReadClient(db));
+  const replayed = async (scope?: "library" | "files") => {
+    const read = await replayRead(
+      reads,
+      (d) => homePlaysRead(d, scope),
+      () => 0,
+    );
+    return (await finishReplaySteps(homePlaysSteps(read.value), () => 0)).value;
+  };
+  for (const settled of [true, false]) {
+    if (settled) while (!settleKeptTotals(db, { songs: 50 }));
+    else unsettle(db);
+    assert.equal(keptTotalsSettled(db), settled);
+    for (const scope of ["library", "files"] as const)
+      assert.deepEqual(await replayed(scope), homePlays(db, scope), `${scope}, settled ${settled}`);
+  }
+  const empty = await openTestDatabase();
+  assert.deepEqual(finishSteps(homePlaysSteps(homePlaysRead(empty))), homePlays(empty));
+});
+
+test("while the totals settle, Home's plays read the same statements however many songs were streamed", async () => {
+  const db = await seed();
+  unsettle(db);
+  const statements = () => traceQueries(db, () => homePlaysRead(db)).queries.length;
+  const few = statements();
+  for (let index = 50; index < 250; index++) stream(db, filler(index), 10_000 + index);
+  unsettle(db);
+  assert.equal(statements(), few);
+  // The streams and the Library's credits are worked out after the read, a row at a time.
+  let steps = 0;
+  const working = homePlaysSteps(homePlaysRead(db));
+  for (let step = working.next(); !step.done; step = working.next()) steps++;
+  assert.ok(steps > 254, `${steps} steps`);
 });
