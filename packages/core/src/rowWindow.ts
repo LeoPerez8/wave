@@ -50,8 +50,16 @@ export const rowWindow = (
 /**
  * The indices to mount for [window], in order, plus [keep] (the row being
  * dragged, or -1) when it has scrolled out of it: unmounting it would end the drag.
+ * [limit] caps how many of the window's rows mount, from its start, while a
+ * first mount is spread over frames (#1440); a dragged row stays mounted past it.
  */
-export const windowRows = ({ start, end }: RowWindow, keep: number): number[] => {
+export const windowRows = (
+  window: RowWindow,
+  keep: number,
+  limit: number = Number.POSITIVE_INFINITY,
+): number[] => {
+  const { start } = window;
+  const end = Math.min(window.end, start + Math.max(0, limit));
   const rows: number[] = [];
   if (keep >= 0 && keep < start) rows.push(keep);
   for (let index = start; index < end; index++) rows.push(index);

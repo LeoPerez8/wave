@@ -22,7 +22,7 @@ const boundary = `data:text/javascript,${encodeURIComponent(`
   export let saved = { follows: [], releases: [], shows: [], country: "BR" };
   export const save = (value) => { saved = value; };
   export const knownHomeFollow = { get: () => ({ follows: [], releases: [], shows: [], country: "BR" }) };
-  export const readHomeFollowForVisit = async (admitted) => admitted ? { ...saved, follows: admitted.follows } : saved;
+  export const readHomeFollowForVisit = async (admitted) => structuredClone(admitted ? { ...saved, follows: admitted.follows } : saved);
   export const checkFollowReleases = () => Effect.succeed(false);
   export const followsSaved = { subscribe: () => () => {} };
   export const LibraryStore = Effect.succeed({ listeningHistoryVersion: { subscribe: () => () => {} } });
@@ -109,6 +109,54 @@ test("returning Home admits saved follows and country, while refreshes during a 
       io.show(true);
     });
     assert.equal((current!.follows as HomeFollowSnapshot["follows"])[0]?.level, "releases");
+  } finally {
+    act(() => renderer?.unmount());
+  }
+});
+
+// Every Settings push and tab switch hides Home and shows it again: with
+// nothing new to show, the follow cards aren't drawn again (#1439).
+test("returning Home with nothing new doesn't draw the follow cards again", async () => {
+  io.save({
+    follows: [
+      {
+        key: "abba",
+        name: "ABBA",
+        level: "shows",
+        followedAt: 1,
+        deezerId: null,
+        ytBrowseId: null,
+      },
+    ],
+    releases: [],
+    shows: [],
+    country: "BR",
+  });
+  let renders = 0;
+  function Cards() {
+    renders++;
+    useHomeFollow();
+    return null;
+  }
+  let renderer: ReturnType<typeof create> | undefined;
+  try {
+    await act(async () => {
+      renderer = create(createElement(HomeFollowProvider, null, createElement(Cards)));
+    });
+    await act(async () => {
+      io.show(false);
+    });
+    await act(async () => {
+      io.show(true);
+    });
+    const drawn = renders;
+    await act(async () => {
+      io.show(false);
+    });
+    await act(async () => {
+      io.show(true);
+    });
+    assert.equal(renders, drawn);
   } finally {
     act(() => renderer?.unmount());
   }

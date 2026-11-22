@@ -13,6 +13,7 @@ import {
   homeOpeningState,
   homeSectionWaiting,
   homePlaceholderHeight,
+  sameHomeSection,
   magicQueueGrid,
 } from "./homeOpening.ts";
 import type { HomeContent } from "./homeOpening.ts";
@@ -189,6 +190,27 @@ test("first content can draw independently while settlement waits for the local 
   assert.equal(homeOpeningState(done).settled, true);
 });
 
+test("a Home section redraws only when the slice of Home it reads changes", () => {
+  const favorites = [] as unknown as HomeSections["favorites"];
+  const before = homeContent(
+    { recentlyAdded: [] },
+    { recentlyPlayed: [], mostPlayed: [] },
+    { favorites },
+  );
+  const played = { ...before, recentlyPlayed: [...before.recentlyPlayed!] };
+  assert.equal(sameHomeSection("favorites", before, played), true);
+  assert.equal(sameHomeSection("recently-played", before, played), false);
+  assert.equal(
+    sameHomeSection("in-your-orbit", before, homeContent(undefined, undefined, undefined)),
+    true,
+  );
+  assert.equal(sameHomeSection("favorites", before, { ...before, favorites: undefined }), false);
+  // Discover reads only whether the Library is empty and whether anything was played.
+  const added = { ...before, recentlyAdded: [...before.recentlyAdded!] };
+  assert.equal(sameHomeSection("discover", before, added), true);
+  assert.equal(sameHomeSection("discover", before, { ...before, mostPlayed: undefined }), false);
+});
+
 test("unanswered plays never show the first-play hint; an empty Library and unplayed Library stay distinct", async () => {
   const db = await openTestDatabase();
   try {
@@ -282,4 +304,11 @@ test("Home reserves matching shelf, list and adaptive Magic Queue dimensions at 
 test("the Magic Queue reserves all nine tile places before its saved picks answer", () => {
   assert.equal(Math.round(magicQueueGrid(312, 1).height), 456);
   assert.equal(Math.round(magicQueueGrid(312, Math.fround(1.3)).height), 1092);
+});
+
+test("In your orbit holds the height of the tiles it has while they mount", () => {
+  // Nine tiles take three rows of three; four take two, five as many as six.
+  assert.equal(magicQueueGrid(312, 1, 9).height, magicQueueGrid(312, 1).height);
+  assert.equal(Math.round(magicQueueGrid(312, 1, 4).height), 301);
+  assert.equal(magicQueueGrid(312, 1, 5).height, magicQueueGrid(312, 1, 6).height);
 });
