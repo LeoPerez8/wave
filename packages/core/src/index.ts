@@ -1771,6 +1771,8 @@ export {
   fillPauseLine,
   nextFillStep,
   indexFillPlaylists,
+  indexFillPlaylistsSteps,
+  type FillPlaylistsIndex,
 } from "./backgroundFill.ts";
 export type {
   BackgroundFill,
