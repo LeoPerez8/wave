@@ -193,6 +193,39 @@ export const spotifyYtMatch = <
   );
 };
 
+/**
+ * The audio track of the music [video] among YouTube Music's Songs
+ * [results]: the first song that is its recording by `spotifyYtMatch`'s
+ * rules, read from the video's side, so its music video note is set aside
+ * (`MUSIC_VIDEO_NOTE`) and the video may be up to 3 seconds shorter or 60
+ * seconds longer. Videos never qualify. A music video's radio brings only
+ * other videos, and its audio track's brings songs.
+ */
+export const musicVideoAudioTrack = <
+  S extends Pick<YtSong, "title" | "artists" | "durationMs"> & {
+    readonly album?: string | null;
+    readonly videoType?: string | null;
+  },
+>(
+  video: Pick<YtSong, "title" | "artists" | "durationMs"> & { readonly album?: string | null },
+  results: readonly S[],
+): S | null => {
+  if (artistNames(video.artists).length === 0) return null;
+  const seen = { ...video, album: video.album ?? null };
+  return (
+    results.find(
+      (result) =>
+        result.videoType !== "MUSIC_VIDEO_TYPE_OMV" &&
+        result.videoType !== "MUSIC_VIDEO_TYPE_UGC" &&
+        sameRecording(
+          reading({ ...result, album: result.album ?? null }, video.artists),
+          reading(seen, result.artists, true),
+          { video: true },
+        ),
+    ) ?? null
+  );
+};
+
 /** Songs first, then one Videos search. Failed searches never settle an entry as not found.
  * Recognize has no length; it uses the same identity checks without a duration bound.
  */
