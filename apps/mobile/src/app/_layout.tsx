@@ -23,7 +23,10 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import {
   afterFirstSettled,
   startupStep,
-  touchEnded, touchStarted, touchTakenOver } from "@/lib/backgroundWork";
+  touchEnded,
+  touchStarted,
+  touchTakenOver,
+} from "@/lib/backgroundWork";
 import { followFixSongsSummary } from "@/library/findLyricsAndGenre";
 import { startKeptPlayTotals } from "@/library/keptPlayTotals";
 import { useAllFilesAccess } from "@/library/hooks";
