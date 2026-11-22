@@ -625,6 +625,16 @@ const rowsById = (db: LibraryDatabase, source: SQL, ids: readonly number[]): Bro
   return ids.flatMap((id) => found.get(id) ?? []);
 };
 
+/**
+ * An artist's Library songs in the order their Popular sort starts from, whatever sort their
+ * table shows: the artist page ranks them so (docs/spec.md, "Artist songs").
+ */
+export const artistSongsForPopular = (db: LibraryDatabase, artistId: number): BrowseRow[] => {
+  // An artist's default sort is Popular.
+  const { source, order } = listing({ kind: "artist", id: artistId });
+  return db.all<BrowseRow>(sql`SELECT * FROM (${source}) ORDER BY ${order}`).map(row);
+};
+
 /** The songs [ids] as rows, in the order given; an id with no song is left out. */
 export const browseSongs = (db: LibraryDatabase, ids: readonly number[]): BrowseRow[] =>
   rowsById(db, SONGS, ids);

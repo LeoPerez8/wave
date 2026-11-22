@@ -22,7 +22,7 @@ import { libraryLayer } from "../src/main/database.ts";
 const appFolder = join(import.meta.dirname, "..");
 const text = catalogueOf("en", "desktop");
 
-const seed = (data: string, ytMusic: "on" | "off", withHistory = false) => {
+const seed = (data: string, ytMusic: "on" | "off", withHistory = false, moreSongs = false) => {
   const cover = join(
     appFolder,
     "../../packages/kotlin-shared/src/testFixtures/resources/fixtures/cover.png",
@@ -40,6 +40,13 @@ const seed = (data: string, ytMusic: "on" | "off", withHistory = false) => {
           ? ([
               ["Collaboration", "Positions", "Nick Drake, Vashti Bunyan", "Nick Drake", 1972],
               ["Quiet Song", "Quiet Album", "Quiet Artist", "Quiet Artist", 1975],
+            ] as const)
+          : []),
+        ...(moreSongs
+          ? ([
+              ["Fly", "Bryter Layter", "Nick Drake", "Nick Drake", 1971],
+              ["Northern Sky", "Bryter Layter", "Nick Drake", "Nick Drake", 1971],
+              ["River Man", "Five Leaves Left", "Nick Drake", "Nick Drake", 1969],
             ] as const)
           : []),
       ] as const;
@@ -116,7 +123,7 @@ test("an artist's page has their photo and album shelves, and an album's hero li
     await expect(albums.getByRole("button")).toHaveText([/Pink Moon/, /Bryter Layter/]);
     const appearsOn = artist.getByRole("region", { name: text.library.appearsOn, exact: true });
     await expect(appearsOn.getByRole("button")).toHaveText([/Folk Collection/]);
-    await expect(artist.getByRole("row", { name: /Hazey Jane II/ })).toBeVisible();
+    await expect(artist.getByRole("listitem", { name: /Hazey Jane II/ })).toBeVisible();
     // YT Music is off: no toggle.
     await expect(hero.getByRole("button", { name: text.library.online, exact: true })).toHaveCount(
       0,
@@ -183,6 +190,38 @@ test("an artist's page shows shared listening stats, credits collaborations, and
   }
 });
 
+test("an artist's page shows their first five songs, and See more opens all of them", async () => {
+  const data = mkdtempSync(join(tmpdir(), "wave-artist-songs-"));
+  await seed(data, "off", false, true);
+  const app = await launch(data);
+  try {
+    const page = await app.firstWindow();
+    await page.getByRole("button", { name: "Artists", exact: true }).click();
+    await page.getByRole("row", { name: /Nick Drake/ }).dblclick();
+    const artist = page.getByTestId("artist-page");
+    const all = text.library.countedHeading(text.library.songs, 7);
+    await expect(artist.getByTestId("artist-songs-heading")).toHaveText(all);
+    // No Popular list is saved: the first five by song name.
+    await expect(artist.locator(".yt-list").getByRole("listitem")).toHaveCount(5);
+    await expect(artist.getByRole("listitem", { name: /River Man/ })).toBeVisible();
+    await expect(artist.getByRole("listitem", { name: /Time Has Told Me/ })).toHaveCount(0);
+    await page.screenshot({ path: "test-results/artist-page-songs-cut.png" });
+
+    await artist.getByRole("button", { name: text.library.seeMore, exact: true }).click();
+    const songs = page.getByTestId("artist-songs");
+    await expect(page.locator(".page-heading h1")).toHaveText("Nick Drake");
+    await expect(page.getByTestId("artist-songs-count")).toHaveText(all);
+    await expect(songs.getByRole("row", { name: /Time Has Told Me/ })).toBeVisible();
+    await page.screenshot({ path: "test-results/artist-songs-view.png" });
+
+    await page.getByRole("button", { name: text.desktopLayout.back, exact: true }).click();
+    await expect(artist.getByTestId("artist-songs-heading")).toHaveText(all);
+  } finally {
+    await app.close();
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
 test("with YT Music on, an artist's page offers Online and shows what YouTube Music adds", async () => {
   test.setTimeout(180_000);
   const data = mkdtempSync(join(tmpdir(), "wave-artist-yt-"));
@@ -198,32 +237,30 @@ test("with YT Music on, an artist's page offers Online and shows what YouTube Mu
     const online = hero.getByRole("button", { name: text.library.online, exact: true });
     await expect(library).toHaveAttribute("aria-pressed", "true");
     await expect(online).toHaveAttribute("aria-pressed", "false");
-    await expect(artist.locator(".yt-list")).toHaveCount(0);
+    // Library: the artist's four Library songs, and nothing YouTube Music adds.
+    const heading = artist.getByTestId("artist-songs-heading");
+    const librarySongs = text.library.countedHeading(text.library.songs, 4);
+    await expect(heading).toHaveText(librarySongs);
     await page.screenshot({ path: "test-results/artist-page-library.png" });
     if (process.env["CI"] !== undefined) return;
 
     await online.click();
     await expect(online).toHaveAttribute("aria-pressed", "true");
-    const songs = artist.locator(".yt-list");
     const note = artist.getByTestId("artist-online-note");
     await expect(async () => {
       const quiet = (await note.count()) > 0 ? await note.innerText() : "";
       expect(
-        (await songs.count()) > 0 || (quiet !== "" && quiet !== text.desktopLayout.loading),
+        (await heading.innerText()) !== librarySongs ||
+          (quiet !== "" && quiet !== text.desktopLayout.loading),
       ).toBe(true);
     }).toPass({ timeout: 90_000 });
     test.info().annotations.push({
       type: "artist-online",
-      description:
-        (await songs.count()) > 0
-          ? `${await songs.getByRole("listitem").count()} songs`
-          : await note.innerText(),
+      description: (await note.count()) > 0 ? await note.innerText() : await heading.innerText(),
     });
     await page.screenshot({ path: "test-results/artist-page-online.png" });
-    // The Library's own shelves and songs stay: in the table, or in the Popular list.
-    await expect(artist.getByText("Hazey Jane II").locator("visible=true").first()).toBeVisible();
     await library.click();
-    await expect(artist.locator(".yt-list")).toHaveCount(0);
+    await expect(heading).toHaveText(librarySongs);
   } finally {
     await app.close();
     rmSync(data, { recursive: true, force: true });

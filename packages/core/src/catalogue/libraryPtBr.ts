@@ -92,6 +92,8 @@ export const libraryPtBr: typeof libraryEn = {
   about: "Sobre",
   showMore: "Ver mais",
   showLess: "Ver menos",
+  seeMore: "Ver mais",
+  countedHeading: (label: string, count: number): string => `${label} · ${n(count)}`,
   subscribersValue: (count: string): string => `${count} inscritos`,
   viewsValue: (count: string): string => `${count} visualizações`,
   popular: "Populares",

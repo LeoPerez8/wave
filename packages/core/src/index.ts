@@ -599,6 +599,7 @@ export {
   inLibraryStack,
   isDetailPath,
   playlistAddSongsPath,
+  artistSongsPath,
   tabOfPath,
 } from "./navigation.ts";
 export type { DetailScreen } from "./navigation.ts";
@@ -1051,7 +1052,7 @@ export { rankPopular } from "./popularSongs.ts";
 export { artistSongOrder } from "./artistSongOrder.ts";
 export type { RankedArtistSong } from "./artistSongOrder.ts";
 export { ytArtistOpening, ytArtistOpeningState } from "./ytArtistOpening.ts";
-export { artistPageItems } from "./artistPage.ts";
+export { ARTIST_PAGE_SONGS, artistPageItems } from "./artistPage.ts";
 export type {
   ArtistPageAbout,
   ArtistPageAfter,

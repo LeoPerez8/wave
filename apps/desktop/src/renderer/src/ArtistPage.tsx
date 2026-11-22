@@ -1,6 +1,11 @@
-import type { YtPick } from "@wave/core";
+import { ARTIST_PAGE_SONGS, type YtPick } from "@wave/core";
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
-import type { ArtistAlbums, ArtistSectionView, CreditedArtist } from "../../shared/artistPage.ts";
+import type {
+  ArtistAlbums,
+  ArtistPageSongs,
+  ArtistSectionView,
+  CreditedArtist,
+} from "../../shared/artistPage.ts";
 import type { BrowseRow } from "../../shared/browse.ts";
 import type { ArtistStatsPage, StatsRow } from "../../shared/stats.ts";
 import type { MenuItem, MenuPoint } from "./Menu.tsx";
@@ -18,9 +23,17 @@ import "./artist.css";
 /** How many of YouTube Music's songs the page reads at a time. */
 const SONGS_PAGE = 100;
 
+/** A Library artist's Songs view: every song of theirs, sorted, from See more on their page. */
+export interface ArtistSongsRoute {
+  readonly kind: "artistSongs";
+  readonly id: number;
+}
+
 export interface ArtistSection {
   /** The section, or null without one (YT Music off, a name that isn't an artist's). */
   readonly view: ArtistSectionView | null;
+  /** The artist page's songs, in Popular order; null while they're read. */
+  readonly songs: ArtistPageSongs | null;
   /** The toggle's segment picked on this visit; null: none yet. */
   readonly pick: YtPick | null;
   readonly setPick: (pick: YtPick) => void;
@@ -45,17 +58,23 @@ export const useArtistSection = (
   });
   const pick = picked.id === artistId ? picked.pick : null;
   const [limit, setLimit] = useState(SONGS_PAGE);
-  const [read, setRead] = useState<{ key: string; view: ArtistSectionView | null }>();
+  const [read, setRead] = useState<{
+    key: string;
+    view: ArtistSectionView | null;
+    songs: ArtistPageSongs;
+  }>();
   const [asked, setAsked] = useState(0);
   const key = `${artistId}:${pick}:${limit}:${ytMusic}:${revision}:${asked}`;
   useEffect(() => {
     if (artistId === undefined) return;
     let current = true;
-    void window.wave.artistPage
-      .section(artistId, pick, 0, limit)
-      .then((view) => {
+    void Promise.all([
+      window.wave.artistPage.section(artistId, pick, 0, limit),
+      window.wave.artistPage.songs(artistId, pick, ARTIST_PAGE_SONGS),
+    ])
+      .then(([view, songs]) => {
         if (!current) return;
-        setRead({ key, view });
+        setRead({ key, view, songs });
         if (view?.asks)
           void window.wave.artistPage
             .ask(artistId)
@@ -71,6 +90,7 @@ export const useArtistSection = (
   const view = read?.key.startsWith(`${artistId}:`) ? read.view : null;
   return {
     view: view === null ? null : view.asks ? { ...view, note: "loading" } : view,
+    songs: read?.key.startsWith(`${artistId}:`) ? read.songs : null,
     pick,
     setPick: (next) => {
       setPicked({ id: artistId, pick: next });
@@ -229,20 +249,78 @@ function ArtistListening({
 }
 
 /**
+ * The artist's songs as their Songs view lists them: the Library's ([children], the songs table,
+ * in its sort) and, with Online, the songs YouTube Music adds. Once the artist's list is known
+ * and the sort is Popular, Online shows them all as one Popular list in YouTube Music's order,
+ * each ranked song led by its rank, in place of the table, which keeps its header to sort by.
+ */
+export function ArtistSongs({
+  section,
+  onPlayStreamed,
+  onSongMenu,
+  children,
+}: {
+  readonly section: ArtistSection;
+  readonly onPlayStreamed: (index: number) => void;
+  readonly onSongMenu: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
+  readonly children: ReactNode;
+}) {
+  const { view } = section;
+  const online = view?.toggle === "online" ? view : null;
+  const songs = online?.songs.items ?? [];
+  return (
+    <>
+      {/* Under Popular the table keeps only its header: it reads the page's hero and sorts the list. */}
+      {online?.popular ? <div className="artist-popular-head">{children}</div> : children}
+      {songs.length > 0 && (
+        <YtSongList
+          songs={songs}
+          ranked={online?.popular ? online.ranked : 0}
+          label={online?.popular ? text.library.popular : labels.youTubeMusic}
+          onPlay={onPlayStreamed}
+          onMenu={onSongMenu}
+        />
+      )}
+      {online !== null && online.songs.total > songs.length && (
+        <button className="artist-more" onClick={section.more}>
+          {text.desktopLibrary.showMoreSongs}
+        </button>
+      )}
+      <OnlineNote section={section} />
+    </>
+  );
+}
+
+/** With Online, the quiet line about YouTube Music's songs (loading, none, no answer), if any. */
+function OnlineNote({ section }: { readonly section: ArtistSection }) {
+  const note = section.view?.toggle === "online" ? section.view.note : null;
+  if (note === null) return null;
+  return (
+    <p className="yt-quiet secondary" role="status" data-testid="artist-online-note">
+      {noteText(note)}
+    </p>
+  );
+}
+
+/**
  * The artist page's content: the album shelves (Albums, with the releases YouTube Music adds
- * after the Library's; Singles & EPs; Appears on), the Library's songs ([children], the songs
- * table) and, with Online, the songs YouTube Music adds. Once the artist's list is known,
- * Online shows them all as one Popular list in YouTube Music's order, each ranked song led by
- * its rank, in place of the table. The page scrolls as one.
+ * after the Library's; Singles & EPs; Appears on), then the artist's first songs in Popular order
+ * whatever the Songs view's sort (docs/spec.md, "Artist songs"), with Online YouTube Music's among
+ * them, under a heading with the whole list's count; See more opens the Songs view with all of
+ * them. While Find narrows the songs, every song it finds shows in the table ([children]). The
+ * page scrolls as one.
  */
 export function ArtistPage({
   artistId,
   revision,
   section,
+  finding,
   onAlbum,
   onAlbumMenu,
   onYtAlbum,
+  onPlay,
   onPlayStreamed,
+  onSeeMore,
   onSongMenu,
   onStatsPlay,
   onStatsMenu,
@@ -252,10 +330,16 @@ export function ArtistPage({
   readonly artistId: number;
   readonly revision: number;
   readonly section: ArtistSection;
+  /** Find narrows the songs: the table lists every song it finds, with no cut. */
+  readonly finding: boolean;
   readonly onAlbum: (id: number) => void;
   readonly onAlbumMenu: (row: BrowseRow, at: MenuPoint) => void;
   readonly onYtAlbum: (browseId: string) => void;
+  /** Plays the page's whole Popular list from its song [index]. */
+  readonly onPlay: (index: number) => void;
   readonly onPlayStreamed: (index: number) => void;
+  /** Opens the artist's Songs view. */
+  readonly onSeeMore: () => void;
   readonly onSongMenu: (row: BrowseRow, event: MouseEvent<HTMLElement>) => void;
   readonly onStatsPlay: (row: StatsRow) => void;
   readonly onStatsMenu: (
@@ -282,7 +366,8 @@ export function ArtistPage({
   const online = view?.toggle === "online" ? view : null;
   const added = online?.albums ?? [];
   const singles = online?.singles ?? [];
-  const songs = online?.songs.items ?? [];
+  const listed = section.songs;
+  const label = listed?.popular ? text.library.popular : text.library.songs;
   return (
     <div className="artist-page" data-testid="artist-page">
       <ArtistListening
@@ -316,29 +401,36 @@ export function ArtistPage({
         onOpen={(index) => onAlbum(library.appearsOn[index]!.id)}
         onMenu={(index, at) => onAlbumMenu(library.appearsOn[index]!, at)}
       />
-      <h2 className="artist-songs-heading">
-        {online?.popular ? text.library.popular : text.library.songs}
-      </h2>
-      {/* Under Popular the table keeps only its header: it reads the page's hero and sorts the list. */}
-      {online?.popular ? <div className="artist-popular-head">{children}</div> : children}
-      {songs.length > 0 && (
-        <YtSongList
-          songs={songs}
-          ranked={online?.popular ? online.ranked : 0}
-          label={online?.popular ? text.library.popular : labels.youTubeMusic}
-          onPlay={onPlayStreamed}
-          onMenu={onSongMenu}
-        />
-      )}
-      {online !== null && online.songs.total > songs.length && (
-        <button className="artist-more" onClick={section.more}>
-          {text.desktopLibrary.showMoreSongs}
-        </button>
-      )}
-      {online?.note && (
-        <p className="yt-quiet secondary" role="status" data-testid="artist-online-note">
-          {noteText(online.note)}
-        </p>
+      {finding ? (
+        <>
+          <h2 className="artist-songs-heading">{label}</h2>
+          <ArtistSongs section={section} onPlayStreamed={onPlayStreamed} onSongMenu={onSongMenu}>
+            {children}
+          </ArtistSongs>
+        </>
+      ) : (
+        <>
+          {listed !== null && listed.total > 0 && (
+            <>
+              <h2 className="artist-songs-heading" data-testid="artist-songs-heading">
+                {text.library.countedHeading(label, listed.total)}
+              </h2>
+              <YtSongList
+                songs={listed.songs}
+                ranked={Math.min(listed.ranked, listed.songs.length)}
+                label={label}
+                onPlay={onPlay}
+                onMenu={onSongMenu}
+              />
+              {listed.total > ARTIST_PAGE_SONGS && (
+                <button className="artist-more" data-testid="artist-see-more" onClick={onSeeMore}>
+                  {text.library.seeMore}
+                </button>
+              )}
+            </>
+          )}
+          <OnlineNote section={section} />
+        </>
       )}
     </div>
   );

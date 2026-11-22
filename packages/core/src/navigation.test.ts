@@ -5,6 +5,7 @@ import {
   TAB_PATH,
   detailPath,
   inLibraryStack,
+  artistSongsPath,
   isDetailPath,
   playlistAddSongsPath,
   tabOfPath,
@@ -86,5 +87,17 @@ describe("isDetailPath", () => {
     assert.equal(isDetailPath("/albums/album/8", "album", 7), false);
     assert.equal(isDetailPath("/albums/artist/7", "album", 7), false);
     assert.equal(isDetailPath("/search/album/7", "album", 7), false);
+  });
+});
+
+describe("artistSongsPath", () => {
+  test("keeps an artist's Songs screen on the stack their page is on", () => {
+    assert.equal(artistSongsPath("/artists/artist/4", 4), "/artists/artist/4/songs");
+    assert.equal(artistSongsPath("/albums/artist/4", 4), "/albums/artist/4/songs");
+    assert.equal(artistSongsPath("/library/artist/4", 4), "/library/artist/4/songs");
+  });
+
+  test("uses the Library stack for a page opened outside a section tab", () => {
+    assert.equal(artistSongsPath("/search", 4), "/library/artist/4/songs");
   });
 });
