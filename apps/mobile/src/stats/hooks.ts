@@ -6,13 +6,14 @@ import {
   homeRecapVisibility,
   startHomeRecap,
   parseRecapId,
+  type HomeRecap,
   type RecapPeriod,
   type RecapGenre,
   type StatsPeriod,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 import type { LibraryStoreError } from "@/library/LibraryStore";
@@ -205,13 +206,17 @@ export const useRecapToAnnounce = (painted: boolean): RecapPeriod | null => {
     () => sight.visible() && AppState.currentState === "active",
     [sight],
   );
-  const [announcement, setAnnouncement] = useState(() =>
+  // Whether Home is in sight changes on every visit; only the period it
+  // announces is drawn, so only that is state (#1439).
+  const [first] = useState(() =>
     startHomeRecap({
       available: knownRecaps(),
       opened: getOpenedRecaps(),
       visible: readVisible(),
     }),
   );
+  const announcement = useRef<HomeRecap>(first);
+  const [period, setPeriod] = useState(first.period);
   useEffect(() => {
     const update = () => {
       const input = {
@@ -219,7 +224,9 @@ export const useRecapToAnnounce = (painted: boolean): RecapPeriod | null => {
         available: knownRecaps(),
         opened: getOpenedRecaps(),
       };
-      setAnnouncement((current) => homeRecapVisibility(current, input));
+      const next = homeRecapVisibility(announcement.current, input);
+      announcement.current = next;
+      setPeriod(next.period);
     };
     const stop = sight.subscribe(update);
     const activity = AppState.addEventListener("change", update);
@@ -229,7 +236,7 @@ export const useRecapToAnnounce = (painted: boolean): RecapPeriod | null => {
       activity.remove();
     };
   }, [sight, readVisible]);
-  return announcement.period;
+  return period;
 };
 
 /**

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   homeFollowCards,
   parseHomeFollowSnapshot,
+  sameHomeFollowCards,
   storedHomeFollowSnapshot,
   type HomeFollowSnapshot,
 } from "./index.ts";
@@ -158,4 +159,23 @@ test("cached release cards without a YT Music match hide at once, and all but th
     homeFollowCards(cached, { now, ytMusic: false }).releaseCards.map((r) => r.key),
     ["owned"],
   );
+});
+
+// Home reads the follow cards again on every return: the same cards from a
+// fresh read are the same, so the sections drawing them aren't drawn again (#1439).
+test("follow cards read again with nothing changed are the same cards", () => {
+  const shown = (snapshot: HomeFollowSnapshot) => ({
+    ...homeFollowCards(snapshot, { now, country: "BR" }),
+    follows: snapshot.follows,
+  });
+  const first = shown(known);
+  assert.equal(first.releaseCards.length, 1);
+  assert.equal(first.showCards.length, 1);
+  assert.equal(sameHomeFollowCards(first, shown(structuredClone(known))), true);
+  const renamed = {
+    ...known,
+    follows: [{ ...known.follows[0]!, name: "A again" }, ...known.follows.slice(1)],
+  };
+  assert.equal(sameHomeFollowCards(first, shown(renamed)), false, "a follow changed");
+  assert.equal(sameHomeFollowCards(first, { ...first, showCards: [] }), false, "a card gone");
 });

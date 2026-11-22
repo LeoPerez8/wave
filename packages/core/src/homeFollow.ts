@@ -56,6 +56,36 @@ export const homeFollowCards = (
   };
 };
 
+/** Plain data (records, lists and primitives) equal field by field. */
+const samePlain = (a: unknown, b: unknown): boolean => {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const left = a as Readonly<Record<string, unknown>>;
+  const right = b as Readonly<Record<string, unknown>>;
+  const keys = Object.keys(left);
+  return (
+    keys.length === Object.keys(right).length &&
+    keys.every((key) => Object.hasOwn(right, key) && samePlain(left[key], right[key]))
+  );
+};
+
+/** What Home's follow sections draw: the cards and the follows they name. */
+export interface HomeFollowShown {
+  readonly releaseCards: readonly unknown[];
+  readonly showCards: readonly unknown[];
+  readonly follows: readonly unknown[];
+}
+
+/**
+ * Whether [a] and [b] draw the same follow sections: a fresh read with nothing
+ * changed gives new objects for the same cards, and Home keeps what it drew.
+ */
+export const sameHomeFollowCards = (a: HomeFollowShown, b: HomeFollowShown): boolean =>
+  samePlain(a.releaseCards, b.releaseCards) &&
+  samePlain(a.showCards, b.showCards) &&
+  samePlain(a.follows, b.follows);
+
 const record = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 const strings = (v: unknown): boolean => Array.isArray(v) && v.every((x) => typeof x === "string");
 const nullableString = (v: unknown): boolean => v === null || typeof v === "string";

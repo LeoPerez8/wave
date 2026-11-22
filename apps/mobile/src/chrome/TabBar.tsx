@@ -1,8 +1,8 @@
 import { useRenderCost } from "@/lib/renderCost";
 import type { TabBarTab } from "@wave/core";
 import { useTabTrigger } from "expo-router/ui";
-import { memo } from "react";
-import { Text, View } from "react-native";
+import { memo, useLayoutEffect, useRef, type RefObject } from "react";
+import { Text, View, type GestureResponderEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { grid } from "@/catalog/grid";
@@ -36,17 +36,57 @@ type TabProps = {
   onTap?: () => void;
 };
 
+/** The trigger a tab taps with, as its latest render had it. */
+type TriggerNow = {
+  readonly switchTab: TappedTrigger["switchTab"];
+  readonly onPress: ((event: GestureResponderEvent) => void) | undefined;
+};
+
 /**
- * One tab inside a pill: teal when it's the current tab, graphite otherwise.
- * A long press opens the tab bar's editor.
+ * One tab inside a pill. expo-router's trigger reads the navigation state, so
+ * every tab renders on every navigation; it draws again (`TabFace`) only when
+ * it gains or loses focus, and taps with its trigger as it is now (#1439).
  */
 function Tab({ name, showLabel = true, onSwitch, onTap }: TabProps) {
   const { triggerProps, switchTab } = useTabTrigger({ name });
+  const trigger = useRef<TriggerNow>({ switchTab, onPress: triggerProps.onPress });
+  useLayoutEffect(() => {
+    trigger.current = { switchTab, onPress: triggerProps.onPress };
+  });
+  return (
+    <TabFace
+      name={name}
+      showLabel={showLabel}
+      focused={triggerProps.isFocused}
+      onSwitch={onSwitch}
+      onTap={onTap}
+      trigger={trigger}
+    />
+  );
+}
+
+type TabFaceProps = Required<Pick<TabProps, "showLabel">> &
+  Omit<TabProps, "showLabel"> & {
+    focused: boolean;
+    trigger: RefObject<TriggerNow>;
+  };
+
+/**
+ * A tab as drawn: teal when it's the current tab, graphite otherwise. A long
+ * press opens the tab bar's editor.
+ */
+const TabFace = memo(function TabFace({
+  name,
+  showLabel,
+  focused,
+  onSwitch,
+  onTap,
+  trigger,
+}: TabFaceProps) {
   const accent = useThemeColor("accent");
   const secondary = useThemeColor("secondary");
   const { strings } = useLocalisation();
   const { label, icon: Icon } = tabLook(name, strings);
-  const focused = triggerProps.isFocused;
   const color = focused ? accent : secondary;
   return (
     <Press
@@ -62,7 +102,8 @@ function Tab({ name, showLabel = true, onSwitch, onTap }: TabProps) {
       }}
       onPress={(event) => {
         onTap?.();
-        onSwitch(name, { switchTab, press: () => triggerProps.onPress?.(event) });
+        const now = trigger.current;
+        onSwitch(name, { switchTab: now.switchTab, press: () => now.onPress?.(event) });
       }}
       onLongPress={openTabBarEditor}
       haptic="selection"
@@ -78,7 +119,7 @@ function Tab({ name, showLabel = true, onSwitch, onTap }: TabProps) {
       )}
     </Press>
   );
-}
+});
 
 const RADIUS = chrome.tabBar / 2;
 
