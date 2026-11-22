@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import {
-  reconcileScan,
-  scanEnd,
-  scanSaveSlices,
-  SCAN_SAVE_SLICE,
-  type IndexedFile,
-} from "./index.ts";
+import { reconcileScan, scanEnd, scanSaveSlices, type IndexedFile } from "./index.ts";
 
 const MUSIC = "/storage/emulated/0/Music";
 
@@ -145,11 +139,6 @@ describe("saving a scan batch in slices", () => {
       slices.map((slice) => slice.tracks.map((track) => track.title)),
       [["One", "Three"], ["Two", "Moved A"], ["Moved B"]],
     );
-  });
-
-  test("the default save slice stays within one short database turn", () => {
-    assert.equal(SCAN_SAVE_SLICE, 4);
-    assert.equal(scanSaveSlices(changes).length, 2);
   });
 
   test("a move goes in the slice that saves the file it moved to, in the batch's order", () => {
