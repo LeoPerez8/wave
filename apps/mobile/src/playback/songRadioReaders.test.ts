@@ -121,6 +121,42 @@ test("a radio not read yet already shows the page its new reader starts from", (
     [true, false],
   );
 });
+
+test("radio reads report the first answer before the others finish", async () => {
+  const waiting = new Map<string, (page: SongRadioPage) => void>();
+  const started: string[] = [];
+  const answers: string[] = [];
+  const readers = createSongRadioReaders((radio) => ({
+    current: () => null,
+    read: () =>
+      Effect.promise(
+        () =>
+          new Promise<SongRadioPage>((resolve) => {
+            started.push(radio.id);
+            waiting.set(radio.id, resolve);
+          }),
+      ),
+  }));
+  const read = Effect.runPromise(
+    readers.read("dj", [seed("first"), seed("second")], {
+      online: true,
+      low: false,
+      onPage: ({ seed: radio, page }) => {
+        if (page !== null) answers.push(radio.id);
+        return Effect.void;
+      },
+    }),
+  );
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(started, ["first", "second"]);
+  waiting.get("second")!(pageOf("second answer"));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(answers, ["second"]);
+  waiting.get("first")!(pageOf("first answer"));
+  await read;
+  assert.deepEqual(answers, ["second", "first"]);
+});
 test("one cached radio supplies the first batch while uncached radios finish in the background", async () => {
   let finish!: (page: SongRadioPage) => void;
   const pending = new Promise<SongRadioPage>((resolve) => {

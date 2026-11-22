@@ -19,7 +19,7 @@ import {
   type YtAlbumSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { freeTurnEffect } from "@/lib/backgroundWork";
 import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
@@ -158,44 +158,54 @@ export const useMagicQueueSection = (
   const { pages, setRead } = usePoolPages(ytMusic);
   // Null until the mixes are first drawn from.
   const [mixPicks, setMixPicks] = useState<MagicQueueMixPicks | null>(null);
-  const row = magicQueueRow({ ytMusic, pages, artistMixes });
-  const { shown, picks } = magicQueueShown(row, mixPicks, Math.random);
+  // Memoized, as the section it returns: Discover renders often, and its rows take it (#1423).
+  const row = useMemo(
+    () => magicQueueRow({ ytMusic, pages, artistMixes }),
+    [ytMusic, pages, artistMixes],
+  );
+  const { shown, picks } = useMemo(
+    () => magicQueueShown(row, mixPicks, Math.random),
+    [row, mixPicks],
+  );
   // Kept for the next render: the same mixes keep these songs.
   if (picks !== mixPicks) setMixPicks(picks);
-  const refresh = (index: number) => {
-    const { strings } = currentLocalisation();
-    if (row.kind === "mixes") {
-      const { mixes } = row;
-      const previous = videoIdsOf(picks?.songs ?? []);
-      const next: MagicQueueMixPicks = { mixes, songs: magicQueueMixPicks(mixes, Math.random) };
-      setMixPicks(next);
+  const refresh = useCallback(
+    (index: number) => {
+      const { strings } = currentLocalisation();
+      if (row.kind === "mixes") {
+        const { mixes } = row;
+        const previous = videoIdsOf(picks?.songs ?? []);
+        const next: MagicQueueMixPicks = { mixes, songs: magicQueueMixPicks(mixes, Math.random) };
+        setMixPicks(next);
+        void showToast(strings.discover.newSongs, {
+          label: strings.discover.undo,
+          run: () =>
+            setMixPicks((current) =>
+              current === next
+                ? { mixes, songs: magicQueueMixPicks(mixes, Math.random, previous) }
+                : current,
+            ),
+        });
+        return;
+      }
+      const previous = (pages ?? []).map((page) => page.map(magicQueueSeedId));
+      const plan: MagicQueuePagesPlan = { kind: "redraw", pages: previous, index };
+      const next = magicQueuePagesRead(Math.random, plan);
+      setRead(next);
       void showToast(strings.discover.newSongs, {
         label: strings.discover.undo,
-        run: () =>
-          setMixPicks((current) =>
+        run: () => {
+          setRead((current) =>
             current === next
-              ? { mixes, songs: magicQueueMixPicks(mixes, Math.random, previous) }
+              ? magicQueuePagesRead(Math.random, { kind: "keep", pages: previous })
               : current,
-          ),
+          );
+        },
       });
-      return;
-    }
-    const previous = (pages ?? []).map((page) => page.map(magicQueueSeedId));
-    const plan: MagicQueuePagesPlan = { kind: "redraw", pages: previous, index };
-    const next = magicQueuePagesRead(Math.random, plan);
-    setRead(next);
-    void showToast(strings.discover.newSongs, {
-      label: strings.discover.undo,
-      run: () => {
-        setRead((current) =>
-          current === next
-            ? magicQueuePagesRead(Math.random, { kind: "keep", pages: previous })
-            : current,
-        );
-      },
-    });
-  };
-  return { shown, refresh };
+    },
+    [row, picks, pages, setRead],
+  );
+  return useMemo(() => ({ shown, refresh }), [shown, refresh]);
 };
 
 /** Starts the same seeded Magic Queue as the song's long-press menu, including queue Undo. */

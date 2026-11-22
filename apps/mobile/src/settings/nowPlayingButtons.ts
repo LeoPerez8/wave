@@ -25,7 +25,7 @@ const previousRow = (): string | null => Storage.getItemSync(NOW_PLAYING_PREVIOU
 
 /**
  * Now Playing's seven slots: five in the footer and one on each side of the
- * transport (Settings › Layout › Now Playing). Synced with the Wave account,
+ * transport (Settings › Layout's Now Playing editor). Synced with the Wave account,
  * as the tab bar is, under Core's key.
  */
 const nowPlayingButtons = persistedSetting<NowPlayingButtons>({

@@ -1,7 +1,7 @@
 /**
  * The tab bar the owner arranges (a long press on it opens its editor): Home,
- * always first, then any of Library, the Library's sections and Search, up to
- * five tabs. Search keeps its own round pill at the end whenever it's on.
+ * any of Library and the Library's sections, then Search, up to five tabs.
+ * Search keeps its own round pill at the end whenever it's on.
  */
 import { LIBRARY_SECTION_SLUGS, type LibrarySectionSlug } from "./librarySections.ts";
 import { moveItem } from "./playlists.ts";
@@ -21,17 +21,23 @@ export const MAX_TABS = 5;
 const isTab = (value: string): value is TabBarTab => TABS.some((tab) => tab === value);
 
 /**
- * [tabs] held to the bar's rules: Home first, each tab once, Search last,
- * anything unknown left out, and no more than `MAX_TABS` (the last ones
- * before Search dropping off).
+ * [tabs] held to the bar's rules: Home in its saved position (or first when
+ * missing), each tab once, Search last, unknown tabs left out, and no more
+ * than `MAX_TABS` (the last ones before Search other than Home dropping off:
+ * Home never does).
  */
 const barOf = (tabs: readonly string[]): TabBar => {
   const known = new Set(tabs.filter(isTab));
   const search = known.has("search");
-  const middle = [...known]
-    .filter((tab) => tab !== "index" && tab !== "search")
-    .slice(0, MAX_TABS - 1 - (search ? 1 : 0));
-  return ["index", ...middle, ...(search ? (["search"] as const) : [])];
+  const arranged = [...known].filter((tab) => tab !== "search");
+  if (!arranged.includes("index")) arranged.unshift("index");
+  const room = MAX_TABS - (search ? 1 : 0);
+  let over = arranged.length - room;
+  const shown = arranged
+    .reverse()
+    .filter((tab) => tab === "index" || over-- <= 0)
+    .reverse();
+  return [...shown, ...(search ? (["search"] as const) : [])];
 };
 
 /** The bar of an install that never chose a shortcut tab. */
@@ -66,9 +72,8 @@ export const tabBarFull = (bar: TabBar): boolean => bar.length >= MAX_TABS;
 /** The tabs [bar] doesn't hold, in the editor's order: Library, its sections, Search. */
 export const tabsOffBar = (bar: TabBar): TabBarTab[] => TABS.filter((tab) => !bar.includes(tab));
 
-/** The tabs between Home and the Search pill: those the editor can drag. */
-export const movableTabs = (bar: TabBar): TabBarTab[] =>
-  bar.filter((tab) => tab !== "index" && tab !== "search");
+/** The tabs sharing a pill before Search: those the editor can drag. */
+export const movableTabs = (bar: TabBar): TabBarTab[] => bar.filter((tab) => tab !== "search");
 
 /** A change made in the tab bar's editor. */
 export type TabBarEdit =
@@ -80,14 +85,14 @@ export type TabBarEdit =
 /**
  * [bar] after [edit]: a removed tab leaves (never Home), an added one joins at
  * the end, before Search, unless the bar is full, and a dragged one lands
- * where it's dropped. Home stays first and Search last throughout.
+ * where it's dropped. Search stays last throughout.
  */
 export const editTabBar = (bar: TabBar, edit: TabBarEdit): TabBar => {
   if ("remove" in edit) return bar.filter((tab) => tab === "index" || tab !== edit.remove);
   const search = bar.filter((tab) => tab === "search");
   if ("move" in edit) {
-    return ["index", ...moveItem(movableTabs(bar), edit.move.from, edit.move.to), ...search];
+    return [...moveItem(movableTabs(bar), edit.move.from, edit.move.to), ...search];
   }
   if (bar.includes(edit.add) || tabBarFull(bar)) return bar;
-  return barOf(["index", ...movableTabs(bar), edit.add, ...search]);
+  return barOf([...movableTabs(bar), edit.add, ...search]);
 };

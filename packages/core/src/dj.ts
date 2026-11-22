@@ -88,6 +88,101 @@ export interface DjGenreTile {
 /** One selectable item of DJ's grid. */
 export type DjTile = DjArtistTile | DjAlbumTile | DjGenreTile;
 
+/** Playable Library songs covered directly by a DJ selection, in Library order. */
+export const djLibraryCandidates = <
+  Song extends {
+    readonly id: number;
+    readonly path: string | null;
+    readonly albumId: number;
+    readonly artistIds: readonly number[];
+    readonly artistNames: readonly string[];
+    readonly genre: string | null;
+  },
+>(
+  tiles: readonly DjTile[],
+  songs: readonly Song[],
+): Song[] => {
+  const artistIds = new Set<number>();
+  const artistNames = new Set<string>();
+  const familyArtistNames = new Set<string>();
+  const albumIds = new Set<number>();
+  const families = new Set<string>();
+  const addArtistName = (set: Set<string>, name: string): void => {
+    const key = catalogSeedKey(name);
+    if (key !== null) set.add(key);
+  };
+  for (const tile of tiles) {
+    if (tile.kind === "artist") {
+      if (tile.libraryId !== null) artistIds.add(tile.libraryId);
+      addArtistName(artistNames, tile.name);
+    } else if (tile.kind === "album") {
+      if (tile.libraryId !== null) albumIds.add(tile.libraryId);
+    } else {
+      families.add(tile.family);
+      for (const artist of tile.artists) addArtistName(familyArtistNames, artist.name);
+    }
+  }
+  return songs.filter(
+    (song) =>
+      song.path !== null &&
+      (albumIds.has(song.albumId) ||
+        song.artistIds.some((id) => artistIds.has(id)) ||
+        song.artistNames.some((name) => {
+          const key = catalogSeedKey(name);
+          return key !== null && artistNames.has(key);
+        }) ||
+        families.has(genreFamily(song.genre ?? "")?.key ?? "") ||
+        (song.genre === null &&
+          song.artistNames.some((name) => {
+            const key = catalogSeedKey(name);
+            return key !== null && familyArtistNames.has(key);
+          }))),
+  );
+};
+
+/** Picks a directly selected Library song by batch rank, excluding picks already unavailable. */
+export const djFirstLibrarySong = <
+  Song extends {
+    readonly id: number;
+    readonly path: string | null;
+    readonly albumId: number;
+    readonly artistIds: readonly number[];
+    readonly artistNames: readonly string[];
+    readonly genre: string | null;
+  },
+>(
+  tiles: readonly DjTile[],
+  songs: readonly Song[],
+  {
+    excluded = new Set<string>(),
+    scoreOf = () => 0,
+    random = () => 0,
+  }: {
+    /** Queue ids the batch would already exclude (dislikes, prior picks and learned signals). */
+    readonly excluded?: ReadonlySet<string>;
+    /** The Library ranking score the batch assigned each matching song. */
+    readonly scoreOf?: (song: Song) => number;
+    /** Breaks equal-score ties, using the batch's random source. */
+    readonly random?: () => number;
+  } = {},
+): Song | null => {
+  const candidates = djLibraryCandidates(tiles, songs).filter(
+    (song) => !excluded.has(String(song.id)),
+  );
+  if (candidates.length === 0) return null;
+  let highest = Number.NEGATIVE_INFINITY;
+  let tied: Song[] = [];
+  for (const candidate of candidates) {
+    const score = scoreOf(candidate);
+    if (score > highest) {
+      highest = score;
+      tied = [candidate];
+    } else if (score === highest) tied.push(candidate);
+  }
+  const at = Math.min(tied.length - 1, Math.floor(Math.max(0, random()) * tied.length));
+  return tied[at] ?? null;
+};
+
 /** The artist [tile] stands for: an artist tile's own, an album tile's album artist. */
 export const djTileArtist = (tile: DjTile): string =>
   tile.kind === "album" ? tile.artist : tile.name;
@@ -296,10 +391,10 @@ export const djGenreTiles = (
  * that is theirs and isn't a compilation, when one is known. Before the profile's first derivation the most
  * played artists stand in for it, in their order. An artist the Library
  * doesn't have shows by the name the plays or the graph know. No tile
- * appears twice, and the grid holds `DJ_GRID_TILES` at most; it's empty with
- * no taste signal and no plays.
+ * appears twice. This is the complete ordered candidate list; `djGrid` is
+ * its opening page. It's empty with no taste signal and no plays.
  */
-export const djGrid = ({
+export const djGridCandidates = ({
   artists,
   taste,
   played = [],
@@ -343,17 +438,16 @@ export const djGrid = ({
     genreCandidates: genreCandidates ?? null,
   }).slice(0, DJ_GENRE_TILES);
   let nextGenre = 0;
-  /** Shows [artist], then the album of theirs while the grid has room for it. */
+  /** Shows [artist], then the first album of theirs when one is known. */
   const show = (artist: DjArtistTile): void => {
     grid.set(artist.key, artist);
     const record = records.get(artist.key);
-    if (record !== undefined && grid.size < DJ_GRID_TILES) grid.set(record.key, record);
+    if (record !== undefined) grid.set(record.key, record);
   };
   for (const favourite of favourites) {
-    if (grid.size >= DJ_GRID_TILES) break;
     if (favourite === null || grid.has(favourite.key)) continue;
     show(favourite);
-    if (graph !== null && grid.size < DJ_GRID_TILES) {
+    if (graph !== null) {
       for (const neighbour of artistNeighbours(graph, favourite.name)) {
         const tile = djArtistTile(neighbour.name);
         if (tile === null || library.has(tile.key) || grid.has(tile.key)) continue;
@@ -362,16 +456,63 @@ export const djGrid = ({
       }
     }
     const genre = genreTiles[nextGenre];
-    if (genre !== undefined && grid.size < DJ_GRID_TILES) {
+    if (genre !== undefined) {
       grid.set(genre.key, genre);
       nextGenre += 1;
     }
   }
-  while (nextGenre < genreTiles.length && grid.size < DJ_GRID_TILES) {
+  while (nextGenre < genreTiles.length) {
     const genre = genreTiles[nextGenre++]!;
     grid.set(genre.key, genre);
   }
   return [...grid.values()];
+};
+
+/** DJ's opening page of the complete grid candidate list. */
+export const djGrid = (sources: DjGridSources): DjTile[] =>
+  djGridCandidates(sources).slice(0, DJ_GRID_TILES);
+
+/** The next [limit] candidates not already shown in this DJ visit. */
+export const djGridPage = (
+  candidates: readonly DjTile[],
+  seen: readonly DjTileKey[],
+  limit = DJ_GRID_TILES,
+): DjTile[] => {
+  const shown = new Set(seen);
+  return candidates.filter((tile) => !shown.has(tile.key)).slice(0, Math.max(0, limit));
+};
+
+/** Append one page without changing [tiles]' existing positions. */
+export const djGridLoadMore = (
+  candidates: readonly DjTile[],
+  tiles: readonly DjTile[],
+  seen: readonly DjTileKey[],
+  limit = DJ_GRID_TILES,
+): { readonly tiles: DjTile[]; readonly page: DjTile[]; readonly seen: DjTileKey[] } => {
+  const shown = new Set([...seen, ...tiles.map((tile) => tile.key)]);
+  const page = djGridPage(candidates, [...shown], limit);
+  for (const tile of page) shown.add(tile.key);
+  return { tiles: [...tiles, ...page], page, seen: [...shown] };
+};
+
+/** Refresh [tiles] in place around selected indices using candidates not yet shown this visit. */
+export const djGridRefresh = (
+  candidates: readonly DjTile[],
+  tiles: readonly DjTile[],
+  selected: readonly DjTileKey[],
+  seen: readonly DjTileKey[],
+): { readonly tiles: DjTile[]; readonly seen: DjTileKey[] } => {
+  const selectedKeys = new Set(selected);
+  const seenKeys = new Set(seen);
+  const fresh = candidates.filter((tile) => !seenKeys.has(tile.key));
+  let next = 0;
+  const refreshed = tiles.map((tile) => {
+    if (selectedKeys.has(tile.key) || fresh[next] === undefined) return tile;
+    const replacement = fresh[next++]!;
+    seenKeys.add(replacement.key);
+    return replacement;
+  });
+  return { tiles: refreshed, seen: [...seenKeys] };
 };
 
 /** How many similar artists a selected tile opens at most. */
@@ -758,6 +899,9 @@ export const startDjQueue = (
     id,
     seed: { kind: "dj", id, title: DJ_SEED_TITLE },
     dj: settings,
+    djArtistSeeds: tiles
+      .filter((tile): tile is DjArtistTile => tile.kind === "artist")
+      .map((tile) => tile.name),
     seedSongs: [...seeds.values()],
     seedDraws: [],
     used: [],
@@ -775,6 +919,35 @@ export const startDjQueue = (
     seedProfile: null,
     seedStyle: null,
     seedVideoIds: [],
+  };
+};
+
+/**
+ * [current], a DJ session that started before its selected albums' pages
+ * were read, with what [refreshed] (`startDjQueue` again, with those pages'
+ * songs) brings: its seed songs, the radio artists it adds and its family
+ * radios. Everything else the session holds since it started stays: its
+ * used songs, signals, learned radios and the artists its first song
+ * credited. A draw for the batch not read yet is dropped, so that batch draws
+ * again from the new seed songs.
+ */
+export const djSessionWithAlbumSongs = (
+  current: MagicSession,
+  refreshed: MagicSession,
+): MagicSession => {
+  const { seedRadios, djGenreRadios: _genreRadios, ...kept } = current;
+  const seedIds = new Set((refreshed.seedSongs ?? []).map((song) => song.id));
+  const artists = new Set(current.radioArtists.map(magicArtistKey));
+  return {
+    ...kept,
+    seedSongs: refreshed.seedSongs ?? [],
+    seedDraws: (current.seedDraws ?? []).filter((id) => seedIds.has(id)),
+    ...(seedRadios === undefined || seedRadios.batch === current.batches ? {} : { seedRadios }),
+    radioArtists: [
+      ...current.radioArtists,
+      ...refreshed.radioArtists.filter((name) => !artists.has(magicArtistKey(name))),
+    ],
+    ...(refreshed.djGenreRadios === undefined ? {} : { djGenreRadios: refreshed.djGenreRadios }),
   };
 };
 

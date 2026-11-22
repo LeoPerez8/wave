@@ -235,6 +235,7 @@ export default function PlaylistScreen() {
         <PlaylistItems
           key={playlist.id}
           playlistId={playlist.id}
+          canAddSongs={playlistId > 0}
           customOrder={sort.key === "custom"}
           showReleaseYear={sort.key === "releaseDate"}
           items={items}

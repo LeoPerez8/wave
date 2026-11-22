@@ -139,6 +139,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   repeatOne: "Repetir Uma",
   search: "Buscar",
   searchYourLibrary: "Buscar na biblioteca",
+  searchSongs: "Buscar músicas",
   searchingForLyrics: "Buscando letra",
   selectsThisLineToShare: "Seleciona este verso para compartilhar",
   share: "Compartilhar",

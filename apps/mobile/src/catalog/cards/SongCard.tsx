@@ -4,6 +4,7 @@ import { View } from "react-native";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Artwork } from "../Artwork";
+import { TileCheck } from "../CheckCell";
 import { CELL } from "../grid";
 import { useLocalisation } from "@/localisation/localisation";
 
@@ -76,6 +77,8 @@ type Props = {
   unavailable?: boolean | undefined;
   onPress: () => void;
   onLongPress?: (() => void) | undefined;
+  /** In selection mode, the tile checks this song instead of playing it. */
+  checked?: boolean | undefined;
 };
 
 /** A song on a shelf or in a grid: its play-disc cover, the title and artist under it. */
@@ -89,6 +92,7 @@ export function SongCard({
   unavailable,
   onPress,
   onLongPress,
+  checked,
 }: Props) {
   const { strings } = useLocalisation();
   const scale = size / TILE.size;
@@ -99,6 +103,7 @@ export function SongCard({
       label={label ?? strings.library.songLabel(title, artist)}
       onPress={onPress}
       onLongPress={onLongPress}
+      checked={checked}
     >
       <SongCover
         uri={artworkUri}
@@ -107,6 +112,7 @@ export function SongCard({
         disc={TILE.disc * scale}
         inset={TILE.inset * scale}
       />
+      {checked !== undefined && <TileCheck checked={checked} />}
       <View style={{ paddingTop: CELL }}>
         <CardTitle>{title}</CardTitle>
         <CardDetail size="footnote">{artist}</CardDetail>

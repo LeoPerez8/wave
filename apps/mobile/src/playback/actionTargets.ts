@@ -9,6 +9,7 @@ import {
   type PlaylistPlace,
   type QueueSong,
   type UnsearchedSong,
+  pickStreamedAlbum,
   ytAlbumSongs,
   ytSongCredit,
   ytSongStarred,
@@ -22,7 +23,12 @@ import type { LibrarySection } from "@/catalog/sections";
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow, SongRow } from "@wave/client";
-import { itemSongs, librarySectionSongs, playlistEntries } from "@/library/sectionSongs";
+import {
+  itemSongs,
+  librarySectionSongs,
+  playlistEntries,
+  songsWithIds,
+} from "@/library/sectionSongs";
 import { currentLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 import { resolveMixedEntries } from "./mixedEntries";
@@ -225,7 +231,7 @@ const KIND_ALBUM: KindInfo<AlbumRow> = {
 
 /** Runs [run] with a mixed item's own kind and the item, typed for each other. */
 const asOwnKind = <R>(
-  mixed: Exclude<MixedItem, { readonly kind: "ytAlbum" }>,
+  mixed: Extract<MixedItem, { readonly kind: "track" | "album" }>,
   run: <T>(kind: KindInfo<T>, item: T) => R,
 ): R => (mixed.kind === "track" ? run(KIND_TRACK, mixed.item) : run(KIND_ALBUM, mixed.item));
 
@@ -279,11 +285,12 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
   },
   // Albums and songs checked together: each acts as its own kind would.
   mixed: {
-    // `targetEntries` reads mixed targets itself (`resolveMixedEntries`); a release has no Library songs.
+    // `targetEntries` reads mixed targets itself (`resolveMixedEntries`); online collections have
+    // no Library songs until the action runs.
     songs: (mixed) =>
-      mixed.kind === "ytAlbum"
-        ? Promise.resolve([])
-        : asOwnKind(mixed, (kind, item) => kind.songs(item)),
+      mixed.kind === "track" || mixed.kind === "album"
+        ? asOwnKind(mixed, (kind, item) => kind.songs(item))
+        : Promise.resolve([]),
     heading: (mixed, sectionSongs) =>
       mixed.kind === "ytAlbum"
         ? {
@@ -291,14 +298,46 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
             subtitle: joinArtists(mixed.item.artists),
             covers: cover(mixed.item.artworkUrl),
           }
-        : asOwnKind(mixed, (kind, item) => kind.heading(item, sectionSongs)),
+        : mixed.kind === "onlineAlbum"
+          ? {
+              title: mixed.item.title,
+              subtitle: mixed.item.albumArtist,
+              covers: cover(mixed.item.artworkUrl),
+            }
+          : mixed.kind === "track" || mixed.kind === "album"
+            ? asOwnKind(mixed, (kind, item) => kind.heading(item, sectionSongs))
+            : mixed.kind === "playlist"
+              ? {
+                  title: mixed.item.name,
+                  subtitle: songCount(mixed.item.trackCount),
+                  covers: mixed.item.thumbPaths,
+                }
+              : mixed.kind === "discoverMix"
+                ? { title: mixed.item.seed.name, subtitle: "", covers: undefined }
+                : mixed.kind === "followRelease"
+                  ? {
+                      title: mixed.item.release.title,
+                      subtitle: mixed.item.artist,
+                      covers: cover(mixed.item.release.artworkUrl),
+                    }
+                  : {
+                      title: mixed.item.title,
+                      subtitle: mixed.item.author,
+                      covers: cover(mixed.item.artworkUrl),
+                    },
     // An album counts as its own album, so songs checked with it share it (Go to Album).
     facts: (mixed, favorites, find, pending) =>
       mixed.kind === "track"
         ? KIND_TRACK.facts(mixed.item, favorites, find, pending)
-        : mixed.kind === "ytAlbum"
-          ? { streamed: true, artistNames: mixed.item.artists }
-          : { albumId: mixed.item.id, artistIds: mixed.item.albumArtistIds },
+        : mixed.kind === "playlist"
+          ? { hasImage: mixed.item.hasImage }
+          : mixed.kind === "onlineAlbum"
+            ? { streamed: true, artistNames: mixed.item.artists }
+            : mixed.kind === "ytAlbum"
+              ? { streamed: true, artistNames: mixed.item.artists }
+              : mixed.kind === "album"
+                ? { albumId: mixed.item.id, artistIds: mixed.item.albumArtistIds }
+                : {},
     count: (count) => library().kindCounts.item(count),
   },
 };
@@ -348,6 +387,61 @@ export const targetEntries = async (target: ActionItems): Promise<readonly Targe
         const result = await askYtMusic((ytMusic) => ytMusic.album(album.browseId));
         if (Result.isFailure(result)) throw result.failure;
         return ytAlbumSongs(album.browseId, result.success);
+      },
+      onlineAlbum: async (album) => {
+        let browseId = album.albumId;
+        if (browseId === null) {
+          const search = await askYtMusic((ytMusic) =>
+            ytMusic.searchAlbums(`${album.title} ${album.artists[0] ?? ""}`),
+          );
+          if (Result.isFailure(search)) throw search.failure;
+          browseId = pickStreamedAlbum(album, search.success);
+        }
+        if (browseId === null) throw new Error(library().albumNotOnYtMusic);
+        const result = await askYtMusic((ytMusic) => ytMusic.album(browseId!));
+        if (Result.isFailure(result)) throw result.failure;
+        return ytAlbumSongs(browseId, result.success);
+      },
+      followRelease: async ({ release }) => {
+        if (release.libraryAlbumId != null)
+          return (await itemSongs("albums", release.libraryAlbumId)).map((track) => ({
+            source: "library" as const,
+            track,
+          }));
+        if (release.browseId === null)
+          throw new Error(currentLocalisation().strings.newReleases.unavailable);
+        const result = await askYtMusic((ytMusic) => ytMusic.album(release.browseId!));
+        if (Result.isFailure(result)) throw result.failure;
+        return ytAlbumSongs(release.browseId, result.success).map((song) => ({
+          source: "stream" as const,
+          song,
+        }));
+      },
+      playlist: async (playlist) =>
+        (await playlistEntries(playlist.id)).flatMap((entry): TargetEntry[] =>
+          entry.source === "library"
+            ? [{ source: "library", track: entry.track }]
+            : entry.source === "stream"
+              ? [{ source: "stream", song: entry.song }]
+              : entry.source === "unsearched"
+                ? [{ source: "unsearched", song: entry.song }]
+                : [],
+        ),
+      discoverMix: async (mix) => {
+        const ids = mix.songs.flatMap((song) => (song.source === "library" ? [song.track.id] : []));
+        const tracks = new Map((await songsWithIds(ids)).map((track) => [track.id, track]));
+        return mix.songs.flatMap((song): TargetEntry[] =>
+          song.source === "stream"
+            ? [{ source: "stream", song: song.song }]
+            : tracks.has(song.track.id)
+              ? [{ source: "library", track: tracks.get(song.track.id)! }]
+              : [],
+        );
+      },
+      ytPlaylist: async (playlist) => {
+        const result = await askYtMusic((ytMusic) => ytMusic.playlist(playlist.playlistId));
+        if (Result.isFailure(result)) throw result.failure;
+        return result.success.songs;
       },
       finder: currentLibraryFinder,
     });

@@ -175,6 +175,33 @@ export const SCREENS_FROM_MEMORY: Record<string, ScreenFromMemory> = {
       "library/collaborativePlaylists.tsx#usePrivateCopyNotice",
     ],
   },
+  "app/library/playlist/[id]/add.tsx": {
+    draws: ["library/hooks.ts#usePlaylist"],
+  },
+  "app/(tabs)/albums/playlist/[id]/add.tsx": {
+    via: ["app/library/playlist/[id]/add.tsx"],
+    draws: ["library/hooks.ts#usePlaylist"],
+  },
+  "app/(tabs)/artists/playlist/[id]/add.tsx": {
+    via: ["app/library/playlist/[id]/add.tsx"],
+    draws: ["library/hooks.ts#usePlaylist"],
+  },
+  "app/(tabs)/favorites/playlist/[id]/add.tsx": {
+    via: ["app/library/playlist/[id]/add.tsx"],
+    draws: ["library/hooks.ts#usePlaylist"],
+  },
+  "app/(tabs)/genres/playlist/[id]/add.tsx": {
+    via: ["app/library/playlist/[id]/add.tsx"],
+    draws: ["library/hooks.ts#usePlaylist"],
+  },
+  "app/(tabs)/playlists/playlist/[id]/add.tsx": {
+    via: ["app/library/playlist/[id]/add.tsx"],
+    draws: ["library/hooks.ts#usePlaylist"],
+  },
+  "app/(tabs)/songs/playlist/[id]/add.tsx": {
+    via: ["app/library/playlist/[id]/add.tsx"],
+    draws: ["library/hooks.ts#usePlaylist"],
+  },
   "app/library/playlist-graveyard/[id].tsx": { draws: ["library/hooks.ts#usePlaylistGraveyard"] },
   "app/library/stats/index.tsx": {
     draws: [
@@ -218,12 +245,6 @@ export const SCREENS_FROM_MEMORY: Record<string, ScreenFromMemory> = {
   "app/settings/lyrics-and-tags.tsx": SETTINGS_ONLY,
   "app/settings/playback.tsx": SETTINGS_ONLY,
   "app/settings/layout/index.tsx": SETTINGS_ONLY,
-  "app/settings/layout/home.tsx": SETTINGS_ONLY,
-  "app/settings/layout/library.tsx": SETTINGS_ONLY,
-  "app/settings/layout/playlists.tsx": SETTINGS_ONLY,
-  "app/settings/layout/tab-bar.tsx": SETTINGS_ONLY,
-  "app/settings/layout/now-playing/index.tsx": SETTINGS_ONLY,
-  "app/settings/layout/now-playing/[slot].tsx": SETTINGS_ONLY,
   "app/settings/swipe-actions/index.tsx": SETTINGS_ONLY,
   "app/settings/swipe-actions/left.tsx": SETTINGS_ONLY,
   "app/settings/swipe-actions/right.tsx": SETTINGS_ONLY,

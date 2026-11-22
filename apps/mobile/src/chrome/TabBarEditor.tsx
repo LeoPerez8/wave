@@ -18,11 +18,11 @@ import { getTabBar, setTabBar } from "@/settings/tabBar";
 import { tabLook } from "./tabs";
 
 /**
- * The tab bar's editor: Home first (it can't move or go), the tabs after it
- * (drag to reorder, a button removes one), Search last while it's on, then
+ * The tab bar's editor: Home and the tabs after it (drag to reorder; Home
+ * can't be removed), Search last while it's on, then
  * the tabs off the bar (a button adds one, until five fit). The caller keeps
  * [bar] and applies each [edit]; given [onDone] it's the card's, with Done,
- * and without it Settings › Layout › Tab bar's page.
+ * and without it Settings › Layout's Tab bar row opens Home and this card.
  */
 export function TabBarEditor({
   bar,
@@ -47,9 +47,7 @@ export function TabBarEditor({
       hiddenHeading={strings.arrangement.notInTabBar}
       edit={edit}
       canAdd={!tabBarFull(bar)}
-      first={
-        <FixedRow title={title("index")} place={place} divider={middle.length > 0 || search} />
-      }
+      canRemove={(tab) => tab !== "index"}
       last={
         search ? (
           <FixedRow

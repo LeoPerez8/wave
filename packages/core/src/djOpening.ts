@@ -22,6 +22,29 @@ export type DjOpeningGrid =
   | { readonly kind: "nothing" };
 
 /**
+ * Work a DJ opening needs; a stored grid renders while its full candidates are read.
+ * An unread Library snapshot is read after the first frame even under a kept grid: its
+ * artists give restored tiles their pictures, similar-artist rows their Library, and
+ * search adds their Library identity. A kept grid skips only the build and the
+ * startup preparation.
+ */
+export const djOpeningWork = ({
+  keptGrid,
+  libraryReady,
+}: {
+  readonly keptGrid: boolean;
+  readonly libraryReady: boolean;
+}): {
+  readonly readLibrary: boolean;
+  readonly buildGrid: boolean;
+  readonly prepareStartup: boolean;
+} => ({
+  readLibrary: !libraryReady,
+  buildGrid: !keptGrid && libraryReady,
+  prepareStartup: !keptGrid,
+});
+
+/**
  * DJ's grid as it opens. With a taste signal (`djGrid` has a tile: a scored
  * artist, or a counted play before the profile's first derivation) the grid
  * is `djGrid`'s, whatever the Artist mixes show. With none, it's the seed

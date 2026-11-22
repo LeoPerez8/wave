@@ -36,13 +36,19 @@ describe("the saved tab bar", () => {
     assert.deepEqual(parseTabBar(storedTabBar(["index"]), null), ["index"]);
   });
 
-  test("a saved bar is held to the bar's rules: Home first, each tab once, Search last", () => {
+  test("a saved bar keeps Home in place, adds it first when missing, and keeps Search last", () => {
     assert.deepEqual(parseTabBar("songs,index,search,artists,songs", null), [
-      "index",
       "songs",
+      "index",
       "artists",
       "search",
     ]);
+    assert.deepEqual(parseTabBar("library,index,playlists", null), [
+      "library",
+      "index",
+      "playlists",
+    ]);
+    assert.deepEqual(parseTabBar("library,search", null), ["index", "library", "search"]);
     assert.deepEqual(parseTabBar("library", null), ["index", "library"]);
     assert.deepEqual(parseTabBar("", null), ["index"]);
   });
@@ -69,6 +75,34 @@ describe("the saved tab bar", () => {
       "playlists",
       "artists",
       "albums",
+    ]);
+  });
+
+  test("a saved bar of more than five never loses Home past the cut", () => {
+    assert.deepEqual(parseTabBar("library,playlists,albums,songs,index,search", null), [
+      "library",
+      "playlists",
+      "albums",
+      "index",
+      "search",
+    ]);
+    assert.deepEqual(parseTabBar("library,playlists,albums,songs,artists,index", null), [
+      "library",
+      "playlists",
+      "albums",
+      "songs",
+      "index",
+    ]);
+    const edited = editTabBar(parseTabBar("library,playlists,albums,songs,index,search", null), {
+      remove: "albums",
+    });
+    assert.deepEqual(edited, ["library", "playlists", "index", "search"]);
+    assert.deepEqual(editTabBar(edited, { add: "genres" }), [
+      "library",
+      "playlists",
+      "index",
+      "genres",
+      "search",
     ]);
   });
 });
@@ -99,6 +133,12 @@ describe("editing the tab bar", () => {
       "songs",
       "genres",
     ]);
+    assert.deepEqual(editTabBar(["library", "index", "search"], { add: "albums" }), [
+      "library",
+      "index",
+      "albums",
+      "search",
+    ]);
   });
 
   test("Search, added back, takes its pill at the end", () => {
@@ -125,29 +165,35 @@ describe("editing the tab bar", () => {
     assert.deepEqual(editTabBar(today, { add: "library" }), today);
   });
 
-  test("the editor drags only the tabs between Home and the Search pill", () => {
-    assert.deepEqual(movableTabs(today), ["library", "playlists"]);
-    assert.deepEqual(movableTabs(["index", "songs", "albums"]), ["songs", "albums"]);
-    assert.deepEqual(movableTabs(["index", "search"]), []);
+  test("the editor drags every tab except Search", () => {
+    assert.deepEqual(movableTabs(today), ["index", "library", "playlists"]);
+    assert.deepEqual(movableTabs(["songs", "index", "albums"]), ["songs", "index", "albums"]);
+    assert.deepEqual(movableTabs(["index", "search"]), ["index"]);
   });
 
-  test("a dragged tab lands where it's dropped among them, Home and Search staying put", () => {
+  test("a dragged tab lands where it's dropped, Search staying last", () => {
     const bar = ["index", "library", "playlists", "albums", "search"] as const;
-    assert.deepEqual(editTabBar(bar, { move: { from: 2, to: 0 } }), [
-      "index",
+    assert.deepEqual(editTabBar(bar, { move: { from: 3, to: 0 } }), [
       "albums",
+      "index",
       "library",
       "playlists",
       "search",
     ]);
     assert.deepEqual(editTabBar(bar, { move: { from: 0, to: 9 } }), [
-      "index",
+      "library",
       "playlists",
       "albums",
-      "library",
+      "index",
       "search",
     ]);
-    assert.deepEqual(editTabBar(bar, { move: { from: 3, to: 0 } }), bar);
+    assert.deepEqual(editTabBar(bar, { move: { from: 0, to: 3 } }), [
+      "library",
+      "playlists",
+      "albums",
+      "index",
+      "search",
+    ]);
   });
 
   test("the editor lists the tabs off the bar in Library order, Search last", () => {

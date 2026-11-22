@@ -36,6 +36,9 @@ import { openYtAlbumActions } from "@/ytmusic/YtAlbumActions";
 import { hideRelease } from "./followReleases";
 import { playNewReleases } from "./playNewReleases";
 import { useHomeFollow } from "./useHomeFollow";
+import { followReleaseItem } from "@/playback/mixedItems";
+import { type HomeSelection, useHomeTiles } from "@/selection/useHomeSelection";
+import { TileCheck } from "@/catalog/CheckCell";
 
 const guardedRequest = <A,>(read: Effect.Effect<A, YtMusicError>) =>
   Effect.gen(function* () {
@@ -80,10 +83,12 @@ function ReleaseTile({
   release,
   follow,
   refresh,
+  selection,
 }: {
   release: FollowRelease;
   follow: FollowedArtist;
   refresh: () => void;
+  selection: HomeSelection;
 }) {
   const { strings } = useLocalisation();
   const copy = strings.newReleases;
@@ -105,6 +110,9 @@ function ReleaseTile({
     { action: "goToArtist", label: copy.goToArtist, onPress: () => openYtArtistNamed(follow.name) },
     { action: "removeFromLibrary", label: copy.hide, onPress: hide },
   ];
+  const item = followReleaseItem(release, follow.name);
+  useHomeTiles(selection, [item]);
+  const select = () => selection.start(item);
   const open = () =>
     run(async () => {
       if (release.libraryAlbumId) {
@@ -128,19 +136,36 @@ function ReleaseTile({
           Effect.flatMap(LibraryStore, (s) => s.getAlbum(release.libraryAlbumId!)),
         );
         if (owned) {
-          openAlbumActions(owned.album, { extraEntries: entries });
+          openAlbumActions(owned.album, {
+            extraEntries: entries,
+            onSelect: selection.enabled ? select : undefined,
+          });
           return;
         }
       }
       if (release.browseId !== null && followedArtistsEnabled() && ytMusicEnabled())
-        openYtAlbumActions({ ...head, browseId: release.browseId }, { releaseEntries: entries });
+        openYtAlbumActions(
+          { ...head, browseId: release.browseId },
+          { releaseEntries: entries, onSelect: selection.enabled ? select : undefined },
+        );
       else
         openOverlay({
           label: release.title,
           render: (close) => (
             <MenuChoices
               cards={[]}
-              entries={entries.map((e) => ({
+              entries={[
+                ...entries,
+                ...(selection.enabled
+                  ? [
+                      {
+                        action: "select" as const,
+                        label: strings.itemActions.labels.select,
+                        onPress: select,
+                      },
+                    ]
+                  : []),
+              ].map((e) => ({
                 ...e,
                 onPress: () => {
                   close();
@@ -159,11 +184,13 @@ function ReleaseTile({
     <CardTile
       width={COVER_ROW_TILE}
       label={`${release.title}, ${tag}, ${follow.name}, ${date}`}
-      onPress={open}
-      onLongPress={menu}
+      checked={selection.selecting ? selection.isChecked(item) : undefined}
+      onPress={() => (selection.selecting ? selection.toggle(item) : open())}
+      onLongPress={selection.selecting ? undefined : menu}
     >
       <View>
         <Artwork uri={release.artworkUrl ?? undefined} size={COVER_ROW_TILE} radius={CELL * 0.75} />
+        {selection.selecting && <TileCheck checked={selection.isChecked(item)} />}
         <View className="absolute bottom-2 left-2 rounded bg-background px-2 py-1">
           <Text className="font-sans text-caption text-foreground">{tag}</Text>
         </View>
@@ -210,11 +237,15 @@ function PlayReleases({ title, cards }: { title: string; cards: readonly FollowR
   );
 }
 
-export function NewReleases({ title }: { title: string }) {
+export function NewReleases({ title, selection }: { title: string; selection: HomeSelection }) {
   const { releaseCards: cards, follows, refresh } = useHomeFollow();
   if (cards.length === 0) return null;
   return (
-    <TitledSection title={title} control={<PlayReleases title={title} cards={cards} />}>
+    <TitledSection
+      title={title}
+      control={<PlayReleases title={title} cards={cards} />}
+      selecting={selection.selecting}
+    >
       <CoverRow>
         {cards.map((r) => (
           <ReleaseTile
@@ -222,6 +253,7 @@ export function NewReleases({ title }: { title: string }) {
             release={r}
             follow={follows.find((f) => f.key === r.artistKey)!}
             refresh={refresh}
+            selection={selection}
           />
         ))}
       </CoverRow>

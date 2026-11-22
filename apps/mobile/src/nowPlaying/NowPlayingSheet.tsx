@@ -1,3 +1,4 @@
+import { useRenderCost } from "@/lib/renderCost";
 import { useLocalisation } from "@/localisation/localisation";
 import { activeTiming, beginTiming, timingSurfaceCommitted } from "@/lib/timing";
 import { IconChevronDown, IconDotsVertical } from "@tabler/icons-react-native";
@@ -221,6 +222,7 @@ export function UnderNowPlaying({ children }: { children: ReactNode }) {
 export function NowPlayingSheet() {
   const { strings } = useLocalisation();
   useRenderCount("NowPlayingSheet");
+  useRenderCost("NowPlayingSheet");
   usePlayheadSource();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -565,7 +567,7 @@ export function NowPlayingSheet() {
                   editing={editing}
                 />
                 {/*
-                 * The five footer slots (Settings › Layout › Now Playing). Empty, the row keeps
+                 * The five footer slots (Settings › Layout's Now Playing editor). Empty, the row keeps
                  * its height, so the transport stays put. The song controls share one lookup
                  * after settlement or their own early tap.
                  */}

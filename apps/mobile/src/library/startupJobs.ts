@@ -26,7 +26,7 @@ import type { IndexedArtwork, IndexedKnownFile, IndexedTrack } from "@wave/clien
 import type { KnownFile } from "./NativeScanner.ts";
 
 /**
- * Rows one startup write takes: ti's scan save slice. A turn holds one such
+ * Rows one startup write takes: Core's scan save slice. A turn holds one such
  * transaction, so a long list costs a turn per hundred rows, not per row.
  */
 const STARTUP_WRITE_ROWS = SCAN_SAVE_SLICE;
@@ -212,8 +212,8 @@ export const readScanIndex = (
   });
 
 /**
- * Reconciliation in steps, then ti's save slices (100 files, the batch's
- * artwork with the first) as one transaction per turn.
+ * Reconciliation in steps, then Core's save slices (`SCAN_SAVE_SLICE`, 100
+ * files, the batch's artwork with the first) as one transaction per turn.
  */
 export const saveScanBatch = (
   store: LibraryStore["Service"],

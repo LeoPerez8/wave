@@ -593,7 +593,14 @@ export type {
   PlaylistSort,
   SortablePlaylist,
 } from "./playlistSort.ts";
-export { TAB_PATH, detailPath, inLibraryStack, isDetailPath, tabOfPath } from "./navigation.ts";
+export {
+  TAB_PATH,
+  detailPath,
+  inLibraryStack,
+  isDetailPath,
+  playlistAddSongsPath,
+  tabOfPath,
+} from "./navigation.ts";
 export type { DetailScreen } from "./navigation.ts";
 export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
@@ -986,6 +993,7 @@ export {
   MAGIC_SKIP_MS,
   isMagicQueue,
   magicArtistKey,
+  magicDjFirstSong,
   magicLibrarySongs,
   magicListSeedSongs,
   magicBatchRadios,
@@ -1626,6 +1634,9 @@ export {
 } from "./pagePlayback.ts";
 export type { PagePlayback, PlayableSongs } from "./pagePlayback.ts";
 export {
+  playlistAddVisit,
+  settlePlaylistAddVisit,
+  stepPlaylistAddVisit,
   planPlaylistSongs,
   playlistEntryLinks,
   playlistPlayback,
@@ -1648,6 +1659,7 @@ export {
   writePlaylistYtSong,
 } from "./playlistEntries.ts";
 export type {
+  PlaylistAddVisit,
   HeldPlaylistTrack,
   PlaylistEntryLink,
   PlaylistEntryLinks,
@@ -3079,14 +3091,12 @@ export {
   moveNowPlayingButton,
   nowPlayingButtonsAreDefault,
   nowPlayingRelatedChevronShown,
-  nowPlayingSlotRoute,
   nowPlayingSlotChoiceHolder,
   nowPlayingSlotChoices,
   nowPlayingSlotShow,
   nowPlayingSlotRunsSongMenu,
   nowPlayingSongMenuShow,
   readNowPlayingButtons,
-  readNowPlayingSlotRoute,
   storedNowPlayingButtons,
 } from "./nowPlayingButtons.ts";
 export type {
@@ -3307,6 +3317,12 @@ export {
   djArtistTile,
   djCanStart,
   djGrid,
+  djGridCandidates,
+  djGridLoadMore,
+  djGridPage,
+  djGridRefresh,
+  djFirstLibrarySong,
+  djLibraryCandidates,
   djOpened,
   djReduce,
   djSeedTiles,
@@ -3325,7 +3341,7 @@ export {
 export type { DjDiscovery, DjPopularity, DjSettings, DjVariety } from "./djSettings.ts";
 export { djAdjustGroups, djAdjustSheetHeight, djAdjustSheetSwipeCloses } from "./djAdjust.ts";
 export type { DjAdjustGroup, DjAdjustOption, DjAdjustSheetSwipe } from "./djAdjust.ts";
-export { djVarietyCandidates } from "./djVariety.ts";
+export { djFirstRadioSong, djVarietyCandidates } from "./djVariety.ts";
 export type { DjCandidatePools } from "./djVariety.ts";
 export {
   DJ_REMEMBERED_SETTING,
@@ -3364,14 +3380,16 @@ export type {
   DjTile,
   DjTileKey,
 } from "./dj.ts";
-export { djOpeningGrid } from "./djOpening.ts";
+export { djOpeningGrid, djOpeningWork } from "./djOpening.ts";
 export type { DjOpeningGrid, DjOpeningSources } from "./djOpening.ts";
+export { DJ_GRID_SETTING, readDjGridMemory, storedDjGridMemory } from "./djGridMemory.ts";
+export { djRestoredGrid } from "./djRemembered.ts";
 export { DJ_OPENED_TILES, djCells, djPageRead, djPagesNeeded } from "./dj.ts";
 export { djAlbumTile, djTileArtist } from "./dj.ts";
 export type { DjAlbum, DjAlbumTile, DjGenreTile } from "./dj.ts";
 export type { DjCell, DjPageRead, DjRow, DjSavedPage } from "./dj.ts";
 export { djSearchTiles } from "./djSearch.ts";
-export { djSeedFull } from "./dj.ts";
+export { djSeedFull, djSessionWithAlbumSongs } from "./dj.ts";
 export type { DjSearchFound } from "./djSearch.ts";
 
 export {

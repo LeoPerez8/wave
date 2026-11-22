@@ -114,15 +114,15 @@ describe("the Disliked songs page", () => {
 });
 
 describe("the Layout page", () => {
-  test("lists Home, Library, Playlists, Tab bar and Now Playing, each opening its own page", () => {
+  test("lists Home, Library, Playlists, Tab bar and Now Playing editor destinations", () => {
     assert.deepEqual(
-      LAYOUT_PAGES.map(({ title, route }) => [title, route]),
+      LAYOUT_PAGES.map(({ page, title }) => [page, title]),
       [
-        ["Home", "/settings/layout/home"],
-        ["Library", "/settings/layout/library"],
-        ["Playlists", "/settings/layout/playlists"],
-        ["Tab bar", "/settings/layout/tab-bar"],
-        ["Now Playing", "/settings/layout/now-playing"],
+        ["home", "Home"],
+        ["library", "Library"],
+        ["playlists", "Playlists"],
+        ["tabBar", "Tab bar"],
+        ["nowPlaying", "Now Playing"],
       ],
     );
   });

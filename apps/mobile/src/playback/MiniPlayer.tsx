@@ -1,3 +1,4 @@
+import { useRenderCost } from "@/lib/renderCost";
 import { playerNotice } from "@wave/core";
 import { useLocalisation } from "@/localisation/localisation";
 import {
@@ -106,6 +107,7 @@ type Props = {
 export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props) {
   const { strings } = useLocalisation();
   useRenderCount("MiniPlayer");
+  useRenderCost("MiniPlayer");
   const item = usePlaybackField("item");
   const playing = usePlaybackField("playWhenReady");
   // "Waiting for connection" or why playback stopped; null while the song plays as usual.

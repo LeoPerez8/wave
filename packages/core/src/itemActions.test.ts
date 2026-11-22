@@ -42,6 +42,20 @@ const albums = (artistIds: readonly number[]): ActionSubject => ({
 });
 
 describe("itemActions", () => {
+  test("songs, albums and playlists checked across Home share the collection actions", () => {
+    const entries = itemActions({
+      kind: "mixed",
+      items: [
+        { albumId: 7, artistIds: [10], favorite: false },
+        { artistIds: [11] },
+        { hasImage: true },
+      ],
+      surface: "selection",
+      here: "/home",
+    });
+    assert.deepEqual(names(entries), ["playNext", "addToQueue", "addToPlaylist"]);
+  });
+
   test("a song's menu: queue it, add it to a playlist, star it, go to its album and artist, delete it", () => {
     assert.deepEqual(names(itemActions(tracks([song()]))), [
       "playNext",

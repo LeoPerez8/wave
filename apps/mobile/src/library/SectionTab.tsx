@@ -1,15 +1,18 @@
+import { useStackScreenOptions } from "@/chrome/tabScreens";
 import { timingStackListeners } from "@/lib/timing";
+import { screenCostLayout } from "@/lib/renderCost";
 import type { LibrarySectionSlug } from "@wave/core";
-import { Stack } from "expo-router";
+import { Stack, useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 import { View } from "react-native";
 
 import { findSection } from "@/catalog/sections";
 import { LargeTitle, useLargeTitleTop } from "@/components/LargeTitleScreen";
 import { useLocalisation } from "@/localisation/localisation";
-import { useThemeColor } from "@/theme/useThemeColor";
 
 import { SectionList } from "./SectionList";
 import { sectionTitleLongPress } from "./sectionTitleLongPress";
+import { openArmedAnchoredMenu } from "@/motion/menuRequest";
 
 /**
  * A section tab's own stack (each section tab's `_layout`): what its list
@@ -17,11 +20,12 @@ import { sectionTitleLongPress } from "./sectionTitleLongPress";
  * and stays open while you're on another tab.
  */
 export function SectionTabStack() {
-  const background = useThemeColor("background");
+  const screenOptions = useStackScreenOptions();
   return (
     <Stack
       screenListeners={timingStackListeners}
-      screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}
+      screenLayout={screenCostLayout}
+      screenOptions={screenOptions}
     />
   );
 }
@@ -32,6 +36,11 @@ export function SectionTabStack() {
  * keeps your place while you're on another one.
  */
 export function SectionTabScreen({ slug }: { slug: LibrarySectionSlug }) {
+  useFocusEffect(
+    useCallback(() => {
+      if (slug === "playlists") openArmedAnchoredMenu("layout-playlists");
+    }, [slug]),
+  );
   const top = useLargeTitleTop();
   const { strings } = useLocalisation();
   const section = findSection(slug);

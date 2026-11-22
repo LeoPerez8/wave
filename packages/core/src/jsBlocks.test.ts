@@ -129,3 +129,79 @@ describe("a long task before the first screen settles is startup's", () => {
     assert.deepEqual(lines, ["JS blocked 400 ms on / by player restore"]);
   });
 });
+
+describe("a long task names the screen or section rendering in it", () => {
+  test("a render span inside the task names it, though named work was running", () => {
+    const { log, lines } = setup("/settings");
+    log.workBegan("scan", 0);
+    log.renderRan("Settings", 1000, 200);
+    log.longTask(995, 210);
+    assert.deepEqual(lines, ["JS blocked 210 ms on /settings by rendering Settings"]);
+  });
+
+  test("of nested renders, the innermost that holds most of it names it", () => {
+    const { log, lines } = setup("/");
+    log.renderRan("HomeSection(recent)", 1005, 4);
+    log.renderRan("HomeSection(mixes)", 1010, 240);
+    log.renderRan("Home", 1000, 300);
+    log.longTask(1000, 310);
+    assert.deepEqual(lines, ["JS blocked 310 ms on / by rendering HomeSection(mixes)"]);
+  });
+
+  test("a screen whose cost is spread over its sections names the screen", () => {
+    const { log, lines } = setup("/");
+    log.renderRan("HomeSection(a)", 1000, 100);
+    log.renderRan("HomeSection(b)", 1100, 100);
+    log.renderRan("HomeSection(c)", 1200, 100);
+    log.renderRan("Home", 1000, 300);
+    log.longTask(1000, 310);
+    assert.deepEqual(lines, ["JS blocked 310 ms on / by rendering Home"]);
+  });
+
+  test("of sibling renders, the one that held most of it names it", () => {
+    const { log, lines } = setup("/");
+    log.renderRan("Home", 1000, 100);
+    log.renderRan("Settings", 1100, 60);
+    log.longTask(1000, 170);
+    assert.deepEqual(lines, ["JS blocked 170 ms on / by rendering Home"]);
+  });
+
+  test("a section beside its screen's render, not inside it, doesn't name it", () => {
+    const { log, lines } = setup("/");
+    log.renderRan("HomeSection(recent)", 900, 160);
+    log.renderRan("Home", 1000, 150);
+    log.longTask(1000, 160);
+    assert.deepEqual(lines, ["JS blocked 160 ms on / by rendering Home"]);
+  });
+
+  test("the render is weighed against the slice that held most of the task, not the latest", () => {
+    const { log, lines } = setup("/search");
+    log.sliceRan("scan", 1000, 45);
+    log.renderRan("Search", 1050, 40);
+    log.sliceRan("sync", 1150, 5);
+    log.longTask(1000, 170);
+    assert.deepEqual(lines, ["JS blocked 170 ms on /search by scan"]);
+  });
+
+  test("a render that holds more of the task than a slice beats the slice", () => {
+    const { log, lines } = setup("/search");
+    log.sliceRan("scan", 1100, 7);
+    log.renderRan("Search", 1000, 200);
+    log.longTask(1000, 210);
+    assert.deepEqual(lines, ["JS blocked 210 ms on /search by rendering Search"]);
+  });
+
+  test("a slice that holds more of the task than a render beats the render", () => {
+    const { log, lines } = setup("/search");
+    log.renderRan("Search", 1000, 5);
+    log.sliceRan("scan", 1010, 45);
+    log.longTask(1000, 60);
+    assert.deepEqual(lines, ["JS blocked 60 ms on /search by scan"]);
+  });
+
+  test("a render span alone writes nothing: only the runtime's long task says the thread was held", () => {
+    const { log, lines } = setup("/");
+    log.renderRan("Home", 1000, 400);
+    assert.deepEqual(lines, []);
+  });
+});

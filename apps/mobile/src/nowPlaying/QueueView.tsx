@@ -1,3 +1,4 @@
+import { useRenderCost } from "@/lib/renderCost";
 import { useLocalisation } from "@/localisation/localisation";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import { AnimatedLegendList } from "@legendapp/list/reanimated";
@@ -61,7 +62,14 @@ import {
   toggleShuffle,
 } from "@/playback/actions";
 import { openQueuedSongActions } from "@/playback/ActionsMenu";
-import { useQueue, useUpNextReshuffles } from "@/playback/hooks";
+import {
+  useQueue,
+  useQueueContext,
+  useQueueRepeat,
+  useQueueShuffle,
+  useUpNextCount,
+  useUpNextReshuffles,
+} from "@/playback/hooks";
 import {
   retryMagicBatch,
   useMagicBatchEmptySeed,
@@ -100,7 +108,7 @@ export function QueueHeader({
   onShowPlayer: () => void;
 }) {
   const { strings } = useLocalisation();
-  const queue = useQueue();
+  const queue = { shuffle: useQueueShuffle(), repeat: useQueueRepeat() };
   const shuffle = useShuffleControl();
   return (
     <View>
@@ -191,8 +199,8 @@ function BarGround({ colors, top, scroll, start }: Ground) {
 function UpNextBar() {
   const { strings } = useLocalisation();
   const ground = use(BarGroundContext);
-  const queue = useQueue();
-  const count = queue.entries.length - queue.index - 1;
+  const count = useUpNextCount();
+  const context = useQueueContext();
   const magic = useMagicQueueLabel();
   return (
     <View className="overflow-hidden" style={{ height: BAR }}>
@@ -200,7 +208,7 @@ function UpNextBar() {
       <Hairline />
       <View className="flex-1 flex-row items-end justify-between" style={{ paddingBottom: CELL }}>
         <CatalogLine className="shrink">
-          {magic ?? followQueueLabel(queue.context, strings) ?? strings.playbackText.upNext}
+          {magic ?? followQueueLabel(context, strings) ?? strings.playbackText.upNext}
         </CatalogLine>
         {count > 0 && (
           <Text
@@ -453,6 +461,7 @@ export function UpNextList({
 }) {
   const { language, strings } = useLocalisation();
   useRenderCount("UpNextList");
+  useRenderCost("UpNextList");
   usePerfVisible("queue");
   const queue = useQueue();
   const [pending, setPending] = useState<readonly PendingMove[]>([]);

@@ -6,21 +6,31 @@ import {
   artistGraph,
   DJ_GRID_TILES,
   DJ_MAX_SELECTED,
+  EMPTY_QUEUE,
+  MAGIC_QUEUE_CONTEXT,
   djArtistTile,
   djAlbumTile,
   djFamilyRadioAllowed,
   djGenreTile,
   djNewToYou,
   djRadioSongAllowed,
+  djFirstLibrarySong,
   djGrid,
+  djGridCandidates,
+  djGridPage,
+  djGridLoadMore,
+  djGridRefresh,
   djOpened,
   djReduce,
   djReopened,
   genreMixDjCandidates,
   djSelected,
+  djSessionWithAlbumSongs,
+  magicSignal,
   startDjQueue,
   DEFAULT_DJ_SETTINGS,
   magicBatchRadios,
+  magicDjFirstSong,
   magicQueueLabel,
   magicSessionSliders,
   parseMagicSession,
@@ -32,9 +42,78 @@ import {
   djSeedTiles,
   djSelectable,
   magicArtistKey,
+  reduceQueue,
+  wantsMagicBatch,
   type DjTile,
   type TasteProfile,
 } from "./index.ts";
+
+test("DJ can take its first playable Library song from the selected artist or album", () => {
+  const artist = djArtistTile("Portishead")!;
+  const album = djAlbumTile({ title: "Dummy", artist: "Portishead", libraryId: 42 })!;
+  const songs = [
+    { id: 1, path: null, albumId: 2, artistIds: [7], artistNames: ["Portishead"], genre: null },
+    {
+      id: 2,
+      path: "song.flac",
+      albumId: 2,
+      artistIds: [7],
+      artistNames: ["Portishead"],
+      genre: null,
+    },
+    { id: 3, path: "album.flac", albumId: 42, artistIds: [9], artistNames: ["Other"], genre: null },
+    {
+      id: 4,
+      path: "family.flac",
+      albumId: 2,
+      artistIds: [10],
+      artistNames: ["Metal Act"],
+      genre: "Metal",
+    },
+  ];
+  assert.equal(djFirstLibrarySong([artist], songs)?.id, 2);
+  assert.equal(djFirstLibrarySong([album], songs)?.id, 3);
+  const family = { ...djGenreTile("Metal")!, artists: [{ id: 10, name: "Metal Act" }] };
+  assert.equal(djFirstLibrarySong([family], songs)?.id, 4);
+});
+
+test("DJ's first Library song follows candidate ranking, exclusions and randomized ties", () => {
+  const artist = djArtistTile("Portishead")!;
+  const songs = [
+    {
+      id: 2,
+      path: "first.flac",
+      albumId: 1,
+      artistIds: [7],
+      artistNames: ["Portishead"],
+      genre: null,
+    },
+    {
+      id: 3,
+      path: "second.flac",
+      albumId: 1,
+      artistIds: [7],
+      artistNames: ["Portishead"],
+      genre: null,
+    },
+  ];
+  const ranked = (id: number) => (id === 2 ? 1 : 2);
+  assert.equal(djFirstLibrarySong([artist], songs, { scoreOf: (song) => ranked(song.id) })?.id, 3);
+  assert.equal(
+    djFirstLibrarySong([artist], songs, {
+      scoreOf: (song) => ranked(song.id),
+      excluded: new Set(["3"]),
+    })?.id,
+    2,
+  );
+  assert.equal(
+    djFirstLibrarySong([artist], songs, {
+      scoreOf: () => 1,
+      random: () => 0.99,
+    })?.id,
+    3,
+  );
+});
 
 /** A taste profile scoring [artists] by name. */
 const tasteOf = (artists: Record<string, number>): TasteProfile => ({
@@ -58,6 +137,113 @@ const graphOf = (pages: Record<string, string[]>) =>
 const names = (tiles: readonly DjTile[]): string[] => tiles.map((tile) => tile.name);
 
 describe("DJ's grid", () => {
+  test("pages through all grid candidates once without moving earlier tiles", () => {
+    const sources = {
+      artists: Array.from({ length: 40 }, (_, i) => ({ id: i + 1, name: `Artist ${i}` })),
+      taste: tasteOf(
+        Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`Artist ${i}`, 100 - i])),
+      ),
+      played: [],
+      graph: graphOf({}),
+    };
+    const candidates = djGridCandidates(sources);
+    const first = candidates.slice(0, DJ_GRID_TILES);
+    const seen = first.map((tile) => tile.key);
+    const second = djGridPage(candidates, seen, 10);
+    const third = djGridPage(candidates, [...seen, ...second.map((tile) => tile.key)], 10);
+
+    assert.equal(first.length, DJ_GRID_TILES);
+    assert.deepEqual(
+      second.map((tile) => tile.name),
+      candidates.slice(24, 34).map((tile) => tile.name),
+    );
+    assert.deepEqual(
+      third.map((tile) => tile.key),
+      candidates.slice(34).map((tile) => tile.key),
+    );
+    assert.deepEqual(
+      djGridPage(candidates, [
+        ...seen,
+        ...second.map((tile) => tile.key),
+        ...third.map((tile) => tile.key),
+      ]),
+      [],
+    );
+    assert.equal(
+      new Set([...first, ...second, ...third].map((tile) => tile.key)).size,
+      candidates.length,
+    );
+  });
+
+  test("loading more appends a page without changing any tile already shown", () => {
+    const candidates = Array.from({ length: 8 }, (_, i) => djArtistTile(`Artist ${i}`)!);
+    const current = candidates.slice(0, 3);
+    const result = djGridLoadMore(
+      candidates,
+      current,
+      current.map((tile) => tile.key),
+      2,
+    );
+
+    assert.deepEqual(result.tiles, [...current, ...candidates.slice(3, 5)]);
+    assert.deepEqual(result.tiles.slice(0, current.length), current);
+  });
+
+  test("refresh fills unselected positions with unseen candidates and keeps selected tiles in place", () => {
+    const candidates = Array.from({ length: 8 }, (_, i) => djArtistTile(`Artist ${i}`)!);
+    const current = candidates.slice(0, 5);
+    const result = djGridRefresh(
+      candidates,
+      current,
+      [current[1]!.key, current[4]!.key],
+      current.map((tile) => tile.key),
+    );
+
+    assert.deepEqual(
+      result.tiles.map((tile) => tile.name),
+      ["Artist 5", "Artist 1", "Artist 6", "Artist 7", "Artist 4"],
+    );
+    assert.deepEqual(result.seen, [
+      ...current.map((tile) => tile.key),
+      ...result.tiles
+        .filter((tile) => !current.some((shown) => shown.key === tile.key))
+        .map((tile) => tile.key),
+    ]);
+    assert.deepEqual(
+      djGridRefresh(candidates, result.tiles, [current[1]!.key, current[4]!.key], result.seen),
+      result,
+    );
+  });
+
+  test("refresh leaves the grid unchanged when no unseen candidates remain", () => {
+    const tiles = Array.from({ length: 3 }, (_, i) => djArtistTile(`Artist ${i}`)!);
+    assert.deepEqual(
+      djGridRefresh(
+        tiles,
+        tiles,
+        [],
+        tiles.map((tile) => tile.key),
+      ),
+      {
+        tiles,
+        seen: tiles.map((tile) => tile.key),
+      },
+    );
+  });
+
+  test("refresh keeps the remaining unselected tiles when too few new candidates remain", () => {
+    const tiles = Array.from({ length: 5 }, (_, i) => djArtistTile(`Artist ${i}`)!);
+    const candidate = djArtistTile("New artist")!;
+    const refreshed = djGridRefresh(
+      [...tiles, candidate],
+      tiles,
+      [tiles[1]!.key],
+      tiles.map((tile) => tile.key),
+    );
+
+    assert.deepEqual(refreshed.tiles, [candidate, tiles[1], tiles[2], tiles[3], tiles[4]]);
+  });
+
   test("offers up to four known genre families in taste order among its artist tiles", () => {
     const artists = [
       { id: 1, name: "Metal Artist" },
@@ -566,8 +752,8 @@ describe("a Magic Queue with a DJ seed", () => {
     assert.equal(startDjQueue([], { id: "dj1" }), null);
   });
 
-  test("each batch reads the radios of up to 3 different selected artists", () => {
-    const { session, seeds } = magicBatchRadios(started(), () => 0);
+  test("later batches read the radios of up to 3 different selected artists", () => {
+    const { session, seeds } = magicBatchRadios({ ...started(), batches: 1 }, () => 0);
     assert.equal(seeds.length, 3);
     assert.equal(new Set(seeds.map((seed) => seed.artists[0])).size, 3);
     for (const seed of seeds) {
@@ -579,13 +765,43 @@ describe("a Magic Queue with a DJ seed", () => {
     assert.deepEqual(parseMagicSession(JSON.parse(JSON.stringify(session))), session);
   });
 
+  test("the first batch reads every selected artist radio, up to ten", () => {
+    for (const count of [4, 12]) {
+      const selected = artistTiles(count);
+      const session = startDjQueue(selected, { id: `dj-${count}` })!;
+      const read = magicBatchRadios(session, () => 0);
+      const selectedNames = selected.slice(0, 10).map((tile) => tile.name);
+      assert.deepEqual(
+        read.seeds.map((seed) => seed.title),
+        selectedNames,
+        `${count} selected artists`,
+      );
+      assert.equal(read.session.seedRadios?.batch, 0);
+      assert.deepEqual(
+        magicBatchRadios(read.session, () => 0.9).seeds.map((seed) => seed.title),
+        selectedNames,
+        "the first batch keeps its requested radios across retries",
+      );
+    }
+  });
+
+  test("an artist already started from the Library or radio is recorded once", () => {
+    const session = started();
+    assert.deepEqual(magicDjFirstSong(session, ["Artist 0"]).djStartedArtists, [
+      magicArtistKey("Artist 0"),
+    ]);
+    assert.deepEqual(
+      magicDjFirstSong(magicDjFirstSong(session, ["Artist 0"]), ["ARTIST 0", "Artist 1"])
+        .djStartedArtists,
+      [magicArtistKey("Artist 0"), magicArtistKey("Artist 1")],
+    );
+  });
+
   test("the next batch reads the artists the last one left out", () => {
     const first = magicBatchRadios(started(), () => 0);
     const second = magicBatchRadios({ ...first.session, batches: 1 }, () => 0);
-    const before = new Set(first.seeds.map((seed) => seed.id));
-    const fresh = second.seeds.filter((seed) => !before.has(seed.id));
     assert.equal(second.seeds.length, 3);
-    assert.equal(fresh.length, 2);
+    assert.ok(second.seeds.every((seed) => tiles.some((tile) => tile.name === seed.title)));
   });
 
   test("a single selected artist's radio is every batch's", () => {
@@ -609,7 +825,8 @@ describe("a Magic Queue with a DJ seed", () => {
     let leading = 0;
     for (let draw = 0; draw < 50; draw++) {
       const random = () => (draw + 0.5) / 50;
-      if (magicBatchRadios(session, random).seeds[0]!.title === "Artist 4") leading += 1;
+      if (magicBatchRadios({ ...session, batches: 1 }, random).seeds[0]!.title === "Artist 4")
+        leading += 1;
     }
     assert.ok(leading > 25, `Artist 4 led ${leading} of 50 draws`);
   });
@@ -635,6 +852,36 @@ describe("a Magic Queue with a DJ seed", () => {
     assert.equal(batch.trackIds[0], ytTrackId("v0"));
     assert.equal(batch.session.batches, 1);
     assert.equal(completeMagicRadioBatch(batch.session, candidates, []).trackIds.length, 4);
+  });
+
+  test("the batch appends nine after a Library song already started", () => {
+    const candidates = Array.from({ length: 14 }, (_, at) =>
+      rankedSong(`v${at}`, `Artist ${at % 5}`),
+    );
+    const batch = completeMagicRadioBatch({ ...started(), used: ["42"] }, candidates, []);
+    assert.equal(batch.trackIds.length, 9);
+    assert.equal(batch.session.batches, 1);
+  });
+
+  test("Library and radio starts each complete to ten songs and do not trigger a second batch", () => {
+    const radioFirst = ytTrackId("v0");
+    const candidates = Array.from({ length: 11 }, (_, at) =>
+      rankedSong(`v${at}`, `Artist ${at % 5}`),
+    );
+    for (const first of ["42", radioFirst]) {
+      const batch = completeMagicRadioBatch({ ...started(), used: [first] }, candidates, []);
+      assert.equal(batch.trackIds.length, 9);
+      const queue = reduceQueue(EMPTY_QUEUE, {
+        type: "play",
+        trackIds: [first, ...batch.trackIds],
+        startIndex: 0,
+        context: { kind: MAGIC_QUEUE_CONTEXT, id: batch.session.id },
+        shuffle: false,
+      }).state;
+      assert.equal(queue.entries.length, 10);
+      assert.equal(queue.entries[queue.index]?.trackId, first);
+      assert.equal(wantsMagicBatch(batch.session, queue), false);
+    }
   });
 
   test("ranks at its own choices, whatever Discover's sliders say", () => {
@@ -675,4 +922,49 @@ describe("DJ's grid marks", () => {
       ["Sua seleção · 2", "Toque em artistas para começar"],
     );
   });
+});
+
+test("an album page read after DJ started adds its songs and artists, keeping what the session learned", () => {
+  const tiles = [
+    djArtistTile("Portishead")!,
+    djAlbumTile({ title: "Hits", artist: "Various Artists", browseId: "MPREb_hits" })!,
+  ];
+  const local = startDjQueue(tiles, { id: "dj1" })!;
+  const drawn = magicBatchRadios(local, () => 0).session;
+  const started = {
+    ...magicDjFirstSong(drawn, ["Portishead"]),
+    used: ["5"],
+    likedRadios: [{ id: "song:liked", title: "Liked", artists: ["Liked Artist"], durationMs: 1 }],
+  };
+  const current = magicSignal(started, {
+    kind: "skip",
+    song: { trackId: "9", artists: [magicArtistKey("Skipped")], genre: null, style: null },
+  });
+  const albumSongs = new Map([
+    [
+      tiles[1]!.key,
+      [
+        {
+          id: "song:hit",
+          title: "Hit",
+          artists: ["Song Artist"],
+          durationMs: 1,
+          videoId: "hit",
+          plays: 0,
+        },
+      ],
+    ],
+  ]);
+  const refreshed = startDjQueue(tiles, { id: "dj1", albumSongs })!;
+  const merged = djSessionWithAlbumSongs(current, refreshed);
+  assert.deepEqual(merged.seedSongs, refreshed.seedSongs);
+  assert.deepEqual(merged.radioArtists, ["Portishead", "Song Artist"]);
+  assert.deepEqual(merged.used, current.used);
+  assert.deepEqual(merged.djStartedArtists, current.djStartedArtists);
+  assert.deepEqual(merged.radioSignals, current.radioSignals);
+  assert.deepEqual(merged.likedRadios, current.likedRadios);
+  assert.equal(merged.ytShare, current.ytShare);
+  assert.equal(merged.batches, 0);
+  // The first batch draws again, so the album's songs can be among its radios.
+  assert.ok(magicBatchRadios(merged, () => 0).seeds.some((seed) => seed.id === "song:hit"));
 });

@@ -199,6 +199,7 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
             {props.starred && <IconStarFilled size={14} color={highlight} />}
           </View>
         )}
+        {props.addedByInitial !== undefined && <MemberInitial initial={props.addedByInitial} />}
         {props.trailing && (
           <Text
             numberOfLines={1}
@@ -212,7 +213,6 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
             {props.trailingText}
           </Text>
         )}
-        {props.addedByInitial !== undefined && <MemberInitial initial={props.addedByInitial} />}
       </View>
     </Press>
   );

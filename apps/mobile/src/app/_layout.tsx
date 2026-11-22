@@ -1,4 +1,5 @@
 import { useLyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
+import { PerfProfiler, screenCostLayout } from "@/lib/renderCost";
 import { startMediumCovers } from "@/library/mediumCovers";
 import "../../global.css";
 // Lays the chosen theme colours over global.css's, in the chosen appearance, before anything renders.
@@ -48,6 +49,7 @@ import { settleFirstRun, startFirstRun } from "@/sync/signInInvitation";
 import { startSync } from "@/sync/startSync";
 import { startWhatsNew } from "@/updates/whatsNew";
 import { useThemeColor } from "@/theme/useThemeColor";
+import { useStackScreenOptions } from "@/chrome/tabScreens";
 
 /** Every touch holds background work; a perf build also notes its native timestamp. */
 const onRootTouchStart = (event: GestureResponderEvent): void => {
@@ -71,6 +73,7 @@ export default function RootLayout() {
   useRenderCount("RootLayout");
   useEffect(startTimingFrameCollection, []);
   const background = useThemeColor("background");
+  const screenOptions = useStackScreenOptions();
   // The status bar follows `useColorScheme` (style "auto"); the navigation bar follows here.
   useNavigationBarScheme();
   const { granted } = useAllFilesAccess();
@@ -265,10 +268,8 @@ export default function RootLayout() {
             <UnderNowPlaying>
               <Stack
                 screenListeners={timingStackListeners}
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: background },
-                }}
+                screenLayout={screenCostLayout}
+                screenOptions={screenOptions}
               >
                 <Stack.Protected guard={granted}>
                   <Stack.Screen name="(tabs)" />
@@ -286,7 +287,11 @@ export default function RootLayout() {
               </Stack>
             </UnderNowPlaying>
             {/* Always mounted, out of sight until opened, so a tap only starts its spring. */}
-            {granted ? <NowPlayingSheet /> : null}
+            {granted ? (
+              <PerfProfiler id="NowPlayingSheet">
+                <NowPlayingSheet />
+              </PerfProfiler>
+            ) : null}
             {/* The song share sheet (Share in Now Playing and song menus), over both. */}
             <SongShareLayer />
             {/* Library › Playlists › Import › From YT Music's sheet, while it's up. */}

@@ -19,6 +19,7 @@ export const editSavedHomeArrangement = (change: HomeArrangementEdit): void =>
  */
 export const homeTitleLongPress = (strings: Catalogue): TitleLongPress => ({
   label: strings.home.edit,
+  requestId: "layout-home",
   open: () => {
     openOverlay({
       label: strings.home.edit,

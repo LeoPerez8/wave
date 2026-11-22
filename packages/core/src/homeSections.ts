@@ -13,6 +13,7 @@ import { readStoredRecord } from "./storedJson.ts";
 export type HomeSectionId =
   | "new-releases"
   | "upcoming-shows"
+  | "dj"
   | "discover"
   | "in-your-orbit"
   | "from-your-library"
@@ -37,6 +38,8 @@ export interface HomeSection {
    * section before it in the catalogue: after the first of these that Home shows.
    */
   readonly joinsAfter?: readonly HomeSectionId[];
+  /** Place it immediately before the first of these shown sections. */
+  readonly joinsBefore?: readonly HomeSectionId[];
 }
 
 /**
@@ -45,13 +48,15 @@ export interface HomeSection {
  * existed (see `parseHomeArrangement`). Discover holds the Magic Queue,
  * Artist mixes and Genre mixes rows (`DISCOVER_ROWS`); it took the place of
  * their three sections, so it joins every Home arranged before it on top.
- * In your orbit follows it, so it joins those Homes right after Discover,
+ * DJ now follows Upcoming Shows and precedes Discover. In your orbit follows
+ * Discover, so it joins those Homes right after it,
  * and From your library follows In your orbit the same way. Community
  * playlists follows From your library, or Discover on a Home without it.
  */
 export const HOME_SECTIONS: readonly HomeSection[] = [
   { id: "new-releases", title: en.newReleases.title, fromPlays: false },
   { id: "upcoming-shows", title: en.upcomingShows.title, fromPlays: false },
+  { id: "dj", title: en.home.sections.dj, fromPlays: false, joinsBefore: ["discover"] },
   { id: "discover", title: en.home.sections.discover, fromPlays: false },
   { id: "in-your-orbit", title: en.home.sections["in-your-orbit"], fromPlays: true },
   { id: "from-your-library", title: en.home.sections["from-your-library"], fromPlays: true },
@@ -111,7 +116,7 @@ export type HomeItem = { readonly section: HomeSectionId } | "play-hint" | "no-s
  * fill (where those sections would be). With every section removed, the
  * line saying how to add them back. With an [empty] Library, Home shows its
  * empty state and, under it, only the sections that need no Library (when
- * arranged): Discover, whose Artist mixes can grow from YouTube Music's
+ * arranged): DJ, Discover, whose Artist mixes can grow from YouTube Music's
  * chart, the followed artists' New releases and Upcoming Shows, and the
  * account's Community playlists.
  */
@@ -130,6 +135,7 @@ export const homeItems = (
 
 /** The sections an empty Library's Home still lists. */
 const NEEDS_NO_LIBRARY: ReadonlySet<HomeSectionId> = new Set([
+  "dj",
   "discover",
   "new-releases",
   "upcoming-shows",
@@ -162,10 +168,9 @@ export const HOME_ARRANGEMENT_SETTING = "settings.homeArrangement";
  * those this Wave doesn't know left out (the Magic Queue, Artist mixes and
  * Genre mixes, now Discover's rows, among them). A catalogue section it
  * neither shows nor hides is newer than the arrangement. It shows after the
- * shown section it follows in the catalogue, on top when none does (so
- * Discover, first in the catalogue, is first on every Home arranged before
- * it), unless the catalogue names where it joins (`joinsAfter`) and Home
- * shows one of those. Stats and Listening overview merge at the first shown one's place,
+ * shown section it follows in the catalogue, on top when none does, unless
+ * the catalogue names where it joins (`joinsAfter`) or what it precedes
+ * (`joinsBefore`). Stats and Listening overview merge at the first shown one's place,
  * visible if either was shown. Nothing stored, or anything unreadable, is the default.
  */
 export const parseHomeArrangement = (stored: string | null): HomeArrangement => {
@@ -175,12 +180,21 @@ export const parseHomeArrangement = (stored: string | null): HomeArrangement => 
   const arrangement = knownSections(shown);
   const known = new Set([...arrangement, ...knownSections(Array.isArray(hidden) ? hidden : [])]);
   const newer = HOME_SECTIONS.filter(({ id }) => !known.has(id));
-  for (const { id, joinsAfter = [] } of newer) {
+  for (const { id, joinsAfter = [], joinsBefore = [] } of newer) {
     const place = DEFAULT_SECTIONS.indexOf(id);
+    const next = joinsBefore.find((anchor) => arrangement.includes(anchor));
     const before =
       joinsAfter.find((anchor) => arrangement.includes(anchor)) ??
       DEFAULT_SECTIONS.slice(0, place).findLast((earlier) => arrangement.includes(earlier));
-    arrangement.splice(before === undefined ? 0 : arrangement.indexOf(before) + 1, 0, id);
+    arrangement.splice(
+      next !== undefined
+        ? arrangement.indexOf(next)
+        : before === undefined
+          ? 0
+          : arrangement.indexOf(before) + 1,
+      0,
+      id,
+    );
   }
   return { sections: arrangement, discoverRows: parseDiscoverRows(discover) };
 };

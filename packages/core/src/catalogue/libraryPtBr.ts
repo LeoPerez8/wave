@@ -248,6 +248,7 @@ export const libraryPtBr: typeof libraryEn = {
   noAnswerTryLater: "Sem resposta online. Tente novamente em instantes.",
   offline: "Você está offline",
   noAnswer: "Sem resposta online",
+  albumNotOnYtMusic: "Este álbum não está no YouTube Music.",
   songsNeedNetwork: "Estas músicas precisam de conexão.",
   songsCouldntLoad: "Não foi possível carregar as músicas. Tente novamente.",
   ytPlaylistRestOffline: "Você está offline, então o resto desta playlist não carregou.",

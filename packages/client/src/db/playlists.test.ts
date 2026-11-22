@@ -773,6 +773,20 @@ describe("unsearched entries", () => {
     );
     appendPlaylistSongs(db, other, [unsearched("Karma Police"), unsearched("Lucky")], 0);
     appendPlaylistSongs(db, gone, [unsearched("Exit Music")], 0);
+    const collaborativeId = db
+      .select({ syncId: schema.playlists.syncId })
+      .from(schema.playlists)
+      .where(eq(schema.playlists.id, playlistId))
+      .get()?.syncId;
+    if (collaborativeId === undefined) throw new Error("Drive needs a sync id");
+    db.insert(schema.collaborations)
+      .values({
+        playlistSyncId: collaborativeId,
+        owned: true,
+        ownerAccountId: "owner",
+        members: JSON.stringify([]),
+      })
+      .run();
     deletePlaylist(db, gone, 0);
     const [airbag] = selectPlaylistEntries(db, playlistId).slice(-1);
     if (airbag === undefined) throw new Error("Airbag is in the playlist");

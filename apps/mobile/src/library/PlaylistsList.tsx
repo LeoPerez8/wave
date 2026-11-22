@@ -1,3 +1,4 @@
+import { useRenderCost } from "@/lib/renderCost";
 import { useScreenContent } from "@/lib/screenTiming";
 import { libraryQueryHasContent } from "./sharedQueries";
 import { IconPlaylist } from "@tabler/icons-react-native";
@@ -190,6 +191,7 @@ const rowHeight = (layout: PlaylistLayout, tile: number, fontScale: number): num
  */
 export function PlaylistsList({ empty }: { empty: string }) {
   useRenderCount("PlaylistsList");
+  useRenderCost("PlaylistsList");
   const { strings } = useLocalisation();
   const playlists = useSortedPlaylists();
   useScreenContent(libraryQueryHasContent("playlists"));

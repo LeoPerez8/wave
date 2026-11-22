@@ -1,8 +1,10 @@
 import { createLongPressIntent } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import {
+  memo,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ComponentRef,
@@ -24,6 +26,7 @@ import {
   useReducedMotion,
   useSharedValue,
   withTiming,
+  type SharedValue,
 } from "react-native-reanimated";
 import { withUniwind } from "uniwind";
 
@@ -33,6 +36,7 @@ import { useLongPressDelayMs } from "@/settings/longPressDelay";
 
 import { cancelHeldTouch, holdTouch, moveHeldTouch, releaseHeldTouch } from "./heldTouch";
 import { measurePressed, type Measurable } from "./measureRect";
+import { listenForAnchoredMenu } from "./menuRequest";
 import { runPressedAt } from "./pressedRect";
 import { HandOverPress } from "./pressHandle";
 import { traceLongPress } from "./longPressTrace";
@@ -59,6 +63,10 @@ type Props = Omit<PressableProps, "children" | "style"> & {
    * long-press does: it stays highlighted while the card is open.
    */
   opensMenu?: boolean;
+  /** A one-shot request to open this press's existing anchored menu. */
+  menuRequestId?: string;
+  /** The menu handler used by a long press and by [menuRequestId]. */
+  onMenuRequest?: (() => void) | undefined;
   /** Looks pressed without a touch of its own (e.g. the menu entry a sliding finger is over). */
   highlighted?: boolean;
   /**
@@ -68,6 +76,83 @@ type Props = Omit<PressableProps, "children" | "style"> & {
    */
   highlightAs?: { readonly view: RefObject<Measurable | null>; readonly radius: number };
 };
+
+/** A press's animation once it has one: what it sinks by, and the style that shows it. */
+interface Motion {
+  readonly pressed: SharedValue<number>;
+  readonly lit: SharedValue<number>;
+  readonly style: ReturnType<typeof useAnimatedStyle>;
+}
+
+/**
+ * A press's sink-and-dim animation, mounted the first time it is touched or
+ * highlighted (#1423): a screen of tiles makes no shared values or animated
+ * styles until one is. It starts towards where the press already is
+ * ([pressedTarget]) and hands its values to [onReady].
+ */
+const PressMotion = memo(function PressMotion({
+  pressedTarget,
+  litAtMount,
+  highlighted,
+  depth,
+  reduceMotion,
+  onReady,
+}: {
+  pressedTarget: RefObject<number>;
+  litAtMount: boolean;
+  highlighted: boolean;
+  depth: number;
+  reduceMotion: boolean;
+  onReady: (motion: Motion) => void;
+}) {
+  const pressed = useSharedValue(0);
+  const lit = useSharedValue(litAtMount ? 1 : 0);
+  const style = useAnimatedStyle(() => {
+    const amount = Math.max(pressed.get(), lit.get());
+    return {
+      opacity: 1 - amount * 0.35,
+      transform: [{ scale: reduceMotion ? 1 : 1 - amount * depth }],
+    };
+  });
+  useLayoutEffect(() => {
+    onReady({ pressed, lit, style });
+  }, [onReady, pressed, lit, style]);
+  // A finger already down when this mounted sinks it now.
+  useLayoutEffect(() => {
+    if (pressedTarget.current !== 0)
+      pressed.set(withTiming(pressedTarget.current, { duration: TAP_ANIMATION_MS, easing: EASE }));
+  }, [pressed, pressedTarget]);
+  // Highlighted sinks and dims just like a press, with the same timing.
+  useEffect(() => {
+    const value = highlighted ? 1 : 0;
+    lit.set(withTiming(value, { duration: TAP_ANIMATION_MS, easing: EASE }));
+  }, [highlighted, lit]);
+  return null;
+});
+
+/**
+ * Where [PressMotion] mounts: this leaf keeps whether it has, so a first touch
+ * ([arm]) re-renders only it, and `Press` renders once, when the motion hands
+ * over the style to attach (#1423). Highlighted mounts it at once.
+ */
+const PressMotionSlot = memo(function PressMotionSlot({
+  onArm,
+  highlighted,
+  ...motion
+}: Omit<Parameters<typeof PressMotion>[0], "litAtMount"> & {
+  /** Hands `Press` what mounts the motion, or null once it has. */
+  onArm: (arm: (() => void) | null) => void;
+}) {
+  const [mounted, setMounted] = useState(highlighted);
+  if (highlighted && !mounted) setMounted(true);
+  const [litAtMount] = useState(highlighted);
+  useLayoutEffect(() => {
+    onArm(mounted ? null : () => setMounted(true));
+  }, [onArm, mounted]);
+  return mounted ? (
+    <PressMotion {...motion} highlighted={highlighted} litAtMount={litAtMount} />
+  ) : null;
+});
 
 /** Where a touch event's finger is in the window, if it carries one. */
 const pointOf = ({ nativeEvent }: GestureResponderEvent) =>
@@ -91,6 +176,8 @@ export function Press({
   onLongPress,
   delayLongPress,
   opensMenu = false,
+  menuRequestId,
+  onMenuRequest,
   highlighted = false,
   highlightAs,
   onTouchStart,
@@ -103,8 +190,18 @@ export function Press({
 }: Props) {
   const longPressDelay = useLongPressDelayMs();
   const reduceMotion = useReducedMotion();
-  const pressed = useSharedValue(0);
-  const lit = useSharedValue(highlighted ? 1 : 0);
+  // The animation mounts on the first touch or highlight and stays (`PressMotionSlot`).
+  const armMotion = useRef<(() => void) | null>(null);
+  const [onArm] = useState(() => (arm: (() => void) | null) => {
+    armMotion.current = arm;
+  });
+  const [motion, setMotion] = useState<Motion | null>(null);
+  const motionRef = useRef<Motion | null>(null);
+  const pressedTarget = useRef(0);
+  const [onMotionReady] = useState(() => (ready: Motion) => {
+    motionRef.current = ready;
+    setMotion(ready);
+  });
   const view = useRef<ComponentRef<typeof View>>(null);
   // This press's finger long-pressed and is still down: it reports where it goes (`heldTouch`).
   const holding = useRef(false);
@@ -136,7 +233,10 @@ export function Press({
     menuAllowed?: () => boolean,
   ): Promise<boolean> =>
     measurePressed(view.current, {
-      scale: reduceMotion ? 1 : 1 - Math.max(pressed.get(), lit.get()) * depth,
+      scale:
+        reduceMotion || motionRef.current === null
+          ? 1
+          : 1 - Math.max(motionRef.current.pressed.get(), motionRef.current.lit.get()) * depth,
       highlight:
         highlightAs === undefined
           ? undefined
@@ -155,6 +255,14 @@ export function Press({
     () => handOver?.({ key, run: (handler) => latestRunAnchored.current(handler) }),
     [handOver, key],
   );
+
+  useEffect(() => {
+    if (menuRequestId === undefined || onMenuRequest === undefined) return;
+    return listenForAnchoredMenu(
+      menuRequestId,
+      () => void latestRunAnchored.current(onMenuRequest),
+    );
+  }, [menuRequestId, onMenuRequest]);
 
   // The finger stays down as a long-press menu opens and can slide onto an entry
   // (slide to choose). A long-press that opens no menu (a tab's) lets it go again.
@@ -203,23 +311,14 @@ export function Press({
     });
   };
 
-  const pressStyle = useAnimatedStyle(() => {
-    const amount = Math.max(pressed.get(), lit.get());
-    return {
-      opacity: 1 - amount * 0.35,
-      transform: [{ scale: reduceMotion ? 1 : 1 - amount * depth }],
-    };
-  });
-
   const animateTo = (value: number) => {
-    pressed.set(withTiming(value, { duration: TAP_ANIMATION_MS, easing: EASE }));
+    pressedTarget.current = value;
+    if (motionRef.current === null) armMotion.current?.();
+    else
+      motionRef.current.pressed.set(
+        withTiming(value, { duration: TAP_ANIMATION_MS, easing: EASE }),
+      );
   };
-
-  // Highlighted sinks and dims just like a press, with the same timing.
-  useEffect(() => {
-    const value = highlighted ? 1 : 0;
-    lit.set(withTiming(value, { duration: TAP_ANIMATION_MS, easing: EASE }));
-  }, [highlighted, lit]);
 
   return (
     <AnimatedPressable
@@ -232,6 +331,7 @@ export function Press({
       onLongPress={onLongPress == null ? undefined : longPress}
       delayLongPress={delayLongPress ?? longPressDelay}
       onTouchStart={(event) => {
+        armMotion.current?.();
         intent.begin();
         touchAt.current = performance.now();
         traceLongPress(key, "touch-start", `delay=${delayLongPress ?? longPressDelay}`);
@@ -263,7 +363,7 @@ export function Press({
         }
         onTouchCancel?.(event);
       }}
-      style={[staticStyle, pressStyle]}
+      style={[staticStyle, motion?.style]}
       onPressIn={(event) => {
         animateTo(1);
         if (haptic === "selection") void Haptics.selectionAsync();
@@ -296,6 +396,14 @@ export function Press({
         // Only the outermost Press is handed over.
         <HandOverPress value={undefined}>{children}</HandOverPress>
       )}
+      <PressMotionSlot
+        onArm={onArm}
+        pressedTarget={pressedTarget}
+        highlighted={highlighted}
+        depth={depth}
+        reduceMotion={reduceMotion}
+        onReady={onMotionReady}
+      />
     </AnimatedPressable>
   );
 }

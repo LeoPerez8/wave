@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { djDone, type DjDone } from "./djDone.ts";
+import { djBatchReadMayResume, djDone, djStartWhileOpen, type DjDone } from "./djDone.ts";
 
 /** Done's states as the screen saw them, and whether DJ closed. */
 const screen = () => {
@@ -86,4 +86,19 @@ test("a start still loading when DJ closes is cancelled, and never closes DJ aga
     return Promise.resolve("started" as const);
   });
   assert.equal(starts, 0);
+});
+
+test("a radio answer arriving after Close cannot commit a start or alter the queue", () => {
+  const closed = new AbortController();
+  const queue = ["the existing song"];
+  closed.abort();
+  const result = djStartWhileOpen(closed.signal, () => {
+    queue.splice(0, queue.length, "the DJ song");
+    return "started" as const;
+  });
+  assert.equal(result, null);
+  assert.deepEqual(queue, ["the existing song"]);
+  assert.equal(djBatchReadMayResume("closed-start", null), false);
+  assert.equal(djBatchReadMayResume("closed-start", "another-session"), false);
+  assert.equal(djBatchReadMayResume("started-session", "started-session"), true);
 });

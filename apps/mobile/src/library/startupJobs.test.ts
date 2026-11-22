@@ -311,7 +311,7 @@ const scanned = async (
   };
 };
 
-test("scan saves ti's 100-file slices, one transaction per turn with artwork first, keeping moved identity and a retry after interruption", async () => {
+test("scan saves 100-file slices, one transaction per turn with artwork first, keeping moved identity and a retry after interruption", async () => {
   const { saveScanBatch } = await import("./startupJobs.ts");
   const fixture = await createFastAgainFixture();
   try {
@@ -354,7 +354,7 @@ test("scan saves ti's 100-file slices, one transaction per turn with artwork fir
       turns.shift()!();
       await new Promise((resolve) => setImmediate(resolve));
     }
-    // One transaction per turn: ti's first slice, with the batch's artwork.
+    // One transaction per turn: the first 100-file slice, with the batch's artwork.
     assert.deepEqual(saves, [{ tracks: 100, artwork: 1, moves: 0 }]);
     assert.equal(Effect.runSync(store.knownFiles(["/Startup"])).length, 101);
     controller.abort();
@@ -381,7 +381,7 @@ test("scan saves ti's 100-file slices, one transaction per turn with artwork fir
     ]);
     assert.equal(Effect.runSync(store.songsByIds([movedId!]))[0]!.path, "/Startup/moved.mp3");
     assert.equal(Effect.runSync(store.knownFiles(["/Startup"])).length, 250);
-    // Artwork alone (read files that saved nothing) still gets its transaction, as on ti.
+    // Artwork alone (read files that saved nothing) still gets its own transaction.
     saves.length = 0;
     Effect.runSync(
       saveScanBatch(counted, { missing: [], read: [], isIndexed: () => true }, [art], Effect.void),

@@ -18,6 +18,7 @@ export function ScanProgressBanner() {
   const scan = useScanProgress();
   const count = (value: number) => formatNumber(language, value);
 
+  if (scan === null) return null;
   if (scan.status === "failed") {
     return (
       <View style={{ gap: CELL, paddingBottom: CELL * 2 }}>
@@ -40,7 +41,6 @@ export function ScanProgressBanner() {
   const reading = scan.phase === "reading";
   const toRead = scan.filesFound - scan.filesUnchanged;
   const incremental = scan.kind === "incremental";
-  if (incremental && (!reading || toRead === 0)) return null;
   const fraction = reading && toRead > 0 ? scan.filesRead / toRead : 0;
   const title = incremental
     ? strings.settings.updatingYourLibrary

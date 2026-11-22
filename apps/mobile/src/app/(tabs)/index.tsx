@@ -1,10 +1,11 @@
+import { useRenderCost } from "@/lib/renderCost";
 import { HomeFollowProvider } from "@/home/useHomeFollow";
 import { useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
 import { IconMusic, IconSettings } from "@tabler/icons-react-native";
 import { homeItems, type RecapPeriod } from "@wave/core";
-import { Link } from "expo-router";
-import { useEffect, useState } from "react";
+import { Link, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import { router } from "@/lib/timingRouter";
 import { Pressable, Text, View, useWindowDimensions } from "react-native";
 
@@ -14,14 +15,22 @@ import { IconButton } from "@/components/IconButton";
 import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { StagedSections } from "@/components/StagedSections";
 import { useHomeArrangement, homeTitleLongPress } from "@/home/homeArrangement";
-import { HomeSection, SECTION_GAP } from "@/home/HomeSection";
+import { HomeSection } from "@/home/HomeSection";
 import { useHomeScreenContent } from "@/home/homeContent";
-import { afterHomeFrame, homeItemEstimate, homeOpeningState } from "@/home/homeOpening";
+import {
+  afterHomeFrame,
+  homeItemEstimate,
+  homeOpeningState,
+  SECTION_GAP,
+} from "@/home/homeOpening";
+import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { startSavingHomeSnapshot } from "@/home/homeSnapshot";
 import { useHomeWorkSight } from "@/home/useHomeWorkSight";
+import { useHomeSelection } from "@/selection/useHomeSelection";
 import { useRenderCount } from "@/perf/perf";
 import { useRecapToAnnounce } from "@/stats/hooks";
 import { RecapCard } from "@/stats/StatsViews";
+import { openArmedAnchoredMenu } from "@/motion/menuRequest";
 
 /** The first section sits a cell under the large title, not a section's gap. */
 const FIRST_SECTION = { marginTop: CELL - SECTION_GAP } as const;
@@ -54,7 +63,14 @@ startSavingHomeSnapshot();
 
 export default function HomeScreen() {
   const { strings } = useLocalisation();
+  useFocusEffect(
+    useCallback(() => {
+      openArmedAnchoredMenu("layout-home");
+      openArmedAnchoredMenu("layout-tab-bar");
+    }, []),
+  );
   useRenderCount("HomeScreen");
+  useRenderCost("HomeScreen");
   // Home's mixes and sections build only while Home is in sight (#1351).
   useHomeWorkSight();
   const [painted, setPainted] = useState(false);
@@ -91,11 +107,16 @@ export default function HomeScreen() {
 
 function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
   const { strings } = useLocalisation();
+  useRenderCost("HomeContent");
   const home = useHomeScreenContent();
+  const selection = useHomeSelection();
+  const endSelection = selection.end;
+  useFocusEffect(useCallback(() => () => endSelection(), [endSelection]));
   const { empty, nothingPlayed, ready } = homeOpeningState(home);
   useScreenContent(ready);
   const arrangement = useHomeArrangement();
   const { fontScale, width } = useWindowDimensions();
+  const ytMusic = useYtMusicEnabled();
   // The first frame mounts the sections that start on screen; the rest follow a screen a
   // frame, before a scroll can reach them (#1380).
   const shown = homeItems(arrangement, { nothingPlayed });
@@ -112,7 +133,7 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
           {/* Discover's Artist mixes grow from YouTube Music's chart while the Library is empty. */}
           {homeItems(arrangement, { nothingPlayed, empty }).map((item) =>
             typeof item === "string" ? null : (
-              <HomeSection key={item.section} id={item.section} home={home} />
+              <HomeSection key={item.section} id={item.section} home={home} selection={selection} />
             ),
           )}
         </>
@@ -122,7 +143,9 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
           <HomeRecap period={newRecap} />
           {/* Sections with nothing to show draw nothing, so whichever shows first is pulled up. */}
           <View style={newRecap === null ? FIRST_SECTION : undefined}>
-            <StagedSections estimate={(index) => homeItemEstimate(shown[index]!, fontScale, width)}>
+            <StagedSections
+              estimate={(index) => homeItemEstimate(shown[index]!, fontScale, width, ytMusic)}
+            >
               {shown.map((item, index) =>
                 item === "no-sections" ? (
                   <HomeLine key={item} top={SECTION_GAP}>
@@ -133,7 +156,12 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
                     {strings.home.playHint}
                   </HomeLine>
                 ) : (
-                  <HomeSection key={item.section} id={item.section} home={home} />
+                  <HomeSection
+                    key={item.section}
+                    id={item.section}
+                    home={home}
+                    selection={selection}
+                  />
                 ),
               )}
             </StagedSections>

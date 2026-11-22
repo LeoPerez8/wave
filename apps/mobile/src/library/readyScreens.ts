@@ -26,10 +26,11 @@
  *   Music answers of `ARTIST_PAGES_AHEAD` most played artists, within
  *   `knownYtArtists`' 16.
  */
-import { identityKey, librarySongSort } from "@wave/core";
+import { djOpeningWork, identityKey, librarySongSort } from "@wave/core";
 
 import { listCollaborations } from "@/collaboration/collaborativePlaylists";
 import { prepareDjOpening } from "@/dj/djOpening";
+import { djGridMemory } from "@/dj/djGridMemory";
 import { homeReadyQueries } from "@/home/homeReady";
 import { freeTurn, inSlice, whenFree } from "@/lib/backgroundWork";
 import { statsOpeningArtists, statsOpeningQueries } from "@/stats/hooks";
@@ -161,7 +162,11 @@ export const startReadyScreens = (): (() => void) => {
   // The most played artists' pages draw Fans might also like and About in their first frame.
   whenFree(() => void artistPagesAhead(), "Artist pages");
   whenFree(() => {
-    if (!stopped) void prepareDjOpening().catch(() => {});
+    if (
+      !stopped &&
+      djOpeningWork({ keptGrid: djGridMemory.get() !== null, libraryReady: false }).prepareStartup
+    )
+      void prepareDjOpening().catch(() => {});
   }, "DJ opening");
   whenFree(() => {
     if (!stopped) void readListeningHistoryHead().catch(() => {});

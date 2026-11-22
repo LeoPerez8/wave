@@ -10,6 +10,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 // The phone's connectivity, which a test turns off and on, and what YT Music was asked.
 const phone = stubModule(
   `export const asked = [];
+   export const endpoints = [];
    const listeners = new Set();
    export const network = { online: true };
    export const setOnline = (next) => {
@@ -31,11 +32,21 @@ const builds = await reactCompilerBuilds<typeof import("./ytMusicSearch.ts")>(
     ),
     "@/settings/searchOnline": stubModule("export const useSearchOnlineAlways = () => false;"),
     "@/settings/ytMusic": stubModule("export const useYtMusicEnabled = () => true;"),
-    // Asked, never answered: the test counts the requests.
+    // Asked, never answered: the test counts the requests and the endpoints each one names.
     "@/ytmusic/askYtMusic": stubModule(
-      `import { asked } from ${JSON.stringify(phone)};
-       export const askYtMusic = () => {
+      `import { asked, endpoints } from ${JSON.stringify(phone)};
+       const pending = { pipe: () => pending };
+       const ytMusic = new Proxy({}, {
+         get: (_, name) => () => {
+           endpoints.push(String(name));
+           return pending;
+         },
+       });
+       export const askYtMusic = (ask) => {
          asked.push(1);
+         try {
+           ask(ytMusic);
+         } catch {}
          return new Promise(() => {});
        };`,
     ),
@@ -44,14 +55,42 @@ const builds = await reactCompilerBuilds<typeof import("./ytMusicSearch.ts")>(
     ),
   },
 );
-const { asked, setOnline } = (await import(phone)) as {
+const { asked, endpoints, setOnline } = (await import(phone)) as {
   asked: number[];
+  endpoints: string[];
   setOnline: (next: boolean) => void;
 };
 
 const pause = () => act(() => new Promise((resolve) => setTimeout(resolve, 360)));
 
-for (const [build, { useYtMusicSection }] of Object.entries(builds)) {
+for (const [build, { useYtMusicSection, useYtMusicSongsSection }] of Object.entries(builds)) {
+  test(`${build}: Add Songs waits for connectivity before its settled search`, async () => {
+    asked.length = 0;
+    endpoints.length = 0;
+    setOnline(false);
+    function View() {
+      useYtMusicSongsSection("daft punk");
+      return createElement("view");
+    }
+
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      await act(async () => {
+        renderer = create(createElement(View));
+      });
+      await pause();
+      assert.equal(asked.length, 0);
+
+      await act(async () => setOnline(true));
+      await pause();
+      assert.equal(asked.length, 1);
+      assert.deepEqual(endpoints, ["searchSongs"]);
+    } finally {
+      await act(() => renderer?.unmount());
+      setOnline(true);
+    }
+  });
+
   test(`${build}: DJ's search asks YT Music once the phone is back online`, async () => {
     asked.length = 0;
     setOnline(false);

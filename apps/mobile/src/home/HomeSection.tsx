@@ -1,3 +1,4 @@
+import { RenderCost } from "@/lib/renderCost";
 import { HomeFollowProvider, useHomeFollowPresence } from "./useHomeFollow";
 import { useLocalisation } from "@/localisation/localisation";
 import { NewReleases } from "./NewReleases";
@@ -43,6 +44,16 @@ import { useYtMusicEnabled } from "@/settings/ytMusic";
 import type { Ranked } from "@/stats/Stats";
 import { openDiscoverMix, openYtPlaylist } from "@/ytmusic/routes";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
+import {
+  discoverMixItem,
+  playlistItem,
+  trackItem,
+  ytTrackItem,
+  type MixedItem,
+} from "@/playback/mixedItems";
+import { MenuChoices } from "@/overlay/MenuChoices";
+import { openOverlay } from "@/overlay/overlay";
+import { type HomeSelection, useHomeTiles } from "@/selection/useHomeSelection";
 
 import {
   refreshMixes,
@@ -76,6 +87,7 @@ import {
   homeOpeningState,
   homeSectionWaiting,
   magicQueueGrid,
+  SECTION_GAP,
   type HomeContent,
 } from "./homeOpening";
 
@@ -92,9 +104,11 @@ type SectionProps = {
   home: HomeContent;
   /** The section's title in Core's catalogue. */
   title: string;
+  /** One checked set shared by every Home section. */
+  selection: HomeSelection;
 };
 
-function MostPlayedAlbums({ title }: SectionProps) {
+function MostPlayedAlbums({ title, selection }: SectionProps) {
   const { strings } = useLocalisation();
   const ranking = useMostPlayedOfAllTime();
   if (ranking === undefined) return <HomeSectionSpace id="most-played-albums" />;
@@ -104,24 +118,28 @@ function MostPlayedAlbums({ title }: SectionProps) {
     <TitledSection
       title={title}
       action={{ label: strings.home.seeAll, onPress: () => openStatsSeeAll("albums", "all") }}
+      selecting={selection.selecting}
     >
-      <AlbumShelf albums={albums} detail={(album) => strings.stats.plays(album.countedPlays)} />
+      <AlbumShelf
+        albums={albums}
+        detail={(album) => strings.stats.plays(album.countedPlays)}
+        selection={selection}
+      />
     </TitledSection>
   );
 }
 
 /**
  * Home's Discover section: one header, its adjustments icon opening the
- * settings card all three rows share (`DiscoverSettingsButton`), the DJ card
- * while YT Music is on, then the rows in the owner's order, each under its label. A row with nothing to show isn't drawn: a mix row shows placeholder tiles
+ * settings card all three rows share (`DiscoverSettingsButton`), then the
+ * rows in the owner's order, each under its label. A row with nothing to show isn't drawn: a mix row shows placeholder tiles
  * while its first mixes build and is gone with YT Music off (Core's
  * `discoverMixesSection`), the Magic Queue row is gone while it has nothing
  * to show (Core's `magicQueueRow`: before its pages are first read, or with
  * an empty pool and no chart mix to take songs from). The section
- * is gone when every arranged row is gone and YT Music is off, which hides
- * the DJ card.
+ * is gone when every arranged row is gone and YT Music is off.
  */
-function Discover({ home, title }: SectionProps) {
+function Discover({ home, title, selection }: SectionProps) {
   const ytMusic = useYtMusicEnabled();
   const { played, empty } = homeOpeningState(home);
   const { discoverRows } = useHomeArrangement();
@@ -145,14 +163,22 @@ function Discover({ home, title }: SectionProps) {
   );
   if (rows.length === 0 && !ytMusic) return null;
   return (
-    <TitledSection title={title} control={<DiscoverSettingsButton ytMusic={ytMusic} />}>
+    <TitledSection
+      title={title}
+      control={<DiscoverSettingsButton ytMusic={ytMusic} />}
+      selecting={selection.selecting}
+    >
       <View style={{ gap: CELL * 3 }}>
-        {ytMusic && <DjCard />}
         {rows.map((id) =>
           id === "magic-queue" ? (
-            <MagicQueueRow key={id} section={magicQueue} />
+            <MagicQueueRow key={id} section={magicQueue} selection={selection} />
           ) : (
-            <MixRow key={id} id={id} section={id === "artist-mixes" ? artistMixes : genreMixes} />
+            <MixRow
+              key={id}
+              id={id}
+              section={id === "artist-mixes" ? artistMixes : genreMixes}
+              selection={selection}
+            />
           ),
         )}
       </View>
@@ -241,7 +267,15 @@ function DiscoverRow({
  * nothing while [section] is hidden (YT Music off). Its label says
  * "Updating…" while a rebuild runs.
  */
-function MixRow({ id, section }: { id: MixSectionId; section: DiscoverMixesSection }) {
+function MixRow({
+  id,
+  section,
+  selection,
+}: {
+  id: MixSectionId;
+  section: DiscoverMixesSection;
+  selection: HomeSelection;
+}) {
   const { strings } = useLocalisation();
   if (section.kind === "hidden") return null;
   const label = discoverRowTitle(id, strings);
@@ -252,12 +286,21 @@ function MixRow({ id, section }: { id: MixSectionId; section: DiscoverMixesSecti
       label={label}
       status={section.kind === "mixes" && section.updating ? strings.discover.updating : undefined}
       busy={updating}
-      refresh={{ label: strings.discover.refresh[id], run: refresh, enabled: !updating }}
+      refresh={
+        selection.selecting
+          ? undefined
+          : { label: strings.discover.refresh[id], run: refresh, enabled: !updating }
+      }
     >
       {section.kind === "skeleton" ? (
         <DiscoverMixesSkeleton />
       ) : section.kind === "mixes" ? (
-        <DiscoverMixRow mixes={section.mixes} onRefresh={refresh} refreshing={section.updating} />
+        <DiscoverMixRow
+          mixes={section.mixes}
+          onRefresh={refresh}
+          refreshing={section.updating}
+          selection={selection}
+        />
       ) : null}
       {section.failed && <RecommendationsFailed onRetry={refresh} />}
     </DiscoverRow>
@@ -276,17 +319,22 @@ function DiscoverMixRow({
   mixes,
   onRefresh,
   refreshing,
+  selection,
 }: {
   mixes: readonly BlendedDiscoverMix[];
   onRefresh: () => void;
   refreshing: boolean;
+  selection: HomeSelection;
 }) {
   const { strings } = useLocalisation();
+  const items = mixes.map(discoverMixItem);
+  useHomeTiles(selection, items);
   return (
-    <PullRefreshRow onRefresh={onRefresh} enabled={!refreshing}>
+    <PullRefreshRow onRefresh={onRefresh} enabled={!refreshing && !selection.selecting}>
       {mixes.map((mix, place) => {
         const caption = discoverMixCaption(mix, strings);
         const shows = [mix.id, caption.artworkUrl, caption.title, caption.artists, caption.line];
+        const item = items[place]!;
         return (
           // oxlint-disable-next-line react/no-array-index-key -- a place crossfades from the mix it had to the one it has now
           <Crossfade key={place} swapKey={shows.join("\n")}>
@@ -296,8 +344,18 @@ function DiscoverMixRow({
               detail={caption.line}
               paths={caption.artworkUrl === null ? [] : [caption.artworkUrl]}
               size={COVER_ROW_TILE}
-              onPress={() => openDiscoverMix(mix.id)}
-              onLongPress={() => openDiscoverMixActions(mix)}
+              checked={selection.selecting ? selection.isChecked(item) : undefined}
+              onPress={() =>
+                selection.selecting ? selection.toggle(item) : openDiscoverMix(mix.id)
+              }
+              onLongPress={
+                selection.selecting || !selection.enabled
+                  ? undefined
+                  : () =>
+                      openDiscoverMixActions(mix, {
+                        onSelect: selection.enabled ? () => selection.start(item) : undefined,
+                      })
+              }
             />
           </Crossfade>
         );
@@ -319,11 +377,21 @@ let keptPage: number | null = snapshotCarouselPage();
 const CAROUSEL_CONTROLS = CELL * 4;
 
 /** A page's songs as the tiles of its grid, each under the key its place crossfades by. */
-const seedTiles = (seeds: readonly MagicQueueSeed<PlayableSongRow>[], size: number) =>
+const seedTiles = (
+  seeds: readonly MagicQueueSeed<PlayableSongRow>[],
+  size: number,
+  selection: HomeSelection,
+) =>
   seeds.map((seed) =>
     seed.source === "library"
-      ? { key: String(seed.song.id), tile: <LibraryTile song={seed.song} size={size} /> }
-      : { key: ytTrackId(seed.song.videoId), tile: <StreamedTile song={seed.song} size={size} /> },
+      ? {
+          key: String(seed.song.id),
+          tile: <LibraryTile song={seed.song} size={size} selection={selection} />,
+        }
+      : {
+          key: ytTrackId(seed.song.videoId),
+          tile: <StreamedTile song={seed.song} size={size} selection={selection} />,
+        },
   );
 
 /** A tile of the row, under the key its place crossfades by. */
@@ -343,6 +411,7 @@ const MagicQueuePage = memo(function MagicQueuePage({
   size,
   width,
   onRefresh,
+  selection,
 }: {
   seeds?: readonly MagicQueueSeed<PlayableSongRow>[] | undefined;
   songs?: readonly YtAlbumSong[] | undefined;
@@ -350,6 +419,7 @@ const MagicQueuePage = memo(function MagicQueuePage({
   size: number;
   width: number;
   onRefresh?: (() => void) | undefined;
+  selection: HomeSelection;
 }) {
   const { strings } = useLocalisation();
   const { fontScale } = useWindowDimensions();
@@ -365,10 +435,10 @@ const MagicQueuePage = memo(function MagicQueuePage({
     );
   const tiles: readonly RowTile[] =
     seeds !== undefined
-      ? seedTiles(seeds, size)
+      ? seedTiles(seeds, size, selection)
       : (songs ?? []).map((song) => ({
           key: song.videoId,
-          tile: <StreamedTile song={song} size={size} />,
+          tile: <StreamedTile song={song} size={size} selection={selection} />,
         }));
   const drawn = (
     <MagicQueueGrid width={width}>
@@ -383,7 +453,7 @@ const MagicQueuePage = memo(function MagicQueuePage({
   return onRefresh === undefined ? (
     drawn
   ) : (
-    <PullRefreshRow onRefresh={onRefresh} enabled>
+    <PullRefreshRow onRefresh={onRefresh} enabled={!selection.selecting}>
       {drawn}
     </PullRefreshRow>
   );
@@ -405,7 +475,13 @@ const MagicQueuePage = memo(function MagicQueuePage({
  * songs, with placeholder tiles while the first mixes build. Each place
  * crossfades its tile when its song changes. Hidden with YT Music off.
  */
-function MagicQueueRow({ section }: { section: MagicQueueSection }) {
+function MagicQueueRow({
+  section,
+  selection,
+}: {
+  section: MagicQueueSection;
+  selection: HomeSelection;
+}) {
   const { strings } = useLocalisation();
   const { width, fontScale } = useWindowDimensions();
   const [available, setAvailable] = useState(width - grid.margin * 2);
@@ -438,16 +514,21 @@ function MagicQueueRow({ section }: { section: MagicQueueSection }) {
       size={size}
       width={available}
       onRefresh={onRefresh}
+      selection={selection}
     />
   );
   return (
     <DiscoverRow
       label={strings.discover.rows["magic-queue"]}
       busy={skeleton}
-      refresh={{ label: strings.discover.otherSongs, run: refresh, enabled: !skeleton }}
+      refresh={
+        selection.selecting
+          ? undefined
+          : { label: strings.discover.otherSongs, run: refresh, enabled: !skeleton }
+      }
       trailing={
         <View className="flex-row items-center" style={{ gap: CELL, minHeight: CAROUSEL_CONTROLS }}>
-          {!skeleton && (
+          {!skeleton && !selection.selecting && (
             <IconButton
               icon={IconRefresh}
               label={strings.discover.otherSongs}
@@ -496,8 +577,18 @@ function MagicQueueGrid({ width, children }: { width: number; children: ReactNod
 }
 
 /** A Library song as a song card in its grid column; a tap starts the Magic Queue from it. */
-function LibraryTile({ song, size }: { song: PlayableSongRow; size: number }) {
+function LibraryTile({
+  song,
+  size,
+  selection,
+}: {
+  song: PlayableSongRow;
+  size: number;
+  selection: HomeSelection;
+}) {
   const { strings } = useLocalisation();
+  const item = trackItem(song);
+  useHomeTiles(selection, [item]);
   return (
     <SongCard
       title={song.title}
@@ -505,16 +596,34 @@ function LibraryTile({ song, size }: { song: PlayableSongRow; size: number }) {
       artworkUri={artworkUri(song, "medium")}
       size={size}
       label={strings.discover.startMagicQueue(song.title, song.artist, song.album)}
-      onPress={() => startMagicQueueFrom(song)}
-      onLongPress={() => openTrackActions(song)}
+      checked={selection.selecting ? selection.isChecked(item) : undefined}
+      onPress={() => (selection.selecting ? selection.toggle(item) : startMagicQueueFrom(song))}
+      onLongPress={
+        selection.selecting
+          ? undefined
+          : () =>
+              openTrackActions(song, {
+                onSelect: selection.enabled ? () => selection.start(item) : undefined,
+              })
+      }
     />
   );
 }
 
 /** A streamed song (a mix's or a playlist's) as a song card; a tap starts the Magic Queue from its radio. */
-function StreamedTile({ song, size }: { song: YtAlbumSong; size: number }) {
+function StreamedTile({
+  song,
+  size,
+  selection,
+}: {
+  song: YtAlbumSong;
+  size: number;
+  selection: HomeSelection;
+}) {
   const { strings } = useLocalisation();
   const artist = ytSongArtist(song);
+  const item = ytTrackItem(song as import("@/native/waveYtMusic").NativeYtSong);
+  useHomeTiles(selection, [item]);
   return (
     <SongCard
       title={song.title}
@@ -522,26 +631,37 @@ function StreamedTile({ song, size }: { song: YtAlbumSong; size: number }) {
       artworkUri={song.artworkUrl ?? undefined}
       size={size}
       label={strings.discover.startMagicQueue(song.title, artist, song.album)}
-      onPress={() => startStreamedMagicQueueFrom(song)}
-      onLongPress={() => openYtSongActions(song)}
+      checked={selection.selecting ? selection.isChecked(item) : undefined}
+      onPress={() =>
+        selection.selecting ? selection.toggle(item) : startStreamedMagicQueueFrom(song)
+      }
+      onLongPress={
+        selection.selecting
+          ? undefined
+          : () =>
+              openYtSongActions(song, {
+                onSelect: selection.enabled ? () => selection.start(item) : undefined,
+              })
+      }
     />
   );
 }
 
-function Favorites({ home, title }: SectionProps) {
+function Favorites({ home, title, selection }: SectionProps) {
   const { strings } = useLocalisation();
   if (home.favorites === undefined || home.favorites.length === 0) return null;
   return (
     <TitledSection
       title={title}
       action={{ label: strings.home.seeAll, onPress: () => router.push("/library/favorites") }}
+      selecting={selection.selecting}
     >
-      <SongRows songs={home.favorites} context={FAVORITES_CONTEXT} />
+      <SongRows songs={home.favorites} context={FAVORITES_CONTEXT} selection={selection} />
     </TitledSection>
   );
 }
 
-function MostPlayedArtists({ title }: SectionProps) {
+function MostPlayedArtists({ title, selection }: SectionProps) {
   const { strings } = useLocalisation();
   const ranking = useMostPlayedOfAllTime();
   if (ranking === undefined) return <HomeSectionSpace id="most-played-artists" />;
@@ -551,8 +671,9 @@ function MostPlayedArtists({ title }: SectionProps) {
     <TitledSection
       title={title}
       action={{ label: strings.home.seeAll, onPress: () => openStatsSeeAll("artists", "all") }}
+      selecting={selection.selecting}
     >
-      <ArtistShelf artists={artists} />
+      <ArtistShelf artists={artists} selecting={selection.selecting} />
     </TitledSection>
   );
 }
@@ -568,15 +689,22 @@ function OrbitTile({
   size,
   ytMusic,
   onPress,
+  selection,
 }: {
   seed: MagicQueueSeed<PlayableSongRow>;
   size: number;
   ytMusic: boolean;
   onPress: () => void;
+  selection: HomeSelection;
 }) {
   const { strings } = useLocalisation();
   const { title, album } = seed.song;
   const artist = seed.source === "library" ? seed.song.artist : ytSongArtist(seed.song);
+  const item =
+    seed.source === "library"
+      ? trackItem(seed.song)
+      : ytTrackItem(seed.song as import("@/native/waveYtMusic").NativeYtSong);
+  useHomeTiles(selection, [item]);
   return (
     <SongCard
       title={title}
@@ -591,16 +719,26 @@ function OrbitTile({
       size={size}
       label={ytMusic ? strings.discover.startMagicQueue(title, artist, album) : undefined}
       unavailable={inYourOrbitTileUnavailable(seed, ytMusic)}
-      onPress={onPress}
-      onLongPress={() =>
-        seed.source === "library" ? openTrackActions(seed.song) : openYtSongActions(seed.song)
+      checked={selection.selecting ? selection.isChecked(item) : undefined}
+      onPress={() => (selection.selecting ? selection.toggle(item) : onPress())}
+      onLongPress={
+        selection.selecting
+          ? undefined
+          : () =>
+              seed.source === "library"
+                ? openTrackActions(seed.song, {
+                    onSelect: selection.enabled ? () => selection.start(item) : undefined,
+                  })
+                : openYtSongActions(seed.song, {
+                    onSelect: selection.enabled ? () => selection.start(item) : undefined,
+                  })
       }
     />
   );
 }
 
 /** Home's nine most played recent songs as a grid laid out as the Magic Queue's is. */
-function InYourOrbit({ title }: SectionProps) {
+function InYourOrbit({ title, selection }: SectionProps) {
   const songs = useInYourOrbit();
   const ytMusic = useYtMusicEnabled();
   const { width, fontScale } = useWindowDimensions();
@@ -609,7 +747,7 @@ function InYourOrbit({ title }: SectionProps) {
   if (songs.length === 0) return null;
   const { size } = magicQueueGrid(available, fontScale);
   return (
-    <TitledSection title={title}>
+    <TitledSection title={title} selecting={selection.selecting}>
       <View onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
         <MagicQueueGrid width={available}>
           {songs.map((seed, index) => {
@@ -622,6 +760,7 @@ function InYourOrbit({ title }: SectionProps) {
                   size={size}
                   ytMusic={ytMusic}
                   onPress={() => tapInYourOrbit(songs, index)}
+                  selection={selection}
                 />
               </Crossfade>
             );
@@ -637,25 +776,42 @@ function InYourOrbit({ title }: SectionProps) {
  * those played in the last 14 days first (Core's `fromYourLibrary`). A tap
  * opens the playlist, a long press its menu.
  */
-function FromYourLibrary({ title }: SectionProps) {
+function FromYourLibrary({ title, selection }: SectionProps) {
   const { strings } = useLocalisation();
   const playlists = useFromYourLibrary();
+  const items = (playlists ?? []).map(playlistItem);
+  useHomeTiles(selection, items);
   if (playlists === undefined) return <HomeSectionSpace id="from-your-library" />;
   if (playlists.length === 0) return null;
   return (
-    <TitledSection title={title}>
+    <TitledSection title={title} selecting={selection.selecting}>
       <CoverRow>
-        {playlists.map((playlist) => (
-          <PlaylistCard
-            key={playlist.id}
-            name={playlist.name}
-            detail={songCount(playlist.trackCount, strings)}
-            paths={playlist.thumbPaths}
-            size={COVER_ROW_TILE}
-            onPress={() => openPlaylist(playlist.id, playlist)}
-            onLongPress={() => openPlaylistActions(playlist)}
-          />
-        ))}
+        {playlists.map((playlist, place) =>
+          (() => {
+            const item = items[place]!;
+            return (
+              <PlaylistCard
+                key={playlist.id}
+                name={playlist.name}
+                detail={songCount(playlist.trackCount, strings)}
+                paths={playlist.thumbPaths}
+                size={COVER_ROW_TILE}
+                checked={selection.selecting ? selection.isChecked(item) : undefined}
+                onPress={() =>
+                  selection.selecting ? selection.toggle(item) : openPlaylist(playlist.id, playlist)
+                }
+                onLongPress={
+                  selection.selecting
+                    ? undefined
+                    : () =>
+                        openPlaylistActions(playlist, {
+                          onSelect: selection.enabled ? () => selection.start(item) : undefined,
+                        })
+                }
+              />
+            );
+          })(),
+        )}
       </CoverRow>
     </TitledSection>
   );
@@ -664,6 +820,31 @@ function FromYourLibrary({ title }: SectionProps) {
 /** A community playlist YouTube Music lists no cover for. */
 const NO_COVERS: readonly string[] = [];
 
+const openHomePlaylistSelectMenu = (
+  title: string,
+  selectLabel: string,
+  onSelect: () => void,
+): void => {
+  openOverlay({
+    label: title,
+    render: (close) => (
+      <MenuChoices
+        cards={[]}
+        entries={[
+          {
+            action: "select",
+            label: selectLabel,
+            onPress: () => {
+              close();
+              onSelect();
+            },
+          },
+        ]}
+      />
+    ),
+  });
+};
+
 /**
  * Community playlists: the playlists of the shelves YouTube Music shows on
  * the connected account's home, as playlist cards in one row (Core's
@@ -671,14 +852,26 @@ const NO_COVERS: readonly string[] = [];
  * opens the playlist's page. Left out signed out and with nothing kept; the
  * kept list shows at once, so there is no skeleton.
  */
-function CommunityPlaylists({ title }: SectionProps) {
+function CommunityPlaylists({ title, selection }: SectionProps) {
+  const { strings } = useLocalisation();
   const playlists = useCommunityPlaylists();
+  const items = playlists.map((playlist): MixedItem => ({
+    kind: "ytPlaylist",
+    item: {
+      playlistId: playlist.playlistId,
+      title: playlist.title,
+      author: playlist.author ?? "",
+      artworkUrl: playlist.artworkUrl,
+    },
+  }));
+  useHomeTiles(selection, items);
   if (playlists.length === 0) return null;
   return (
-    <TitledSection title={title}>
+    <TitledSection title={title} selecting={selection.selecting}>
       <CoverRow>
-        {playlists.map((playlist) => {
+        {playlists.map((playlist, place) => {
           const author = playlist.author ?? "";
+          const item = items[place]!;
           return (
             <PlaylistCard
               key={playlist.playlistId}
@@ -687,12 +880,25 @@ function CommunityPlaylists({ title }: SectionProps) {
               label={author === "" ? playlist.title : undefined}
               paths={playlist.artworkUrl === null ? NO_COVERS : [playlist.artworkUrl]}
               size={COVER_ROW_TILE}
+              checked={selection.selecting ? selection.isChecked(item) : undefined}
               onPress={() =>
-                openYtPlaylist(playlist.playlistId, {
-                  title: playlist.title,
-                  line: author,
-                  artworkUrl: playlist.artworkUrl,
-                })
+                selection.selecting
+                  ? selection.toggle(item)
+                  : openYtPlaylist(playlist.playlistId, {
+                      title: playlist.title,
+                      line: author,
+                      artworkUrl: playlist.artworkUrl,
+                    })
+              }
+              onLongPress={
+                selection.selecting
+                  ? undefined
+                  : () =>
+                      openHomePlaylistSelectMenu(
+                        playlist.title,
+                        strings.itemActions.labels.select,
+                        () => selection.start(item),
+                      )
               }
             />
           );
@@ -707,32 +913,51 @@ function CommunityPlaylists({ title }: SectionProps) {
  * when it has nothing to show. A section added to the catalogue needs its
  * entry here (the type insists).
  */
+/**
+ * DJ has its own place in Home's arrangement and is unavailable with YT Music
+ * off. Like every section it leaves `SECTION_GAP` above itself.
+ */
+function Dj() {
+  return useYtMusicEnabled() ? (
+    <View style={DJ_SECTION}>
+      <DjCard />
+    </View>
+  ) : null;
+}
+
+const DJ_SECTION = { marginTop: SECTION_GAP } as const;
+
 const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
+  dj: Dj,
   discover: Discover,
   "in-your-orbit": InYourOrbit,
   "from-your-library": FromYourLibrary,
   "community-playlists": CommunityPlaylists,
   "new-releases": NewReleases,
   "upcoming-shows": UpcomingShows,
-  "recently-added": ({ home, title }) =>
+  "recently-added": ({ home, title, selection }) =>
     home.recentlyAdded !== undefined &&
     home.recentlyAdded.length > 0 && (
-      <TitledSection title={title}>
-        <AlbumShelf albums={home.recentlyAdded} />
+      <TitledSection title={title} selecting={selection.selecting}>
+        <AlbumShelf albums={home.recentlyAdded} selection={selection} />
       </TitledSection>
     ),
-  "recently-played": ({ home, title }) =>
+  "recently-played": ({ home, title, selection }) =>
     home.recentlyPlayed !== undefined &&
     home.recentlyPlayed.length > 0 && (
-      <TitledSection title={title}>
-        <AlbumShelf albums={home.recentlyPlayed} />
+      <TitledSection title={title} selecting={selection.selecting}>
+        <AlbumShelf albums={home.recentlyPlayed} selection={selection} />
       </TitledSection>
     ),
-  "most-played": ({ home, title }) =>
+  "most-played": ({ home, title, selection }) =>
     home.mostPlayed !== undefined &&
     home.mostPlayed.length > 0 && (
-      <TitledSection title={title}>
-        <MostPlayedRows rows={home.mostPlayed} context={MOST_PLAYED_CONTEXT} />
+      <TitledSection title={title} selecting={selection.selecting}>
+        <MostPlayedRows
+          rows={home.mostPlayed}
+          context={MOST_PLAYED_CONTEXT}
+          selection={selection}
+        />
       </TitledSection>
     ),
   "most-played-albums": MostPlayedAlbums,
@@ -741,25 +966,50 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
   stats: HomeStats,
 };
 
-/** Space above every section but the first on a screen: what `TitledSection` puts there. */
-export const SECTION_GAP = CELL * 5;
+const INERT_HOME_SELECTION: HomeSelection = {
+  enabled: false,
+  selecting: false,
+  selection: null,
+  isChecked: () => false,
+  start: () => undefined,
+  toggle: () => undefined,
+  end: () => undefined,
+  show: () => undefined,
+  hide: () => undefined,
+};
 
 /**
  * The section [id] of Home's catalogue with its data, or nothing when it has
  * nothing to show. Every section leaves `SECTION_GAP` above itself, so it can
  * sit under any screen's content (Home, or the Library under its rows).
- * [home] is `useHome`'s answer.
+ * [home] is `useHome`'s answer. Memoized: a Home render (its arrangement, the
+ * window, the opening state) leaves a section whose props kept their identity alone.
  */
-export function HomeSection({ id, home }: { id: HomeSectionId; home: HomeContent }) {
+function HomeSectionShown({
+  id,
+  home,
+  selection = INERT_HOME_SELECTION,
+}: {
+  id: HomeSectionId;
+  home: HomeContent;
+  selection?: HomeSelection;
+}) {
   const { strings } = useLocalisation();
   const hasFollowProvider = useHomeFollowPresence();
   if (!hasFollowProvider && (id === "new-releases" || id === "upcoming-shows"))
     return (
       <HomeFollowProvider>
-        <HomeSection id={id} home={home} />
+        <HomeSection id={id} home={home} selection={selection} />
       </HomeFollowProvider>
     );
   if (homeSectionWaiting(id, home)) return <HomeSectionSpace id={id} />;
   const Section = SECTIONS[id];
-  return <Section home={home} title={homeSectionTitle(id, strings)} />;
+  return (
+    <RenderCost name={`HomeSection(${id})`}>
+      <Section home={home} title={homeSectionTitle(id, strings)} selection={selection} />
+    </RenderCost>
+  );
 }
+
+// A declaration wrapped apart: the compiler can't build a memo's function that names itself.
+export const HomeSection = memo(HomeSectionShown);

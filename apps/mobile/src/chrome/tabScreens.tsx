@@ -7,11 +7,20 @@ import {
   type TabBarTab,
 } from "@wave/core";
 import type { TabSlot } from "expo-router/ui";
-import { useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import { StyleSheet } from "react-native";
 import { Screen } from "react-native-screens";
 
+import { RenderCost } from "@/lib/renderCost";
 import { PERF_ENABLED, perfMark, registerPerfMeta } from "@/perf/perf";
+import { useThemeColor } from "@/theme/useThemeColor";
 
 /**
  * How hidden tabs are kept (#304). By default: taken out of the window, hidden
@@ -25,6 +34,24 @@ import { PERF_ENABLED, perfMark, registerPerfMeta } from "@/perf/perf";
 export const TAB_SCREENS = parseTabScreens(process.env.EXPO_PUBLIC_WAVE_TABS);
 
 registerPerfMeta("tabs", () => ({ screens: describeTabScreens(TAB_SCREENS) }), true);
+
+/**
+ * Every stack's screen options: no header, the theme's background, and a
+ * screen under a push frozen as a hidden tab is (#1423), so a list or Home
+ * under a pushed album renders nothing until it shows again. `thaw` bundles
+ * leave them live too. `perf/memoryGuards.test.ts` keeps every stack on these.
+ */
+export const useStackScreenOptions = () => {
+  const background = useThemeColor("background");
+  return useMemo(
+    () => ({
+      headerShown: false,
+      contentStyle: { backgroundColor: background },
+      freezeOnBlur: TAB_SCREENS.freeze,
+    }),
+    [background],
+  );
+};
 
 type RenderTab = NonNullable<ComponentProps<typeof TabSlot>["renderFn"]>;
 
@@ -95,13 +122,15 @@ export const renderTabScreens =
             : undefined
         }
       >
-        {PERF_ENABLED ? (
-          <TabCommitMark name={name} focused={isFocused}>
-            {descriptor.render()}
-          </TabCommitMark>
-        ) : (
-          descriptor.render()
-        )}
+        <RenderCost name={`tab:${name}`}>
+          {PERF_ENABLED ? (
+            <TabCommitMark name={name} focused={isFocused}>
+              {descriptor.render()}
+            </TabCommitMark>
+          ) : (
+            descriptor.render()
+          )}
+        </RenderCost>
       </Screen>
     );
   };

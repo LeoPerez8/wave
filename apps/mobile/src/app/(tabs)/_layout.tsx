@@ -1,3 +1,4 @@
+import { PerfProfiler, useRenderCost } from "@/lib/renderCost";
 import { TAB_PATH, tabOfPath, type TabBarTab } from "@wave/core";
 import { usePathname } from "expo-router";
 import { router } from "@/lib/timingRouter";
@@ -35,6 +36,7 @@ const TABS = Object.entries(TAB_PATH) as [TabBarTab, (typeof TAB_PATH)[TabBarTab
  */
 export default function TabsLayout() {
   useRenderCount("TabsLayout");
+  useRenderCost("TabsLayout");
   const background = useThemeColor("background");
   const tab = tabOfPath(usePathname());
   const bar = useTabBar();
@@ -68,8 +70,12 @@ export default function TabsLayout() {
         ) : (
           <>
             <UpdatePill />
-            <MiniPlayer backdropId={BACKDROP.tabs} onOpen={openNowPlaying} />
-            <TabBar onTabTap={onTabTap} />
+            <PerfProfiler id="MiniPlayer">
+              <MiniPlayer backdropId={BACKDROP.tabs} onOpen={openNowPlaying} />
+            </PerfProfiler>
+            <PerfProfiler id="TabBar">
+              <TabBar onTabTap={onTabTap} />
+            </PerfProfiler>
           </>
         )}
       </Tabs>

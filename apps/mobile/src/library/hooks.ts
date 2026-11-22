@@ -16,13 +16,14 @@ import { AppState } from "react-native";
 import { WaveNative } from "@/native/waveNative";
 import { homeContent, type HomeContent } from "@/home/homeOpening";
 import { useSnapshotted } from "@/home/homeSnapshot";
-import { useSightedStore } from "@/lib/screenSight";
+import { useSightedSelector, useSightedStore } from "@/lib/screenSight";
 import { createAllFilesAccess, type AllFilesAccessState } from "./allFilesAccess";
 
 import type { LibraryCounts } from "@wave/client/db/counts";
 import type { LinkRows } from "@wave/client/db/links";
 import type { HomePlays, HomeSections } from "@wave/client/db/playHistory";
 import { scanState, type ScanState } from "./LibraryScan";
+import { scanBannerScan } from "./scanBanner";
 import { homeReads } from "./homeReads";
 import { LibraryStore, type LibraryStoreError } from "./LibraryStore";
 import {
@@ -64,8 +65,12 @@ const scanStatusNow = (): ScanState["status"] => scanState.get().status;
 export const useScanStatus = (): ScanState["status"] =>
   useSightedStore(scanState.subscribe, scanStatusNow);
 
-/** The scan's progress, for `ScanProgressBanner` alone; everything else reads `useScanStatus`. */
-export const useScanProgress = (): ScanState => useSightedStore(scanState.subscribe, scanState.get);
+/**
+ * The scan's progress while the banner shows it, else null (`scanBannerScan`), for
+ * `ScanProgressBanner` alone; everything else reads `useScanStatus`.
+ */
+export const useScanProgress = (): ScanState | null =>
+  useSightedSelector(scanState, scanBannerScan);
 
 /**
  * Whether Wave holds all-files access. Re-checked whenever the app comes back
