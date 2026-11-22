@@ -172,8 +172,39 @@ function ClearUncovered({
 }
 
 /**
+ * A cheap stand-in for [Edges] from the row's mount: each edge's colour and
+ * icon on its half of the row, with no animated style, so a swipe that moves
+ * the row (on the UI thread) before the touch's render commits never uncovers
+ * blank (#1423). Full strength; [Edges] replaces it once mounted.
+ */
+function Backdrop({ swipe }: { swipe: RowSwipe }) {
+  return (
+    <>
+      {swipe.right !== null && <BackdropSide action={swipe.right} edge="start" />}
+      {swipe.left !== null && <BackdropSide action={swipe.left} edge="end" />}
+    </>
+  );
+}
+
+function BackdropSide({ action, edge }: { action: SwipeSide; edge: "start" | "end" }) {
+  const colour = useThemeColor(swipeActionTone(action.action));
+  const Icon = ACTION_ICONS[action.action];
+  return (
+    <View
+      pointerEvents="none"
+      className={`absolute bottom-0 top-0 w-1/2 flex-row items-center bg-fill ${edge === "start" ? "left-0 justify-start" : "right-0 justify-end"}`}
+      style={{ paddingHorizontal: CELL * 2 }}
+    >
+      <Icon size={20} color={colour} strokeWidth={1.5} />
+    </View>
+  );
+}
+
+/**
  * What a row's swipe uncovers on both edges, each showing while the row moves
- * off it, faint until armed. Mounted on the row's first touch or demo (#1423).
+ * off it, faint until armed. Mounted on the row's first touch or demo (#1423),
+ * over [Backdrop] until then; a clear row's at mount, as nothing can stand in
+ * behind a row with no background.
  */
 function Edges({
   swipe,
@@ -273,8 +304,8 @@ export function SwipeableRow({
   const contentStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: offsetX.get() }],
   }));
-  // What a swipe uncovers is drawn from the first touch (well before the drag
-  // slop is crossed) or demo on, and kept.
+  // What a swipe uncovers is drawn in full from the first touch (well before
+  // the drag slop is crossed) or demo on, and kept; [Backdrop] stands in until then.
   const [uncovering, setUncovering] = useState(false);
   const [firstDemo] = useState(demo);
   if (demo !== firstDemo && !uncovering) setUncovering(true);
@@ -365,7 +396,11 @@ export function SwipeableRow({
       }}
       onTouchStart={active && !uncovering ? () => setUncovering(true) : undefined}
     >
-      {uncovering && <Edges swipe={swipe} clear={clear} offsetX={offsetX} width={width} />}
+      {uncovering || clear ? (
+        <Edges swipe={swipe} clear={clear} offsetX={offsetX} width={width} />
+      ) : (
+        <Backdrop swipe={swipe} />
+      )}
       <GestureDetector gesture={pan}>
         <Animated.View className={clear ? undefined : "bg-background"} style={contentStyle}>
           {children}

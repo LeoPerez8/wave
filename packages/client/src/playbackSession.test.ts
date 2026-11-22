@@ -220,6 +220,39 @@ test("a report from the preloaded song catches the queue up when its transition 
   assert.equal(audio.preloaded(), keys[2]);
 });
 
+test("a report taken on the next song before Previous doesn't take the queue back to it", async (t) => {
+  // The audio process stamps each answer with when it took it, as the desktop's does.
+  let clock = 0;
+  const inner = device();
+  const stamp = async (status: Promise<AudioStatus>) => ({
+    ...(await status),
+    observedAtMs: (clock += 10),
+  });
+  const audio: AudioPort = {
+    ...inner,
+    load: (path, key, how) => stamp(inner.load(path, key, how)),
+    preload: (path, key, how) => stamp(inner.preload(path, key, how)),
+    play: () => stamp(inner.play()),
+    pause: () => stamp(inner.pause()),
+    seek: (positionMs) => stamp(inner.seek(positionMs)),
+    status: () => stamp(inner.status()),
+  };
+  const { session, keys } = await album(t, { audio });
+  await session.dispatch({ type: "next" });
+  const late: AudioStatus = {
+    key: keys[1],
+    state: "playing",
+    positionMs: 50,
+    observedAtMs: (clock += 10),
+  };
+  await session.dispatch({ type: "previous" });
+  assert.equal(current(session), keys[0]);
+  // It reaches the session only now, with the second song lined up after the first again.
+  await session.feed(late);
+  assert.equal(current(session), keys[0]);
+  assert.equal(session.snapshot().status.key, keys[0]);
+});
+
 test("a report about a song the queue no longer holds changes nothing", async (t) => {
   const { session, keys } = await album(t);
   await session.feed({ key: "999", state: "paused", positionMs: 500 });

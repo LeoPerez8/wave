@@ -12,7 +12,13 @@ import {
   statsWindow,
   summedListeningTotals,
 } from "@wave/core";
-import type { HomeRow, HomeSectionView, HomeView, LocalHomeSectionId } from "../../shared/home.ts";
+import {
+  DESKTOP_SKIPPED_SECTIONS,
+  type HomeRow,
+  type HomeSectionView,
+  type HomeView,
+  type LocalHomeSectionId,
+} from "../../shared/home.ts";
 import { ytRow } from "../../shared/yt.ts";
 import { browseRows, browseSongs } from "./browse.ts";
 
@@ -20,7 +26,7 @@ const page = <T>(items: readonly T[]) => ({ items, offset: 0, total: items.lengt
 
 /** A bounded Home read: the same 12-album shelves and 10-song previews as the phone. */
 export const readHome = (db: LibraryDatabase, stored: string | null): Omit<HomeView, "recap"> => {
-  const arrangement = parseHomeArrangement(stored);
+  const arrangement = parseHomeArrangement(stored, DESKTOP_SKIPPED_SECTIONS);
   // The Library's shelves. Discover and the followed artists' sections fill their own places.
   const home = homeSections(db);
   const now = Date.now();
