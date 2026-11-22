@@ -424,7 +424,14 @@ test("a slow scan save makes the next slice smaller, so each stays near Core's s
     };
     const pace = scanSavePace(() => clock, 20);
     runTestSync(
-      saveScanBatch(slow, { missing: [], read, isIndexed: () => false }, [], Effect.void, undefined, pace),
+      saveScanBatch(
+        slow,
+        { missing: [], read, isIndexed: () => false },
+        [],
+        Effect.void,
+        undefined,
+        pace,
+      ),
     );
     assert.deepEqual(sizes, [20, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]);
     assert.equal(pace.size(), 4);

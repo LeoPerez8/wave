@@ -68,7 +68,9 @@ for (const size of SLICES) {
     const blocks: number[] = [];
     for (let i = 0; i < saved.length; i += size)
       blocks.push(
-        time(() => saveBatch(db, splits, saved.slice(i, i + size), [], [], 0, { linkEntries: false })),
+        time(() =>
+          saveBatch(db, splits, saved.slice(i, i + size), [], [], 0, { linkEntries: false }),
+        ),
       );
     totals.push(blocks.reduce((sum, ms) => sum + ms, 0));
     longest.push(Math.max(...blocks));
@@ -89,7 +91,9 @@ for (let run = 0; run < RUNS; run++) {
 console.log(`Desktop (sql.js), Library ${LIBRARY}, ${RUNS} runs, medians:`);
 console.log(`| Step | ms |`);
 console.log(`| --- | ---: |`);
-console.log(`| A session's first save (${SCAN_SAVE_SLICE} files, reads every credit) | ${first.toFixed(1)} |`);
+console.log(
+  `| A session's first save (${SCAN_SAVE_SLICE} files, reads every credit) | ${first.toFixed(1)} |`,
+);
 for (const row of rows) console.log(row);
 console.log(`| Scan end, first of the session (credits re-filed) | ${median(staleEnd)} |`);
 console.log(`| Scan end, Library already re-filed | ${median(freshEnd)} |`);

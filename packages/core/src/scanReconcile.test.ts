@@ -9,6 +9,7 @@ import {
   scanEnd,
   scanSaveSliceSteps,
   scanSaveSlices,
+  scanTimingsLogLine,
   type IndexedFile,
 } from "./index.ts";
 
@@ -244,4 +245,48 @@ test("each slice's size is asked for once the slice before it was taken, so its 
   for (const slice of scanSaveSliceSteps(changes, () => sizes[taken.length]!))
     taken.push(slice.tracks.map((track) => track.title));
   assert.deepEqual(taken, [["1"], ["2", "3", "4"], ["5", "6"]]);
+});
+
+describe("scanTimingsLogLine", () => {
+  test("says how long the scan took and where its time went, without a path or a title", () => {
+    assert.equal(
+      scanTimingsLogLine({
+        kind: "incremental",
+        found: 3000,
+        read: 200,
+        saved: 200,
+        batches: 2,
+        ms: 41_250,
+        savingMs: 1_830,
+        longestSaveMs: 46,
+        announcingMs: 420,
+        longestAnnounceMs: 230,
+        slice: 12,
+      }),
+      "Scan done (incremental): 3000 found, 200 read, 200 saved in 2 batches, 41.3 s; " +
+        "saves 1.8 s (longest 46 ms, slice now 12), Library changes 0.4 s (longest 230 ms), " +
+        "waiting 39.0 s",
+    );
+  });
+
+  test("a scan that saved nothing says so", () => {
+    assert.equal(
+      scanTimingsLogLine({
+        kind: "full",
+        found: 0,
+        read: 0,
+        saved: 0,
+        batches: 0,
+        ms: 300,
+        savingMs: 0,
+        longestSaveMs: 0,
+        announcingMs: 0,
+        longestAnnounceMs: 0,
+        slice: 25,
+      }),
+      "Scan done (full): 0 found, 0 read, 0 saved in 0 batches, 0.3 s; " +
+        "saves 0.0 s (longest 0 ms, slice now 25), Library changes 0.0 s (longest 0 ms), " +
+        "waiting 0.3 s",
+    );
+  });
 });

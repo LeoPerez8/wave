@@ -267,9 +267,11 @@ export const saveScanBatch = (
     let count = 0;
     const ids: number[] = [];
     let index = 0;
+    // The save transactions' time, for the scan's log line.
+    const timed = { savingMs: 0, longestSaveMs: 0 };
     for (const slice of scanSaveSliceSteps(changes, pace.size)) {
       yield* turn;
-      const result = yield* saveSlice(store, slice, index === 0 ? artwork : [], pace);
+      const result = yield* saveSlice(store, slice, index === 0 ? artwork : [], pace, timed);
       saved(result);
       ids.push(...result.trackIds);
       count += slice.tracks.length;
@@ -278,24 +280,36 @@ export const saveScanBatch = (
     // New artwork alone (files that were read but saved nothing) still gets saved.
     if (index === 0 && artwork.length > 0) {
       yield* turn;
-      saved(yield* saveSlice(store, { tracks: [], moves: [] }, artwork, pace));
+      saved(yield* saveSlice(store, { tracks: [], moves: [] }, artwork, pace, timed));
     }
-    return { changes, count, ids };
+    return { changes, count, ids, ...timed };
   });
 
-/** One slice's transaction, timed for [pace]. Its artwork goes before any file that shows it. */
+/** One slice's transaction, timed for [pace] and [timed]. Its artwork goes before any file that shows it. */
 const saveSlice = (
   store: LibraryStore["Service"],
-  slice: { readonly tracks: readonly IndexedTrack[]; readonly moves: readonly { from: string; to: string }[] },
+  slice: {
+    readonly tracks: readonly IndexedTrack[];
+    readonly moves: readonly { from: string; to: string }[];
+  },
   artwork: readonly IndexedArtwork[],
   pace: ScanSavePace,
+  timed: { savingMs: number; longestSaveMs: number },
 ) =>
   Effect.gen(function* () {
     const start = pace.now();
-    const result = yield* store.saveBatch(slice.tracks, artwork, slice.moves, { linkEntries: false });
-    pace.took(slice.tracks.length, pace.now() - start);
+    const result = yield* store.saveBatch(slice.tracks, artwork, slice.moves, {
+      linkEntries: false,
+    });
+    const ms = pace.now() - start;
+    pace.took(slice.tracks.length, ms);
+    timed.savingMs += ms;
+    timed.longestSaveMs = Math.max(timed.longestSaveMs, ms);
     return result;
   });
+
+/** The files the app's next scan save slice takes, for the scan's log line. */
+export const scanSaveSlice = (): number => appScanSavePace.size();
 
 /** Pair source SQL and one pair's native audio read/atomic history merge are indivisible. */
 export const checkDuplicateFiles = (

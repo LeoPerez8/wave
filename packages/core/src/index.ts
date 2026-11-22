@@ -160,10 +160,12 @@ export {
   scanEnd,
   scanSaveSliceSteps,
   scanSaveSlices,
+  scanTimingsLogLine,
 } from "./scanReconcile.ts";
 export type {
   IndexedFile,
   ScanChanges,
+  ScanTimings,
   ScanEnd,
   ScanReconcileInput,
   ScanSaveSlice,

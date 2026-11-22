@@ -252,10 +252,12 @@ const writeLinks = (
   const linkTable = sql.raw(table.links);
   const owner = sql.raw(table.owner);
   for (const ids of chunks([...changed.keys()]))
-    db.run(sql`DELETE FROM ${linkTable} WHERE ${owner} IN (${sql.join(
-      ids.map((id) => sql`${id}`),
-      sql`, `,
-    )})`);
+    db.run(
+      sql`DELETE FROM ${linkTable} WHERE ${owner} IN (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `,
+      )})`,
+    );
   const rows = [...changed].flatMap(([id, artists]) =>
     artists.map((artist, position) => sql`(${id}, ${artist}, ${position})`),
   );

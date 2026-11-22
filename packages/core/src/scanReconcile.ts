@@ -98,6 +98,39 @@ export const scanEnd = ({
   announce: gone > 0 ? "removed" : saved > 0 ? "added" : firstScan ? "scanned" : null,
 });
 
+/** What one scan did and where its time went, for its app log line (#1436). */
+export interface ScanTimings {
+  readonly kind: "full" | "incremental";
+  readonly found: number;
+  readonly read: number;
+  readonly saved: number;
+  readonly batches: number;
+  /** From the scan's start to its end. */
+  readonly ms: number;
+  /** The save transactions, all together, and the longest one. */
+  readonly savingMs: number;
+  readonly longestSaveMs: number;
+  /** Telling the app of each batch's songs (`LibraryChange`), all together, and the longest. */
+  readonly announcingMs: number;
+  readonly longestAnnounceMs: number;
+  /** The files the next save slice takes (`nextScanSaveSlice`). */
+  readonly slice: number;
+}
+
+const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
+
+/**
+ * The app log's line once a scan ends: its files, its time, and how much of it
+ * went to saving, to telling the app, and to waiting for free turns (the rest:
+ * reading files, reconciling, other work ahead of it). Holds no path or title.
+ */
+export const scanTimingsLogLine = (t: ScanTimings): string =>
+  `Scan done (${t.kind}): ${t.found} found, ${t.read} read, ${t.saved} saved in ${t.batches} batches, ` +
+  `${seconds(t.ms)}; saves ${seconds(t.savingMs)} (longest ${Math.round(t.longestSaveMs)} ms, ` +
+  `slice now ${t.slice}), Library changes ${seconds(t.announcingMs)} ` +
+  `(longest ${Math.round(t.longestAnnounceMs)} ms), ` +
+  `waiting ${seconds(Math.max(0, t.ms - t.savingMs - t.announcingMs))}`;
+
 /**
  * Files a scan batch's slice saves per transaction: the scanner hands over
  * up to 500 at once, and saving them in one go holds the JavaScript thread
@@ -117,7 +150,10 @@ export const SCAN_SLICE_BUDGET_MS = 30;
  * (one quick slice can be luck), never past `SCAN_SAVE_SLICE` and never
  * under one file, so a slow phone still gets through.
  */
-export const nextScanSaveSlice = (last: { readonly files: number; readonly ms: number }): number => {
+export const nextScanSaveSlice = (last: {
+  readonly files: number;
+  readonly ms: number;
+}): number => {
   const fit = last.ms > 0 ? Math.floor((last.files * SCAN_SLICE_BUDGET_MS) / last.ms) : Infinity;
   return Math.max(1, Math.min(fit, last.files * 2, SCAN_SAVE_SLICE));
 };

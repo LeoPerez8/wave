@@ -9,6 +9,7 @@ import {
   planAddRoot,
   planExclusion,
   scanEnd,
+  scanTimingsLogLine,
   type IndexedFile,
   type LibraryChange,
 } from "@wave/core";
@@ -22,12 +23,14 @@ import { namedWork, runSteps } from "@/lib/stepped";
 import {
   readScanIndex,
   saveScanBatch,
+  scanSaveSlice,
   finishScanIndex,
   forgetSkippedFiles,
   skipVoiceNoteFiles,
 } from "./startupJobs";
 
 import { inSlice, startupTurnEffect } from "@/lib/backgroundWork";
+import { appLog } from "@/log/appLog";
 import { makeExternalStore } from "@wave/client/externalStore";
 import { argbToHex, type NativeArtwork, type NativeScannedTrack } from "@/native/waveNative";
 import { skipVoiceNotes } from "@/settings/skipVoiceNotes";
@@ -234,6 +237,16 @@ const scanFolders = (roots: readonly string[]) =>
     let saved = 0;
     const savedTrackIds: number[] = [];
     const startedAt = Date.now();
+    // Where the scan's time goes, for its log line (#1436).
+    const timings = {
+      read: 0,
+      batches: 0,
+      savingMs: 0,
+      longestSaveMs: 0,
+      announcingMs: 0,
+      longestAnnounceMs: 0,
+    };
+    const scanStart = performance.now();
     scanState.set({
       status: "scanning",
       kind,
@@ -329,6 +342,8 @@ const scanFolders = (roots: readonly string[]) =>
               changes,
               count,
               ids: batchTrackIds,
+              savingMs,
+              longestSaveMs,
             } = yield* saveScanBatch(
               store,
               { missing, read, isIndexed: (path) => indexed.has(path) },
@@ -338,6 +353,10 @@ const scanFolders = (roots: readonly string[]) =>
             );
             missing = changes.unmatched;
             saved += count;
+            timings.read += event.tracks.length;
+            timings.batches++;
+            timings.savingMs += savingMs;
+            timings.longestSaveMs = Math.max(timings.longestSaveMs, longestSaveMs);
             savedTrackIds.push(...batchTrackIds);
             yield* runSteps(
               (function* () {
@@ -353,7 +372,13 @@ const scanFolders = (roots: readonly string[]) =>
               })(),
               startupTurnEffect,
             );
-            if (count > 0) bumpLibraryVersion(scanBatchChange(batchTrackIds));
+            if (count > 0) {
+              const announcing = performance.now();
+              bumpLibraryVersion(scanBatchChange(batchTrackIds));
+              const ms = performance.now() - announcing;
+              timings.announcingMs += ms;
+              timings.longestAnnounceMs = Math.max(timings.longestAnnounceMs, ms);
+            }
             return;
           }
           case "Complete":
@@ -423,6 +448,18 @@ const scanFolders = (roots: readonly string[]) =>
     }
     scanState.set({ status: "done", filesFound: completed.filesFound });
     publishScanFinished();
+    appLog(
+      "info",
+      "WaveScan",
+      scanTimingsLogLine({
+        kind,
+        found: completed.filesFound,
+        saved,
+        ms: performance.now() - scanStart,
+        slice: scanSaveSlice(),
+        ...timings,
+      }),
+    );
   }).pipe(namedWork("scan"));
 
 /** Scans every scan root: in full the first time, incrementally afterwards. */
