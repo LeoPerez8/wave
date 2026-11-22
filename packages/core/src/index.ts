@@ -1721,7 +1721,12 @@ export type {
   TrackService,
   YtMusicLinkPlay,
 } from "./songLinkOpening.ts";
-export { spotifySearchQuery, spotifyYtMatch, searchRecording } from "./spotifyImport.ts";
+export {
+  musicVideoAudioTrack,
+  spotifySearchQuery,
+  spotifyYtMatch,
+  searchRecording,
+} from "./spotifyImport.ts";
 export { settleUnsearched, unsearchedSearchQuery, unsearchedSettles } from "./unsearchedEntries.ts";
 export {
   PLAYING_SEARCHES,
