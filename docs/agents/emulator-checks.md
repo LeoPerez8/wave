@@ -23,6 +23,57 @@ several, and a parallel `testDebugUnitTest` once hung for 50 minutes.
 Use `wave-run-903` on host `local`, through the T3 device tools: `device_list`, `device_open`, then
 the `agent-device` command it returns. Use `adb` only for installs, logs and pushing files.
 
+## Seed a reference-size Library (#1457)
+
+Measurements need a Library the size of the reference phone's, and a cold-booted AVD has almost
+none. With Wave installed (a build of your checkout, as above) and the emulator booted, run:
+
+```sh
+node scripts/perf/seed.ts --serial <adb-serial>
+```
+
+It took 75 to 112 seconds on the PC against a cold-booted read-only `wave-marquee`: about 5 s to
+write the files, 25 to 50 s to push them, 35 s to build the database. It refuses anything but an
+emulator, because it empties `Music` and clears Wave's data (`pm clear`). Then it:
+
+1. writes tagged MP3s of about 1 KB each (an ID3 tag and a Xing header claiming a 2 to 6 minute
+   song) under `Music/Wave Seed/<Artist>/<Album>/`, and pushes them with `adb root`;
+2. builds `wave.db` through the client's migrations and store (`packages/client/src/db/referenceSeed.ts`),
+   from the same tags and from each file's size and modified time as the device reports them, so
+   the scan at launch finds every file unchanged;
+3. pushes it to `files/SQLite/wave.db`, grants All files access, and launches Wave.
+
+Default sizes, the reference phone's:
+
+| What                                                                  | Default                       | Option        |
+| --------------------------------------------------------------------- | ----------------------------- | ------------- |
+| Library songs                                                         | 3,000                         | `--songs`     |
+| Artists                                                               | 900                           | `--artists`   |
+| Albums                                                                | 1,500                         | `--albums`    |
+| Playlists                                                             | 60, the biggest 3,800 entries | `--playlists` |
+| Playlist entries, about 45% Library songs and the rest YT Music songs | 26,700                        | `--entries`   |
+| Known videos (`selectKnownVideos`)                                    | 20,500                        | `--videos`    |
+| Plays over the last year, a fifth of them streamed                    | 12,000                        | `--plays`     |
+| Favorites                                                             | 150                           | `--favorites` |
+| Followed artists                                                      | 5                             | `--follows`   |
+
+`--scale 0.1` shrinks every default for a quick seed. Every name is generated, the same every run:
+the first artist on Artists is `Amber Ainsley` and the first playlist on Playlists is `Archive`
+(the biggest), which `scripts/perf/fixture.json` names for `perf.ts`. `--stale` gives the database
+other modified times than the files', so the scan at launch reads all 3,000 files again. Library
+holds 3,000 songs, 900 artists and 1,500 albums throughout, with no duplicates, but that scan is
+slow: on `wave-marquee` it saved about 50 files a minute, so it takes about an hour. Measure
+after it. Without `--stale` the scan at launch finds nothing changed and is through in seconds.
+`--local <dir>` writes the files and the database to `<dir>` and touches no device.
+
+Wave opens on Home with the "Open song links in Wave" dialog, as on any first launch; dismiss it
+before measuring. Playlists' YT Music entries carry generated video ids, but Wave's Wi-Fi
+pre-download still went to the network on the seeded Library, so turn the emulator's network off
+when a measurement must not include it.
+
+A read-only instance writes nothing back, so seed it again after each boot. The seed doesn't cover
+artwork (no file has a cover) or lyrics.
+
 ## The emulator check (#1359)
 
 Between phone runs, this catches a JS block over 50 ms or a tap kind gone past its budget. Run it
@@ -32,10 +83,10 @@ heavy queue since it holds the emulator for a while:
 
 ```sh
 bash ~/.wave/heavy.sh node scripts/perf/perf.ts emulator-check --serial <adb-serial> \
-  --artist "<artist on Artists' first screen>" --playlist "<playlist on Playlists' first screen>"
+  --artist "Amber Ainsley" --playlist "Archive"
 ```
 
-It plays `reference-taps` (five iterations; `--iterations 2` for a quick look, which took ten
+On a seeded Library those are the fixture's names, the defaults. It plays `reference-taps` (five iterations; `--iterations 2` for a quick look, which took ten
 minutes on the PC). Then it sends Wave home and brings it back, since the timing session writes
 its "Speed since" summary on leaving and a paused Wave runs no JS timer. Last, it reads the app log
 (`files/logs/wave.log`) through the emulator's root, or `run-as` on a debug build. Only entries
