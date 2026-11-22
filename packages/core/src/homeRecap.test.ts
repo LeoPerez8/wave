@@ -110,3 +110,13 @@ test("returning from a Recap removes its announcement and reopening uses the kno
     september,
   );
 });
+
+// Home draws the announced period: a return that announces the same Recap
+// hands back the same one, so Home isn't drawn again for it (#1439).
+test("a return to Home announcing the same Recap keeps the period it had", () => {
+  const first = startHomeRecap({ available: [september], opened: [], visible: true });
+  const input = { available: [{ ...september }], opened: [] };
+  const hidden = homeRecapVisibility(first, { ...input, visible: false });
+  const returned = homeRecapVisibility(hidden, { ...input, visible: true });
+  assert.equal(returned.period, first.period);
+});

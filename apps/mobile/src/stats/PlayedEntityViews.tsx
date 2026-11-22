@@ -1,11 +1,10 @@
-import { useScreenSettled } from "@/lib/screenTiming";
 import { useScreenSight } from "@/lib/screenSight";
-import { isScreenSettled } from "@/lib/timing";
+import { isScreenSettled, onScreenSettled } from "@/lib/timing";
 import { online } from "@/native/waveNative";
 import { loadPlayedArtistImage, openPlayedRelease } from "./playedEntityOpening";
 import { artistPhotoName, knownPages } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { View } from "react-native";
 
 import { artworkUri } from "@wave/client/artworkUri";
@@ -54,33 +53,50 @@ const artistImages = knownPages<Promise<string | null>>(64);
 export const usePlayedArtist = (artist: PlayedArtist) => {
   const enabled = useYtMusicEnabled();
   const isOnlineArtist = "online" in artist;
-  const settled = useScreenSettled();
   const sight = useScreenSight();
-  const visible = useSyncExternalStore(sight.subscribe, sight.visible);
   const [photo, setPhoto] = useState<{ name: string; url: string | null } | null>(null);
+  // Sight and settlement are followed here, not drawn: a visit elsewhere or a
+  // screen settling changes nothing an artist shows (#1439). Only an online
+  // artist waits on them, for its photo.
   useEffect(() => {
-    if (!isOnlineArtist || !enabled || !settled || !visible || !online()) return;
+    if (!isOnlineArtist || !enabled) return;
     let current = true;
-    const key = artistPhotoName(artist.name);
-    let pending = artistImages.get(key);
-    if (pending === undefined) {
-      pending = loadPlayedArtistImage(
-        artist.name,
-        { enabled: ytMusicEnabled, settled: isScreenSettled, visible: sight.visible, online },
-        (name) => appRuntime.runPromise(Effect.flatMap(YtMusic, (yt) => yt.searchArtists(name))),
-      );
-      artistImages.set(key, pending);
-      void pending.catch(() => artistImages.forget(key));
-    }
-    void pending
-      .then((url) => {
-        if (current) setPhoto({ name: artist.name, url });
-      })
-      .catch(() => {});
+    let asked = false;
+    const ask = () => {
+      if (asked || !current || !sight.visible() || !isScreenSettled() || !online()) return;
+      asked = true;
+      const key = artistPhotoName(artist.name);
+      let pending = artistImages.get(key);
+      if (pending === undefined) {
+        pending = loadPlayedArtistImage(
+          artist.name,
+          { enabled: ytMusicEnabled, settled: isScreenSettled, visible: sight.visible, online },
+          (name) => appRuntime.runPromise(Effect.flatMap(YtMusic, (yt) => yt.searchArtists(name))),
+        );
+        artistImages.set(key, pending);
+        void pending.catch(() => artistImages.forget(key));
+      }
+      void pending
+        .then((url) => {
+          if (!current) return;
+          setPhoto((shown) =>
+            shown?.name === artist.name && shown.url === url ? shown : { name: artist.name, url },
+          );
+        })
+        // A failed lookup is asked again on the next return to the screen.
+        .catch(() => {
+          asked = false;
+        });
+    };
+    const stopSight = sight.subscribe(ask);
+    const stopSettled = onScreenSettled(ask);
+    ask();
     return () => {
       current = false;
+      stopSight();
+      stopSettled();
     };
-  }, [artist.name, enabled, isOnlineArtist, settled, sight, visible]);
+  }, [artist.name, enabled, isOnlineArtist, sight]);
   return {
     unavailable: isOnlineArtist && !enabled,
     image: isOnlineArtist
