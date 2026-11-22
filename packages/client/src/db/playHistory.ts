@@ -520,13 +520,18 @@ export const homeAdded = (
 ): Pick<HomeSections, "recentlyAdded"> => ({ recentlyAdded: recentlyAddedAlbums(db, scope) });
 
 /** Recently Played and Most Played, read from the play totals (`play_totals`). */
-export const homePlays = (db: LibraryDatabase, scope: TrackScope = "library"): HomePlays => {
-  const streamed = streamedListeningTotals(db);
-  return {
-    recentlyPlayed: recentlyPlayedShelf(db, scope, streamed),
-    mostPlayed: mostPlayedSongs(db, scope, streamed),
-  };
-};
+export const homePlays = (db: LibraryDatabase, scope: TrackScope = "library"): HomePlays =>
+  homePlaysWith(db, scope, streamedListeningTotals(db));
+
+/** `homePlays` with the streamed songs' totals [streamed] already read. */
+const homePlaysWith = (
+  db: LibraryDatabase,
+  scope: TrackScope,
+  streamed: readonly StreamedListeningTotal[],
+): HomePlays => ({
+  recentlyPlayed: recentlyPlayedShelf(db, scope, streamed),
+  mostPlayed: mostPlayedSongs(db, scope, streamed),
+});
 
 /**
  * What Home's plays (`homePlays`) are read from in a replayed read (#1452): the sections
@@ -550,7 +555,7 @@ export const homePlaysRead = (
 ): HomePlaysRead => {
   const streamed = streamedListeningTotals(db);
   if (scope === "files" || streamed.length === 0 || keptTotalsSettled(db))
-    return { plays: homePlays(db, scope) };
+    return { plays: homePlaysWith(db, scope, streamed) };
   const local = recentlyPlayedLocal(db, scope, SHELF);
   return {
     mostPlayed: mostPlayedSongs(db, scope, streamed),
