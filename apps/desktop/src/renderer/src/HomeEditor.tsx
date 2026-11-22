@@ -23,6 +23,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { DESKTOP_SKIPPED_SECTIONS } from "../../shared/home.ts";
 import { Icon } from "./Icon.tsx";
 import { trapTab } from "./SongActions.tsx";
 import { labels, text } from "./text.ts";
@@ -276,7 +277,7 @@ export function HomeEditor({
         name="section"
         label={text.home.edit}
         shown={arrangement.sections}
-        hidden={hiddenHomeSections(arrangement)}
+        hidden={hiddenHomeSections(arrangement, DESKTOP_SKIPPED_SECTIONS)}
         title={(id) => homeSectionTitle(id, text)}
         place={text.arrangement.home}
         hiddenHeading={text.home.notOnHome}

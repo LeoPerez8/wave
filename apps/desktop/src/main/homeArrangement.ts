@@ -7,11 +7,12 @@ import {
   type HomeArrangement,
   type HomeArrangementEdit,
 } from "@wave/core";
+import { DESKTOP_SKIPPED_SECTIONS } from "../shared/home.ts";
 import { keepPreference, syncedPreference } from "./sync/desktopSync.ts";
 
 /** Home's sections and Discover rows as the account arranges them. */
 export const homeArrangement = (db: LibraryDatabase): HomeArrangement =>
-  parseHomeArrangement(syncedPreference(db, HOME_ARRANGEMENT_SETTING));
+  parseHomeArrangement(syncedPreference(db, HOME_ARRANGEMENT_SETTING), DESKTOP_SKIPPED_SECTIONS);
 
 /**
  * Makes [edit] to the account's Home arrangement by Core's rules, keeps the result and stamps it
@@ -21,8 +22,12 @@ export const editDesktopHome = (
   db: LibraryDatabase,
   edit: HomeArrangementEdit,
 ): HomeArrangement => {
-  const stored = editStoredHomeArrangement(syncedPreference(db, HOME_ARRANGEMENT_SETTING), edit);
+  const stored = editStoredHomeArrangement(
+    syncedPreference(db, HOME_ARRANGEMENT_SETTING),
+    edit,
+    DESKTOP_SKIPPED_SECTIONS,
+  );
   keepPreference(db, HOME_ARRANGEMENT_SETTING, stored);
   stampPreference(db, HOME_ARRANGEMENT_SETTING, Date.now());
-  return parseHomeArrangement(stored);
+  return parseHomeArrangement(stored, DESKTOP_SKIPPED_SECTIONS);
 };

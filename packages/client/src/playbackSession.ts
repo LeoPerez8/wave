@@ -559,7 +559,14 @@ export const createPlaybackSession = async (
           );
           followed = true;
         }
-        if (next.key !== undefined && next.key !== currentKey() && next.key === plannedKey()) {
+        if (
+          next.key !== undefined &&
+          next.key !== currentKey() &&
+          next.key === plannedKey() &&
+          // One taken before the queue last moved is from the song it left, which may be the
+          // one lined up again (Previous from the next song): it isn't a move.
+          (next.observedAtMs === undefined || next.observedAtMs >= observedAt)
+        ) {
           // The move's own report went missing; the audio process is on the next song all the same.
           followPlan(now());
           followed = true;
