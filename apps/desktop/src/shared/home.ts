@@ -1,4 +1,10 @@
-import type { DiscoverRowId, LibraryTotals, ListeningTotals, RecapPeriod } from "@wave/core";
+import type {
+  DiscoverRowId,
+  HomeSectionId,
+  LibraryTotals,
+  ListeningTotals,
+  RecapPeriod,
+} from "@wave/core";
 import type { Page } from "./bridge.ts";
 import type { BrowseRow } from "./browse.ts";
 
@@ -10,6 +16,11 @@ export type LocalHomeSectionId =
   | "most-played-albums"
   | "most-played-artists"
   | "favorites";
+/**
+ * Home's sections the computer doesn't draw: DJ is the phone's. The computer's Home neither shows
+ * nor offers them, and an edit made here keeps them where the phone has them (Core's `skip`).
+ */
+export const DESKTOP_SKIPPED_SECTIONS: readonly HomeSectionId[] = ["dj"];
 /** The shelves whose See all opens their own page (`home.seeAll`). */
 export const HOME_SEE_ALL_SECTIONS = ["recently-added", "recently-played"] as const;
 export type HomeSeeAllSection = (typeof HOME_SEE_ALL_SECTIONS)[number];

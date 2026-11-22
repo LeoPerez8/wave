@@ -114,20 +114,26 @@ const rowId = (id: string): string | null => (isRow(id) ? id : null);
 export const editStoredHomeArrangement = (
   stored: string | null,
   edit: HomeArrangementEdit,
+  skip: readonly HomeSectionId[] = [],
 ): string | null => {
-  const arrangement = editHomeArrangement(parseHomeArrangement(stored), edit);
-  const plain = storedHomeArrangement(arrangement);
+  const arrangement = editHomeArrangement(parseHomeArrangement(stored, skip), edit);
+  const plain = storedHomeArrangement(arrangement, skip);
   const record = readStoredRecord(stored);
   if (!Array.isArray(record.shown)) return plain;
+  // A section this Wave skips is kept as a newer Wave's would be: in its place, untouched.
+  const sectionId = (id: string): string | null => {
+    const known = storedHomeSectionId(id);
+    return known !== null && skip.includes(known) ? null : known;
+  };
   const discover = isRecord(record.discover) ? record.discover : {};
   const shown = strings(record.shown);
-  const hidden = unknownOf(strings(record.hidden), storedHomeSectionId);
+  const hidden = unknownOf(strings(record.hidden), sectionId);
   const rows = Array.isArray(discover.shown) ? strings(discover.shown) : [];
   const hiddenRows = unknownOf(strings(discover.hidden), rowId);
   const others = without(record, ["shown", "hidden", "discover"]);
   const otherRowFields = without(discover, ["shown", "hidden"]);
   const nothingUnknown =
-    unknownOf(shown, storedHomeSectionId).length === 0 &&
+    unknownOf(shown, sectionId).length === 0 &&
     hidden.length === 0 &&
     unknownOf(rows, rowId).length === 0 &&
     hiddenRows.length === 0 &&
@@ -136,8 +142,8 @@ export const editStoredHomeArrangement = (
   if (nothingUnknown) return plain;
   return JSON.stringify({
     ...others,
-    shown: withUnknown(shown, arrangement.sections, storedHomeSectionId),
-    hidden: [...hiddenHomeSections(arrangement), ...hidden],
+    shown: withUnknown(shown, arrangement.sections, sectionId),
+    hidden: [...hiddenHomeSections(arrangement, skip), ...hidden],
     discover: {
       ...otherRowFields,
       shown: withUnknown(rows, arrangement.discoverRows, rowId),
