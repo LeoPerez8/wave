@@ -401,6 +401,7 @@ import {
   type SavedLyricsCandidate,
 } from "@wave/client/db/savedLyrics";
 import { notifyLyricsSearchIndexChanged } from "./lyricsSearchVersion";
+import { runLibraryWrite } from "./libraryWrites";
 import {
   rememberNoBetterCopies,
   replaceTrackFile,
@@ -1598,8 +1599,12 @@ export class LibraryStore extends Context.Service<
  */
 const KEPT_TOTALS_STEP = { songs: 2, plays: 250, days: 24 };
 
+/** A synchronous write on the JS thread, named for the block log (`runLibraryWrite`). */
 const writeAttempt = <A>(operation: string, run: () => A): Effect.Effect<A, LibraryStoreError> =>
-  Effect.try({ try: run, catch: (cause) => new LibraryStoreError({ operation, cause }) });
+  Effect.try({
+    try: () => runLibraryWrite(operation, run),
+    catch: (cause) => new LibraryStoreError({ operation, cause }),
+  });
 
 const now = () => performance.now();
 

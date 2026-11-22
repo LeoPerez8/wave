@@ -13,6 +13,7 @@ import * as Effect from "effect/Effect";
 import { AppState, type GestureResponderEvent } from "react-native";
 
 import { appLog } from "@/log/appLog";
+import { runLibraryWritesWith } from "@/library/libraryWrites";
 import { isScreenSettled, onScreenSettled, onTimingTransition, timingRoute } from "./timing";
 import { createFingerDown } from "./fingerDown";
 import { createStartupWork } from "./startupWork";
@@ -66,6 +67,8 @@ export const renderRan = (name: string, startedAt: number, durationMs: number): 
 
 // An off-thread read's replay maps its rows on the JS thread once its last answer is in.
 runReplayPassesWith((run) => inSlice("Library read replay", run));
+// A Library write holds the JS thread for its whole transaction: a long one names itself.
+runLibraryWritesWith((operation, run) => inSlice(`Library write: ${operation}`, run));
 
 /**
  * Runs [run], [name]'s asynchronous work, saying to the block log that it runs until its promise

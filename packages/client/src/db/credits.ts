@@ -229,30 +229,50 @@ const currentLinks = (
 const sameArtists = (a: readonly number[] | undefined, b: readonly number[]): boolean =>
   a !== undefined && a.length === b.length && a.every((id, i) => id === b[i]);
 
-/** Rewrites the links (and primary artist) of each of [links] that changed. */
+/**
+ * Rewrites the links (and primary artist) of each of [links] that changed, a
+ * few statements for them all rather than three each: a scan's save slice
+ * files a hundred new tracks, and each statement costs the JS thread its own
+ * round trip (#1436).
+ */
 const writeLinks = (
   db: LibraryDatabase,
   table: LinkTable,
   links: readonly CreditLink[],
   current: ReadonlyMap<number, readonly number[]>,
 ): void => {
+  // The last link given for an id is the one it keeps.
+  const changed = new Map<number, readonly number[]>();
+  for (const link of links) {
+    if (link.artistIds.length === 0 || sameArtists(current.get(link.id), link.artistIds)) continue;
+    changed.delete(link.id);
+    changed.set(link.id, link.artistIds);
+  }
+  if (changed.size === 0) return;
   const linkTable = sql.raw(table.links);
   const owner = sql.raw(table.owner);
-  for (const link of links) {
-    const [primary] = link.artistIds;
-    if (primary === undefined || sameArtists(current.get(link.id), link.artistIds)) continue;
-    db.run(sql`DELETE FROM ${linkTable} WHERE ${owner} = ${link.id}`);
+  for (const ids of chunks([...changed.keys()]))
+    db.run(sql`DELETE FROM ${linkTable} WHERE ${owner} IN (${sql.join(
+      ids.map((id) => sql`${id}`),
+      sql`, `,
+    )})`);
+  const rows = [...changed].flatMap(([id, artists]) =>
+    artists.map((artist, position) => sql`(${id}, ${artist}, ${position})`),
+  );
+  for (const chunk of chunks(rows, ROWS_PER_STATEMENT))
     db.run(
-      sql`INSERT INTO ${linkTable} (${owner}, artist_id, position) VALUES ${sql.join(
-        link.artistIds.map((artist, position) => sql`(${link.id}, ${artist}, ${position})`),
+      sql`INSERT INTO ${linkTable} (${owner}, artist_id, position) VALUES ${sql.join(chunk, sql`, `)}`,
+    );
+  for (const chunk of chunks([...changed], ROWS_PER_STATEMENT))
+    db.run(
+      sql`UPDATE ${sql.raw(table.table)} SET ${sql.raw(table.primary)} = CASE id ${sql.join(
+        chunk.map(([id, artists]) => sql`WHEN ${id} THEN ${artists[0]}`),
+        sql` `,
+      )} END WHERE id IN (${sql.join(
+        chunk.map(([id]) => sql`${id}`),
         sql`, `,
-      )}`,
+      )})`,
     );
-    db.run(
-      sql`UPDATE ${sql.raw(table.table)} SET ${sql.raw(table.primary)} = ${primary}
-        WHERE id = ${link.id}`,
-    );
-  }
 };
 
 /** Files tracks under their credited artists ([links]); the first is the primary artist. */

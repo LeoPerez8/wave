@@ -105,6 +105,23 @@ export const scanEnd = ({
  */
 export const SCAN_SAVE_SLICE = 100;
 
+/**
+ * How long one save slice should hold the JavaScript thread (#1436): under
+ * the 50 ms a block is logged at, with room for the work around it.
+ */
+export const SCAN_SLICE_BUDGET_MS = 30;
+
+/**
+ * The files the next save slice takes, after one that saved `files` in
+ * `ms`: as many as fit the budget at that pace, growing at most twofold
+ * (one quick slice can be luck), never past `SCAN_SAVE_SLICE` and never
+ * under one file, so a slow phone still gets through.
+ */
+export const nextScanSaveSlice = (last: { readonly files: number; readonly ms: number }): number => {
+  const fit = last.ms > 0 ? Math.floor((last.files * SCAN_SLICE_BUDGET_MS) / last.ms) : Infinity;
+  return Math.max(1, Math.min(fit, last.files * 2, SCAN_SAVE_SLICE));
+};
+
 /** One transaction's worth of a scan batch: its files, and the moves to them. */
 export interface ScanSaveSlice<T> {
   readonly tracks: readonly T[];
@@ -121,22 +138,32 @@ export interface ScanSaveSlice<T> {
 export const scanSaveSlices = <T extends IndexedFile>(
   changes: ScanChanges<T>,
   size: number = SCAN_SAVE_SLICE,
-): ScanSaveSlice<T>[] => {
+): ScanSaveSlice<T>[] => [...scanSaveSliceSteps(changes, () => size)];
+
+/**
+ * `scanSaveSlices` one slice at a time, asking [size] for each slice's size
+ * once the one before it was taken: the caller times each save and sizes the
+ * next by it (`nextScanSaveSlice`).
+ */
+export function* scanSaveSliceSteps<T extends IndexedFile>(
+  changes: ScanChanges<T>,
+  size: () => number,
+): Generator<ScanSaveSlice<T>, void> {
   const tracks = [...changes.added, ...changes.updated, ...changes.moved.map((move) => move.to)];
   const movedFrom = new Map(changes.moved.map((move) => [move.to, move.from]));
-  const slices: ScanSaveSlice<T>[] = [];
-  for (let start = 0; start < tracks.length; start += Math.max(1, size)) {
-    const slice = tracks.slice(start, start + Math.max(1, size));
-    slices.push({
+  let start = 0;
+  while (start < tracks.length) {
+    const slice = tracks.slice(start, start + Math.max(1, size()));
+    start += slice.length;
+    yield {
       tracks: slice,
       moves: slice.flatMap((track) => {
         const from = movedFrom.get(track);
         return from === undefined ? [] : [{ from, to: track.path }];
       }),
-    });
+    };
   }
-  return slices;
-};
+}
 
 /** Same reconciliation, with a resumable boundary per input file. */
 export function* reconcileScanSteps<T extends IndexedFile>(

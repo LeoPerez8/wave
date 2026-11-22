@@ -27,7 +27,7 @@ import {
   skipVoiceNoteFiles,
 } from "./startupJobs";
 
-import { startupTurnEffect } from "@/lib/backgroundWork";
+import { inSlice, startupTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@wave/client/externalStore";
 import { argbToHex, type NativeArtwork, type NativeScannedTrack } from "@/native/waveNative";
 import { skipVoiceNotes } from "@/settings/skipVoiceNotes";
@@ -74,12 +74,16 @@ let editsVersion = 0;
  */
 export const libraryEditsVersion = (): number => editsVersion;
 
-/** Bumps `libraryVersion` and announces [changes] to shared queries; [landing]: downloads landed. */
-const changeLibrary = (changes: readonly LibraryChange[], landing: boolean): void => {
-  if (!landing) editsVersion++;
-  libraryVersion.update((version) => version + 1);
-  for (const change of changes) publishLibraryChange(change);
-};
+/**
+ * Bumps `libraryVersion` and announces [changes] to shared queries; [landing]: downloads landed.
+ * What follows the Library hears it synchronously, in one slice named for the block log.
+ */
+const changeLibrary = (changes: readonly LibraryChange[], landing: boolean): void =>
+  inSlice("Library change", () => {
+    if (!landing) editsVersion++;
+    libraryVersion.update((version) => version + 1);
+    for (const change of changes) publishLibraryChange(change);
+  });
 
 const bumpLibraryVersion = (...changes: readonly LibraryChange[]): void =>
   changeLibrary(changes, false);

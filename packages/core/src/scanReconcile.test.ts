@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { reconcileScan, scanEnd, scanSaveSlices, type IndexedFile } from "./index.ts";
+import {
+  SCAN_SAVE_SLICE,
+  SCAN_SLICE_BUDGET_MS,
+  nextScanSaveSlice,
+  reconcileScan,
+  scanEnd,
+  scanSaveSliceSteps,
+  scanSaveSlices,
+  type IndexedFile,
+} from "./index.ts";
 
 const MUSIC = "/storage/emulated/0/Music";
 
@@ -198,4 +207,41 @@ describe("what a scan does once it ends", () => {
       announce: "removed",
     });
   });
+});
+
+describe("nextScanSaveSlice", () => {
+  test("a slice that took four times the budget is followed by one a quarter its size", () => {
+    assert.equal(nextScanSaveSlice({ files: 40, ms: SCAN_SLICE_BUDGET_MS * 4 }), 10);
+  });
+});
+
+describe("nextScanSaveSlice when the phone is fast", () => {
+  test("a quick slice is followed by one at most twice its size", () => {
+    assert.equal(nextScanSaveSlice({ files: 10, ms: 1 }), 20);
+  });
+
+  test("a slice never grows past the fixed slice size", () => {
+    assert.equal(nextScanSaveSlice({ files: 80, ms: 1 }), SCAN_SAVE_SLICE);
+  });
+
+  test("a slice that took no measurable time grows like a quick one", () => {
+    assert.equal(nextScanSaveSlice({ files: 10, ms: 0 }), 20);
+  });
+});
+
+test("however slow one file is to save, the next slice still saves one", () => {
+  assert.equal(nextScanSaveSlice({ files: 1, ms: 400 }), 1);
+});
+
+test("each slice's size is asked for once the slice before it was taken, so its timing can set it", () => {
+  const changes = reconcileScan({
+    missing: [],
+    read: ["1", "2", "3", "4", "5", "6"].map((n) => song(`New/${n}.mp3`, { title: n })),
+    isIndexed: () => false,
+  });
+  const sizes = [1, 3, 2];
+  const taken: string[][] = [];
+  for (const slice of scanSaveSliceSteps(changes, () => sizes[taken.length]!))
+    taken.push(slice.tracks.map((track) => track.title));
+  assert.deepEqual(taken, [["1"], ["2", "3", "4"], ["5", "6"]]);
 });
