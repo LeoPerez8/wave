@@ -50,7 +50,7 @@ export function AlbumShelf<A extends PlayedAlbum>({
   );
   useHomeTiles(activeSelection, items);
   return (
-    <CoverRow>
+    <CoverRow staged>
       {albums.map((album, place) => (
         <PlayedAlbumCard
           key={album.id}
@@ -216,7 +216,7 @@ export function ArtistShelf<A extends PlayedArtist>({
   selecting?: boolean;
 }) {
   return (
-    <CoverRow>
+    <CoverRow staged>
       {artists.map((artist) => (
         <PlayedArtistCard
           key={artist.id}
