@@ -7,6 +7,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  availableMagicSongs,
+  availableMagicSongsSteps,
   artistGraph,
   completeMagicRadioBatch,
   completeMagicRadioBatchSteps,
@@ -24,12 +26,15 @@ import {
   magicArtistKey,
   magicRadioExclusions,
   magicRadioExclusionsSteps,
+  rankRadioSongs,
+  rankRadioSongsSteps,
   startMagicQueue,
   ytTrackId,
   type DjAudioFeatures,
   type DjReleasePage,
   type MagicSession,
   type RankedRadioSong,
+  type YtAlbumSong,
 } from "./index.ts";
 
 /** The reference phone's seed: 3,000 Library songs. */
@@ -387,6 +392,83 @@ describe("the Library's genre profiles a batch ranks with", () => {
     for (const name of names) {
       assert.deepEqual(profileOf(name), eager(name), name);
       assert.deepEqual(plain(name), eager(name), name);
+    }
+  });
+});
+
+describe("a batch's radio ranking (#1448)", () => {
+  const radio = Array.from({ length: 2000 }, (_, i) => stream(i, "c").song!);
+  const library = seed.filter((song) => song.source === "library");
+  // Disliked by video and by Track id, as the app keeps them.
+  const disliked = new Set([
+    ...Array.from({ length: 150 }, (_, i) => ytTrackId(`c${i * 5}`)),
+    ...Array.from({ length: 150 }, (_, i) => String(i * 11)),
+  ]);
+  const ranking = (songs: readonly YtAlbumSong[]) =>
+    [
+      { artists: ["Artist 1"] },
+      {
+        pages: [{ id: "song:c", artists: ["Artist 1"], songs }],
+        graph,
+        library,
+        disliked,
+        popularityOf: () => 0.5,
+      },
+      { libraryFallback: true, exclude: new Set(session.used) },
+    ] as const;
+
+  test("ranks the same songs in the same order", () => {
+    const ranked = rankRadioSongs(...ranking(radio));
+    // Recorded from the ranking before its dislike filter ran a candidate per step.
+    assert.equal(digest(ids(ranked)), "4519:2d9b944d");
+    assert.ok(ranked.every((song) => !disliked.has(song.trackId)));
+  });
+
+  test("leaves out the disliked a candidate per step", () => {
+    const counter = { reads: 0 };
+    const counting = radio.map(
+      (song) =>
+        new Proxy(song, {
+          get: (target, key, receiver) => {
+            counter.reads++;
+            return Reflect.get(target, key, receiver);
+          },
+        }),
+    );
+    const { value, most } = mostReadsPerStep(rankRadioSongsSteps(...ranking(counting)), counter);
+    assert.ok(most <= MOST_READS_PER_STEP, `${most} reads in one step`);
+    assert.deepEqual(ids(value), ids(rankRadioSongs(...ranking(radio))));
+  });
+
+  test("keeps the songs that can play, offline too, a song per step", () => {
+    const ranked = rankRadioSongs(...ranking(radio));
+    const cachedVideos = new Set(Array.from({ length: 400 }, (_, i) => `c${i * 3}`));
+    for (const where of [
+      { online: true, ytMusic: true, cachedVideos: null },
+      { online: false, ytMusic: true, cachedVideos },
+      { online: false, ytMusic: true, cachedVideos: null },
+      { online: true, ytMusic: false, cachedVideos },
+    ]) {
+      const counter = { reads: 0 };
+      const { value, most } = mostReadsPerStep(
+        availableMagicSongsSteps(session, counted(ranked, counter), where),
+        counter,
+      );
+      assert.ok(most <= MOST_READS_PER_STEP, `${most} reads in one step`);
+      const plain = availableMagicSongs(session, ranked, where);
+      assert.deepEqual(ids(value), ids(plain));
+      assert.deepEqual(
+        ids(plain),
+        ids(
+          ranked.filter(
+            (song) =>
+              song.source === "library" ||
+              (where.ytMusic &&
+                (where.online ||
+                  (song.song !== null && where.cachedVideos?.has(song.song.videoId) === true))),
+          ),
+        ),
+      );
     }
   });
 });

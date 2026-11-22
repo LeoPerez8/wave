@@ -19,7 +19,7 @@ import {
   magicFaithfulGenreProfile,
   magicSeedProfile,
   magicYtSong,
-  availableMagicSongs,
+  availableMagicSongsSteps,
   filterSteps,
   mapSteps,
   rankRadioSongsSteps,
@@ -53,6 +53,37 @@ import type { SongRadioRead } from "./songRadioReaders";
 import { createAppSongRadioReaders } from "./songRadioSetup";
 
 let found: readonly MagicSong[] = [];
+
+/** A radio's songs its session's family allows, and those of them that aren't videos. */
+interface AllowedRadio {
+  readonly id: string;
+  readonly artists: readonly string[];
+  readonly songs: readonly YtAlbumSong[];
+  readonly audio: readonly YtAlbumSong[];
+}
+
+const isAudio = (song: YtAlbumSong): boolean => !("video" in song && song.video === true);
+
+/** The songs of the radios [read] has that [allowed] keeps, a song per step (#1448). */
+function* allowedRadioSongs(
+  read: readonly SongRadioRead[],
+  allowed: (id: string, songArtists: readonly string[]) => boolean,
+): Generator<void, AllowedRadio[]> {
+  const radios: AllowedRadio[] = [];
+  for (const { seed, page } of read) {
+    if (page === null) continue;
+    const songs: YtAlbumSong[] = [];
+    const audio: YtAlbumSong[] = [];
+    for (const song of page.songs) {
+      yield;
+      if (!allowed(seed.id, song.artists)) continue;
+      songs.push(song);
+      if (isAudio(song)) audio.push(song);
+    }
+    radios.push({ id: seed.id, artists: seed.artists, songs, audio });
+  }
+  return radios;
+}
 const radioReaders = createAppSongRadioReaders("Magic Queue");
 
 /** What's saved for an artist's page, read from the Library's store once a batch has it. */
@@ -199,16 +230,8 @@ export const magicQueueYtCandidates = (
         // Old artist radios still provide an offline fallback until an ordered page is saved.
         const familyAllowed = (id: string, songArtists: readonly string[]): boolean =>
           djRadioSongAllowed(current, id, songArtists, profileOf, graph);
-        const radios = read.flatMap(({ seed, page }) => {
-          if (page === null) return [];
-          return [
-            {
-              id: seed.id,
-              artists: seed.artists,
-              songs: page.songs.filter((song) => familyAllowed(seed.id, song.artists)),
-            },
-          ];
-        });
+        // A song per step (#1448): radios read again with their continuations hold thousands.
+        const radios = yield* runSteps(allowedRadioSongs(read, familyAllowed), freeTurnEffect);
         // Only an offline batch with no radio page reads the catalog: it may hold thousands of songs.
         if (original && radios.length === 0 && !connected) {
           const fallback = yield* runSteps(
@@ -221,7 +244,9 @@ export const magicQueueYtCandidates = (
             ),
             freeTurnEffect,
           );
-          radios.push({ id: seeds[0]!.id, artists, songs: fallback.map((entry) => entry.song) });
+          const songs = fallback.map((entry) => entry.song);
+          const audio = yield* runSteps(filterSteps(songs, isAudio), freeTurnEffect);
+          radios.push({ id: seeds[0]!.id, artists, songs, audio });
         }
         const exclude = yield* runSteps(
           magicRadioExclusionsSteps(
@@ -239,11 +264,8 @@ export const magicQueueYtCandidates = (
               : magicSeedProfile(session, profileOf),
           },
           {
-            // Several radios interleave by position before ranking.
-            pages: radios.map((radio) => ({
-              ...radio,
-              songs: radio.songs.filter((song) => !("video" in song && song.video === true)),
-            })),
+            // Several radios interleave by position before ranking; their videos were left out.
+            pages: radios.map(({ id, artists, audio }) => ({ id, artists, songs: audio })),
             graph,
             taste,
             profileOf,
@@ -266,11 +288,17 @@ export const magicQueueYtCandidates = (
             libraryFallback: session.continuation === true && !connected,
           },
         );
-        return availableMagicSongs(current, yield* runSteps(ranked, freeTurnEffect), {
-          online: online(),
-          ytMusic: ytMusicEnabled(),
-          cachedVideos,
-        });
+        return yield* runSteps(
+          (function* () {
+            const songs = yield* ranked;
+            return yield* availableMagicSongsSteps(current, songs, {
+              online: online(),
+              ytMusic: ytMusicEnabled(),
+              cachedVideos,
+            });
+          })(),
+          freeTurnEffect,
+        );
       });
     // A DJ session's Artist variety limits who a batch may hold; any other keeps every song.
     const allowed = (size: number) =>

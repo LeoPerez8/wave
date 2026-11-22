@@ -9,22 +9,31 @@ import { recordingMatches, recordingMatchTitle, ytTrackId } from "./ytMusic.ts";
 export const availableMagicSongs = (
   session: MagicSession,
   songs: readonly RankedRadioSong[],
-  {
-    online,
-    ytMusic,
-    cachedVideos,
-  }: {
-    readonly online: boolean;
-    readonly ytMusic: boolean;
-    readonly cachedVideos: ReadonlySet<string> | null;
-  },
-): RankedRadioSong[] =>
-  songs.filter(
+  where: MagicSongsWhere,
+): RankedRadioSong[] => finishSteps(availableMagicSongsSteps(session, songs, where));
+
+/** Where a batch's songs can play from: online, with YT Music on, and the videos kept offline. */
+export interface MagicSongsWhere {
+  readonly online: boolean;
+  readonly ytMusic: boolean;
+  readonly cachedVideos: ReadonlySet<string> | null;
+}
+
+/** `availableMagicSongs`, a step per song, for a background slice (#1448). */
+export const availableMagicSongsSteps = (
+  session: MagicSession,
+  songs: readonly RankedRadioSong[],
+  { online, ytMusic, cachedVideos }: MagicSongsWhere,
+): Generator<void, RankedRadioSong[]> =>
+  filterSteps(
+    songs,
     (song) =>
       song.source === "library" ||
       (ytMusic &&
         (online ||
-          (!session.continuation && song.song !== null && cachedVideos?.has(song.song.videoId)))),
+          (!session.continuation &&
+            song.song !== null &&
+            cachedVideos?.has(song.song.videoId)))) === true,
   );
 
 /** Keep learned recordings out even when a Library song's video id was unknown before its radio read. */
