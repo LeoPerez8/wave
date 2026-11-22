@@ -7,6 +7,7 @@ import {
   settlePlaylistAddVisit,
   stepPlaylistAddVisit,
   playlistEntryLinks,
+  playlistEntryLinkSteps,
   playlistPlayback,
   readPlaylistEntrySong,
   readPlaylistYtSong,
@@ -449,6 +450,25 @@ describe("playlistEntryLinks", () => {
   test("nothing to link when there are no entries or no new songs", () => {
     assert.deepEqual(playlistEntryLinks([], [track(1, "Genesis", "Justice")], []), linked());
     assert.deepEqual(playlistEntryLinks([entry(10, yt("a"))], [], []), linked());
+  });
+
+  test("in steps, it links the same entries and hands the thread back between them", () => {
+    const entries = [
+      entry(10, yt("a", { title: "Genesis" }), 1),
+      entry(11, yt("b", { title: "Phantom" }), 1),
+      entry(12, yt("a", { title: "Genesis" }), 2),
+    ];
+    const songs = [track(1, "Genesis", "Justice"), track(2, "Phantom", "Justice")];
+    const held = [{ playlistId: 2, trackId: 1 }];
+    const steps = playlistEntryLinkSteps(entries, songs, held);
+    let yielded = 0;
+    let next = steps.next();
+    while (next.done !== true) {
+      yielded++;
+      next = steps.next();
+    }
+    assert.deepEqual(next.value, playlistEntryLinks(entries, songs, held));
+    assert.equal(yielded >= entries.length, true);
   });
 });
 

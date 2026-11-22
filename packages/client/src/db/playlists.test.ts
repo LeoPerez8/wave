@@ -31,6 +31,9 @@ import {
   deletePlaylist,
   linkPlaylistEntries,
   movePlaylistItem,
+  playlistLinkSteps,
+  readPlaylistLinks,
+  writePlaylistLinks,
   removePlaylistItems,
   restorePlaylistItems,
   renamePlaylist,
@@ -414,6 +417,32 @@ describe("linkPlaylistEntries", () => {
     linkPlaylistEntries(db, 0, [luckyId]);
     deleteTracksById(db, [luckyId]);
     assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Creep", "Airbag"]);
+  });
+
+  test("read, matched and written apart, it links what the whole link does", () => {
+    appendPlaylistSongs(db, playlistId, [stream(yt("a", { title: "Lucky" }))], 0);
+    addTrack(db, { title: "Lucky", artist: "Radiohead", durationMs: 180_000 });
+    const steps = playlistLinkSteps(readPlaylistLinks(db));
+    let step = steps.next();
+    let yields = 0;
+    while (step.done !== true) {
+      yields++;
+      step = steps.next();
+    }
+    assert.ok(yields > 1);
+    assert.equal(writePlaylistLinks(db, 0, step.value), 1);
+    assert.equal(titles().at(-1), "Lucky");
+  });
+
+  test("read apart, an entry isn't linked to a song that left the Library before the write", () => {
+    appendPlaylistSongs(db, playlistId, [stream(yt("a", { title: "Lucky" }))], 0);
+    const luckyId = addTrack(db, { title: "Lucky", artist: "Radiohead", durationMs: 180_000 });
+    const steps = playlistLinkSteps(readPlaylistLinks(db));
+    let step = steps.next();
+    while (step.done !== true) step = steps.next();
+    deleteTracksById(db, [luckyId]);
+    assert.equal(writePlaylistLinks(db, 0, step.value), 0);
+    assert.equal(titles().at(-1), "yt:Lucky");
   });
 });
 
