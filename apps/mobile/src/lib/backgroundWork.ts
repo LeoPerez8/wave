@@ -64,7 +64,8 @@ export const inSlice = <A>(name: string, run: () => A): A => {
 export const renderRan = (name: string, startedAt: number, durationMs: number): void =>
   blocks.renderRan(name, startedAt, durationMs);
 
-// An off-thread read's replay maps its rows on the JS thread once its last answer is in.
+// An off-thread read's replay builds its queries and maps its rows on the JS thread, in passes
+// and in steps of 8 ms that yield to a new task between them (#1435); each is named here.
 runReplayPassesWith((run) => inSlice("Library read replay", run));
 
 /**
