@@ -5,6 +5,7 @@
  * added to the file's; one the Library hasn't counts on its own, by video id.
  * What every per-song count of counted plays sums by, so they all agree.
  */
+import { finishSteps } from "./buildSteps.ts";
 import { parseTrackId } from "./ytMusic.ts";
 
 /** Plays summed: how many counted, the time listened and the latest play's start. */
@@ -60,21 +61,30 @@ const add = (sum: PlaySums | undefined, plays: PlaySums): PlaySums => ({
 });
 
 /** The [library] songs' and [streamed] songs' plays, summed per song. */
-export const mergeCountedPlays = ({
+export const mergeCountedPlays = (plays: PlaysToMerge): CountedPlays =>
+  finishSteps(mergeCountedPlaysSteps(plays));
+
+/** `mergeCountedPlays` in steps: a step per Library song's and streamed song's plays. */
+export function* mergeCountedPlaysSteps({
   library = [],
   streamed,
   libraryVideos = new Map(),
-}: PlaysToMerge): CountedPlays => {
+}: PlaysToMerge): Generator<void, CountedPlays> {
   const songs = new Map<number, PlaySums>();
   const online = new Map<string, PlaySums>();
   const videoTracks = new Map(libraryVideos);
-  for (const plays of library) songs.set(plays.id, add(songs.get(plays.id), plays));
-  for (const plays of streamed)
+  for (const plays of library) {
+    songs.set(plays.id, add(songs.get(plays.id), plays));
+    yield;
+  }
+  for (const plays of streamed) {
     if (plays.trackId === null) online.set(plays.videoId, add(online.get(plays.videoId), plays));
     else {
       songs.set(plays.trackId, add(songs.get(plays.trackId), plays));
       videoTracks.set(plays.videoId, plays.trackId);
     }
+    yield;
+  }
   const of = (trackId: string): PlaySums | undefined => {
     const ref = parseTrackId(trackId);
     if (ref === null) return undefined;
@@ -83,4 +93,4 @@ export const mergeCountedPlays = ({
     return track === undefined ? online.get(ref.videoId) : songs.get(track);
   };
   return { library: songs, online, of };
-};
+}
