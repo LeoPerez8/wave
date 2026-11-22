@@ -26,7 +26,8 @@ import { perfMark, registerPerfMeta } from "@/perf/perf";
 /**
  * A JS block over 50 ms while a screen is shown writes one app log line
  * naming the work (#1350, #1359): the slice it ran in, else the named work
- * still running, else "startup" before the first screen settled, else none.
+ * still running, else "startup" before the first screen settled, with the step
+ * startup had reached (#1434), else none.
  */
 const blocks = createJsBlockLog({
   write: (line) => appLog("warn", "WaveTiming", line),
@@ -42,6 +43,9 @@ else {
     stop();
   });
 }
+
+/** Startup reached [name] (#1434): an unnamed block before the first settle says so. */
+export const startupStep = (name: string): void => blocks.startupStep(name, performance.now());
 
 /**
  * Runs [run] now as a slice of [name]'s work, for the block log: a continuation after an
@@ -177,13 +181,16 @@ const startupWork = createStartupWork({
 });
 let startupStarted = 0;
 
-/** Startup starts keep their registration order, after global settlement and quiet frames. */
+/**
+ * Startup starts keep their registration order, after global settlement and quiet frames. A
+ * block in a start, or in the work it leaves running, names it as "startup <name>" (#1434).
+ */
 export const afterFirstSettled = (name: string, start: () => void): (() => void) =>
   startupWork.whenFree(
-    named(name, () => {
+    named(`startup ${name}`, () => {
       startupStarted++;
       perfMark("startup.started", name);
-      start();
+      inSlice(`startup ${name}`, start);
     }),
   );
 
@@ -193,6 +200,7 @@ let contentSeen = false;
 export const firstContentShown = (): void => {
   if (contentSeen) return;
   contentSeen = true;
+  startupStep("first content shown");
   requestAnimationFrame(() => {
     perfMark("startup.content");
     work.contentShown();

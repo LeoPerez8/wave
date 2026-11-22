@@ -80,14 +80,21 @@ const optimize = (when: "opened" | "leaving"): void =>
   );
 
 /**
- * Lets SQLite gather the planner statistics it lacks (startup work, once the first screen has
- * settled), then refresh the ones each session's reads made stale whenever Wave goes to the
- * background. Statistics only guide the planner: a failed run leaves every read as it was.
+ * Lets SQLite gather the planner statistics it lacks, then refresh the ones each session's reads
+ * made stale, whenever Wave goes to the background. The first run checks every table: on the
+ * JS thread it held a 3,000-song Library's Home for 157 ms, so it waits for Wave to leave the
+ * screen (#1434), or runs now with none shown. Statistics only guide the planner: a failed or
+ * later run leaves every read as it was.
  */
 export const optimizeLibraryDatabase = (): void => {
-  optimize("opened");
+  let checked = false;
+  const run = () => {
+    optimize(checked ? "leaving" : "opened");
+    checked = true;
+  };
+  if (AppState.currentState === "background") run();
   optimizeOnLeave ??= AppState.addEventListener("change", (state) => {
-    if (state === "background") optimize("leaving");
+    if (state === "background") run();
   });
 };
 

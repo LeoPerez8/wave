@@ -3,7 +3,7 @@
  * (#1350, #1359), naming the work that held the thread: the slice the block
  * ran in, else the named work still running then (begun and not ended, or
  * a free turn's work shortly after its turn), else "startup" before the
- * first screen settled, else none. A screen or section rendering in the
+ * first screen settled, with the startup step under way (#1434), else none. A screen or section rendering in the
  * block (#1423) names it as "rendering <name>" when it held more of the
  * block than any slice did, and beats running work.
  */
@@ -46,6 +46,11 @@ export interface JsBlockLog {
    * span may cover a yield, so only a long task the runtime reports says the thread was held.
    */
   readonly renderRan: (name: string, startedAt: number, durationMs: number) => void;
+  /**
+   * Startup reached [name] at [at] (#1434): a block before the first screen settles with no named
+   * work says the latest step begun before it ended, as "startup (<name>)".
+   */
+  readonly startupStep: (name: string, at: number) => void;
   /** The first screen settled at [at]: blocks before it with no named work are startup's. */
   readonly firstSettled: (at: number) => void;
   /** The runtime reported a long task (`PerformanceObserver`'s "longtask"), on the same clock. */
@@ -129,6 +134,7 @@ export const createJsBlockLog = ({ write, screen }: JsBlockLogPorts): JsBlockLog
   const slices: Span[] = [];
   const renders: Span[] = [];
   const works: Span[] = [];
+  const steps: { readonly name: string; readonly at: number }[] = [];
   let settledAt: number | null = null;
   const log = (durationMs: number, work: string | null): boolean => {
     const shown = screen();
@@ -139,6 +145,12 @@ export const createJsBlockLog = ({ write, screen }: JsBlockLogPorts): JsBlockLog
   const keep = (list: Span[], span: Span, kept = KEPT): void => {
     list.push(span);
     if (list.length > kept) list.shift();
+  };
+  /** Startup's name for a block ending at [end]: with the latest step begun before it. */
+  const startup = (end: number): string => {
+    let step: string | undefined;
+    for (const { name, at } of steps) if (at < end) step = name;
+    return step === undefined ? STARTUP : `${STARTUP} (${step})`;
   };
   return {
     sliceRan: (name, startedAt, durationMs) => {
@@ -164,6 +176,9 @@ export const createJsBlockLog = ({ write, screen }: JsBlockLogPorts): JsBlockLog
         KEPT_RENDERS,
       );
     },
+    startupStep: (name, at) => {
+      if (settledAt === null && steps.length < KEPT) steps.push({ name, at });
+    },
     firstSettled: (at) => {
       settledAt ??= at;
     },
@@ -183,7 +198,7 @@ export const createJsBlockLog = ({ write, screen }: JsBlockLogPorts): JsBlockLog
         rendering ??
         slice?.name ??
         latestWithin(works, startTime, end)?.name ??
-        (settledAt === null || startTime < settledAt ? STARTUP : null);
+        (settledAt === null || startTime < settledAt ? startup(end) : null);
       log(durationMs, name);
     },
   };
