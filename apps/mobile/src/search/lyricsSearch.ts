@@ -1,12 +1,13 @@
 import { findLyricMatch } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { SongRow } from "@wave/client";
 import { LibraryStore } from "@/library/LibraryStore";
 
 import { lyricsSearchIndexVersion } from "@/library/lyricsSearchVersion";
 import { appRuntime } from "@/library/runtime";
+import { useStoreWhile } from "@/lib/storeWhile";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
 import { lyricsQueries } from "./lyricsQueries";
@@ -38,6 +39,11 @@ type LyricsAnswer = {
 };
 
 const EMPTY: readonly LocalLyricsHit[] = [];
+/** [build]'s value, built on the first call. */
+const lazily = <A>(build: () => A): (() => A) => {
+  let built: { readonly value: A } | null = null;
+  return () => (built ??= { value: build() }).value;
+};
 const NO_ANSWER: LyricsAnswer = { library: [], stream: [] };
 
 /** Reads the word index for [query] and lets Core choose each hit's line and ranges. */
@@ -77,10 +83,10 @@ export const useLocalLyricsSearch = (
   songs: readonly SongRow[],
   skipIds: ReadonlySet<number>,
 ): { readonly hits: readonly LocalLyricsHit[]; readonly submit: (query: string) => void } => {
-  const version = useSyncExternalStore(
-    lyricsSearchIndexVersion.subscribe,
-    lyricsSearchIndexVersion.get,
-  );
+  const empty = query.trim() === "";
+  // A scan's index work bumps the version every 350 ms. An empty field has nothing to read
+  // again, so it doesn't follow the version and Search doesn't render for it (#1438).
+  const version = useStoreWhile(lyricsSearchIndexVersion, !empty, -1);
   const [answer, setAnswer] = useState<LyricsAnswer>(NO_ANSWER);
   const [queries] = useState(() =>
     lyricsQueries<LyricsAnswer>({
@@ -92,7 +98,6 @@ export const useLocalLyricsSearch = (
   );
   useEffect(() => () => queries.dispose(), [queries]);
 
-  const empty = query.trim() === "";
   useEffect(() => queries.type(query), [queries, query]);
   // The background fill bumps the index's version every few hundred ms: the settled query is
   // read again, and its last answer stays meanwhile.
@@ -103,13 +108,18 @@ export const useLocalLyricsSearch = (
     queries.refresh();
   }, [queries, version]);
 
-  const songsById = useMemo(() => new Map(songs.map((song) => [song.id, song])), [songs]);
+  // The Library's songs by id, made only once an answer has Library hits to join: the songs
+  // change with every scan batch, mostly while nothing is typed.
+  const songsById = useMemo(
+    () => lazily(() => new Map(songs.map((song) => [song.id, song]))),
+    [songs],
+  );
   const hits = useMemo((): readonly LocalLyricsHit[] => {
     if (answer.library.length === 0 && answer.stream.length === 0) return EMPTY;
     const found: LocalLyricsHit[] = [];
     for (const hit of answer.library) {
       if (skipIds.has(hit.trackId)) continue;
-      const song = songsById.get(hit.trackId);
+      const song = songsById().get(hit.trackId);
       if (song !== undefined)
         found.push({ source: "library", song, line: hit.line, ranges: hit.ranges });
     }
