@@ -10,9 +10,12 @@
 import {
   EMPTY_SYNC_TABLES,
   UNKNOWN_ALBUM,
+  finishSteps,
   accountTrackIds,
   collaborativeEntryMatcher,
   creditSplitter,
+  creditSplitterSteps,
+  pullPagePieces,
   libraryEntryFields,
   writePlaylistEntrySong as writeEntrySong,
   type CollaborativeEntryMatch,
@@ -54,6 +57,7 @@ import {
   asc,
   eq,
   getTableColumns,
+  gt,
   inArray,
   isNotNull,
   isNull,
@@ -359,6 +363,7 @@ const unpushedEntries = (
   where: ReturnType<typeof sql>,
   limit: number,
   mark: Mark,
+  after = 0,
 ): SyncPlaylistEntry[] => {
   const { accountSongs, albums, playlists, playlistItems, tracks, collaborations } = schema;
   return db
@@ -390,6 +395,7 @@ const unpushedEntries = (
     .where(
       and(
         eq(playlistItems.pushed, false),
+        gt(playlistItems.id, after),
         where,
         // A Track not keyed yet can't be named to the account: its entry waits.
         or(
@@ -494,7 +500,42 @@ export const selectUnpushed = (
   db: LibraryDatabase,
   limit: number,
   preferenceValue: (key: string) => string | null,
-): UnpushedRows => {
+): UnpushedRows => finishSteps(selectUnpushedSteps(db, limit, preferenceValue));
+
+/** Rows one step of a push's read reads (#1450). */
+const UNPUSHED_AT_ONCE = 250;
+
+/**
+ * Up to [limit] rows of a table, read `UNPUSHED_AT_ONCE` a step: [read] gives up to [count]
+ * rows after the one [after] names (null: from the first), each with the key the next read
+ * goes on after.
+ */
+function* inChunks<K, R>(
+  limit: number,
+  read: (after: K | null, count: number) => readonly { readonly after: K; readonly row: R }[],
+): Generator<void, R[]> {
+  const rows: R[] = [];
+  for (let after: K | null = null; rows.length < limit;) {
+    const count = Math.min(UNPUSHED_AT_ONCE, limit - rows.length);
+    const chunk = read(after, count);
+    for (const each of chunk) rows.push(each.row);
+    const last = chunk[chunk.length - 1];
+    if (last === undefined || chunk.length < count) break;
+    after = last.after;
+    yield;
+  }
+  return rows;
+}
+
+/**
+ * `selectUnpushed` as steps for work that runs in slices (#1450): one table's read each, so
+ * a push's read of up to [limit] rows a table never holds the JavaScript thread whole.
+ */
+export function* selectUnpushedSteps(
+  db: LibraryDatabase,
+  limit: number,
+  preferenceValue: (key: string) => string | null,
+): Generator<void, UnpushedRows> {
   const { accountSongs, playlists, favorites, tracks } = schema;
   const { preferenceChanges } = schema;
   const { playEvents, syncRemovals } = schema;
@@ -519,22 +560,30 @@ export const selectUnpushed = (
         };
       });
 
-  const songs = db
-    .select()
-    .from(accountSongs)
-    .where(eq(accountSongs.pushed, false))
-    .orderBy(asc(accountSongs.recordingKey))
-    .limit(limit)
-    .all()
-    .map((row) => {
-      mark("songs", row.recordingKey, {
-        table: "songs",
-        key: row.recordingKey,
-        changedAt: row.changedAt,
-      });
-      return songRow(row);
-    });
+  const songs = yield* inChunks(limit, (after: string | null, count) =>
+    db
+      .select()
+      .from(accountSongs)
+      .where(
+        and(
+          eq(accountSongs.pushed, false),
+          after === null ? undefined : gt(accountSongs.recordingKey, after),
+        ),
+      )
+      .orderBy(asc(accountSongs.recordingKey))
+      .limit(count)
+      .all()
+      .map((row) => {
+        mark("songs", row.recordingKey, {
+          table: "songs",
+          key: row.recordingKey,
+          changedAt: row.changedAt,
+        });
+        return { after: row.recordingKey, row: songRow(row) };
+      }),
+  );
 
+  yield;
   const playlistRows = db
     .select()
     .from(playlists)
@@ -544,34 +593,56 @@ export const selectUnpushed = (
     .all()
     .map((row) => playlistRow(row, mark));
 
-  const entries = unpushedEntries(db, notMemberPlaylist(playlists.syncId), limit, mark);
+  yield;
+  // Entries are read in their local ids' order: each chunk goes on after the last one's, as marked.
+  const entries = yield* inChunks(limit, (after: number | null, count) => {
+    const ids: number[] = [];
+    const marking: Mark = (table, id, from) => {
+      mark(table, id, from);
+      if (from.table === "entries") ids.push(from.id);
+    };
+    return unpushedEntries(db, notMemberPlaylist(playlists.syncId), count, marking, after ?? 0).map(
+      (row, n) => ({ after: ids[n] ?? 0, row }),
+    );
+  });
 
-  const stars = db
-    .select({
-      trackId: favorites.trackId,
-      recordingKey: sql<string>`${tracks.recordingKey}`,
-      addedAt: favorites.addedAt,
-      changedAt: favorites.changedAt,
-      phoneId: favorites.phoneId,
-      deleted: favorites.deleted,
-    })
-    .from(favorites)
-    .innerJoin(tracks, eq(favorites.trackId, tracks.id))
-    .where(and(eq(favorites.pushed, false), isNotNull(tracks.recordingKey)))
-    .orderBy(asc(favorites.trackId))
-    .limit(limit)
-    .all()
-    .map((row): SyncFavorite => {
-      mark("favorites", row.recordingKey, {
-        table: "favorites",
-        trackId: row.trackId,
-        changedAt: row.changedAt,
-      });
-      return row.deleted
-        ? { id: row.recordingKey, ...stamp(row), deleted: true }
-        : { id: row.recordingKey, ...stamp(row), deleted: false, addedAt: row.addedAt };
-    });
+  yield;
+  const stars = yield* inChunks(limit, (after: number | null, count) =>
+    db
+      .select({
+        trackId: favorites.trackId,
+        recordingKey: sql<string>`${tracks.recordingKey}`,
+        addedAt: favorites.addedAt,
+        changedAt: favorites.changedAt,
+        phoneId: favorites.phoneId,
+        deleted: favorites.deleted,
+      })
+      .from(favorites)
+      .innerJoin(tracks, eq(favorites.trackId, tracks.id))
+      .where(
+        and(
+          eq(favorites.pushed, false),
+          isNotNull(tracks.recordingKey),
+          after === null ? undefined : gt(favorites.trackId, after),
+        ),
+      )
+      .orderBy(asc(favorites.trackId))
+      .limit(count)
+      .all()
+      .map((row) => {
+        mark("favorites", row.recordingKey, {
+          table: "favorites",
+          trackId: row.trackId,
+          changedAt: row.changedAt,
+        });
+        const star: SyncFavorite = row.deleted
+          ? { id: row.recordingKey, ...stamp(row), deleted: true }
+          : { id: row.recordingKey, ...stamp(row), deleted: false, addedAt: row.addedAt };
+        return { after: row.trackId, row: star };
+      }),
+  );
 
+  yield;
   const preferences = db
     .select()
     .from(preferenceChanges)
@@ -596,62 +667,73 @@ export const selectUnpushed = (
       };
     });
 
-  const plays = db
-    .select({
-      ...getTableColumns(playEvents),
-      contextPlaylistId: sql<string | null>`CASE WHEN ${playEvents.contextType} = 'playlist' THEN
+  /** Up to [count] plays waiting to go up, after the play [after]. */
+  const unpushedPlays = (after: number | null, count: number) =>
+    db
+      .select({
+        ...getTableColumns(playEvents),
+        contextPlaylistId: sql<string | null>`CASE WHEN ${playEvents.contextType} = 'playlist' THEN
         (SELECT sync_id FROM playlists WHERE id = CAST(${playEvents.contextId} AS INTEGER))
         ELSE NULL END`,
-      currentTitle: tracks.title,
-      currentArtist: tracks.artistCredit,
-      currentAlbum: schema.albums.title,
-    })
-    .from(playEvents)
-    .leftJoin(tracks, eq(playEvents.trackId, tracks.id))
-    .leftJoin(schema.albums, eq(tracks.albumId, schema.albums.id))
-    .where(
-      and(
-        eq(playEvents.pushed, false),
-        eq(playEvents.ongoing, false),
-        isNotNull(playEvents.syncId),
-        isNotNull(playEvents.recordingKey),
-      ),
-    )
-    .orderBy(asc(playEvents.id))
-    .limit(limit)
-    .all()
-    .flatMap((row): SyncPlayRow[] => {
-      if (row.syncId === null || row.recordingKey === null) return [];
-      mark("plays", row.syncId, { table: "plays", id: row.id });
-      return [
-        {
-          id: row.syncId,
-          songId: row.recordingKey,
-          startedAt: row.startedAt,
-          listenedMs: row.listenedMs,
-          durationMs: row.durationMs,
-          endReason: row.endReason,
-          counted: row.counted,
-          contextType: row.contextType,
-          contextId: row.contextId,
-          contextPlaylistId: row.contextPlaylistId,
-          source: row.source,
-          importedFrom: row.importedFrom,
-          snapshot: wireSnapshot(
-            row.snapshot ?? {
-              title: row.currentTitle ?? UNKNOWN_SONG_TITLE,
-              artist: row.currentArtist ?? "",
-              album: row.currentAlbum,
-              artworkPath: null,
-              thumbPath: null,
-            },
-          ),
-          videoId: row.videoId,
+        currentTitle: tracks.title,
+        currentArtist: tracks.artistCredit,
+        currentAlbum: schema.albums.title,
+      })
+      .from(playEvents)
+      .leftJoin(tracks, eq(playEvents.trackId, tracks.id))
+      .leftJoin(schema.albums, eq(tracks.albumId, schema.albums.id))
+      .where(
+        and(
+          eq(playEvents.pushed, false),
+          eq(playEvents.ongoing, false),
+          isNotNull(playEvents.syncId),
+          isNotNull(playEvents.recordingKey),
+          after === null ? undefined : gt(playEvents.id, after),
+        ),
+      )
+      .orderBy(asc(playEvents.id))
+      .limit(count)
+      .all();
+  /** A play waiting to go up, as the service's row (null: not one to name yet). */
+  const playRow = (row: ReturnType<typeof unpushedPlays>[number]): SyncPlayRow | null => {
+    if (row.syncId === null || row.recordingKey === null) return null;
+    mark("plays", row.syncId, { table: "plays", id: row.id });
+    return {
+      id: row.syncId,
+      songId: row.recordingKey,
+      startedAt: row.startedAt,
+      listenedMs: row.listenedMs,
+      durationMs: row.durationMs,
+      endReason: row.endReason,
+      counted: row.counted,
+      contextType: row.contextType,
+      contextId: row.contextId,
+      contextPlaylistId: row.contextPlaylistId,
+      source: row.source,
+      importedFrom: row.importedFrom,
+      snapshot: wireSnapshot(
+        row.snapshot ?? {
+          title: row.currentTitle ?? UNKNOWN_SONG_TITLE,
+          artist: row.currentArtist ?? "",
+          album: row.currentAlbum,
+          artworkPath: null,
+          thumbPath: null,
         },
-      ];
-    });
+      ),
+      videoId: row.videoId,
+    };
+  };
+
+  yield;
+  const plays = yield* inChunks(limit, (after: number | null, count) =>
+    unpushedPlays(after, count).flatMap((row) => {
+      const play = playRow(row);
+      return play === null ? [] : [{ after: row.id, row: play }];
+    }),
+  );
 
   const { follows, hiddenFollowReleases, notifiedFollowShows, dismissedFollowSuggestions } = schema;
+  yield;
   const followRows = db
     .select()
     .from(follows)
@@ -689,6 +771,7 @@ export const selectUnpushed = (
       mark(table, row.id, { table, key: row.id, changedAt: row.changedAt });
       return { id: row.id, ...stamp(row) } as SyncTables[typeof table][number];
     });
+  yield;
   const hiddenReleases = idRows(
     "hiddenReleases",
     db
@@ -699,6 +782,7 @@ export const selectUnpushed = (
       .limit(limit)
       .all(),
   );
+  yield;
   const notifiedShows = idRows(
     "notifiedShows",
     db
@@ -709,6 +793,7 @@ export const selectUnpushed = (
       .limit(limit)
       .all(),
   );
+  yield;
   const dismissedSuggestions = db
     .select()
     .from(dismissedFollowSuggestions)
@@ -728,6 +813,7 @@ export const selectUnpushed = (
     });
 
   const { dislikes } = schema;
+  yield;
   const dislikeRows = db
     .select({
       key: dislikes.songKey,
@@ -769,13 +855,17 @@ export const selectUnpushed = (
           };
     });
 
+  yield;
+  const entryRemovals = removals("playlistEntries");
+  yield;
+  const starRemovals = removals("favorites");
   return {
     rows: {
       songs,
       playlists: playlistRows,
-      playlistEntries: [...entries, ...removals("playlistEntries")],
+      playlistEntries: [...entries, ...entryRemovals],
       // Two Tracks with one key are one song for the account: one star, the later change.
-      favorites: mergeRows([], [...stars, ...removals("favorites")]).rows,
+      favorites: mergeRows([], [...stars, ...starRemovals]).rows,
       preferences,
       plays,
       follows: followRows,
@@ -787,7 +877,7 @@ export const selectUnpushed = (
     },
     marks,
   };
-};
+}
 
 /** The dislikes of YT Music songs, by how their key starts (Core's `ytTrackId`). */
 const YT_DISLIKES = "yt:%";
@@ -818,6 +908,33 @@ export const markPushed = (
   db: LibraryDatabase,
   marks: readonly PushMark[],
   storedAt: ReadonlyMap<PushMark, number> = new Map(),
+): void => {
+  db.transaction((tx) => finishSteps(markPushedSteps(tx, marks, storedAt)));
+};
+
+/** How many push marks one step of `markPushedSteps` records. */
+const MARKS_AT_ONCE = 50;
+
+/**
+ * `markPushed` as steps for work that runs in slices (#1450): up to `MARKS_AT_ONCE` marks a
+ * step, each step its own transaction. A sync stopped between steps leaves the rest waiting,
+ * and they go up again with the next push, which the account takes as no change.
+ */
+export function* markPushedSteps(
+  db: LibraryDatabase,
+  marks: readonly PushMark[],
+  storedAt: ReadonlyMap<PushMark, number> = new Map(),
+): Generator<void, void> {
+  for (let start = 0; start < marks.length; start += MARKS_AT_ONCE) {
+    if (start > 0) yield;
+    markSome(db, marks.slice(start, start + MARKS_AT_ONCE), storedAt);
+  }
+}
+
+const markSome = (
+  db: LibraryDatabase,
+  marks: readonly PushMark[],
+  storedAt: ReadonlyMap<PushMark, number>,
 ): void => {
   /** What a pushed row behind [from] becomes. */
   const pushedAs = (from: PushMark & { readonly changedAt: number }) => {
@@ -911,36 +1028,75 @@ export const markPushed = (
 
 // --- The song list -------------------------------------------------------------
 
-/** The phone's songs as the account would hold them: every Track with a file and a key, by id. */
-const selectPhoneSongs = (db: LibraryDatabase): PhoneSong[] => {
+/** Rows one step of a sync's song-list reads takes (#1450). */
+const SONGS_AT_ONCE = 250;
+/** Songs one step of a sync's song-list writes writes, in one transaction (#1450). */
+const SONG_WRITES_AT_ONCE = 50;
+
+/**
+ * The phone's songs as the account would hold them: every Track with a file and a key, by id,
+ * `SONGS_AT_ONCE` a step.
+ */
+function* selectPhoneSongsSteps(db: LibraryDatabase): Generator<void, PhoneSong[]> {
   const { tracks, albums, genres } = schema;
-  return db
-    .select({
-      recordingKey: sql<string>`${tracks.recordingKey}`,
-      title: tracks.title,
-      credit: tracks.artistCredit,
-      album: albums.title,
-      albumArtist: albums.albumArtistCredit,
-      discNumber: tracks.discNumber,
-      trackNumber: tracks.trackNumber,
-      durationMs: tracks.durationMs,
-      releaseDate: tracks.releaseDate,
-      year: tracks.year,
-      genre: genres.name,
-      videoId: tracks.videoId,
-      addedAt: tracks.addedAt,
-    })
-    .from(tracks)
-    .innerJoin(albums, eq(tracks.albumId, albums.id))
-    .leftJoin(genres, eq(tracks.genreId, genres.id))
-    .where(and(hasFile, isNotNull(tracks.recordingKey)))
-    .orderBy(asc(tracks.id))
-    .all()
-    .map(({ recordingKey, ...fields }) => ({
-      recordingKey,
-      fields: { ...fields, album: fields.album === UNKNOWN_ALBUM ? null : fields.album },
-    }));
-};
+  const songs: PhoneSong[] = [];
+  for (let after = 0; ;) {
+    const rows = db
+      .select({
+        id: tracks.id,
+        recordingKey: sql<string>`${tracks.recordingKey}`,
+        title: tracks.title,
+        credit: tracks.artistCredit,
+        album: albums.title,
+        albumArtist: albums.albumArtistCredit,
+        discNumber: tracks.discNumber,
+        trackNumber: tracks.trackNumber,
+        durationMs: tracks.durationMs,
+        releaseDate: tracks.releaseDate,
+        year: tracks.year,
+        genre: genres.name,
+        videoId: tracks.videoId,
+        addedAt: tracks.addedAt,
+      })
+      .from(tracks)
+      .innerJoin(albums, eq(tracks.albumId, albums.id))
+      .leftJoin(genres, eq(tracks.genreId, genres.id))
+      .where(and(gt(tracks.id, after), hasFile, isNotNull(tracks.recordingKey)))
+      .orderBy(asc(tracks.id))
+      .limit(SONGS_AT_ONCE)
+      .all();
+    for (const { id, recordingKey, ...fields } of rows) {
+      songs.push({
+        recordingKey,
+        fields: { ...fields, album: fields.album === UNKNOWN_ALBUM ? null : fields.album },
+      });
+      after = id;
+    }
+    if (rows.length < SONGS_AT_ONCE) return songs;
+    yield;
+  }
+}
+
+/** The account's song list as this phone keeps it, `SONGS_AT_ONCE` a step. */
+function* selectAccountSongsSteps(db: LibraryDatabase): Generator<void, AccountSongState[]> {
+  const { accountSongs } = schema;
+  const account: AccountSongState[] = [];
+  for (let after: string | null = null; ;) {
+    const rows = db
+      .select()
+      .from(accountSongs)
+      .where(after === null ? undefined : gt(accountSongs.recordingKey, after))
+      .orderBy(asc(accountSongs.recordingKey))
+      .limit(SONGS_AT_ONCE)
+      .all();
+    for (const row of rows) {
+      account.push({ row: songRow(row), local: row.local });
+      after = row.recordingKey;
+    }
+    if (rows.length < SONGS_AT_ONCE) return account;
+    yield;
+  }
+}
 
 /**
  * Brings the account's song list up to date with the phone's (Core's
@@ -948,42 +1104,58 @@ const selectPhoneSongs = (db: LibraryDatabase): PhoneSong[] => {
  * up as of [now].
  */
 export const planSongs = (db: LibraryDatabase, now: number): void => {
+  db.transaction((tx) => finishSteps(planSongsSteps(tx, now)));
+};
+
+/**
+ * `planSongs` as steps for work that runs in slices (#1450): the song lists read a few
+ * hundred rows a step, then planned, then written `SONG_WRITES_AT_ONCE` songs a step, each
+ * step's writes one transaction. A change to the Library meanwhile (a scan) marks the songs
+ * changed again, and the next sync plans them anew.
+ */
+export function* planSongsSteps(db: LibraryDatabase, now: number): Generator<void, void> {
   const { accountSongs } = schema;
-  const account: AccountSongState[] = db
-    .select()
-    .from(accountSongs)
-    .all()
-    .map((row) => ({ row: songRow(row), local: row.local }));
-  const plan = planSongSync({
-    phone: selectPhoneSongs(db),
-    account,
-    now,
-    phoneId: selectPhoneId(db),
-  });
+  const account = yield* selectAccountSongsSteps(db);
+  yield;
+  const phone = yield* selectPhoneSongsSteps(db);
+  yield;
+  const plan = planSongSync({ phone, account, now, phoneId: selectPhoneId(db) });
   if (plan.push.length === 0 && plan.local.length === 0) return;
   const local = new Map(plan.local.map((entry) => [entry.recordingKey, entry.local]));
-  db.transaction((tx) => {
-    for (const row of plan.push) {
-      const values = {
-        song: storedSong(row),
-        ...stamp(row),
-        pushed: false,
-        local: local.get(row.id) ?? null,
-      };
-      tx.insert(accountSongs)
-        .values({ recordingKey: row.id, ...values })
-        .onConflictDoUpdate({ target: accountSongs.recordingKey, set: values })
-        .run();
-      local.delete(row.id);
-    }
-    for (const [recordingKey, text] of local) {
-      tx.update(accountSongs)
-        .set({ local: text })
-        .where(eq(accountSongs.recordingKey, recordingKey))
-        .run();
-    }
+  const pushed = plan.push.map((row) => {
+    const values = {
+      song: storedSong(row),
+      ...stamp(row),
+      pushed: false,
+      local: local.get(row.id) ?? null,
+    };
+    local.delete(row.id);
+    return { recordingKey: row.id, values };
   });
-};
+  const localOnly = [...local];
+  for (let start = 0; start < pushed.length; start += SONG_WRITES_AT_ONCE) {
+    yield;
+    db.transaction((tx) => {
+      for (const { recordingKey, values } of pushed.slice(start, start + SONG_WRITES_AT_ONCE)) {
+        tx.insert(accountSongs)
+          .values({ recordingKey, ...values })
+          .onConflictDoUpdate({ target: accountSongs.recordingKey, set: values })
+          .run();
+      }
+    });
+  }
+  for (let start = 0; start < localOnly.length; start += SONG_WRITES_AT_ONCE) {
+    yield;
+    db.transaction((tx) => {
+      for (const [recordingKey, text] of localOnly.slice(start, start + SONG_WRITES_AT_ONCE)) {
+        tx.update(accountSongs)
+          .set({ local: text })
+          .where(eq(accountSongs.recordingKey, recordingKey))
+          .run();
+      }
+    });
+  }
+}
 
 /**
  * Tracks [leaving] their recording keys while the Library is joined with an
@@ -1840,12 +2012,30 @@ const applyPlay = (
   return true;
 };
 
+/** Splits a play's artist credit by the Library's artists (Core's `creditSplitter`). */
+type Splitter = (credit: string | readonly string[]) => string[];
+
+/** The Library's artist names, which a pulled play's credit is split by. */
+const selectArtistNames = (tx: LibraryDatabase): string[] =>
+  tx
+    .select({ name: schema.artists.name })
+    .from(schema.artists)
+    .all()
+    .map((row) => row.name);
+
+/** A splitter built from [tx]'s artists the first time a play needs one. */
+const splitterOf = (tx: LibraryDatabase): (() => Splitter) => {
+  let split: Splitter | null = null;
+  return () => (split ??= creditSplitter(selectArtistNames(tx)));
+};
+
 const applyRows = (
   tx: LibraryDatabase,
   rows: Pick<SyncTables, "playlistEntries" | "favorites" | "plays" | "dislikes">,
   place: Placing,
   changed: Changed,
   now: number,
+  splitter: () => Splitter,
 ): void => {
   const { trackIds } = place;
   const placed = new Set<number>();
@@ -1861,13 +2051,7 @@ const applyRows = (
   }
   settlePulledMarks(tx, changed);
   if (rows.plays.length > 0) {
-    const split = creditSplitter(
-      tx
-        .select({ name: schema.artists.name })
-        .from(schema.artists)
-        .all()
-        .map((row) => row.name),
-    );
+    const split = splitter();
     for (const row of rows.plays) {
       if (applyPlay(tx, row, trackIds, split)) changed.plays = true;
     }
@@ -1892,45 +2076,152 @@ export const applyPulledPage = (
   now: number,
 ): PulledChanges =>
   db.transaction((tx) => {
-    const changed = nothingChanged();
-    const place = placing(tx, trackIds, page.playlistEntries);
-    for (const row of page.songs) {
-      if (applySong(tx, row)) changed.songs = true;
-    }
-    for (const row of page.playlists) {
-      if (applyPlaylist(tx, row, now, place)) changed.playlists = true;
-    }
-    applyRows(tx, page, place, changed, now);
-    markUnseen(tx, place);
-    for (const row of page.preferences) {
-      const applied = applyPreference(tx, row);
-      if (applied !== null) changed.preferences.push(applied);
-    }
-    for (const row of page.follows) {
-      if (applyIdRow(tx, row, { table: schema.follows, field: "key" }, followFields(row))) {
-        changed.follows = true;
-      }
-    }
-    for (const row of page.hiddenReleases) {
-      if (applyIdRow(tx, row, { table: schema.hiddenFollowReleases, field: "key" })) {
-        changed.follows = true;
-      }
-    }
-    for (const row of page.notifiedShows) {
-      if (applyIdRow(tx, row, { table: schema.notifiedFollowShows, field: "id" })) {
-        changed.follows = true;
-      }
-    }
-    for (const row of page.dismissedSuggestions) {
-      const into = { table: schema.dismissedFollowSuggestions, field: "key" } as const;
-      if (applyIdRow(tx, row, into, dismissalFields(row))) changed.dismissedSuggestions = true;
-    }
-    tx.update(schema.syncState)
-      .set({ cursor: page.cursor })
-      .where(eq(schema.syncState.id, 1))
-      .run();
+    const changed = applyPulledRows(tx, page, trackIds, now, splitterOf(tx));
+    keepCursor(tx, page.cursor);
     return changed;
   });
+
+/** Rows one step of a pulled page's apply applies, in one transaction (#1450). */
+const PULLED_AT_ONCE = 25;
+
+/** The recording keys [rows] place their songs by (`selectAccountTrackIds`). */
+const songKeys = (rows: SyncTables): string[] => [
+  ...rows.playlistEntries.flatMap((row) =>
+    "playlistId" in row && row.songId !== null ? [row.songId] : [],
+  ),
+  ...rows.favorites.map((row) => row.id),
+  ...rows.dislikes.map((row) => row.id),
+  ...rows.plays.map((row) => row.songId),
+];
+
+/**
+ * `applyPulledPage` as steps for work that runs in slices (#1450): the page applied
+ * `PULLED_AT_ONCE` rows a step (Core's `pullPagePieces`), each piece one transaction that
+ * reads only the Tracks its rows name, and the page's cursor kept with the last piece. A sync
+ * stopped between pieces pulls the page again; the pieces applied by then merge as no change.
+ * [applied] gets what each piece changed once it's committed.
+ */
+export function* applyPulledPageSteps(
+  db: LibraryDatabase,
+  page: SyncPullPage,
+  now: number,
+  applied: (changes: PulledChanges) => void,
+): Generator<void, void> {
+  let split: Splitter | null = null;
+  if (page.plays.length > 0) {
+    const names = selectArtistNames(db);
+    yield;
+    split = yield* creditSplitterSteps(names);
+  }
+  for (const piece of pullPagePieces(page, PULLED_AT_ONCE)) {
+    yield;
+    const keys = songKeys(piece.rows);
+    const changes = db.transaction((tx) => {
+      const trackIds =
+        keys.length === 0 ? new Map<string, number>() : selectAccountTrackIds(tx, keys);
+      const changed = applyPulledRows(
+        tx,
+        piece.rows,
+        trackIds,
+        now,
+        () => split ?? splitterOf(tx)(),
+      );
+      if (piece.cursor !== null) keepCursor(tx, piece.cursor);
+      return changed;
+    });
+    applied(changes);
+  }
+}
+
+/** Keeps [cursor] for the next pull. */
+const keepCursor = (tx: LibraryDatabase, cursor: string): void => {
+  tx.update(schema.syncState).set({ cursor }).where(eq(schema.syncState.id, 1)).run();
+};
+
+/** Applies pulled [rows] (`applyPulledPage`), the cursor aside. */
+const applyPulledRows = (
+  tx: LibraryDatabase,
+  rows: SyncTables,
+  trackIds: ReadonlyMap<string, number>,
+  now: number,
+  splitter: () => Splitter,
+): Changed => {
+  const changed = nothingChanged();
+  const place = placing(tx, trackIds, rows.playlistEntries);
+  for (const row of rows.songs) {
+    if (applySong(tx, row)) changed.songs = true;
+  }
+  for (const row of rows.playlists) {
+    if (applyPlaylist(tx, row, now, place)) changed.playlists = true;
+  }
+  applyRows(tx, rows, place, changed, now, splitter);
+  markUnseen(tx, place);
+  for (const row of rows.preferences) {
+    const applied = applyPreference(tx, row);
+    if (applied !== null) changed.preferences.push(applied);
+  }
+  for (const row of rows.follows) {
+    if (applyIdRow(tx, row, { table: schema.follows, field: "key" }, followFields(row))) {
+      changed.follows = true;
+    }
+  }
+  for (const row of rows.hiddenReleases) {
+    if (applyIdRow(tx, row, { table: schema.hiddenFollowReleases, field: "key" })) {
+      changed.follows = true;
+    }
+  }
+  for (const row of rows.notifiedShows) {
+    if (applyIdRow(tx, row, { table: schema.notifiedFollowShows, field: "id" })) {
+      changed.follows = true;
+    }
+  }
+  for (const row of rows.dismissedSuggestions) {
+    const into = { table: schema.dismissedFollowSuggestions, field: "key" } as const;
+    if (applyIdRow(tx, row, into, dismissalFields(row))) changed.dismissedSuggestions = true;
+  }
+  return changed;
+};
+
+/** The rows waiting in `sync_pending` whose song and playlist the phone now has. */
+const isReady = (tx: LibraryDatabase): SQL | undefined => {
+  const { syncPending, tracks, playlists } = schema;
+  return and(
+    or(
+      isNull(syncPending.songKey),
+      inArray(syncPending.songKey, tx.select({ key: tracks.recordingKey }).from(tracks)),
+      // A collaborative playlist's entry finds its song by its fields, or streams.
+      and(
+        eq(syncPending.kind, "playlistEntries"),
+        inArray(
+          sql`json_extract(${syncPending.row}, '$.playlistId')`,
+          tx.select({ id: schema.collaborations.playlistSyncId }).from(schema.collaborations),
+        ),
+      ),
+    ),
+    or(
+      isNull(syncPending.playlistKey),
+      inArray(syncPending.playlistKey, tx.select({ key: playlists.syncId }).from(playlists)),
+    ),
+  );
+};
+
+/** The waiting rows [ready], taken out of `sync_pending` and grouped by table. */
+const pendingRows = (
+  tx: LibraryDatabase,
+  ready: readonly { readonly kind: string; readonly id: string; readonly row: string }[],
+) => {
+  const rows = {
+    playlistEntries: [] as SyncPlaylistEntry[],
+    favorites: [] as SyncFavorite[],
+    plays: [] as SyncPlayRow[],
+    dislikes: [] as SyncDislike[],
+  };
+  for (const row of ready) {
+    unpend(tx, row.kind as PendingKind, row.id);
+    (rows[row.kind as PendingKind] as unknown[]).push(JSON.parse(row.row));
+  }
+  return rows;
+};
 
 /**
  * Applies the rows waiting in `sync_pending` whose song and playlist the
@@ -1941,45 +2232,13 @@ export const applyPending = (
   trackIds: ReadonlyMap<string, number>,
   now: number = Date.now(),
 ): PulledChanges => {
-  const { syncPending, tracks, playlists } = schema;
+  const { syncPending } = schema;
   return db.transaction((tx) => {
-    const ready = tx
-      .select()
-      .from(syncPending)
-      .where(
-        and(
-          or(
-            isNull(syncPending.songKey),
-            inArray(syncPending.songKey, tx.select({ key: tracks.recordingKey }).from(tracks)),
-            // A collaborative playlist's entry finds its song by its fields, or streams.
-            and(
-              eq(syncPending.kind, "playlistEntries"),
-              inArray(
-                sql`json_extract(${syncPending.row}, '$.playlistId')`,
-                tx.select({ id: schema.collaborations.playlistSyncId }).from(schema.collaborations),
-              ),
-            ),
-          ),
-          or(
-            isNull(syncPending.playlistKey),
-            inArray(syncPending.playlistKey, tx.select({ key: playlists.syncId }).from(playlists)),
-          ),
-        ),
-      )
-      .all();
-    const rows = {
-      playlistEntries: [] as SyncPlaylistEntry[],
-      favorites: [] as SyncFavorite[],
-      plays: [] as SyncPlayRow[],
-      dislikes: [] as SyncDislike[],
-    };
-    for (const row of ready) {
-      unpend(tx, row.kind as PendingKind, row.id);
-      (rows[row.kind as PendingKind] as unknown[]).push(JSON.parse(row.row));
-    }
+    const ready = tx.select().from(syncPending).where(isReady(tx)).all();
+    const rows = pendingRows(tx, ready);
     const changed = nothingChanged();
     const place = placing(tx, trackIds, rows.playlistEntries);
-    applyRows(tx, rows, place, changed, now);
+    applyRows(tx, rows, place, changed, now, splitterOf(tx));
     markUnseen(tx, place);
     // A snapshot-only Library play is already visible; attach it once its
     // account song or file arrives, keeping its play id and display snapshot.
@@ -2006,6 +2265,102 @@ export const applyPending = (
     return changed;
   });
 };
+
+/** Waiting rows one step of `applyPendingSteps` reads, and how many it applies a step. */
+const PENDING_READ_AT_ONCE = 250;
+const PENDING_AT_ONCE = 15;
+/**
+ * Detached plays one step attaches to their songs: fewer, as each one's new song runs the play
+ * totals' triggers, which no statement count shows.
+ */
+const ATTACHED_AT_ONCE = 10;
+
+/**
+ * `applyPending` as steps for work that runs in slices (#1450): the ready rows read a few
+ * hundred a step in their key's order and applied `PENDING_AT_ONCE` a step, each piece one
+ * transaction that reads only the Tracks its rows name; then the detached plays attached the
+ * same way. [applied] gets what each piece changed once it's committed.
+ */
+export function* applyPendingSteps(
+  db: LibraryDatabase,
+  now: number,
+  applied: (changes: PulledChanges) => void,
+): Generator<void, void> {
+  const { syncPending, playEvents } = schema;
+  for (let after: { kind: string; id: string } | null = null; ;) {
+    const ready: (typeof syncPending.$inferSelect)[] = db
+      .select()
+      .from(syncPending)
+      .where(
+        and(
+          isReady(db),
+          after === null
+            ? undefined
+            : sql`(${syncPending.kind}, ${syncPending.id}) > (${after.kind}, ${after.id})`,
+        ),
+      )
+      .orderBy(asc(syncPending.kind), asc(syncPending.id))
+      .limit(PENDING_READ_AT_ONCE)
+      .all();
+    for (let start = 0; start < ready.length; start += PENDING_AT_ONCE) {
+      yield;
+      const piece = ready.slice(start, start + PENDING_AT_ONCE);
+      applied(
+        db.transaction((tx) => {
+          const rows = pendingRows(tx, piece);
+          const changed = nothingChanged();
+          const trackIds = selectAccountTrackIds(tx, songKeys({ ...EMPTY_SYNC_TABLES, ...rows }));
+          const place = placing(tx, trackIds, rows.playlistEntries);
+          applyRows(tx, rows, place, changed, now, splitterOf(tx));
+          markUnseen(tx, place);
+          return changed;
+        }),
+      );
+    }
+    const last: typeof syncPending.$inferSelect | undefined = ready[ready.length - 1];
+    if (last === undefined || ready.length < PENDING_READ_AT_ONCE) break;
+    after = { kind: last.kind, id: last.id };
+    yield;
+  }
+  // A snapshot-only Library play is already visible; attach it once its
+  // account song or file arrives, keeping its play id and display snapshot. Read by play
+  // id, so each step touches only the plays it read: a play's key has no index of its own.
+  const detachedPlay = and(isNull(playEvents.trackId), isNull(playEvents.videoId));
+  for (let after = 0; ;) {
+    yield;
+    const plays: { id: number; key: string }[] = db
+      .select({ id: playEvents.id, key: sql<string>`${playEvents.recordingKey}` })
+      .from(playEvents)
+      .where(and(detachedPlay, isNotNull(playEvents.recordingKey), gt(playEvents.id, after)))
+      .orderBy(asc(playEvents.id))
+      .limit(PENDING_READ_AT_ONCE)
+      .all();
+    yield;
+    const trackIds =
+      plays.length === 0
+        ? new Map<string, number>()
+        : selectAccountTrackIds(db, [...new Set(plays.map((play) => play.key))]);
+    const placed = plays.flatMap(({ id, key }) => {
+      const trackId = trackIds.get(key);
+      return trackId === undefined ? [] : [{ id, trackId }];
+    });
+    for (let start = 0; start < placed.length; start += ATTACHED_AT_ONCE) {
+      yield;
+      db.transaction((tx) => {
+        for (const { id, trackId } of placed.slice(start, start + ATTACHED_AT_ONCE)) {
+          tx.update(playEvents)
+            .set({ trackId })
+            .where(and(eq(playEvents.id, id), detachedPlay))
+            .run();
+        }
+      });
+      applied({ ...nothingChanged(), plays: true });
+    }
+    const last: { id: number } | undefined = plays[plays.length - 1];
+    if (last === undefined || plays.length < PENDING_READ_AT_ONCE) return;
+    after = last.id;
+  }
+}
 
 /** What a page of a member's pull of one collaborative playlist did here. */
 export interface PlaylistPageResult {
@@ -2075,6 +2430,7 @@ export const applyPlaylistPage = (
       place,
       changed,
       now,
+      splitterOf(tx),
     );
     markUnseen(tx, place);
     tx.update(schema.collaborations)
