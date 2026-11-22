@@ -1,10 +1,11 @@
-import { homeFollowCards, type HomeFollowSnapshot } from "@wave/core";
+import { homeFollowCards, sameHomeFollowCards, type HomeFollowSnapshot } from "@wave/core";
 import {
   createContext,
   createElement,
   useContext,
   useCallback,
   useEffect,
+  useMemo,
   useState,
   useRef,
   type ReactNode,
@@ -126,7 +127,15 @@ const useHomeFollowState = (reading: boolean) => {
     country: currentFollowCountry(),
     admitted: visit.admitted,
   });
-  return { ...cards, follows: visit.latest.follows, refresh };
+  const latest = { ...cards, follows: visit.latest.follows };
+  // Each return to Home reads the cards again and ticks the clock: the
+  // sections drawing them keep the value they had while they draw the same
+  // cards (#1439).
+  const [shown, setShown] = useState(latest);
+  const same = sameHomeFollowCards(shown, latest);
+  if (!same) setShown(latest);
+  const kept = same ? shown : latest;
+  return useMemo(() => ({ ...kept, refresh }), [kept, refresh]);
 };
 
 const HomeFollowPresence = createContext(false);

@@ -144,6 +144,9 @@ export const snapshotSection = <K extends keyof HomeSnapshotSections>(
 ): HomeSnapshotSections[K] | undefined =>
   live[name] === undefined ? coldStart()?.sections[name] : undefined;
 
+const unheld = (): (() => void) => () => {};
+const notDown = (): boolean => false;
+
 /**
  * Home's section [name]: [value] once its read answers (noted for the next
  * snapshot), the snapshot's until then. A section drawing the snapshot keeps
@@ -153,9 +156,15 @@ export const useSnapshotted = <K extends keyof HomeSnapshotSections>(
   name: K,
   value: HomeSnapshotSections[K] | undefined,
 ): HomeSnapshotSections[K] | undefined => {
-  const held = useSyncExternalStore(fingerDown.subscribe, fingerDown.isDown);
   const snapshot = snapshotSection(name);
-  const shown = value === undefined || (held && snapshot !== undefined) ? snapshot : value;
+  // Only a read waiting on a snapshot in sight cares where the finger is: any
+  // other section would be drawn again on every touch for nothing (#1439).
+  const holds = value !== undefined && snapshot !== undefined;
+  const held = useSyncExternalStore(
+    holds ? fingerDown.subscribe : unheld,
+    holds ? fingerDown.isDown : notDown,
+  );
+  const shown = value === undefined || held ? snapshot : value;
   const showsRead = value !== undefined && shown === value;
   useEffect(() => {
     if (!showsRead) return;
