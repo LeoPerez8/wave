@@ -220,7 +220,10 @@ test("a large result is mapped in short steps that yield between them", async ()
   assert.ok(expected.length >= 600);
   assert.ok(Math.max(...held) <= 8, `no step held the thread over 8 ms: ${Math.max(...held)}`);
   assert.ok(yields >= expected.length / 8 - 1, `yielded between steps: ${yields}`);
-  assert.equal(value.heldMs, held.reduce((a, b) => a + b, 0));
+  assert.equal(
+    value.heldMs,
+    held.reduce((a, b) => a + b, 0),
+  );
 });
 
 test("each row is mapped once, however many passes the read takes", async () => {
