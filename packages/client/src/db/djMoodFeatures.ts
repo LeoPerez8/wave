@@ -9,6 +9,12 @@ import { chunks } from "./chunks.ts";
 
 export const DJ_MOOD_MISS_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const DJ_MOOD_PAGE_SIZE = 40;
+/**
+ * How long a song whose lookup failed (a service error, an answer that doesn't
+ * read) waits before it is due again (#1437). Unsaved, it stayed due, and every
+ * pass the catalog started read and asked about it again.
+ */
+export const DJ_MOOD_RETRY_MS = 6 * 60 * 60 * 1000;
 
 export interface DjMoodLookupSong {
   readonly videoId: string;
@@ -74,10 +80,13 @@ export interface DjMoodFeatureWrite {
   readonly isrc: string | null;
   readonly features: DjAudioFeatures | null;
   readonly checkedAt: number;
+  /** The lookup failed rather than missed: the song is due again after `DJ_MOOD_RETRY_MS`. */
+  readonly failed?: boolean;
 }
 
 /**
- * Saves misses with their check time; a found feature row is kept forever. A song the catalog
+ * Saves misses with their check time (a failed lookup as one due again after
+ * `DJ_MOOD_RETRY_MS`); a found feature row is kept forever. A song the catalog
  * pruned since its page was read is skipped, in the same transaction as the writes.
  */
 export const keepDjMoodFeatures = (
@@ -108,7 +117,10 @@ export const keepDjMoodFeatures = (
         valence: write.features?.valence ?? null,
         acousticness: write.features?.acousticness ?? null,
         mode: write.features?.mode ?? null,
-        checkedAt: write.checkedAt,
+        // A failed lookup is kept as a miss that expires after the retry wait, not the miss TTL.
+        checkedAt: write.failed
+          ? write.checkedAt - DJ_MOOD_MISS_TTL_MS + DJ_MOOD_RETRY_MS
+          : write.checkedAt,
       };
       tx.insert(djMoodFeatures)
         .values({ videoId: write.videoId, ...values })
