@@ -219,16 +219,17 @@ let startupStarted = 0;
 
 /**
  * Startup starts keep their registration order, after global settlement and quiet frames. A
- * block in a start, or in the work it leaves running, names it as "startup <name>" (#1434).
+ * block in a start, or in the work it leaves running, names it as "startup <name>" (#1434), or
+ * just <name> when its turn came long after startup (Core's `startupWork`, #1432).
  */
 export const afterFirstSettled = (name: string, start: () => void): (() => void) =>
-  startupWork.whenFree(
-    named(`startup ${name}`, () => {
-      startupStarted++;
-      perfMark("startup.started", name);
-      inSlice(`startup ${name}`, start);
-    }),
-  );
+  startupWork.whenFree(() => {
+    const work = blocks.startupWork(name, performance.now());
+    workTurnTaken(work);
+    startupStarted++;
+    perfMark("startup.started", name);
+    inSlice(work, start);
+  });
 
 let contentSeen = false;
 

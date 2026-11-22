@@ -9,17 +9,36 @@
  * leaving the screen (#1446) is the phone pausing the process, not work: it is
  * written apart, as "JS paused", so no total of blocks counts it. A block is named when it's
  * judged, so a render whose commit is reported after the long task still names it (#1449).
+ * Each block gets one line (#1432): a slice that wrote its own keeps its long task from adding
+ * another, however much background work ran before that task was reported or judged. A startup
+ * start is "startup <name>" only during startup; one that waited minutes is just <name>.
  */
 import { timingDuration } from "./timing.ts";
 
 /** A block longer than this, with a screen shown, is a bug to file. */
 export const JS_BLOCK_MS = 50;
 
-/** How many recent slices and works a long task may be matched against. */
+/**
+ * How long slices, works, renders and trips off screen are kept to match a long task against: a
+ * long task is reported after its own task, and judged a moment later, while background work
+ * keeps running slices meanwhile, so a count of recent spans could lose the one it ran in.
+ */
+const KEPT_MS = 10_000;
+
+/** At least this many recent spans stay, however old, for a long task as long as a pause. */
 const KEPT = 16;
 
-/** How many recent render spans: one commit can end several screens' and sections' renders. */
+/** One commit can end several screens' and sections' renders. */
 const KEPT_RENDERS = 32;
+
+/** At most this many spans stay, however recent. */
+const KEPT_MAX = 4096;
+
+/**
+ * How long after the first screen settled a startup start's turn still counts as startup's: one
+ * that waited longer for quiet frames (the owner kept using Wave) runs as ordinary work.
+ */
+export const STARTUP_WORK_MS = 60_000;
 
 /**
  * How long after its free turn a work counts as still running when it never says it ended: its
@@ -75,6 +94,11 @@ export interface JsBlockLog {
   readonly returned: (at: number) => void;
   /** The runtime reported a long task (`PerformanceObserver`'s "longtask"), on the same clock. */
   readonly longTask: (startTime: number, durationMs: number) => void;
+  /**
+   * The name of the work a startup start ([name]) does when it gets its turn at [at]: "startup
+   * <name>" before the first screen settled or within `STARTUP_WORK_MS` after, else [name].
+   */
+  readonly startupWork: (name: string, at: number) => string;
 }
 
 /** What a block is put down to with no named work, before the first screen settled. */
@@ -189,9 +213,26 @@ export const createJsBlockLog = ({ write, screen, later }: JsBlockLogPorts): JsB
     else later(PAUSE_HEARD_MS, judge);
     return true;
   };
+  /**
+   * Adds [span], dropping the spans that ended `KEPT_MS` before it began beyond the [kept] latest.
+   * They go from the front as they age; a work still running there holds the rest back until the
+   * list is full, when stale spans go from anywhere, and then the oldest.
+   */
   const keep = (list: Span[], span: Span, kept = KEPT): void => {
     list.push(span);
-    if (list.length > kept) list.shift();
+    const stale = (old: Span) => old.to < span.from - KEPT_MS;
+    let drop = 0;
+    while (list.length - drop > kept && stale(list[drop]!)) drop++;
+    if (drop > 0) list.splice(0, drop);
+    if (list.length <= KEPT_MAX) return;
+    let excess = list.length - kept;
+    let at = 0;
+    for (const old of list) {
+      if (excess > 0 && stale(old)) excess--;
+      else list[at++] = old;
+    }
+    list.length = at;
+    if (list.length > KEPT_MAX) list.splice(0, list.length - KEPT_MAX);
   };
   /** Startup's name for a block ending at [end]: with the latest step begun before it. */
   const startup = (end: number): string => {
@@ -237,6 +278,8 @@ export const createJsBlockLog = ({ write, screen, later }: JsBlockLogPorts): JsB
       const last = away.at(-1);
       if (last?.to === Number.POSITIVE_INFINITY) last.to = at;
     },
+    startupWork: (name, at) =>
+      settledAt === null || at - settledAt <= STARTUP_WORK_MS ? `${STARTUP} ${name}` : name,
     longTask: (startTime, durationMs) => {
       if (durationMs <= JS_BLOCK_MS) return;
       const end = startTime + durationMs;
