@@ -39,13 +39,19 @@ export const keepLyricsWords = (
   const texts = sql.raw(index.texts);
   const wordsTable = sql.raw(index.words);
   const column = sql.raw(index.key);
+  const text = lyrics?.trim() ?? null;
+  // A rescan refreshes every touched file; one whose lyrics didn't change keeps its rows, since
+  // writing a song's words again held the JS thread for 50-150 ms on the emulator (#1436).
+  const kept = db.get<{ lyrics: string } | undefined>(
+    sql`SELECT lyrics FROM ${texts} WHERE ${column} = ${key}`,
+  );
+  if (text !== null && kept?.lyrics === text) return;
   db.transaction((tx) => {
     tx.run(sql`DELETE FROM ${wordsTable} WHERE ${column} = ${key}`);
-    if (lyrics === null) {
+    if (text === null) {
       tx.run(sql`DELETE FROM ${texts} WHERE ${column} = ${key}`);
       return;
     }
-    const text = lyrics.trim();
     tx.run(
       sql`INSERT INTO ${texts} (${column}, lyrics) VALUES (${key}, ${text})
           ON CONFLICT (${column}) DO UPDATE SET lyrics = excluded.lyrics`,
