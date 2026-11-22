@@ -2,6 +2,7 @@
 import {
   EMPTY_SYNC_TABLES,
   finishSteps,
+  normalizeTrack,
   readPullPage,
   statsWindow,
   type FollowRelease,
@@ -14,10 +15,12 @@ import { test } from "node:test";
 
 import { sql } from "drizzle-orm";
 
+import type { IndexedTrack } from "../types.ts";
 import { saveImportedPlays } from "./blackPlayer.ts";
 import { creditSplits, relinkCredits } from "./credits.ts";
 import { followReleaseListening } from "./followReleases.ts";
 import { selectPlaylistPlays } from "./playlists.ts";
+import { removeTracks, saveBatch } from "./save.ts";
 import {
   keptCreditedPlayTotals,
   keptPlayedTotals,
@@ -605,4 +608,43 @@ test("marking songs owed looks them up by their key, never through every settled
     if (!/song_track (=|IN)/.test(plain))
       assert.doesNotMatch(plan, /song_track_idx/, `${name}: ${plan}`);
   }
+});
+
+test("a rescan that changes no song's tags leaves the kept totals settled; a changed tag owes them", async () => {
+  const db = await openTestDatabase();
+  const splits = creditSplits();
+  const file = (title: string, artist: string, album: string): IndexedTrack => ({
+    ...normalizeTrack({ path: `/Music/${album}/${title}.mp3`, title, artist, album }),
+    sizeBytes: 1_000,
+    modifiedAt: 0,
+    sampleRate: null,
+    bitrateKbps: null,
+    artworkHash: null,
+    hasLyrics: false,
+    explicit: "unknown",
+  });
+  const files = [
+    file("Solo", "A", "First"),
+    file("Duet", "A & B", "First"),
+    file("Mix", "C", "Hits"),
+  ];
+  const { trackIds } = saveBatch(db, splits, files, [], [], NOW);
+  removeTracks(db, splits, []);
+  const online = streamed("online-1", ["D", "E"], "Online album", "MPREb_online");
+  for (let index = 0; index < 40; index++) {
+    const id = index % 4 === 3 ? "yt:online-1" : String(trackIds[index % 3]);
+    recordPlay(db, play(id, NOW - index * DAY), false, id === "yt:online-1" ? online : undefined);
+  }
+  settle(db);
+
+  // A scan saves the touched files again, tags as they were.
+  saveBatch(db, splits, files, [], [], NOW + 1, { linkEntries: false });
+  removeTracks(db, splits, []);
+  assert.equal(keptTotalsSettled(db), true);
+
+  saveBatch(db, splits, [file("Solo", "A", "First (Deluxe)")], [], [], NOW + 2);
+  removeTracks(db, splits, []);
+  assert.equal(keptTotalsSettled(db), false);
+  settle(db);
+  assertSameTotals(db);
 });

@@ -8,6 +8,7 @@
 import {
   checkPlaylistName,
   compareStrings,
+  finishSteps,
   graveyardRemovalsOf,
   graveyardRestoreIndex,
   graveyardSongs,
@@ -15,7 +16,7 @@ import {
   planPlaylistSongs,
   planShazamAdd,
   playlistArtwork,
-  playlistEntryLinks,
+  playlistEntryLinkSteps,
   playlistMosaic,
   readPlaylistEntrySong,
   sortKey,
@@ -26,11 +27,14 @@ import {
   recentWindowStart,
   writePlaylistEntrySong,
   type AppLanguage,
+  type HeldPlaylistTrack,
   type OrderedEntry,
+  type PlaylistEntryLinks,
   type PlaylistItem,
   type PlaylistPlays,
   type PlaylistSong,
   type StoredPlaylistSong,
+  type StreamedPlaylistEntry,
   type TryAgainAnswered,
   type UnsearchedSong,
   type YtAlbumSong,
@@ -698,29 +702,43 @@ export const selectInPlaylists = (db: LibraryDatabase, trackIds: readonly number
 };
 
 /**
- * Turns the YT Music and unavailable entries of every playlist that the
- * Library tracks [trackIds] (just downloaded; the whole Library when not
- * given, as a scan does once it ends) positively are (Core's
- * `playlistEntryLinks`) into those tracks, in the same place; an entry whose
- * track its playlist already holds is removed instead (a tombstone). Each
- * change is stamped at [now]. Returns how many entries it changed. Does
- * nothing (one small query) while no playlist holds such an entry. Run it
- * inside the caller's transaction.
+ * What linking playlists' YT Music entries reads (`readPlaylistLinks`): the
+ * entries as stored, the Library songs with a file, and the tracks the
+ * entries' playlists hold. Plain rows, so the read can leave the JS thread.
  */
-export const linkPlaylistEntries = (
+export interface PlaylistLinkRead {
+  readonly entries: readonly {
+    readonly itemId: number;
+    readonly playlistId: number;
+    readonly ytSong: string;
+  }[];
+  readonly library: readonly {
+    readonly id: number;
+    readonly title: string;
+    readonly artist: string;
+    readonly durationMs: number;
+  }[];
+  readonly held: readonly HeldPlaylistTrack[];
+}
+
+/**
+ * What `linkPlaylistEntries` reads, for the Library tracks [trackIds] (the
+ * whole Library when not given); null when no playlist holds a YT Music or
+ * unavailable entry (one small query).
+ */
+export const readPlaylistLinks = (
   db: LibraryDatabase,
-  now: number,
   trackIds?: readonly number[],
-): number => {
+): PlaylistLinkRead | null => {
   const { playlistItems, tracks } = schema;
-  if (trackIds?.length === 0) return 0;
+  if (trackIds?.length === 0) return null;
   const anyEntry = db
     .select({ id: playlistItems.id })
     .from(playlistItems)
     .where(and(isNotNull(playlistItems.ytSong), live))
     .limit(1)
     .get();
-  if (anyEntry === undefined) return 0;
+  if (anyEntry === undefined) return null;
   const entries = db
     .select({
       itemId: playlistItems.id,
@@ -731,11 +749,10 @@ export const linkPlaylistEntries = (
     .where(and(isNotNull(playlistItems.ytSong), live))
     .orderBy(asc(playlistItems.playlistId), ...IN_ORDER)
     .all()
-    .flatMap(({ itemId, playlistId, ytSong }) => {
-      const stored = ytSong === null ? null : decode(playlistId, ytSong);
-      return stored === null ? [] : [{ itemId, playlistId, song: stored.song }];
-    });
-  if (entries.length === 0) return 0;
+    .flatMap(({ itemId, playlistId, ytSong }) =>
+      ytSong === null ? [] : [{ itemId, playlistId, ytSong }],
+    );
+  if (entries.length === 0) return null;
   const columns = {
     id: tracks.id,
     title: tracks.title,
@@ -766,21 +783,90 @@ export const linkPlaylistEntries = (
     )
     .all()
     .flatMap(({ playlistId, trackId }) => (trackId === null ? [] : [{ playlistId, trackId }]));
-  const { links, drops } = playlistEntryLinks(entries, library, held);
-  for (const { itemId, trackId } of links) {
+  return { entries, library, held };
+};
+
+/**
+ * Which of [read]'s entries become Library songs and which are removed
+ * (Core's `playlistEntryLinkSteps`), each entry's stored song decoded in a
+ * step of its own.
+ */
+export function* playlistLinkSteps(
+  read: PlaylistLinkRead | null,
+): Generator<void, PlaylistEntryLinks> {
+  if (read === null) return { links: [], drops: [] };
+  const entries: StreamedPlaylistEntry[] = [];
+  for (const { itemId, playlistId, ytSong } of read.entries) {
+    const stored = decode(playlistId, ytSong);
+    if (stored !== null) entries.push({ itemId, playlistId, song: stored.song });
+    yield;
+  }
+  return yield* playlistEntryLinkSteps(entries, read.library, read.held);
+}
+
+/**
+ * Writes what linking found ([found]), stamped at [now]; returns how many
+ * entries it changed. An entry already a Library song isn't written again,
+ * and none becomes a song that has since left the Library or lost its file.
+ * Run it inside the caller's transaction.
+ */
+export const writePlaylistLinks = (
+  db: LibraryDatabase,
+  now: number,
+  found: PlaylistEntryLinks,
+): number => {
+  const { playlistItems, tracks } = schema;
+  const linked = [...new Set(found.links.map(({ trackId }) => trackId))];
+  const kept = new Set<number>();
+  for (let i = 0; i < linked.length; i += LINK_CHUNK) {
+    for (const { id } of db
+      .select({ id: tracks.id })
+      .from(tracks)
+      .where(and(inArray(tracks.id, linked.slice(i, i + LINK_CHUNK)), hasFile))
+      .all())
+      kept.add(id);
+  }
+  let changed = 0;
+  for (const { itemId, trackId } of found.links) {
+    if (!kept.has(trackId)) continue;
     db.update(playlistItems)
       .set({ trackId, ytSong: null, ...stamped(playlistItems, now) })
-      .where(and(eq(playlistItems.id, itemId), isNull(playlistItems.trackId)))
+      .where(and(eq(playlistItems.id, itemId), isNull(playlistItems.trackId), live))
       .run();
+    changed++;
   }
-  for (let i = 0; i < drops.length; i += LINK_CHUNK) {
+  for (let i = 0; i < found.drops.length; i += LINK_CHUNK) {
     db.update(playlistItems)
       .set({ deleted: true, ...stamped(playlistItems, now) })
-      .where(inArray(playlistItems.id, drops.slice(i, i + LINK_CHUNK)))
+      .where(
+        and(
+          inArray(playlistItems.id, found.drops.slice(i, i + LINK_CHUNK)),
+          isNull(playlistItems.trackId),
+        ),
+      )
       .run();
   }
-  return links.length + drops.length;
+  return changed + found.drops.length;
 };
+
+/**
+ * Turns the YT Music and unavailable entries of every playlist that the
+ * Library tracks [trackIds] (just downloaded; the whole Library when not
+ * given, as a scan does once it ends) positively are (Core's
+ * `playlistEntryLinks`) into those tracks, in the same place; an entry whose
+ * track its playlist already holds is removed instead (a tombstone). Each
+ * change is stamped at [now]. Returns how many entries it changed. Does
+ * nothing (one small query) while no playlist holds such an entry. Run it
+ * inside the caller's transaction. A scan's whole-library link runs these
+ * same parts apart (`readPlaylistLinks`, `playlistLinkSteps`,
+ * `writePlaylistLinks`), its read and steps off the JS thread's long holds.
+ */
+export const linkPlaylistEntries = (
+  db: LibraryDatabase,
+  now: number,
+  trackIds?: readonly number[],
+): number =>
+  writePlaylistLinks(db, now, finishSteps(playlistLinkSteps(readPlaylistLinks(db, trackIds))));
 
 /**
  * Settles what Try Again's [answered] searches found in [playlistId] (Core's

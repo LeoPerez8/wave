@@ -315,6 +315,7 @@ const scanned = async (
 
 test("scan saves 100-file slices, one transaction per turn with artwork first, keeping moved identity and a retry after interruption", async () => {
   const { saveScanBatch } = await import("./startupJobs.ts");
+  const hundred = { size: () => 100, took: () => {}, now: () => 0 };
   const fixture = await createFastAgainFixture();
   try {
     const store = await loadLibraryStore(root, fixture.db);
@@ -346,7 +347,14 @@ test("scan saves 100-file slices, one transaction per turn with artwork first, k
     });
     const controller = new AbortController();
     const saving = runTestPromise(
-      saveScanBatch(counted, { missing: [old], read, isIndexed: () => false }, [art], turn),
+      saveScanBatch(
+        counted,
+        { missing: [old], read, isIndexed: () => false },
+        [art],
+        turn,
+        undefined,
+        hundred,
+      ),
       { signal: controller.signal },
     );
     // Reconciliation's CPU steps take their own turns before any write.
@@ -371,6 +379,8 @@ test("scan saves 100-file slices, one transaction per turn with artwork first, k
         },
         [],
         Effect.void,
+        undefined,
+        hundred,
       ),
     );
     assert.equal(retried.count, 250);
@@ -387,6 +397,55 @@ test("scan saves 100-file slices, one transaction per turn with artwork first, k
       saveScanBatch(counted, { missing: [], read: [], isIndexed: () => true }, [art], Effect.void),
     );
     assert.deepEqual(saves, [{ tracks: 0, artwork: 1, moves: 0 }]);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("a slow scan save makes the next slice smaller, so each stays near Core's slice budget", async () => {
+  const { saveScanBatch, scanSavePace } = await import("./startupJobs.ts");
+  const { SCAN_SLICE_BUDGET_MS } = await import("@wave/core");
+  const fixture = await createFastAgainFixture();
+  try {
+    const store = await loadLibraryStore(root, fixture.db);
+    const read = await Promise.all(
+      Array.from({ length: 60 }, (_, i) => scanned(`/Paced/${i}.mp3`, `Paced ${i}`)),
+    );
+    // Each file takes a quarter of the budget to save, on this clock.
+    let clock = 0;
+    const sizes: number[] = [];
+    const slow: typeof store = {
+      ...store,
+      saveBatch: (tracks, artwork, moves = [], options) => {
+        sizes.push(tracks.length);
+        clock += (tracks.length * SCAN_SLICE_BUDGET_MS) / 4;
+        return store.saveBatch(tracks, artwork, moves, options);
+      },
+    };
+    const pace = scanSavePace(() => clock, 20);
+    runTestSync(
+      saveScanBatch(
+        slow,
+        { missing: [], read, isIndexed: () => false },
+        [],
+        Effect.void,
+        undefined,
+        pace,
+      ),
+    );
+    // 20 files take 150 ms: the next slice is the 4 the budget holds, then it keeps within a
+    // file of the budget (a 5-file slice takes 37.5 ms, a 4-file one exactly the budget).
+    assert.equal(sizes[0], 20);
+    assert.equal(sizes[1], 4);
+    assert.ok(
+      sizes.slice(1).every((size) => size === 4 || size === 5),
+      `${sizes}`,
+    );
+    assert.equal(
+      sizes.reduce((sum, size) => sum + size, 0),
+      60,
+    );
+    assert.ok(pace.size() === 4 || pace.size() === 5);
   } finally {
     fixture.close();
   }

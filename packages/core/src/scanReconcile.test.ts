@@ -1,7 +1,19 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { reconcileScan, scanEnd, scanSaveSlices, type IndexedFile } from "./index.ts";
+import {
+  SCAN_SAVE_SLICE,
+  SCAN_SLICE_BUDGET_MS,
+  SCAN_ANNOUNCE_MS,
+  nextScanSaveSlice,
+  reconcileScan,
+  scanAnnounceDue,
+  scanEnd,
+  scanSaveSliceSteps,
+  scanSaveSlices,
+  scanTimingsLogLine,
+  type IndexedFile,
+} from "./index.ts";
 
 const MUSIC = "/storage/emulated/0/Music";
 
@@ -197,5 +209,120 @@ describe("what a scan does once it ends", () => {
       linkEntries: true,
       announce: "removed",
     });
+  });
+});
+
+describe("nextScanSaveSlice", () => {
+  test("a slice that took four times the budget is followed by one a quarter its size", () => {
+    assert.equal(nextScanSaveSlice({ files: 40, ms: SCAN_SLICE_BUDGET_MS * 4 }), 10);
+  });
+});
+
+describe("nextScanSaveSlice when the phone is fast", () => {
+  test("a quick slice is followed by one at most twice its size", () => {
+    assert.equal(nextScanSaveSlice({ files: 10, ms: 1 }), 20);
+  });
+
+  test("a slice never grows past the fixed slice size", () => {
+    assert.equal(nextScanSaveSlice({ files: 80, ms: 1 }), SCAN_SAVE_SLICE);
+  });
+
+  test("a slice that took no measurable time grows like a quick one", () => {
+    assert.equal(nextScanSaveSlice({ files: 10, ms: 0 }), 20);
+  });
+});
+
+describe("nextScanSaveSlice when each save costs the same however few files it holds", () => {
+  test("a slice under the budget is followed by a bigger one, though halving it wouldn't halve its time", () => {
+    // 17 ms of a transaction's own cost and 0.5 ms a file: one file's 17.5 ms fits the budget.
+    assert.equal(nextScanSaveSlice({ files: 1, ms: 17.5 }), 2);
+  });
+
+  test("slices grow file by file to the budget, then keep within a file of it", () => {
+    const fixedCost = (files: number) => 17 + files * 3;
+    const sizes: number[] = [];
+    let files = 1;
+    for (let slice = 0; slice < 40; slice++) {
+      files = nextScanSaveSlice({ files, ms: fixedCost(files) });
+      sizes.push(files);
+    }
+    // 4 files take 29 ms, 5 take 32: no slice goes over the budget by more than a file's cost.
+    assert.deepEqual(sizes.slice(0, 4), [2, 3, 4, 5]);
+    assert.deepEqual([...new Set(sizes.slice(3))].sort(), [4, 5]);
+  });
+});
+
+test("however slow one file is to save, the next slice still saves one", () => {
+  assert.equal(nextScanSaveSlice({ files: 1, ms: 400 }), 1);
+});
+
+test("each slice's size is asked for once the slice before it was taken, so its timing can set it", () => {
+  const changes = reconcileScan({
+    missing: [],
+    read: ["1", "2", "3", "4", "5", "6"].map((n) => song(`New/${n}.mp3`, { title: n })),
+    isIndexed: () => false,
+  });
+  const sizes = [1, 3, 2];
+  const taken: string[][] = [];
+  for (const slice of scanSaveSliceSteps(changes, () => sizes[taken.length]!))
+    taken.push(slice.tracks.map((track) => track.title));
+  assert.deepEqual(taken, [["1"], ["2", "3", "4"], ["5", "6"]]);
+});
+
+describe("scanTimingsLogLine", () => {
+  test("says how long the scan took and where its time went, without a path or a title", () => {
+    assert.equal(
+      scanTimingsLogLine({
+        kind: "incremental",
+        found: 3000,
+        read: 200,
+        saved: 200,
+        batches: 2,
+        ms: 41_250,
+        savingMs: 1_830,
+        longestSaveMs: 46,
+        announcingMs: 420,
+        longestAnnounceMs: 230,
+        slice: 12,
+      }),
+      "Scan done (incremental): 3000 found, 200 read, 200 saved in 2 batches, 41.3 s; " +
+        "saves 1.8 s (longest 46 ms, slice now 12), Library changes 0.4 s (longest 230 ms), " +
+        "waiting 39.0 s",
+    );
+  });
+
+  test("a scan that saved nothing says so", () => {
+    assert.equal(
+      scanTimingsLogLine({
+        kind: "full",
+        found: 0,
+        read: 0,
+        saved: 0,
+        batches: 0,
+        ms: 300,
+        savingMs: 0,
+        longestSaveMs: 0,
+        announcingMs: 0,
+        longestAnnounceMs: 0,
+        slice: 25,
+      }),
+      "Scan done (full): 0 found, 0 read, 0 saved in 0 batches, 0.3 s; " +
+        "saves 0.0 s (longest 0 ms, slice now 25), Library changes 0.0 s (longest 0 ms), " +
+        "waiting 0.3 s",
+    );
+  });
+});
+
+describe("scanAnnounceDue", () => {
+  test("a scan's first saved batch is announced at once", () => {
+    assert.equal(scanAnnounceDue({ lastAt: undefined, now: 5 }), true);
+  });
+
+  test("a batch saved soon after an announcement waits for the next one", () => {
+    assert.equal(scanAnnounceDue({ lastAt: 1000, now: 1000 + SCAN_ANNOUNCE_MS - 1 }), false);
+  });
+
+  test("a batch saved once the pause is over is announced, with the ones that waited", () => {
+    assert.equal(scanAnnounceDue({ lastAt: 1000, now: 1000 + SCAN_ANNOUNCE_MS }), true);
   });
 });
