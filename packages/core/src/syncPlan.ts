@@ -5,6 +5,7 @@
  * missing songs, and the ids imported plays carry.
  */
 
+import { finishSteps } from "./buildSteps.ts";
 import { normalizeTrack, type LibraryTrack } from "./library.ts";
 import { findRecording, joinLibraries } from "./sync.ts";
 import type { SyncSong, SyncSongFields } from "./syncWire.ts";
@@ -267,16 +268,37 @@ export interface MissingSongsPlan {
  * another phone, and one the account no longer has (removed there, or never
  * sent up) leaves. Tracks with a file are never touched.
  */
-export const planMissingSongs = (input: {
+export const planMissingSongs = (input: MissingSongsInput): MissingSongsPlan =>
+  finishSteps(planMissingSongsSteps(input));
+
+/** What `planMissingSongs` plans from. */
+export interface MissingSongsInput {
   readonly account: readonly { readonly recordingKey: string; readonly song: SyncSongFields }[];
   readonly held: readonly string[];
   readonly missing: readonly ShownMissingSong[];
-}): MissingSongsPlan => {
-  const live = new Map(input.account.map(({ recordingKey, song }) => [recordingKey, song]));
+}
+
+/** Songs `planMissingSongsSteps` goes through a step. */
+const PLANNED_AT_ONCE = 250;
+
+/**
+ * `planMissingSongs` in steps of a few hundred songs, for work that runs in slices: a
+ * new phone's first sync plans the whole account's songs.
+ */
+export function* planMissingSongsSteps(
+  input: MissingSongsInput,
+): Generator<void, MissingSongsPlan> {
+  const live = new Map<string, SyncSongFields>();
+  for (const [at, { recordingKey, song }] of input.account.entries()) {
+    live.set(recordingKey, song);
+    if ((at + 1) % PLANNED_AT_ONCE === 0) yield;
+  }
   const held = new Set(input.held);
+  yield;
   const save: MissingSongSave[] = [];
   const leave: number[] = [];
-  for (const shown of input.missing) {
+  for (const [at, shown] of input.missing.entries()) {
+    if ((at + 1) % PLANNED_AT_ONCE === 0) yield;
     const song = shown.recordingKey === null ? undefined : live.get(shown.recordingKey);
     if (song === undefined || shown.recordingKey === null) {
       leave.push(shown.id);
@@ -293,7 +315,8 @@ export const planMissingSongs = (input: {
     });
   }
   const retagged = save.length > 0;
-  for (const { recordingKey, song } of input.account) {
+  for (const [at, { recordingKey, song }] of input.account.entries()) {
+    if ((at + 1) % PLANNED_AT_ONCE === 0) yield;
     if (held.has(recordingKey)) continue;
     save.push({
       trackId: null,
@@ -304,7 +327,7 @@ export const planMissingSongs = (input: {
     });
   }
   return { save, leave, prune: retagged || leave.length > 0 };
-};
+}
 
 /**
  * The id of a song's [ordinal]-th play imported from BlackPlayer (from 1, in

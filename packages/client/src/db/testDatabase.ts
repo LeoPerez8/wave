@@ -171,6 +171,36 @@ export const traceQueriesAsync = async <A>(
   return { result, queries: trace.queries() };
 };
 
+/**
+ * Counts what [db] runs until `stop`: the statements and the rows they stepped through, with
+ * no plans, cheap enough to read between each step of a long run (a whole sync).
+ */
+export const countStatements = (db: TestDatabase) => {
+  const client = clients.get(db);
+  if (client === undefined) throw new Error("not a test database");
+  const counted = { statements: 0, rows: 0 };
+  const prepare = client.prepare;
+  client.prepare = (text, params) => {
+    const statement = prepare.call(client, text, params);
+    let ran = false;
+    const step = statement.step;
+    statement.step = () => {
+      if (!ran) counted.statements += 1;
+      ran = true;
+      const row = step.call(statement);
+      if (row) counted.rows += 1;
+      return row;
+    };
+    return statement;
+  };
+  return {
+    stop: (): void => {
+      client.prepare = prepare;
+    },
+    counted: (): { readonly statements: number; readonly rows: number } => ({ ...counted }),
+  };
+};
+
 /** Records the statements [db] runs until `stop`; `queries` reads them with their plans. */
 const startTrace = (db: TestDatabase) => {
   const client = clients.get(db);
