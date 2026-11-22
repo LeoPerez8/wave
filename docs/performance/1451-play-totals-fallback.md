@@ -51,5 +51,5 @@ The totals are equal both ways, and equal to the synchronous read's.
 
 ## Not checked here
 
-No block over 50 ms on the emulator. That needs the seeded emulator check (#1457), and the
-phone's timings need a phone.
+No block over 50 ms on the emulator. The seeded emulator (#1457) can check it, but that check
+hasn't run on this change. The phone's timings need a phone.
