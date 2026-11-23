@@ -159,6 +159,20 @@ test("each read is one transaction on its connection, and a connection runs one 
   assert.deepEqual(log, ["c0 BEGIN", "c0 query", "c0 COMMIT", "c0 BEGIN", "c0 COMMIT"]);
 });
 
+test("read connections open on their first read, never when they're made", async () => {
+  // The phone makes them with its main connection, before that connection migrates (#1494).
+  const db = await library();
+  let opened = 0;
+  const reads = readConnections(async () => {
+    opened++;
+    return asyncReadClient(db);
+  });
+  await Promise.resolve();
+  assert.equal(opened, 0);
+  await replayRead(reads, countTracks, () => 0);
+  assert.equal(opened, 1);
+});
+
 test("a failed read rolls back and frees its connection for the next", async () => {
   const db = await library();
   const reads = readConnections(async () => asyncReadClient(db), 1);
