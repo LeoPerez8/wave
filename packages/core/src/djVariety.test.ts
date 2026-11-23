@@ -12,6 +12,7 @@ import {
   djFirstRadioSong,
   djGenreTile,
   djVarietyCandidates,
+  djVarietyMoodPools,
   magicDjFirstSong,
   magicArtistKey,
   magicSignal,
@@ -193,6 +194,20 @@ describe("Artist variety in a DJ session", () => {
     for (const name of strangers) assert.equal(count(artists, name), 1, name);
     // Nobody else is left, so the closest artist repeats.
     assert.equal(count(artists, "Picked"), 3);
+  });
+
+  test("High credits no artist of a mood's matched songs again in its unknown fill", () => {
+    const started = session({ variety: "high" });
+    const names = (songs: readonly RankedRadioSong[]) =>
+      songs.map((song) => song.song!.artists.join(" & "));
+    const matched = { seed: [songBy("Picked"), songBy("Near A")], liked: [] };
+    const unknown = { seed: [songBy("Picked"), songBy("Near B"), songBy("Far A")], liked: [] };
+    const unfilled = djVarietyMoodPools(started, graph, matched, unknown, 0);
+    assert.deepEqual(names(unfilled.matched.seed), ["Picked", "Near A"]);
+    assert.deepEqual(names(unfilled.unknown.seed), ["Near B", "Far A"]);
+    // Filled, the unknown pool repeats a matched song's artist only once nobody else is left.
+    const filled = djVarietyMoodPools(started, graph, matched, unknown, 10);
+    assert.deepEqual(names(filled.unknown.seed), ["Near B", "Far A", "Picked"]);
   });
 
   test("a batch isn't left empty when the graph knows nobody", () => {

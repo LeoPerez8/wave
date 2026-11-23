@@ -238,6 +238,13 @@ describe("a long task names the screen or section rendering in it", () => {
     assert.deepEqual(lines, ["JS blocked 60 ms on /search by scan"]);
   });
 
+  test("a frozen screen shown again without a render names it as shown again (#1490)", () => {
+    const { log, lines } = setup("/playlists");
+    log.shownAgain("tab:playlists", 1040, 150);
+    log.longTask(1000, 190);
+    assert.deepEqual(lines, ["JS blocked 190 ms on /playlists by showing tab:playlists again"]);
+  });
+
   test("a render span alone writes nothing: only the runtime's long task says the thread was held", () => {
     const { log, lines } = setup("/");
     log.renderRan("Home", 1000, 400);

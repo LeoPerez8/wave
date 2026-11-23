@@ -244,6 +244,14 @@ export const speedSummaryLine = (window: TimingWindow): string | null => {
   return parts.join("; ");
 };
 
+/**
+ * Android's Back came while JS still held a touch: its end never reached JS (Android drops the
+ * events of a view removed under the finger, as a slot's long press into edit mode does). No
+ * finger is on Wave's screen when Back comes, so what Back begins counts from the press (#1488).
+ */
+export const lostTouchEndLine = (ageMs: number): string =>
+  `Back pressed ${timingDuration(ageMs)} after a touch whose end Wave never heard: Back counts from itself`;
+
 /** Count late callbacks, not inferred display slots. The interval comes from the display. */
 export const lateFrame = (gapMs: number, intervalMs: number): boolean =>
   Number.isFinite(gapMs) &&

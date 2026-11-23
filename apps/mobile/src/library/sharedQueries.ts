@@ -6,6 +6,7 @@ import {
 } from "@wave/core";
 import type * as Effect from "effect/Effect";
 import { useCallback, useContext, useEffect, useSyncExternalStore } from "react";
+import { AppState } from "react-native";
 
 import { firstContentShown, inSlice } from "@/lib/backgroundWork";
 import { CoveredByNowPlaying, useScreenSight } from "@/lib/screenSight";
@@ -81,6 +82,11 @@ const registry = createLibraryQueries<unknown>({
   },
 });
 
+// Kept queries wait out plays while Wave is on screen and catch up once it isn't (#1489).
+const away = (state: string | null | undefined): boolean => state === "background";
+registry.away(away(AppState.currentState));
+AppState.addEventListener("change", (state) => registry.away(away(state)));
+
 registerPerfMeta("libraryQueries", () => ({ ...registry.stats() }));
 
 const NONE = (): undefined => undefined;
@@ -131,7 +137,10 @@ export const useLibraryQuery = <A>(query: LibraryQuery<A> | null, initial: A): A
 /**
  * Holds [query] ready in memory for the screens that will show it (#1352,
  * Core's `keep`): read now, re-read as the Library changes whether or not a
- * screen shows it, so opening one draws its result and reads nothing.
+ * screen shows it, so opening one draws its result and reads nothing. Plays
+ * are the exception (`waitsForSight`, #1489): a screen showing it reads them
+ * when it comes into sight, starting from the kept result, and Wave reads
+ * them once it leaves the screen.
  * Returns the release. What's kept, and its bound, is `readyScreens.ts`'s.
  */
 export const keepLibraryQuery = <A>(query: LibraryQuery<A>): (() => void) => {

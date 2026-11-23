@@ -12,12 +12,14 @@ describe("glassLayers", () => {
       blur: 24,
       refraction: 12,
       coalesce: false,
+      opaque: false,
     });
     assert.deepEqual(glassLayers(TUNED, "live"), {
       backdrop: true,
       blur: 30,
       refraction: 6,
       coalesce: false,
+      opaque: false,
     });
   });
 
@@ -28,18 +30,21 @@ describe("glassLayers", () => {
       blur: 30,
       refraction: 0,
       coalesce: false,
+      opaque: false,
     });
     assert.deepEqual(glassLayers(TUNED, "record"), {
       backdrop: true,
       blur: 0,
       refraction: 0,
       coalesce: false,
+      opaque: false,
     });
     assert.deepEqual(glassLayers(TUNED, "off"), {
       backdrop: false,
       blur: 0,
       refraction: 0,
       coalesce: false,
+      opaque: false,
     });
   });
 
@@ -49,6 +54,7 @@ describe("glassLayers", () => {
       blur: 30,
       refraction: 6,
       coalesce: true,
+      opaque: false,
     });
   });
 });

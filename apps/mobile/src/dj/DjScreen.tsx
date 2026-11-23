@@ -71,6 +71,7 @@ import { magicQueueGrid } from "@/home/homeOpening";
 import type { MixIndexes } from "@/home/mixKnown";
 import { recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { savedYtArtist } from "@/home/ytArtistPage";
+import { useRenderCost } from "@/lib/renderCost";
 import { useScreenContent } from "@/lib/screenTiming";
 import { freeTurn, inSlice } from "@/lib/backgroundWork";
 import { router } from "@/lib/timingRouter";
@@ -601,6 +602,8 @@ function PlaceholderTile({ size, fontScale }: { size: number; fontScale: number 
  * when the result is a new first tile.
  */
 export function DjScreen() {
+  // Its own state renders it without the stack's screen span (#1490).
+  useRenderCost("DjScreen");
   const { strings } = useLocalisation();
   const insets = useSafeAreaInsets();
   const { width, fontScale } = useWindowDimensions();

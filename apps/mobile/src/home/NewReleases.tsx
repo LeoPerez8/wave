@@ -246,7 +246,7 @@ export function NewReleases({ title, selection }: { title: string; selection: Ho
       control={<PlayReleases title={title} cards={cards} />}
       selecting={selection.selecting}
     >
-      <CoverRow>
+      <CoverRow staged>
         {cards.map((r) => (
           <ReleaseTile
             key={r.key}

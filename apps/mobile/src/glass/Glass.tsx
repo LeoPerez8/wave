@@ -18,8 +18,8 @@ import { NativeGlassView } from "./waveGlass";
  * blur + tint + rim fallback. Below API 33 the native view drops the
  * refraction shader by itself. A perf build launched with a glass probe drops
  * the layers the probe names (Core `glassLayers`, issue #316). A phone whose
- * frame times measured weak draws it simpler: half the blur, no refraction
- * (`./phoneEffects`, #1357).
+ * frame times measured weak (`./phoneEffects`, #1357) draws the opaque surface
+ * old Android draws, recording no backdrop (#1491).
  */
 
 type Props = {
@@ -38,7 +38,8 @@ export function GlassSurface({
   glass,
 }: Props & { glass: GlassSettings }) {
   const surface = useThemeColor("surface");
-  if (!CAN_BLUR) {
+  const layers = glassLayers(glass, glassProbe(), phoneEffects());
+  if (!CAN_BLUR || layers.opaque) {
     return (
       <View
         pointerEvents="none"
@@ -47,7 +48,6 @@ export function GlassSurface({
       />
     );
   }
-  const layers = glassLayers(glass, glassProbe(), phoneEffects());
   return (
     <NativeGlassView
       pointerEvents="none"

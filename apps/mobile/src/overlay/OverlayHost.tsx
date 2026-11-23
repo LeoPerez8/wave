@@ -33,6 +33,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { OnOverlayCard } from "@/catalog/Hairline";
 import { BACKDROP, useFloatingChromeHeight } from "@/chrome/chrome";
 import { Glass } from "@/glass/Glass";
+import { timingBackPressed } from "@/lib/timing";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import {
@@ -99,7 +100,10 @@ export function OverlayHost({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (entries.length === 0) return undefined;
     // Screen handlers also dismiss the live top card through `addScreenBackHandler`.
-    const subscription = BackHandler.addEventListener("hardwareBackPress", dismissTopOverlay);
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      timingBackPressed();
+      return dismissTopOverlay();
+    });
     return () => subscription.remove();
   }, [entries.length]);
 

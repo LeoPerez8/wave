@@ -10,11 +10,16 @@ import {
   magicBatchLoading,
   magicPickDue,
   magicPickEnded,
+  magicStandInDue,
+  magicStandInHeld,
+  magicStandInSteps,
+  mapSteps,
   magicQueueDislikedEntries,
   magicBatchRadios,
   magicDjFirstSong,
   djFirstLibrarySong,
   djLibraryCandidates,
+  magicLibraryMapperSteps,
   magicLibrarySongs,
   magicListSeedSongs,
   completeMagicRadioBatch,
@@ -150,6 +155,19 @@ export const useMagicQueueLabel = (): string | null => {
  * null while none is.
  */
 const picking = makeExternalStore<MagicSession["id"] | null>(null);
+
+const queueLengths = makeQueueLengths();
+
+/**
+ * A queue song's length, as far as it's known, for how early the Magic Queue
+ * asks for its next batch (Core's `MAGIC_ASK_AHEAD`): from its queue track,
+ * else as `queueLengths` read it.
+ */
+const songLength = (trackId: string): number | null => {
+  const tracks = queueTracks.get();
+  const known = tracks.get(trackId)?.durationMs;
+  return known != null && known > 0 ? known : queueLengths.of(trackId, tracks);
+};
 const failedBatch = makeExternalStore<MagicSession["id"] | null>(null);
 /** The id of the session whose last pick found no songs (`magicBatchEmpty`, `magicPickDue`); null while none has. */
 const emptyBatch = makeExternalStore<MagicSession["id"] | null>(null);
@@ -167,6 +185,7 @@ const batchFailedNow = (): boolean =>
     failedBatch.get(),
     queueState.get(),
     sleepTimerState.get(),
+    songLength,
   );
 const subscribeBatchFailed = subscribeAll(queueState, magicSession, failedBatch, sleepTimerState);
 
@@ -175,7 +194,13 @@ export const useMagicBatchFailed = (): boolean =>
 
 const emptySeedNow = (): string | null => {
   const session = activeMagicSession();
-  return magicBatchEmpty(session, emptyBatch.get(), queueState.get(), sleepTimerState.get())
+  return magicBatchEmpty(
+    session,
+    emptyBatch.get(),
+    queueState.get(),
+    sleepTimerState.get(),
+    songLength,
+  )
     ? (session?.seed.title ?? null)
     : null;
 };
@@ -189,7 +214,13 @@ export const useMagicBatchEmptySeed = (): string | null =>
   useSyncExternalStore(subscribeBatchEmpty, emptySeedNow);
 
 const batchLoadingNow = (): boolean =>
-  magicBatchLoading(activeMagicSession(), picking.get(), queueState.get(), sleepTimerState.get());
+  magicBatchLoading(
+    activeMagicSession(),
+    picking.get(),
+    queueState.get(),
+    sleepTimerState.get(),
+    songLength,
+  );
 
 const subscribeBatchLoading = subscribeAll(queueState, magicSession, picking, sleepTimerState);
 
@@ -208,6 +239,7 @@ const footnoteNow = (): boolean =>
     { picking: picking.get(), failed: failedBatch.get(), empty: emptyBatch.get() },
     queueState.get(),
     sleepTimerState.get(),
+    songLength,
   );
 const subscribeFootnote = subscribeAll(
   queueState,
@@ -231,8 +263,6 @@ let batchStart: { readonly id: string; readonly at: number; readonly first: bool
 
 /** How many of the seed songs' video ids a session keeps: its song radio reads the first. */
 const SEED_VIDEO_IDS = 5;
-
-const queueLengths = makeQueueLengths();
 
 /** Whether the player has started [state]'s current entry, including after restoration. */
 const playingCurrentEntry = (state: QueueState): boolean => {
@@ -676,7 +706,13 @@ export const startDjMagicQueue = (
         sliders: magicSessionSliders(drawnLibrary.session, discoverSliders.get()),
       },
     );
-    const initialLibraryBatch = completeMagicRadioBatch(drawnLibrary.session, rankedLibrary, []);
+    // A mood's unknown songs only fill what its matched ones can't, so a known match leads.
+    const initialLibraryBatch = completeMagicRadioBatch(
+      drawnLibrary.session,
+      rankedLibrary.matched,
+      [],
+      () => ({ seed: rankedLibrary.unknown, liked: [] }),
+    );
     const initialLibraryOrder = new Map(
       initialLibraryBatch.trackIds.map((trackId, index) => [trackId, index] as const),
     );
@@ -909,6 +945,9 @@ export const layer = Layer.effectDiscard(
       });
     };
 
+    /** The session whose batch is being completed and queued, past its radios' wait. */
+    let completing: MagicSession["id"] | null = null;
+
     /**
      * Picks [wanted]'s next batch, weighing every signal so far, and adds it
      * while still wanted; gives how it ended, for the app log (`magicBatchLine`).
@@ -954,12 +993,14 @@ export const layer = Layer.effectDiscard(
         const session = activeMagicSession();
         if (
           session?.id !== wanted.id ||
-          !wantsMagicBatch(session, queueState.get(), sleepTimerState.get())
+          !wantsMagicBatch(session, queueState.get(), sleepTimerState.get(), songLength)
         )
           return { kind: "dropped" } satisfies MagicBatchOutcome;
         const candidates = yt.candidates;
         const likedCandidates = yt.likedCandidates;
-        // Completed in slices (#1448): the Close fill re-ranks every candidate.
+        // Completed in slices (#1448): the Close fill re-ranks every candidate. No stand-in
+        // joins meanwhile, so the batch saves a session that holds every song queued.
+        completing = session.id;
         const batch = yield* runSteps(
           completeMagicRadioBatchSteps(session, candidates, likedCandidates, yt.fallback),
           freeTurnEffect,
@@ -980,13 +1021,21 @@ export const layer = Layer.effectDiscard(
         save(batch.session);
         const songs = batchQueueTracks(batch, library.songs);
         yield* queue.dispatch({ type: "append", trackIds: songs.map((song) => song.id) }, songs);
+        completing = null;
         appended(songs.length);
         yield* cacheYtCoversInBackground(batchStreams(batch)).pipe(
           Effect.provideService(YtMusic, ytMusic),
           Effect.provideService(Player, player),
         );
         return { kind: "appended", songs: songs.length } satisfies MagicBatchOutcome;
-      }).pipe(namedWork("Magic Queue batch"));
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (completing === wanted.id) completing = null;
+          }),
+        ),
+        namedWork("Magic Queue batch"),
+      );
 
     /**
      * Picks a batch for the session under way if it wants one
@@ -998,7 +1047,7 @@ export const layer = Layer.effectDiscard(
       if (wanted?.id === pendingDjFirstBatch) return Effect.succeed(false);
       if (
         wanted === null ||
-        !magicPickDue(wanted, emptyBatch.get(), queueState.get(), sleepTimerState.get())
+        !magicPickDue(wanted, emptyBatch.get(), queueState.get(), sleepTimerState.get(), songLength)
       ) {
         // Marked as picked when the session started, and held back since (an End of Queue timer).
         if (wanted !== null && picking.get() === wanted.id) picking.set(null);
@@ -1058,6 +1107,7 @@ export const layer = Layer.effectDiscard(
               activeMagicSession(),
               queueState.get(),
               sleepTimerState.get(),
+              songLength,
             );
             picking.set(ended.picking);
             again = ended.again || askedMeanwhile;
@@ -1077,6 +1127,87 @@ export const layer = Layer.effectDiscard(
         let again = yield* pickOnce;
         while (again) again = yield* pickOnce;
       }),
+    );
+
+    /** Whether the session under way wants Library songs to stand in for its late batch now. */
+    const standInDue = (session: MagicSession | null): session is MagicSession =>
+      session !== null &&
+      completing !== session.id &&
+      magicStandInDue(session, queueState.get(), {
+        picking: picking.get() === session.id,
+        sleepTimer: sleepTimerState.get(),
+      });
+
+    /**
+     * Queues a few Library songs while the batch is late and the queue's last
+     * song plays (Core's `magicStandIn`), so the music doesn't stop without
+     * network: songs that fit the mood and Artist variety, read from the phone
+     * alone. The batch, once it lands, joins after them. Asked at every queue
+     * change and whenever a pick ends; it does nothing while it runs.
+     */
+    const standIn = oneAtATime(
+      Effect.gen(function* () {
+        // A save or a queue change while the Library was read starts the pick over.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const session = activeMagicSession();
+          if (!standInDue(session)) return;
+          const state = queueState.get();
+          yield* freeTurnEffect;
+          const latest = recommendationSnapshot.peek();
+          const library = latest.library ?? startingLibrary;
+          const mood = session.dj?.mood ?? null;
+          const moodFeatures =
+            mood === null
+              ? new Map()
+              : yield* store.djLibraryMoodFeatures().pipe(Effect.orElseSucceed(() => new Map()));
+          // The whole Library, so in slices (#1448).
+          const playable = yield* runSteps(filterSteps(library.songs, songHasFile), freeTurnEffect);
+          const mapLibrary = yield* runSteps(
+            magicLibraryMapperSteps(library.artists),
+            freeTurnEffect,
+          );
+          const songs = yield* runSteps(mapSteps(playable, mapLibrary), freeTurnEffect);
+          const picked = yield* runSteps(
+            magicStandInSteps(session, state, songs, {
+              picking: picking.get() === session.id,
+              sleepTimer: sleepTimerState.get(),
+              moodFeatures,
+              disliked: dislikedSongsNow(),
+              graph: latest.graph,
+              taste: latestTasteProfile(),
+            }),
+            freeTurnEffect,
+          );
+          if (picked === null) return;
+          if (activeMagicSession() !== session || queueState.get() !== state) continue;
+          if (!standInDue(session)) return;
+          const wanted = new Set(picked.trackIds);
+          const rows = new Map<string, SongRow>();
+          for (const song of playable)
+            if (wanted.has(String(song.id))) rows.set(String(song.id), song);
+          const tracks = picked.trackIds.flatMap((id) => {
+            const row = rows.get(id);
+            return row !== undefined && songHasFile(row) ? [toQueueTrack(row)] : [];
+          });
+          yield* queue.dispatch({ type: "append", trackIds: picked.trackIds }, tracks);
+          // Saved once they're queued, onto the latest session: one saved meanwhile (a signal
+          // learned) keeps what it learned.
+          const held = magicSession.get();
+          if (held?.id === session.id) save(magicStandInHeld(held, picked.trackIds));
+          appLog(
+            "info",
+            "MagicQueue",
+            `Library stand-in: ${tracks.length} songs while the batch is late (picking: ${picking.get() === session.id})`,
+          );
+          return;
+        }
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.sync(() => {
+            appLog("warn", "MagicQueue", `Library stand-in failed: ${String(Cause.squash(cause))}`);
+          }),
+        ),
+      ),
     );
 
     const continueOrdinaryQueue = oneAtATime(
@@ -1181,12 +1312,18 @@ export const layer = Layer.effectDiscard(
         followQueueEnd();
         return;
       }
-      if (wantsMagicBatch(session, state) && batchStart?.id !== session.id)
+      if (wantsMagicBatch(session, state, null, songLength) && batchStart?.id !== session.id)
         batchStart = { id: session.id, at: Date.now(), first: session.used.length <= 1 };
       const { added, removed } = magicQueueEdits(session, before, state);
       teach("added", added);
       teach("removed", removed);
       fork(fill);
+      if (standInDue(session)) fork(standIn, "Magic Queue stand-in");
+    };
+
+    /** A pick ended without its batch, or the session's state moved: a stand-in may be due. */
+    const onPickEnded = (): void => {
+      if (standInDue(activeMagicSession())) fork(standIn, "Magic Queue stand-in");
     };
 
     yield* Effect.acquireRelease(
@@ -1205,6 +1342,7 @@ export const layer = Layer.effectDiscard(
           subscribeConnectivity(askAgain),
           subscribeYtMusicEnabled(askAgain),
           retryBatch.subscribe(() => fork(fill)),
+          picking.subscribe(onPickEnded),
           discoverSliders.subscribe(askAgain),
           onPlayEnded((end) => {
             const kind = magicPlaySignal(end);

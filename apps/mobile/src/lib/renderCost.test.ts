@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Activity, createElement, type ComponentProps, type ReactNode } from "react";
+import {
+  Activity,
+  createElement,
+  type ComponentProps,
+  type ComponentType,
+  type ReactNode,
+} from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
 import { loadWithStubs, nativeStubs, stubModule } from "../perf/renderHarness.ts";
@@ -11,12 +17,13 @@ const SPANS_KEY = "__waveRenderSpans";
 const spans = (): string[] =>
   ((globalThis as unknown as Record<string, string[]>)[SPANS_KEY] ??= []);
 
-const [{ useRenderCost }] = await loadWithStubs<[typeof import("./renderCost.tsx")]>(
+const [{ RenderCost, useRenderCost }] = await loadWithStubs<[typeof import("./renderCost.tsx")]>(
   [import.meta.resolve("./renderCost.tsx")],
   {
     ...nativeStubs(),
     "./backgroundWork": stubModule(`
       export const renderRan = (name) => (globalThis.${SPANS_KEY} ??= []).push(name);
+      export const shownAgain = (name) => (globalThis.${SPANS_KEY} ??= []).push("shown again " + name);
     `),
     "@/perf/perf": stubModule(`
       export const PERF_ENABLED = false;
@@ -63,6 +70,27 @@ test("a hidden screen shown again without rendering reports no span", async () =
     await act(() => renderer!.update(shell("hidden")));
     await act(() => renderer!.update(shell("visible")));
     assert.deepEqual(spans(), []);
+  } finally {
+    await act(() => renderer?.unmount());
+  }
+});
+
+test("a timed screen shown again without rendering reports that it showed again (#1490)", async () => {
+  spans().length = 0;
+  const screen = createElement(
+    RenderCost as ComponentType<{ name: string }>,
+    { name: "tab:playlists" },
+    createElement("text", null, "Playlists"),
+  );
+  let renderer: ReactTestRenderer | undefined;
+  await act(() => {
+    renderer = create(shell("visible", screen));
+  });
+  try {
+    assert.deepEqual(spans(), ["tab:playlists"]);
+    await act(() => renderer!.update(shell("hidden", screen)));
+    await act(() => renderer!.update(shell("visible", screen)));
+    assert.deepEqual(spans(), ["tab:playlists", "shown again tab:playlists"]);
   } finally {
     await act(() => renderer?.unmount());
   }

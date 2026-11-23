@@ -144,28 +144,42 @@ describe("glassLayers on a weak phone", () => {
       blur: 24,
       refraction: 12,
       coalesce: false,
+      opaque: false,
     });
   });
 
-  test("simple effects blur at half the radius and drop the refraction", () => {
-    assert.deepEqual(glassLayers(DEFAULT_GLASS_SETTINGS, "live", "simple"), {
+  test("simple effects draw the glass as the opaque surface, recording no backdrop (#1491)", () => {
+    const opaque = { backdrop: false, blur: 0, refraction: 0, coalesce: false, opaque: true };
+    assert.deepEqual(glassLayers(DEFAULT_GLASS_SETTINGS, "live", "simple"), opaque);
+    assert.deepEqual(
+      glassLayers({ blur: 40, refraction: 20, tint: 10, rim: 100 }, "live", "simple"),
+      opaque,
+    );
+  });
+
+  test("a probe still draws the simple glass, so one build compares it with the opaque surface", () => {
+    // `blur` is the simple glass #1357 shipped: half the radius, rounded up, and no refraction.
+    assert.deepEqual(glassLayers(DEFAULT_GLASS_SETTINGS, "blur", "simple"), {
       backdrop: true,
       blur: 12,
       refraction: 0,
       coalesce: false,
+      opaque: false,
     });
-    assert.deepEqual(
-      glassLayers({ ...DEFAULT_GLASS_SETTINGS, blur: 15 }, "live", "simple").blur,
-      8,
-    );
-  });
-
-  test("a probe still peels its layers off the simple glass", () => {
+    assert.equal(glassLayers({ ...DEFAULT_GLASS_SETTINGS, blur: 15 }, "blur", "simple").blur, 8);
+    assert.deepEqual(glassLayers(DEFAULT_GLASS_SETTINGS, "coalesced", "simple"), {
+      backdrop: true,
+      blur: 12,
+      refraction: 0,
+      coalesce: true,
+      opaque: false,
+    });
     assert.deepEqual(glassLayers(DEFAULT_GLASS_SETTINGS, "off", "simple"), {
       backdrop: false,
       blur: 0,
       refraction: 0,
       coalesce: false,
+      opaque: false,
     });
   });
 });

@@ -18,9 +18,13 @@ const react = JSON.stringify(import.meta.resolve("react"));
 const core = JSON.stringify(import.meta.resolve("@wave/core"));
 const reanimated = JSON.stringify(countingReanimated);
 
-/** What the stubs count and hold: each song row's renders by row key, and the queue shown. */
+/**
+ * What the stubs count and hold: each song row's renders by row key, the queue shown, and the
+ * props Up Next last gave Legend List.
+ */
 interface Scope {
   rows: string[];
+  list?: Record<string, unknown>;
   queue: { state: QueueState | null; listeners: Set<() => void> };
 }
 const SCOPE_KEY = "__waveQueueMoveRenders";
@@ -72,10 +76,14 @@ const [{ UpNextList }] = await loadWithStubs<[typeof import("./QueueView.tsx")]>
     "@legendapp/list/reanimated": stubModule(`
       import { createElement, Fragment } from ${react};
       // Every row drawn, as Legend List draws the ones on screen: each item through renderItem.
-      export const AnimatedLegendList = ({ data, keyExtractor, renderItem, ListFooterComponent }) =>
-        createElement("view", null,
+      const scope = ${shared};
+      export const AnimatedLegendList = (props) => {
+        scope.list = props;
+        const { data, keyExtractor, renderItem, ListFooterComponent } = props;
+        return createElement("view", null,
           data.map(item => createElement(Fragment, { key: keyExtractor(item) }, renderItem({ item }))),
           ListFooterComponent);
+      };
     `),
     "@/songs/SongRow": stubModule(`
       import { createElement } from ${react};
@@ -157,6 +165,25 @@ const show = (state: QueueState) => {
   for (const listener of scope().queue.listeners) listener();
 };
 
+/**
+ * Frames on demand: Up Next mounts its rows a few a frame, so a test runs the frames itself.
+ */
+let waiting: FrameRequestCallback[] = [];
+globalThis.requestAnimationFrame = (callback) => waiting.push(callback);
+globalThis.cancelAnimationFrame = (id: number | null | undefined) => {
+  if (id != null) waiting[id - 1] = () => {};
+};
+const nextFrame = async () => {
+  const due = waiting;
+  waiting = [];
+  await act(() => due.forEach((callback) => callback(0)));
+};
+/** Runs frames until Up Next has nothing left to mount. */
+const drawAll = async () => {
+  while (waiting.length > 0) await nextFrame();
+};
+const listRows = () => (scope().list?.data as unknown[] | undefined)?.length ?? 0;
+
 const rowsFor = async (change: () => void): Promise<string[]> => {
   scope().rows = [];
   await act(change);
@@ -172,6 +199,7 @@ test("a position change re-renders only the Queue rows whose state changed (#144
     );
   });
   try {
+    await drawAll();
     assert.equal(scope().rows.length, 9, "Up Next's nine rows drew");
 
     // The next song plays: every Up Next row moves up a place.
@@ -211,6 +239,51 @@ test("a position change re-renders only the Queue rows whose state changed (#144
     const rowView = row.findByType("view" as never);
     const [, style] = rowView.props.style as [unknown, { transform: { translateY: number }[] }];
     assert.equal(style.transform[0]!.translateY, 0, "the row's place followed the queue");
+  } finally {
+    await act(() => renderer?.unmount());
+  }
+});
+
+test("Up Next shows from its start: the list keeps no visible-content anchor (#1488)", async () => {
+  // Legend List's default anchor (Android's maintainVisibleContentPosition) kept the end of a
+  // long Up Next in place when the Queue first showed, so the list jumped to its last rows and
+  // drew every row twice.
+  show(queueAt(0));
+  let renderer: ReactTestRenderer | undefined;
+  await act(() => {
+    renderer = create(
+      createElement(UpNextList, { bottomInset: 0, ground: {} as never, paneTop: 0 }),
+    );
+  });
+  try {
+    assert.equal(scope().list?.maintainVisibleContentPosition, false);
+  } finally {
+    await act(() => renderer?.unmount());
+  }
+});
+
+test("a long Up Next shows its first rows at once, then a few more a frame until it's whole (#1488)", async () => {
+  // Mounting a screenful of song rows in one task blocked JS for 115 ms as the Queue showed.
+  const keys = [...Array(60).keys()].map((n) => `k${n}`);
+  show(queueAt(0, keys));
+  let renderer: ReactTestRenderer | undefined;
+  await act(() => {
+    renderer = create(
+      createElement(UpNextList, { bottomInset: 0, ground: {} as never, paneTop: 0 }),
+    );
+  });
+  try {
+    const seen = [listRows()];
+    while (waiting.length > 0) {
+      await nextFrame();
+      seen.push(listRows());
+    }
+    console.log(`[1488] list rows per frame: ${JSON.stringify(seen)}`);
+    assert.equal(seen[0], 5, "the first showing draws the bar and four songs");
+    // Past a screenful, the rest join at once: the list mounts none of them below the screen.
+    for (let at = 1; at < seen.length && seen[at]! < 60; at++)
+      assert.ok(seen[at]! - seen[at - 1]! <= 4, "each frame adds at most four songs");
+    assert.equal(seen.at(-1), 60, "every row of Up Next ends up in the list");
   } finally {
     await act(() => renderer?.unmount());
   }

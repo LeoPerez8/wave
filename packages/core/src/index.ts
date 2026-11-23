@@ -975,11 +975,13 @@ export {
   warmTab,
 } from "./tabScreens.ts";
 export type { TabScreens } from "./tabScreens.ts";
+export { rememberPathStates } from "./pathStates.ts";
 export {
   LIBRARY_QUERY_LIMITS,
   createLibraryQueries,
   longListBurstPace,
   libraryChangeAffects,
+  waitsForSight,
 } from "./libraryQueries.ts";
 export type {
   LibraryChange,
@@ -1073,6 +1075,7 @@ export {
   searchSongTap,
   streamedSongMagicStart,
   wantsMagicBatch,
+  MAGIC_ASK_AHEAD,
 } from "./magicQueue.ts";
 export type {
   MagicArtistKey,
@@ -1086,6 +1089,7 @@ export type {
   MagicSeedSong,
   MagicSession,
   MagicSongRadioSeed,
+  MagicSongLength,
   MagicSignal,
   MagicSignalKind,
   MagicSong,
@@ -2079,6 +2083,8 @@ export {
   knownGain,
   MEASURE_AHEAD,
   measureCandidates,
+  MEASURE_PAGE,
+  nextMeasureCandidates,
   albumGain,
   entryGain,
   readNormalizeVolume,
@@ -2885,6 +2891,7 @@ export {
   lateFrame,
   hitchLine,
   missedFramesLine,
+  lostTouchEndLine,
   type TimingFrames,
   timingDuration,
   timingBudgetExceeded,
@@ -3443,7 +3450,16 @@ export {
 export type { DjDiscovery, DjPopularity, DjSettings, DjVariety } from "./djSettings.ts";
 export { djAdjustGroups, djAdjustSheetHeight, djAdjustSheetSwipeCloses } from "./djAdjust.ts";
 export type { DjAdjustGroup, DjAdjustOption, DjAdjustSheetSwipe } from "./djAdjust.ts";
-export { djFirstRadioSong, djVarietyCandidates, djVarietyCandidatesSteps } from "./djVariety.ts";
+export {
+  DJ_FIRST_UNKNOWN_WAIT_MS,
+  djFirstRadioSong,
+  djFirstSongPick,
+  djVarietyCandidates,
+  djVarietyCandidatesSteps,
+  djVarietyMoodPools,
+  djVarietyMoodPoolsSteps,
+} from "./djVariety.ts";
+export type { DjVarietyMoodPools } from "./djVariety.ts";
 export type { DjCandidatePools } from "./djVariety.ts";
 export {
   DJ_REMEMBERED_SETTING,
@@ -3462,8 +3478,24 @@ export {
   djToggleMood,
 } from "./djSettings.ts";
 export type { DjFilter, DjMood } from "./djSettings.ts";
-export { djMedianAudioFeatures, djMoodRanked, djMoodRankedSteps, djMoodScore } from "./djMood.ts";
-export type { DjAudioFeatures, DjMoodRankable } from "./djMood.ts";
+export {
+  DJ_MOOD_HIGH_ENERGY,
+  DJ_MOOD_LOW_ENERGY,
+  DJ_MOOD_SAD_VALENCE,
+  djMedianAudioFeatures,
+  djMoodFiltered,
+  djMoodFilteredSteps,
+  djMoodFit,
+} from "./djMood.ts";
+export type { DjAudioFeatures, DjMoodFit, DjMoodPools, DjMoodRankable } from "./djMood.ts";
+export {
+  MAGIC_STAND_IN_SONGS,
+  magicStandIn,
+  magicStandInDue,
+  magicStandInHeld,
+  magicStandInSteps,
+} from "./magicStandIn.ts";
+export type { MagicStandIn, MagicStandInOptions } from "./magicStandIn.ts";
 export { djAudioFeaturesByIsrc, isrcFromTag } from "./isrcTag.ts";
 export {
   DJ_NEW_RELEASE_BOOST,
@@ -3500,6 +3532,7 @@ export {
   listMounts,
   pagerMounts,
   stagedMounts,
+  topDownMounts,
   type ListMountsInput,
   type PagerMountsInput,
   type StagedMountsInput,

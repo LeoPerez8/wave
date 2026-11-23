@@ -18,6 +18,7 @@ import Animated from "react-native-reanimated";
 import { CAPTION_TOP, titleLineHeight } from "@/catalog/cards/CardParts";
 import { CELL, grid } from "@/catalog/grid";
 import { useChromeInset } from "@/chrome/chrome";
+import { useRenderCost } from "@/lib/renderCost";
 import { useListScrollable } from "@/motion/heldTouch";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -200,6 +201,8 @@ export function ArrangeablePlaylists({
   lead,
   renderPlaylist,
 }: Props) {
+  // A scroll or a drag renders the list here, without PlaylistsList (#1490).
+  useRenderCost("ArrangeablePlaylists");
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const columns = layout === "grid" ? 2 : 1;

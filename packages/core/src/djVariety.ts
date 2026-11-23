@@ -4,6 +4,7 @@
  */
 import { artistNeighbourhood, type ArtistGraph } from "./artistGraph.ts";
 import { djRadioSongAllowed } from "./dj.ts";
+import type { DjMoodFit } from "./djMood.ts";
 import type { DjVariety } from "./djSettings.ts";
 import { isDisliked, NO_DISLIKES, type DislikedSongs } from "./dislikes.ts";
 import type { GenreProfileOf } from "./genreAffinity.ts";
@@ -25,7 +26,7 @@ export interface DjCandidatePools<S> {
 }
 
 /** How many hops from the selected artists each step allows. */
-const REACH: { readonly [K in DjVariety]: number } = { low: 0, medium: 1, high: 2 };
+export const REACH: { readonly [K in DjVariety]: number } = { low: 0, medium: 1, high: 2 };
 
 /** Where an artist the graph doesn't reach within two hops stands. */
 const OUTSIDE = 3;
@@ -35,7 +36,7 @@ const OUTSIDE = 3;
  * selected artists in [graph]: 0 for a selected one, `OUTSIDE` for one the
  * graph doesn't reach within two hops.
  */
-const djArtistHops = (
+export const djArtistHops = (
   session: MagicSession,
   graph: ArtistGraph | null,
 ): ((artists: readonly string[]) => number) => {
@@ -94,13 +95,61 @@ export function* djVarietyCandidatesSteps<S extends RankedRadioSong>(
   pools: DjCandidatePools<S>,
   size = 0,
 ): Generator<void, DjCandidatePools<S>> {
+  return yield* varietySteps(session, graph, pools, size, new Set());
+}
+
+/** A mood's matched and unknown candidates, each as the pools a batch is picked from. */
+export interface DjVarietyMoodPools<S> {
+  readonly matched: DjCandidatePools<S>;
+  readonly unknown: DjCandidatePools<S>;
+}
+
+/**
+ * `djVarietyCandidates` over a mood's [matched] candidates and then its
+ * [unknown] ones (`djMoodFiltered`) in one pass: the unknown ones fill a
+ * batch behind the matched ones, so High credits none of the matched songs'
+ * artists again in them while another can play. Each is filled to [size].
+ */
+export const djVarietyMoodPools = <S extends RankedRadioSong>(
+  session: MagicSession,
+  graph: ArtistGraph | null,
+  matched: DjCandidatePools<S>,
+  unknown: DjCandidatePools<S>,
+  size = 0,
+): DjVarietyMoodPools<S> =>
+  finishSteps(djVarietyMoodPoolsSteps(session, graph, matched, unknown, size));
+
+/** `djVarietyMoodPools`, a step per candidate and pass, for a background slice (#1448). */
+export function* djVarietyMoodPoolsSteps<S extends RankedRadioSong>(
+  session: MagicSession,
+  graph: ArtistGraph | null,
+  matched: DjCandidatePools<S>,
+  unknown: DjCandidatePools<S>,
+  size = 0,
+): Generator<void, DjVarietyMoodPools<S>> {
+  const held = new Set<string>();
+  const matchedPools = yield* varietySteps(session, graph, matched, size, held);
+  const unknownPools =
+    unknown.seed.length + unknown.liked.length === 0
+      ? unknown
+      : yield* varietySteps(session, graph, unknown, size, held);
+  return { matched: matchedPools, unknown: unknownPools };
+}
+
+/** `djVarietyCandidatesSteps`, crediting the artists in [held] as already in the batch. */
+function* varietySteps<S extends RankedRadioSong>(
+  session: MagicSession,
+  graph: ArtistGraph | null,
+  pools: DjCandidatePools<S>,
+  size: number,
+  held: Set<string>,
+): Generator<void, DjCandidatePools<S>> {
   if (session.dj === undefined) return pools;
   const hopsOf = djArtistHops(session, graph);
   const eligible = yield* magicRadioEligibleSteps(session, [...pools.seed, ...pools.liked]);
   const extras = new Set(yield* magicLearnedExtrasSteps(pools.seed, pools.liked));
   const reach = REACH[session.dj.variety];
   const once = session.dj.variety === "high";
-  const held = new Set<string>();
   function* pool(
     songs: readonly S[],
     usable: (song: S) => boolean,
@@ -152,8 +201,10 @@ export function* djVarietyCandidatesSteps<S extends RankedRadioSong>(
  * (`magicRadioEligibleSteps`), on a family tile's radio of its family
  * (`djRadioSongAllowed`), and within the Artist variety's reach of the
  * selected artists in [graph] (Low: a selected artist's song). With none in
- * reach, the nearest, as the batch fills (`djVarietyCandidates`). Null when
- * the page has no song the batch could take.
+ * reach, the nearest, as the batch fills (`djVarietyCandidates`). With a
+ * mood, [moodFit] (`djMoodFit`) picks among the songs it matches first, and
+ * among the ones it can't tell only when the page has no match; it never
+ * picks an off song. Null when the page has no song the batch could take.
  */
 export const djFirstRadioSong = <S extends YtAlbumSong & { readonly video?: boolean }>(
   session: MagicSession,
@@ -163,16 +214,20 @@ export const djFirstRadioSong = <S extends YtAlbumSong & { readonly video?: bool
     profileOf,
     graph = null,
     disliked = NO_DISLIKES,
+    moodFit = () => "matched",
   }: {
     readonly profileOf: GenreProfileOf;
     readonly graph?: ArtistGraph | null;
     readonly disliked?: DislikedSongs;
+    /** The session's mood's verdict on a song; every song matches with no mood. */
+    readonly moodFit?: (song: S) => DjMoodFit;
   },
 ): S | null => {
   const exclude = magicRadioExclusions(session, songs);
   const reach = session.dj === undefined ? OUTSIDE : REACH[session.dj.variety];
   const hopsOf = djArtistHops(session, graph);
-  let nearest: { readonly song: S; readonly hops: number } | null = null;
+  /** The best song for each verdict: the first in reach, else the nearest. */
+  const best = new Map<DjMoodFit, { readonly song: S; readonly hops: number }>();
   for (const song of songs) {
     if (
       song.video === true ||
@@ -181,9 +236,46 @@ export const djFirstRadioSong = <S extends YtAlbumSong & { readonly video?: bool
       !djRadioSongAllowed(session, radioId, song.artists, profileOf, graph)
     )
       continue;
-    const hops = hopsOf(song.artists.map(magicArtistKey));
-    if (hops <= reach) return song;
-    if (nearest === null || hops < nearest.hops) nearest = { song, hops };
+    const fit = moodFit(song);
+    if (fit === "off") continue;
+    const hops = Math.max(reach, hopsOf(song.artists.map(magicArtistKey)));
+    const held = best.get(fit);
+    if (held === undefined || hops < held.hops) best.set(fit, { song, hops });
+    if (fit === "matched" && hops === reach) return song;
   }
-  return nearest?.song ?? null;
+  return (best.get("matched") ?? best.get("unknown"))?.song ?? null;
+};
+
+/**
+ * How long a DJ session with a mood waits for a radio song the cached
+ * features say matches it before it starts with one they can't tell.
+ */
+export const DJ_FIRST_UNKNOWN_WAIT_MS = 1500;
+
+/**
+ * Which song starts a DJ session with a mood while its radios load
+ * (`djFirstRadioSong` picks each radio's): the first [matched] one at once.
+ * With none yet, the first song of [unknown] mood starts once
+ * `DJ_FIRST_UNKNOWN_WAIT_MS` has passed ([waitedMs]), a radio has [answered]
+ * from the network, or every radio has ([settled]), so a cold features cache
+ * doesn't hold the music back. Null once every radio answered with no song to
+ * start; undefined while it should wait.
+ */
+export const djFirstSongPick = <S>({
+  matched,
+  unknown,
+  waitedMs,
+  answered,
+  settled,
+}: {
+  readonly matched: S | null;
+  readonly unknown: S | null;
+  readonly waitedMs: number;
+  readonly answered: boolean;
+  readonly settled: boolean;
+}): S | null | undefined => {
+  if (matched !== null) return matched;
+  if (unknown !== null && (settled || answered || waitedMs >= DJ_FIRST_UNKNOWN_WAIT_MS))
+    return unknown;
+  return settled ? null : undefined;
 };
