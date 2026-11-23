@@ -299,18 +299,27 @@ export const downloadRunPanelLine = (
     timeLeft,
     paused,
     throttled,
-  }: { readonly timeLeft: number | null; readonly paused: boolean; readonly throttled: boolean },
+    held = false,
+  }: {
+    readonly timeLeft: number | null;
+    readonly paused: boolean;
+    readonly throttled: boolean;
+    /** The owner paused downloads (`DownloadPause`): Paused, whatever YouTube's pause says. */
+    readonly held?: boolean;
+  },
   language: AppLanguage = "en",
 ): string =>
   withTime(
     downloadRunLines(counts, language).detail,
-    throttled
-      ? null
-      : paused
-        ? catalogueOf(language).downloadNotice.paused
-        : timeLeft === null
-          ? null
-          : downloadTimeLeftLine(timeLeft, language),
+    held
+      ? catalogueOf(language).downloadNotice.paused
+      : throttled
+        ? null
+        : paused
+          ? catalogueOf(language).downloadNotice.paused
+          : timeLeft === null
+            ? null
+            : downloadTimeLeftLine(timeLeft, language),
   );
 
 /**
@@ -333,14 +342,16 @@ export const downloadRunNotice = (
   overall: DownloadRunCounts | null,
   timeLeft: number | null,
   language: AppLanguage = "en",
+  { held = false }: { readonly held?: boolean } = {},
 ): DownloadRunNotice | null => {
   if (overall === null || overall.total <= 1) return null;
   const lines = downloadRunLines(overall, language);
+  const text = catalogueOf(language).downloadNotice;
   return {
-    title: catalogueOf(language).downloadNotice.title(lines.count),
+    title: held ? text.pausedTitle(lines.count) : text.title(lines.count),
     text: withTime(
       lines.detail,
-      timeLeft === null ? null : downloadTimeLeftLine(timeLeft, language),
+      held || timeLeft === null ? null : downloadTimeLeftLine(timeLeft, language),
     ),
     finished: overall.done + overall.failed,
     total: overall.total,

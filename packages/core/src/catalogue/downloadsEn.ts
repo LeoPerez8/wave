@@ -60,4 +60,14 @@ export const downloadsEn = {
     replace: "Replace",
     notNow: "Not now",
   },
+  /** Settings › Downloads' run panel: Pause or Resume every download, and Cancel All with its question. */
+  run: {
+    pause: "Pause",
+    resume: "Resume",
+    cancelAll: "Cancel All",
+    cancelAllTitle: (count: number): string =>
+      `Cancel ${n(count)} ${plural("en", count, { one: "download", other: "downloads" })}?`,
+    cancelAllMessage: "Songs already downloaded stay, and failed songs stay in the failed list.",
+    keepDownloading: "Keep Downloading",
+  },
 };
