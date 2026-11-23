@@ -139,6 +139,44 @@ class PlaybackService : MediaLibraryService() {
     }
   }
 
+  private val runtimeLetGo = Runnable { runtimeHold.pauseOver() }
+
+  /** Holds Wave's JS runtime while the player plays, so the Magic Queue fills with the screen off. */
+  private val runtimeHold = PlaybackRuntimeHold(
+    object : RuntimeHoldHost {
+      override fun hold() {
+        WaveLog.i(JsRuntime.LOG_TAG, "Playback holds the JS runtime")
+        JsRuntime.ensureStarted(this@PlaybackService, PlaybackRuntimeHold.OWNER)
+      }
+
+      override fun letGo() {
+        WaveLog.i(JsRuntime.LOG_TAG, "Playback let the JS runtime go")
+        JsRuntime.release(PlaybackRuntimeHold.OWNER)
+      }
+
+      override fun scheduleLetGo(delayMs: Long) {
+        main.removeCallbacks(runtimeLetGo)
+        main.postDelayed(runtimeLetGo, delayMs)
+      }
+
+      override fun cancelLetGo() {
+        main.removeCallbacks(runtimeLetGo)
+      }
+    },
+  )
+
+  /** Whether [player] plays, or would but for buffering: what [runtimeHold] holds the runtime for. */
+  private fun playsOrWantsTo(player: Player) =
+    player.playWhenReady &&
+      (player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_BUFFERING)
+
+  /** Tells [runtimeHold] when the session's player starts and stops playing. */
+  private val runtimeListener = object : Player.Listener {
+    override fun onEvents(player: Player, events: Player.Events) {
+      if (events.containsAny(*RUNTIME_EVENTS)) runtimeHold.update(playsOrWantsTo(player))
+    }
+  }
+
   /** Keeps the resume snapshot up to date with the player. */
   private val resumeListener = object : Player.Listener {
     override fun onEvents(player: Player, events: Player.Events) {
@@ -347,7 +385,9 @@ class PlaybackService : MediaLibraryService() {
 
   /** The session's player's listeners, which move with the role at a crossfade's handoff. */
   private val sessionListeners: List<Player.Listener>
-    get() = listOf(sleepTimerListener, resumeListener, streamListener, crossfadeListener)
+    get() = listOf(
+      sleepTimerListener, resumeListener, streamListener, crossfadeListener, runtimeListener,
+    )
 
   /**
    * Makes [player] the session's player: audio focus, becoming noisy, the wake
@@ -366,6 +406,8 @@ class PlaybackService : MediaLibraryService() {
     player.setWakeMode(if (streams(player.currentMediaItem)) C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL)
     sessionListeners.forEach(player::addListener)
     exoPlayer = player
+    // A crossfade's handoff gives the session a player that already plays.
+    runtimeHold.update(playsOrWantsTo(player))
     // A crossfade's handoff changes the song without a transition on this player.
     AutoModes.state.playing(player.currentMediaItem?.mediaId)
   }
@@ -785,6 +827,7 @@ class PlaybackService : MediaLibraryService() {
     browsers.clear()
     JsRuntime.release()
     JsRuntime.release(RESUME_JS_OWNER)
+    runtimeHold.stop()
     main.removeCallbacks(sleepCheck)
     main.removeCallbacks(resumePositionSave)
     main.removeCallbacks(crossfadeTick)
@@ -1126,6 +1169,12 @@ class PlaybackService : MediaLibraryService() {
     )
 
     const val RESUME_SAVE_INTERVAL_MS = 10_000L
+
+    /** Player changes that start or stop playing, for [runtimeHold]. */
+    val RUNTIME_EVENTS = intArrayOf(
+      Player.EVENT_PLAY_WHEN_READY_CHANGED,
+      Player.EVENT_PLAYBACK_STATE_CHANGED,
+    )
 
     val MUSIC: AudioAttributes = AudioAttributes.Builder()
       .setUsage(C.USAGE_MEDIA)
