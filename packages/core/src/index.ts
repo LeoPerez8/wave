@@ -3035,6 +3035,8 @@ export {
   uniqueGeniusLyricsHits,
 } from "./geniusLyricsSearch.ts";
 export type { GeniusLyricsSearchRequest, GeniusLyricsSearchState } from "./geniusLyricsSearch.ts";
+export { isLyricPhraseQuery, queryNamesSong, songNamedByQuery } from "./titleArtistQuery.ts";
+export type { NamedSong } from "./titleArtistQuery.ts";
 export { GENIUS_LOADING_NOTE_DELAY_MS, geniusLoadingNote } from "./geniusLoading.ts";
 export type { GeniusInsightState } from "./geniusLoading.ts";
 export {

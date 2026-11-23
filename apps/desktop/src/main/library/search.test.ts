@@ -110,6 +110,21 @@ test("songs found by their lyrics follow, leaving out those Songs shows, and lea
     assert.deepEqual(searchSongIds(db, "pink moon").at(-1), ids.get("Harvest"));
   }));
 
+test("a song's title with its artist puts that song on top and isn't a lyric phrase", () =>
+  inLibrary((db) => {
+    seed(db);
+    for (const query of ["pink moon nick drake", "nick drake pink moon"]) {
+      const view = searchLibrary(db, query);
+      assert.deepEqual([view.top?.kind, view.top?.row.title], ["song", "Pink Moon"]);
+      assert.equal(view.lyricsFirst, false);
+      assert.equal(view.namesSong, true);
+    }
+    assert.equal(searchLibrary(db, "pink moon").namesSong, false);
+    const phrase = searchLibrary(db, "under a pink moon");
+    assert.equal(phrase.namesSong, false);
+    assert.equal(phrase.lyricsFirst, true);
+  }));
+
 test("a search follows the Library: songs added, renamed playlists and lists read again", () =>
   inLibrary((db) => {
     seed(db);

@@ -42,6 +42,8 @@ import {
   type TrackItem,
 } from "@/playback/actionTargets";
 import {
+  namedSongOnTop,
+  namesTopSong,
   noLibraryResultsRow,
   RESULT_LIMIT,
   resultRows,
@@ -146,17 +148,17 @@ export default function SearchScreen() {
     () => (find === null ? NO_TRACKS : heldTracks(holding.held, find, trackId)),
     [holding.held, find],
   );
-  const results = useMemo(
-    () =>
-      index?.search(deferredQuery, {
-        limit: RESULT_LIMIT,
-        skip:
-          downloads.size === 0
-            ? undefined
-            : (hit) => hit.kind === "song" && downloads.has(hit.song.id),
-      }) ?? null,
-    [index, deferredQuery, downloads],
-  );
+  // A query naming a Library song by its title and artist has that song on top (#1470).
+  const results = useMemo(() => {
+    const found = index?.search(deferredQuery, {
+      limit: RESULT_LIMIT,
+      skip:
+        downloads.size === 0
+          ? undefined
+          : (hit) => hit.kind === "song" && downloads.has(hit.song.id),
+    });
+    return found === undefined ? null : namedSongOnTop(found, deferredQuery);
+  }, [index, deferredQuery, downloads]);
   const libraryEmpty = results !== null && results.groups.length === 0;
   // YT Music is asked once Online is picked on the toggle beside the field, or on
   // its own when the library has nothing, or as you type with Search online set to
@@ -200,9 +202,12 @@ export default function SearchScreen() {
     library?.songs ?? NO_SONG_ROWS,
     lyricsSkipIds,
   );
+  // Genius isn't asked for a query that names the song on top by its title and artist.
+  const namesSong = results !== null && namesTopSong(results, ytView, deferredQuery);
   const { state: geniusLyrics, retry: retryGeniusLyrics } = useGeniusLyricsSearch(
     deferredQuery,
     index !== null,
+    namesSong,
   );
   // A Library artist on top, with Online, counts the songs their online page adds.
   const topArtist = results?.top?.kind === "artist" ? results.top.artist : null;

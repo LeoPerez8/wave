@@ -122,3 +122,26 @@ for (const [build, { useGeniusLyricsSearch }] of Object.entries(builds)) {
     }
   });
 }
+
+for (const [build, { useGeniusLyricsSearch }] of Object.entries(builds)) {
+  test(`${build}: a query naming the song on top by its title and artist asks Genius nothing`, async () => {
+    requests.length = 0;
+    const seen: ReturnType<typeof useGeniusLyricsSearch>[] = [];
+    function View() {
+      seen.push(useGeniusLyricsSearch("try my luck wayv", true, true));
+      return createElement("view");
+    }
+
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      await act(async () => {
+        renderer = create(createElement(View));
+      });
+      await act(() => new Promise((resolve) => setTimeout(resolve, 360)));
+      assert.equal(requests.length, 0);
+      assert.equal(seen.at(-1)?.state.status, "idle");
+    } finally {
+      await act(() => renderer?.unmount());
+    }
+  });
+}

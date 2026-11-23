@@ -2,11 +2,14 @@ import {
   catalogueOf,
   formatNumber,
   GENIUS_LYRICS_SEARCH_PREVIEW,
+  isLyricPhraseQuery,
   joinArtists,
-  normalizeSearchText,
+  queryNamesSong,
   searchKindOrder,
+  songNamedByQuery,
   uniqueGeniusLyricsHits,
   type AppLanguage,
+  type NamedSong,
 } from "@wave/core";
 import type {
   DiscoverSong,
@@ -200,6 +203,49 @@ const songsOf = (hits: readonly SearchHit[]): SongRow[] =>
 export const songResults = (results: SearchResults<SearchHit>): SongRow[] =>
   songsOf(results.groups.find((group) => group.kind === "song")?.items ?? []);
 
+/** A Library song as naming it by title and artist compares it (Core's `queryNamesSong`). */
+const namedLibrarySong = (song: SongRow): NamedSong => ({
+  title: song.title,
+  artists: [song.artist],
+});
+
+/**
+ * [results] with the Library song [query] names by its title and artist ("try my luck wayV",
+ * Core's `queryNamesSong`) as the top result; unchanged when it names none (#1470).
+ */
+export const namedSongOnTop = (
+  results: SearchResults<SearchHit>,
+  query: string,
+): SearchResults<SearchHit> => {
+  const songs = results.groups.find((group) => group.kind === "song")?.items ?? [];
+  const named = songNamedByQuery(query, songs, (hit) =>
+    hit.kind === "song" ? namedLibrarySong(hit.song) : { title: "", artists: [] },
+  );
+  return named === null || named === results.top ? results : { ...results, top: named };
+};
+
+/** Whether the top result is a song [query] names: the Library's song on top, else YT Music's. */
+const topNamedBy = (
+  results: SearchResults<SearchHit>,
+  yt: YtSectionView<NativeYtSong> | null,
+  query: string,
+): "library" | "yt" | null => {
+  const top = results.top;
+  if (top?.kind === "song" && queryNamesSong(query, namedLibrarySong(top.song))) return "library";
+  const ytTop = yt?.top;
+  return ytTop?.kind === "song" && queryNamesSong(query, ytTop.song) ? "yt" : null;
+};
+
+/**
+ * Whether Search's top result is a song [query] names by its title and artist (#1470): then the
+ * query isn't a lyric phrase, so Lyrics follow Songs and Genius isn't asked.
+ */
+export const namesTopSong = (
+  results: SearchResults<SearchHit>,
+  yt: YtSectionView<NativeYtSong> | null,
+  query: string,
+): boolean => topNamedBy(results, yt, query) !== null;
+
 const NO_YT_ARTISTS: readonly YtArtistCandidate[] = [];
 const NO_YT_ALBUMS: readonly YtArtistAlbum[] = [];
 
@@ -253,7 +299,9 @@ const communityPlaylistRows = (
  * group when the Library has nothing of its kind; groups count them too. A
  * group nothing in which matches the query (YT Music's artists for a song
  * title) comes after those that match. The
- * top result is the Library's best match, else YT Music's best. [placed] are
+ * top result is the Library's best match, else YT Music's best; YT Music's song
+ * the query names by its title and artist (`namesTopSong`) comes before a Library
+ * top result that isn't one, and such a query puts Lyrics after Songs. [placed] are
  * YT Music's songs kept in place for the visit: one whose download finished
  * shows as the Library's song in its row (and [results] leave it out), and
  * one shown as an earlier row's Library file plays from that row.
@@ -310,8 +358,9 @@ export const resultRows = (
         },
   );
   const visibleGenius = uniqueGeniusLyricsHits(geniusLyrics, lyricSongs);
-  const wordCount = normalizeSearchText(query).split(" ").filter(Boolean).length;
-  const lyricsFirst = wordCount >= 3;
+  // A query naming the song on top by its title and artist isn't a lyric phrase (#1470).
+  const named = topNamedBy(results, yt, query);
+  const lyricsFirst = isLyricPhraseQuery(query, named !== null);
   const lyricSection = (): ResultRow[] =>
     lyricRows(
       visibleLyrics,
@@ -365,7 +414,7 @@ export const resultRows = (
     }
   };
   const ytTop = yt?.top ?? null;
-  if (results.top !== null) {
+  if (results.top !== null && named !== "yt") {
     rows.push(
       { type: "heading", key: "heading:top", label: catalogueOf(language).playbackText.topResult },
       hitRow(results.top, true),

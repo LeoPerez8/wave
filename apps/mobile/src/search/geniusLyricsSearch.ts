@@ -13,12 +13,14 @@ import { useWaveSignedIn } from "@/sync/waveSignedIn";
 
 /**
  * Asks once each time a 3+ word query pauses; old replies never replace the current query.
+ * A query naming the song Search shows on top by its title and artist ([namesSong]) asks nothing.
  * A Library re-read (a scan batch, a play count) asks nothing again: the answer is kept, and
  * Search's rows leave out the hits a Lyrics row now shows (`resultRows`).
  */
 export const useGeniusLyricsSearch = (
   query: string,
   libraryReady: boolean,
+  namesSong = false,
 ): { readonly state: GeniusLyricsSearchState; readonly retry: () => void } => {
   const enabled = useGeniusInsightsEnabled();
   const signedIn = useWaveSignedIn();
@@ -30,7 +32,7 @@ export const useGeniusLyricsSearch = (
     setRetryCount((count) => count + 1);
   }, [query]);
   useEffect(() => {
-    const request = geniusLyricsSearchRequest(query, enabled);
+    const request = geniusLyricsSearchRequest(query, enabled, namesSong);
     if (
       !enabled ||
       request === null ||
@@ -67,9 +69,9 @@ export const useGeniusLyricsSearch = (
       live = false;
       clearTimeout(timer);
     };
-  }, [query, libraryReady, enabled, signedIn, isOnline, retryCount]);
+  }, [query, libraryReady, namesSong, enabled, signedIn, isOnline, retryCount]);
 
-  const request = geniusLyricsSearchRequest(query, enabled);
+  const request = geniusLyricsSearchRequest(query, enabled, namesSong);
   let current: GeniusLyricsSearchState;
   if (!enabled) current = { query, status: "disabled" };
   else if (request === null || signedIn === null || !libraryReady)
