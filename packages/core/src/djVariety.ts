@@ -4,6 +4,7 @@
  */
 import { artistNeighbourhood, type ArtistGraph } from "./artistGraph.ts";
 import { djRadioSongAllowed } from "./dj.ts";
+import type { DjMoodFit } from "./djMood.ts";
 import type { DjVariety } from "./djSettings.ts";
 import { isDisliked, NO_DISLIKES, type DislikedSongs } from "./dislikes.ts";
 import type { GenreProfileOf } from "./genreAffinity.ts";
@@ -152,8 +153,10 @@ export function* djVarietyCandidatesSteps<S extends RankedRadioSong>(
  * (`magicRadioEligibleSteps`), on a family tile's radio of its family
  * (`djRadioSongAllowed`), and within the Artist variety's reach of the
  * selected artists in [graph] (Low: a selected artist's song). With none in
- * reach, the nearest, as the batch fills (`djVarietyCandidates`). Null when
- * the page has no song the batch could take.
+ * reach, the nearest, as the batch fills (`djVarietyCandidates`). With a
+ * mood, [moodFit] (`djMoodFit`) picks among the songs it matches first, and
+ * among the ones it can't tell only when the page has no match; it never
+ * picks an off song. Null when the page has no song the batch could take.
  */
 export const djFirstRadioSong = <S extends YtAlbumSong & { readonly video?: boolean }>(
   session: MagicSession,
@@ -163,16 +166,20 @@ export const djFirstRadioSong = <S extends YtAlbumSong & { readonly video?: bool
     profileOf,
     graph = null,
     disliked = NO_DISLIKES,
+    moodFit = () => "matched",
   }: {
     readonly profileOf: GenreProfileOf;
     readonly graph?: ArtistGraph | null;
     readonly disliked?: DislikedSongs;
+    /** The session's mood's verdict on a song; every song matches with no mood. */
+    readonly moodFit?: (song: S) => DjMoodFit;
   },
 ): S | null => {
   const exclude = magicRadioExclusions(session, songs);
   const reach = session.dj === undefined ? OUTSIDE : REACH[session.dj.variety];
   const hopsOf = djArtistHops(session, graph);
-  let nearest: { readonly song: S; readonly hops: number } | null = null;
+  /** The best song for each verdict: the first in reach, else the nearest. */
+  const best = new Map<DjMoodFit, { readonly song: S; readonly hops: number }>();
   for (const song of songs) {
     if (
       song.video === true ||
@@ -181,9 +188,12 @@ export const djFirstRadioSong = <S extends YtAlbumSong & { readonly video?: bool
       !djRadioSongAllowed(session, radioId, song.artists, profileOf, graph)
     )
       continue;
-    const hops = hopsOf(song.artists.map(magicArtistKey));
-    if (hops <= reach) return song;
-    if (nearest === null || hops < nearest.hops) nearest = { song, hops };
+    const fit = moodFit(song);
+    if (fit === "off") continue;
+    const hops = Math.max(reach, hopsOf(song.artists.map(magicArtistKey)));
+    const held = best.get(fit);
+    if (held === undefined || hops < held.hops) best.set(fit, { song, hops });
+    if (fit === "matched" && hops === reach) return song;
   }
-  return nearest?.song ?? null;
+  return (best.get("matched") ?? best.get("unknown"))?.song ?? null;
 };
