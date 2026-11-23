@@ -1024,262 +1024,262 @@ Wave speaks English and Brazilian Portuguese (pt-BR). This spec quotes UI text i
 
 Every translation ticket follows it, so one English term always gets the same Portuguese. Leo approved it unchanged on 29 October 2026 (#789); terms added by later tickets are part of it. A term written as a noun and as an action has both forms; a plural follows the singular. `<x>` stands for a name or a count filled in.
 
-| English                                                                           | pt-BR                                                                           |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| **Spec glossary**                                                                 |                                                                                 |
-| Track                                                                             | Faixa (in the UI a track is a "song": Música)                                   |
-| Song / Songs                                                                      | Música / Músicas                                                                |
-| Graveyard                                                                         | Cemitério                                                                       |
-| Collaborative playlist / Collaborative                                            | Playlist colaborativa / Colaborativa                                            |
-| Member / Members                                                                  | Membro / Membros                                                                |
-| Owner                                                                             | Dono                                                                            |
-| Invite link                                                                       | Link de convite                                                                 |
-| Make Collaborative                                                                | Tornar Colaborativa                                                             |
-| Invite                                                                            | Convidar                                                                        |
-| End Collaboration                                                                 | Encerrar Colaboração                                                            |
-| Leave Playlist                                                                    | Sair da Playlist                                                                |
-| Join                                                                              | Entrar                                                                          |
-| Wave account                                                                      | Conta Wave                                                                      |
-| Recording key                                                                     | Chave de gravação                                                               |
-| Missing song                                                                      | Música ausente                                                                  |
-| non-D (non-downloaded)                                                            | Não baixada                                                                     |
-| Unsearched entry                                                                  | Entrada não buscada                                                             |
-| Unavailable entry                                                                 | Entrada indisponível                                                            |
-| Album / Albums                                                                    | Álbum / Álbuns                                                                  |
-| Credit                                                                            | Crédito                                                                         |
-| Artist / Artists                                                                  | Artista / Artistas                                                              |
-| Primary artist                                                                    | Artista principal                                                               |
-| Go to Artist                                                                      | Ir para o Artista                                                               |
-| Album artist                                                                      | Artista do álbum                                                                |
-| Genre / Genres                                                                    | Gênero / Gêneros                                                                |
-| Style                                                                             | Estilo                                                                          |
-| Folder                                                                            | Pasta                                                                           |
-| Playlist / Playlists                                                              | Playlist / Playlists                                                            |
-| Scan root (Music folders)                                                         | Pasta de música (Pastas de música)                                              |
-| Excluded folder                                                                   | Pasta excluída                                                                  |
-| Library scan                                                                      | Verificação da biblioteca                                                       |
-| Voice note                                                                        | Mensagem de voz                                                                 |
-| Recording (a voice or call recording)                                             | Gravação                                                                        |
-| Skip voice notes and recordings                                                   | Ignorar mensagens de voz e gravações                                            |
-| Play context                                                                      | Contexto de reprodução                                                          |
-| Queue                                                                             | Fila                                                                            |
-| Up Next                                                                           | A Seguir                                                                        |
-| Shuffle kind                                                                      | Tipo de aleatório                                                               |
-| Real Shuffle                                                                      | Aleatório Real                                                                  |
-| Smart Shuffle                                                                     | Aleatório Inteligente                                                           |
-| Even Shuffle                                                                      | Aleatório Equilibrado                                                           |
-| Magic Queue                                                                       | Fila Mágica                                                                     |
-| Taste profile                                                                     | Perfil de gosto                                                                 |
-| Candidate catalog                                                                 | Catálogo de candidatas                                                          |
-| Artist graph                                                                      | Grafo de artistas                                                               |
-| Recommendation snapshot                                                           | Retrato das recomendações                                                       |
-| Play event                                                                        | Evento de reprodução                                                            |
-| Counted play / Plays                                                              | Reprodução contada / Reproduções                                                |
-| Recap                                                                             | Retrospectiva                                                                   |
-| Sidecar                                                                           | Arquivo .lrc ao lado                                                            |
-| Favorite (a starred song) / Favorites                                             | Favorita / Favoritas                                                            |
-| Artist image                                                                      | Imagem do artista                                                               |
-| Artist photo / Artist photos                                                      | Foto do artista / Fotos de artistas                                             |
-| Now Playing                                                                       | Tocando Agora                                                                   |
-| Mini player                                                                       | Miniplayer                                                                      |
-| Toast                                                                             | Aviso                                                                           |
-| Phone ("this phone", "your other phones")                                         | Celular                                                                         |
-| YT Music song                                                                     | Música do YT Music                                                              |
-| Recognize                                                                         | Reconhecer                                                                      |
-| Go to Suggestions                                                                 | Ir para sugestões                                                               |
-| Follow suggestion / Suggested (Settings › Followed Artists)                       | Sugestão para seguir / Sugestões                                                |
-| Suggestion dismissed (toast after a follow suggestion's ×)                        | Sugestão dispensada                                                             |
-| Added to Queue / Added N songs to Queue (toast)                                   | Adicionada à Fila / N músicas adicionadas à Fila                                |
-| Playing Next / Playing N songs next (toast)                                       | Será reproduzida a seguir / N músicas serão reproduzidas a seguir               |
-| **Welcome tour**                                                                  |                                                                                 |
-| Bring your music                                                                  | Traga suas músicas                                                              |
-| Turn On                                                                           | Ativar                                                                          |
-| Turn On YT Music                                                                  | Ativar YT Music                                                                 |
-| From Spotify / From YT Music                                                      | Do Spotify / Do YT Music                                                        |
-| Importing…                                                                        | Importando…                                                                     |
-| Continue / Not Now                                                                | Continuar / Agora Não                                                           |
-| **Tabs**                                                                          |                                                                                 |
-| Home                                                                              | Início                                                                          |
-| Library                                                                           | Biblioteca                                                                      |
-| Search                                                                            | Buscar                                                                          |
-| Playlists, Artists, Albums, Songs, Genres, Favorites (as tabs and Library rows)   | Playlists, Artistas, Álbuns, Músicas, Gêneros, Favoritas                        |
-| **Settings pages**                                                                |                                                                                 |
-| Settings                                                                          | Ajustes                                                                         |
-| Library                                                                           | Biblioteca                                                                      |
-| Appearance                                                                        | Aparência                                                                       |
-| Layout                                                                            | Layout                                                                          |
-| Swipe actions                                                                     | Ações de deslizar                                                               |
-| Playback                                                                          | Reprodução                                                                      |
-| Listening History                                                                 | Histórico de Ouvidas                                                            |
-| Lyrics and tags                                                                   | Letras e tags                                                                   |
-| Downloads                                                                         | Downloads                                                                       |
-| Accounts                                                                          | Contas                                                                          |
-| Developer                                                                         | Developer (dev screen, stays English)                                           |
-| Layout › Home, Library, Playlists                                                 | Início, Biblioteca, Playlists                                                   |
-| Layout › Tab bar                                                                  | Barra de abas                                                                   |
-| Layout › Now Playing                                                              | Tocando Agora                                                                   |
-| **Home sections**                                                                 |                                                                                 |
-| Discover                                                                          | Descobrir                                                                       |
-| In your orbit                                                                     | Na sua órbita                                                                   |
-| From your library                                                                 | Da sua biblioteca                                                               |
-| Community playlists                                                               | Playlists da comunidade                                                         |
-| Recently added                                                                    | Adicionadas recentemente                                                        |
-| Recently played                                                                   | Tocadas recentemente                                                            |
-| Most played                                                                       | Mais tocadas                                                                    |
-| Most played albums                                                                | Álbuns mais tocados                                                             |
-| Most played artists                                                               | Artistas mais tocados                                                           |
-| Favorites                                                                         | Favoritas                                                                       |
-| Stats                                                                             | Estatísticas                                                                    |
-| Edit Home                                                                         | Editar Início                                                                   |
-| **Wave features**                                                                 |                                                                                 |
-| Magic Queue                                                                       | Fila Mágica                                                                     |
-| DJ                                                                                | DJ                                                                              |
-| Magic Queue · from DJ                                                             | Fila Mágica · de DJ                                                             |
-| A queue made from the artists you pick (DJ card)                                  | Uma fila feita dos artistas que você escolher                                   |
-| Pick artists (DJ card)                                                            | Escolher artistas                                                               |
-| Search artists and albums (DJ)                                                    | Buscar artistas e álbuns                                                        |
-| Genre, <family> (DJ tile for screen readers)                                      | Gênero, <família>                                                               |
-| Artists, albums (DJ's search field)                                               | Artistas, álbuns                                                                |
-| No artists or albums match.                                                       | Nenhum artista ou álbum encontrado.                                             |
-| Adjust (DJ)                                                                       | Ajustar                                                                         |
-| Artist variety                                                                    | Variedade de artistas                                                           |
-| Low, Medium, High (Artist variety)                                                | Baixa, Média, Alta                                                              |
-| Music discovery                                                                   | Descoberta de música                                                            |
-| Familiar, Blend, Discover (Music discovery)                                       | Conhecidas, Misturar, Descobrir                                                 |
-| <x>% of the songs are new to you. (DJ, Music discovery's note)                    | <x>% das músicas são novas para você.                                           |
-| Filters (DJ)                                                                      | Filtros                                                                         |
-| Trending                                                                          | Em alta                                                                         |
-| Lesser-known songs                                                                | Músicas pouco conhecidas                                                        |
-| New releases (DJ)                                                                 | Lançamentos                                                                     |
-| Your selection · <x> (DJ)                                                         | Sua seleção · <x>                                                               |
-| Tap artists to start (DJ)                                                         | Toque em artistas para começar                                                  |
-| Remove <x> (a mark of DJ's selection row, for screen readers)                     | Remover <x>                                                                     |
-| New to you (DJ, an artist the Library doesn't have)                               | Novo para você                                                                  |
-| Low variety, Medium variety, High variety (DJ's summary of Adjust)                | Variedade baixa, Variedade média, Variedade alta                                |
-| Discover                                                                          | Descobrir                                                                       |
-| Artist mixes                                                                      | Mixes de artistas                                                               |
-| Genre mixes                                                                       | Mixes de gêneros                                                                |
-| Mix / Download Mix                                                                | Mix / Baixar Mix                                                                |
-| A mix's caption naming its artist or genre                                        | Mix de `<x>`                                                                    |
-| Mostly familiar, More familiar, Balanced, Mostly new, All new (Discover levels)   | Quase só conhecidas, Mais conhecidas, Equilibrado, Mais novidades, Só novidades |
-| Recap                                                                             | Retrospectiva                                                                   |
-| Stats                                                                             | Estatísticas                                                                    |
-| Last 7 days, Last 30 days, Last 12 months, All time                               | Últimos 7 dias, Últimos 30 dias, Últimos 12 meses, Todo o período               |
-| Listening History                                                                 | Histórico de Ouvidas                                                            |
-| Go to this moment (a Listening History result's icon)                             | Ir para este momento                                                            |
-| Find in Playlist (Find in Songs, Find in Albums…)                                 | Buscar na Playlist (Buscar em Músicas, Buscar em Álbuns…)                       |
-| Keep Find Field Visible                                                           | Manter Campo de Busca Visível                                                   |
-| Colour at the Top of Pages                                                        | Cor no Topo das Páginas                                                         |
-| Recognize Song                                                                    | Reconhecer Música                                                               |
-| What's New, New, Fixes                                                            | Novidades, Novo, Correções                                                      |
-| Version                                                                           | Versão                                                                          |
-| Version History                                                                   | Histórico de Versões                                                            |
-| Current (the running version, in Version History)                                 | Atual                                                                           |
-| Recognized songs                                                                  | Músicas reconhecidas                                                            |
-| Lyrics                                                                            | Letra                                                                           |
-| Lyrics online                                                                     | Letras online                                                                   |
-| Karaoke                                                                           | Karaokê                                                                         |
-| Translate / Translate Lyrics                                                      | Traduzir / Traduzir Letra                                                       |
-| Lyrics translation                                                                | Tradução da letra                                                               |
-| Genius insights, About, Annotations                                               | Informações do Genius, Sobre, Anotações                                         |
-| Sleep Timer                                                                       | Timer para Dormir                                                               |
-| Related (Now Playing's view)                                                      | Relacionadas                                                                    |
-| Related · from <song> (the phone's Queue heading after a Search tap or a link)    | Relacionadas · de <música>                                                      |
-| Couldn't load the related songs                                                   | Não foi possível carregar as relacionadas                                       |
-| Crossfade                                                                         | Crossfade                                                                       |
-| Explicit / Don't play explicit                                                    | Explícito / Não reproduzir conteúdo explícito                                   |
-| Buffer                                                                            | Buffer                                                                          |
-| Normalize Volume                                                                  | Normalizar volume                                                               |
-| Continue with Magic Queue                                                         | Continuar com a Fila Mágica                                                     |
-| Swipe actions                                                                     | Ações de deslizar                                                               |
-| Library \| Online (an artist page's toggle)                                       | Biblioteca \| Online                                                            |
-| Appears on                                                                        | Aparece em                                                                      |
-| Import BlackPlayer Stats                                                          | Importar Estatísticas do BlackPlayer                                            |
-| Importing playlists from a link                                                   | Importação de playlists por link                                                |
-| Download in best quality                                                          | Baixar na melhor qualidade                                                      |
-| Quality upgrade                                                                   | Melhoria de qualidade                                                           |
-| Appearance: System, Light, Dark                                                   | Sistema, Claro, Escuro                                                          |
-| Theme, Glass, Blur, Refraction, Tint, Rim                                         | Tema, Vidro, Desfoque, Refração, Tonalidade, Borda                              |
-| Motion, Bounce amount, Touch, Long-press delay                                    | Movimento, Elasticidade, Toque, Duração do toque longo                          |
-| List, Grid, Large Cards, Sort by                                                  | Lista, Grade, Cartões Grandes, Ordenar por                                      |
-| **Actions**                                                                       |                                                                                 |
-| Play                                                                              | Reproduzir                                                                      |
-| Shuffle / Shuffle all                                                             | Aleatório / Tudo em Aleatório                                                   |
-| Repeat                                                                            | Repetir                                                                         |
-| Play Next                                                                         | Reproduzir a Seguir                                                             |
-| Add to Queue                                                                      | Adicionar à Fila                                                                |
-| Add to Playlist                                                                   | Adicionar à Playlist                                                            |
-| Save as Playlist                                                                  | Salvar como Playlist                                                            |
-| Favorite / Unfavorite                                                             | Favoritar / Desfavoritar                                                        |
-| Remove from Favorites                                                             | Remover das Favoritas                                                           |
-| Download                                                                          | Baixar                                                                          |
-| Download Playlist, Download Album, Download All                                   | Baixar Playlist, Baixar Álbum, Baixar Tudo                                      |
-| Download Missing Songs                                                            | Baixar Músicas Ausentes                                                         |
-| Cancel Download                                                                   | Cancelar Download                                                               |
-| Retry, Retry All, Retry Failed                                                    | Tentar Novamente, Tentar Todas Novamente, Tentar Falhas Novamente               |
-| Go to Album                                                                       | Ir para o Álbum                                                                 |
-| Go to Artist                                                                      | Ir para o Artista                                                               |
-| Share                                                                             | Compartilhar                                                                    |
-| Select                                                                            | Selecionar                                                                      |
-| Rename Playlist                                                                   | Renomear Playlist                                                               |
-| Delete / Delete Playlist                                                          | Apagar / Apagar Playlist                                                        |
-| Remove / Remove from Playlist / Remove from Library                               | Remover / Remover da Playlist / Remover da Biblioteca                           |
-| Change Image, Adjust Image, Remove Image                                          | Alterar Imagem, Ajustar Imagem, Remover Imagem                                  |
-| Fix Song                                                                          | Corrigir Música                                                                 |
-| Import                                                                            | Importar                                                                        |
-| Export to YT Music, Export                                                        | Exportar para o YT Music, Exportar                                              |
-| Waiting to export / Exporting <x> of <x>                                          | Aguardando exportação / Exportando <x> de <x>                                   |
-| Rescan library                                                                    | Verificar Biblioteca de Novo                                                    |
-| Edit                                                                              | Editar                                                                          |
-| Done                                                                              | OK                                                                              |
-| Play (DJ: starts the queue; Play · <x> with <x> tiles selected)                   | Reproduzir                                                                      |
-| Cancel                                                                            | Cancelar                                                                        |
-| Undo                                                                              | Desfazer                                                                        |
-| New releases / New releases and shows (in `<x>`) (follow level icons)             | Novos lançamentos / Novos lançamentos e shows (em `<x>`)                        |
-| Show More                                                                         | Mostrar Mais                                                                    |
-| Clear / Clear All                                                                 | Limpar / Limpar Tudo                                                            |
-| Pause / Resume (downloads)                                                        | Pausar / Retomar                                                                |
-| Cancel All (downloads)                                                            | Cancelar Tudo                                                                   |
-| Cancel <x> downloads? / Keep Downloading                                          | Cancelar <x> downloads? / Continuar Baixando                                    |
-| Paused · <x> of <x> (download notification, a paused group's line)                | Pausado · <x> de <x>                                                            |
-| Paused · <x> songs left (a paused group's header)                                 | Pausado · <x> músicas restantes                                                 |
-| Pause Downloads / Resume Downloads / Cancel Downloads (one playlist's or album's) | Pausar Downloads / Retomar Downloads / Cancelar Downloads                       |
-| Show all                                                                          | Ver tudo                                                                        |
-| Show Songs / Hide Songs                                                           | Mostrar Músicas / Ocultar Músicas                                               |
-| Sign In / Sign Out                                                                | Iniciar Sessão / Finalizar Sessão                                               |
-| Sign Out on All Phones                                                            | Finalizar Sessão em Todos os Celulares                                          |
-| Sign In with Google                                                               | Iniciar Sessão com o Google                                                     |
-| Send to Leo / Save Logs (render-error screen)                                     | Enviar para o Leo / Salvar Logs                                                 |
-| Install Now (Settings' Version History row)                                       | Instalar Agora                                                                  |
-| See All (the What's New card's link to Version History)                           | Ver Tudo                                                                        |
-| **States and messages**                                                           |                                                                                 |
-| Couldn't `<x>` ("Couldn't load the songs")                                        | Não foi possível `<x>` ("Não foi possível carregar as músicas")                 |
-| Try Again                                                                         | Tentar Novamente                                                                |
-| Updating…                                                                         | Atualizando…                                                                    |
-| Loading…                                                                          | Carregando…                                                                     |
-| Scanning…                                                                         | Verificando…                                                                    |
-| Downloading / Downloaded / Waiting                                                | Baixando / Baixada / Aguardando                                                 |
-| Saving                                                                            | Salvando                                                                        |
-| Paused                                                                            | Pausado                                                                         |
-| Failed / `<x>` songs failed                                                       | Falhou / `<x>` músicas falharam                                                 |
-| Not found online                                                                  | Não encontrada online                                                           |
-| Local file on Spotify                                                             | Arquivo local no Spotify                                                        |
-| Offline / No connection                                                           | Offline / Sem conexão                                                           |
-| No answer online                                                                  | Sem resposta online                                                             |
-| No lyrics                                                                         | Sem letra                                                                       |
-| No Match                                                                          | Nenhum Resultado                                                                |
-| No songs match                                                                    | Nenhuma música encontrada                                                       |
-| No plays yet                                                                      | Nenhuma reprodução ainda                                                        |
-| `<x>` songs (0, 1, 2)                                                             | Nenhuma música, 1 música, 2 músicas                                             |
-| Imported                                                                          | Importada                                                                       |
-| Unfollowed `<x>`                                                                  | Você deixou de seguir `<x>`                                                     |
-| `<x>` plays in the last 90 days (1, 2)                                            | 1 reprodução nos últimos 90 dias, 2 reproduções nos últimos 90 dias             |
-| Signed Out / Signing In…                                                          | Sessão finalizada / Iniciando Sessão…                                           |
-| `<x>` of `<y>`                                                                    | `<x>` de `<y>`                                                                  |
-| About `<x>` left                                                                  | Cerca de `<x>` restantes                                                        |
-| Song links (Settings › Accounts)                                                  | Links de música                                                                 |
-| Open song links in Wave                                                           | Abrir links de música no Wave                                                   |
-| Open by default (Android's page)                                                  | Abrir por padrão                                                                |
+| English                                                                         | pt-BR                                                                           |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Spec glossary**                                                               |                                                                                 |
+| Track                                                                           | Faixa (in the UI a track is a "song": Música)                                   |
+| Song / Songs                                                                    | Música / Músicas                                                                |
+| Graveyard                                                                       | Cemitério                                                                       |
+| Collaborative playlist / Collaborative                                          | Playlist colaborativa / Colaborativa                                            |
+| Member / Members                                                                | Membro / Membros                                                                |
+| Owner                                                                           | Dono                                                                            |
+| Invite link                                                                     | Link de convite                                                                 |
+| Make Collaborative                                                              | Tornar Colaborativa                                                             |
+| Invite                                                                          | Convidar                                                                        |
+| End Collaboration                                                               | Encerrar Colaboração                                                            |
+| Leave Playlist                                                                  | Sair da Playlist                                                                |
+| Join                                                                            | Entrar                                                                          |
+| Wave account                                                                    | Conta Wave                                                                      |
+| Recording key                                                                   | Chave de gravação                                                               |
+| Missing song                                                                    | Música ausente                                                                  |
+| non-D (non-downloaded)                                                          | Não baixada                                                                     |
+| Unsearched entry                                                                | Entrada não buscada                                                             |
+| Unavailable entry                                                               | Entrada indisponível                                                            |
+| Album / Albums                                                                  | Álbum / Álbuns                                                                  |
+| Credit                                                                          | Crédito                                                                         |
+| Artist / Artists                                                                | Artista / Artistas                                                              |
+| Primary artist                                                                  | Artista principal                                                               |
+| Go to Artist                                                                    | Ir para o Artista                                                               |
+| Album artist                                                                    | Artista do álbum                                                                |
+| Genre / Genres                                                                  | Gênero / Gêneros                                                                |
+| Style                                                                           | Estilo                                                                          |
+| Folder                                                                          | Pasta                                                                           |
+| Playlist / Playlists                                                            | Playlist / Playlists                                                            |
+| Scan root (Music folders)                                                       | Pasta de música (Pastas de música)                                              |
+| Excluded folder                                                                 | Pasta excluída                                                                  |
+| Library scan                                                                    | Verificação da biblioteca                                                       |
+| Voice note                                                                      | Mensagem de voz                                                                 |
+| Recording (a voice or call recording)                                           | Gravação                                                                        |
+| Skip voice notes and recordings                                                 | Ignorar mensagens de voz e gravações                                            |
+| Play context                                                                    | Contexto de reprodução                                                          |
+| Queue                                                                           | Fila                                                                            |
+| Up Next                                                                         | A Seguir                                                                        |
+| Shuffle kind                                                                    | Tipo de aleatório                                                               |
+| Real Shuffle                                                                    | Aleatório Real                                                                  |
+| Smart Shuffle                                                                   | Aleatório Inteligente                                                           |
+| Even Shuffle                                                                    | Aleatório Equilibrado                                                           |
+| Magic Queue                                                                     | Fila Mágica                                                                     |
+| Taste profile                                                                   | Perfil de gosto                                                                 |
+| Candidate catalog                                                               | Catálogo de candidatas                                                          |
+| Artist graph                                                                    | Grafo de artistas                                                               |
+| Recommendation snapshot                                                         | Retrato das recomendações                                                       |
+| Play event                                                                      | Evento de reprodução                                                            |
+| Counted play / Plays                                                            | Reprodução contada / Reproduções                                                |
+| Recap                                                                           | Retrospectiva                                                                   |
+| Sidecar                                                                         | Arquivo .lrc ao lado                                                            |
+| Favorite (a starred song) / Favorites                                           | Favorita / Favoritas                                                            |
+| Artist image                                                                    | Imagem do artista                                                               |
+| Artist photo / Artist photos                                                    | Foto do artista / Fotos de artistas                                             |
+| Now Playing                                                                     | Tocando Agora                                                                   |
+| Mini player                                                                     | Miniplayer                                                                      |
+| Toast                                                                           | Aviso                                                                           |
+| Phone ("this phone", "your other phones")                                       | Celular                                                                         |
+| YT Music song                                                                   | Música do YT Music                                                              |
+| Recognize                                                                       | Reconhecer                                                                      |
+| Go to Suggestions                                                               | Ir para sugestões                                                               |
+| Follow suggestion / Suggested (Settings › Followed Artists)                     | Sugestão para seguir / Sugestões                                                |
+| Suggestion dismissed (toast after a follow suggestion's ×)                      | Sugestão dispensada                                                             |
+| Added to Queue / Added N songs to Queue (toast)                                 | Adicionada à Fila / N músicas adicionadas à Fila                                |
+| Playing Next / Playing N songs next (toast)                                     | Será reproduzida a seguir / N músicas serão reproduzidas a seguir               |
+| **Welcome tour**                                                                |                                                                                 |
+| Bring your music                                                                | Traga suas músicas                                                              |
+| Turn On                                                                         | Ativar                                                                          |
+| Turn On YT Music                                                                | Ativar YT Music                                                                 |
+| From Spotify / From YT Music                                                    | Do Spotify / Do YT Music                                                        |
+| Importing…                                                                      | Importando…                                                                     |
+| Continue / Not Now                                                              | Continuar / Agora Não                                                           |
+| **Tabs**                                                                        |                                                                                 |
+| Home                                                                            | Início                                                                          |
+| Library                                                                         | Biblioteca                                                                      |
+| Search                                                                          | Buscar                                                                          |
+| Playlists, Artists, Albums, Songs, Genres, Favorites (as tabs and Library rows) | Playlists, Artistas, Álbuns, Músicas, Gêneros, Favoritas                        |
+| **Settings pages**                                                              |                                                                                 |
+| Settings                                                                        | Ajustes                                                                         |
+| Library                                                                         | Biblioteca                                                                      |
+| Appearance                                                                      | Aparência                                                                       |
+| Layout                                                                          | Layout                                                                          |
+| Swipe actions                                                                   | Ações de deslizar                                                               |
+| Playback                                                                        | Reprodução                                                                      |
+| Listening History                                                               | Histórico de Ouvidas                                                            |
+| Lyrics and tags                                                                 | Letras e tags                                                                   |
+| Downloads                                                                       | Downloads                                                                       |
+| Accounts                                                                        | Contas                                                                          |
+| Developer                                                                       | Developer (dev screen, stays English)                                           |
+| Layout › Home, Library, Playlists                                               | Início, Biblioteca, Playlists                                                   |
+| Layout › Tab bar                                                                | Barra de abas                                                                   |
+| Layout › Now Playing                                                            | Tocando Agora                                                                   |
+| **Home sections**                                                               |                                                                                 |
+| Discover                                                                        | Descobrir                                                                       |
+| In your orbit                                                                   | Na sua órbita                                                                   |
+| From your library                                                               | Da sua biblioteca                                                               |
+| Community playlists                                                             | Playlists da comunidade                                                         |
+| Recently added                                                                  | Adicionadas recentemente                                                        |
+| Recently played                                                                 | Tocadas recentemente                                                            |
+| Most played                                                                     | Mais tocadas                                                                    |
+| Most played albums                                                              | Álbuns mais tocados                                                             |
+| Most played artists                                                             | Artistas mais tocados                                                           |
+| Favorites                                                                       | Favoritas                                                                       |
+| Stats                                                                           | Estatísticas                                                                    |
+| Edit Home                                                                       | Editar Início                                                                   |
+| **Wave features**                                                               |                                                                                 |
+| Magic Queue                                                                     | Fila Mágica                                                                     |
+| DJ                                                                              | DJ                                                                              |
+| Magic Queue · from DJ                                                           | Fila Mágica · de DJ                                                             |
+| A queue made from the artists you pick (DJ card)                                | Uma fila feita dos artistas que você escolher                                   |
+| Pick artists (DJ card)                                                          | Escolher artistas                                                               |
+| Search artists and albums (DJ)                                                  | Buscar artistas e álbuns                                                        |
+| Genre, <family> (DJ tile for screen readers)                                    | Gênero, <família>                                                               |
+| Artists, albums (DJ's search field)                                             | Artistas, álbuns                                                                |
+| No artists or albums match.                                                     | Nenhum artista ou álbum encontrado.                                             |
+| Adjust (DJ)                                                                     | Ajustar                                                                         |
+| Artist variety                                                                  | Variedade de artistas                                                           |
+| Low, Medium, High (Artist variety)                                              | Baixa, Média, Alta                                                              |
+| Music discovery                                                                 | Descoberta de música                                                            |
+| Familiar, Blend, Discover (Music discovery)                                     | Conhecidas, Misturar, Descobrir                                                 |
+| <x>% of the songs are new to you. (DJ, Music discovery's note)                  | <x>% das músicas são novas para você.                                           |
+| Filters (DJ)                                                                    | Filtros                                                                         |
+| Trending                                                                        | Em alta                                                                         |
+| Lesser-known songs                                                              | Músicas pouco conhecidas                                                        |
+| New releases (DJ)                                                               | Lançamentos                                                                     |
+| Your selection · <x> (DJ)                                                       | Sua seleção · <x>                                                               |
+| Tap artists to start (DJ)                                                       | Toque em artistas para começar                                                  |
+| Remove <x> (a mark of DJ's selection row, for screen readers)                   | Remover <x>                                                                     |
+| New to you (DJ, an artist the Library doesn't have)                             | Novo para você                                                                  |
+| Low variety, Medium variety, High variety (DJ's summary of Adjust)              | Variedade baixa, Variedade média, Variedade alta                                |
+| Discover                                                                        | Descobrir                                                                       |
+| Artist mixes                                                                    | Mixes de artistas                                                               |
+| Genre mixes                                                                     | Mixes de gêneros                                                                |
+| Mix / Download Mix                                                              | Mix / Baixar Mix                                                                |
+| A mix's caption naming its artist or genre                                      | Mix de `<x>`                                                                    |
+| Mostly familiar, More familiar, Balanced, Mostly new, All new (Discover levels) | Quase só conhecidas, Mais conhecidas, Equilibrado, Mais novidades, Só novidades |
+| Recap                                                                           | Retrospectiva                                                                   |
+| Stats                                                                           | Estatísticas                                                                    |
+| Last 7 days, Last 30 days, Last 12 months, All time                             | Últimos 7 dias, Últimos 30 dias, Últimos 12 meses, Todo o período               |
+| Listening History                                                               | Histórico de Ouvidas                                                            |
+| Go to this moment (a Listening History result's icon)                           | Ir para este momento                                                            |
+| Find in Playlist (Find in Songs, Find in Albums…)                               | Buscar na Playlist (Buscar em Músicas, Buscar em Álbuns…)                       |
+| Keep Find Field Visible                                                         | Manter Campo de Busca Visível                                                   |
+| Colour at the Top of Pages                                                      | Cor no Topo das Páginas                                                         |
+| Recognize Song                                                                  | Reconhecer Música                                                               |
+| What's New, New, Fixes                                                          | Novidades, Novo, Correções                                                      |
+| Version                                                                         | Versão                                                                          |
+| Version History                                                                 | Histórico de Versões                                                            |
+| Current (the running version, in Version History)                               | Atual                                                                           |
+| Recognized songs                                                                | Músicas reconhecidas                                                            |
+| Lyrics                                                                          | Letra                                                                           |
+| Lyrics online                                                                   | Letras online                                                                   |
+| Karaoke                                                                         | Karaokê                                                                         |
+| Translate / Translate Lyrics                                                    | Traduzir / Traduzir Letra                                                       |
+| Lyrics translation                                                              | Tradução da letra                                                               |
+| Genius insights, About, Annotations                                             | Informações do Genius, Sobre, Anotações                                         |
+| Sleep Timer                                                                     | Timer para Dormir                                                               |
+| Related (Now Playing's view)                                                    | Relacionadas                                                                    |
+| Related · from <song> (the phone's Queue heading after a Search tap or a link)  | Relacionadas · de <música>                                                      |
+| Couldn't load the related songs                                                 | Não foi possível carregar as relacionadas                                       |
+| Crossfade                                                                       | Crossfade                                                                       |
+| Explicit / Don't play explicit                                                  | Explícito / Não reproduzir conteúdo explícito                                   |
+| Buffer                                                                          | Buffer                                                                          |
+| Normalize Volume                                                                | Normalizar volume                                                               |
+| Continue with Magic Queue                                                       | Continuar com a Fila Mágica                                                     |
+| Swipe actions                                                                   | Ações de deslizar                                                               |
+| Library \| Online (an artist page's toggle)                                     | Biblioteca \| Online                                                            |
+| Appears on                                                                      | Aparece em                                                                      |
+| Import BlackPlayer Stats                                                        | Importar Estatísticas do BlackPlayer                                            |
+| Importing playlists from a link                                                 | Importação de playlists por link                                                |
+| Download in best quality                                                        | Baixar na melhor qualidade                                                      |
+| Quality upgrade                                                                 | Melhoria de qualidade                                                           |
+| Appearance: System, Light, Dark                                                 | Sistema, Claro, Escuro                                                          |
+| Theme, Glass, Blur, Refraction, Tint, Rim                                       | Tema, Vidro, Desfoque, Refração, Tonalidade, Borda                              |
+| Motion, Bounce amount, Touch, Long-press delay                                  | Movimento, Elasticidade, Toque, Duração do toque longo                          |
+| List, Grid, Large Cards, Sort by                                                | Lista, Grade, Cartões Grandes, Ordenar por                                      |
+| **Actions**                                                                     |                                                                                 |
+| Play                                                                            | Reproduzir                                                                      |
+| Shuffle / Shuffle all                                                           | Aleatório / Tudo em Aleatório                                                   |
+| Repeat                                                                          | Repetir                                                                         |
+| Play Next                                                                       | Reproduzir a Seguir                                                             |
+| Add to Queue                                                                    | Adicionar à Fila                                                                |
+| Add to Playlist                                                                 | Adicionar à Playlist                                                            |
+| Save as Playlist                                                                | Salvar como Playlist                                                            |
+| Favorite / Unfavorite                                                           | Favoritar / Desfavoritar                                                        |
+| Remove from Favorites                                                           | Remover das Favoritas                                                           |
+| Download                                                                        | Baixar                                                                          |
+| Download Playlist, Download Album, Download All                                 | Baixar Playlist, Baixar Álbum, Baixar Tudo                                      |
+| Download Missing Songs                                                          | Baixar Músicas Ausentes                                                         |
+| Cancel Download                                                                 | Cancelar Download                                                               |
+| Retry, Retry All, Retry Failed                                                  | Tentar Novamente, Tentar Todas Novamente, Tentar Falhas Novamente               |
+| Go to Album                                                                     | Ir para o Álbum                                                                 |
+| Go to Artist                                                                    | Ir para o Artista                                                               |
+| Share                                                                           | Compartilhar                                                                    |
+| Select                                                                          | Selecionar                                                                      |
+| Rename Playlist                                                                 | Renomear Playlist                                                               |
+| Delete / Delete Playlist                                                        | Apagar / Apagar Playlist                                                        |
+| Remove / Remove from Playlist / Remove from Library                             | Remover / Remover da Playlist / Remover da Biblioteca                           |
+| Change Image, Adjust Image, Remove Image                                        | Alterar Imagem, Ajustar Imagem, Remover Imagem                                  |
+| Fix Song                                                                        | Corrigir Música                                                                 |
+| Import                                                                          | Importar                                                                        |
+| Export to YT Music, Export                                                      | Exportar para o YT Music, Exportar                                              |
+| Waiting to export / Exporting <x> of <x>                                        | Aguardando exportação / Exportando <x> de <x>                                   |
+| Rescan library                                                                  | Verificar Biblioteca de Novo                                                    |
+| Edit                                                                            | Editar                                                                          |
+| Done                                                                            | OK                                                                              |
+| Play (DJ: starts the queue; Play · <x> with <x> tiles selected)                 | Reproduzir                                                                      |
+| Cancel                                                                          | Cancelar                                                                        |
+| Undo                                                                            | Desfazer                                                                        |
+| New releases / New releases and shows (in `<x>`) (follow level icons)           | Novos lançamentos / Novos lançamentos e shows (em `<x>`)                        |
+| Show More                                                                       | Mostrar Mais                                                                    |
+| Clear / Clear All                                                               | Limpar / Limpar Tudo                                                            |
+| Pause / Resume (downloads)                                                      | Pausar / Retomar                                                                |
+| Cancel All (downloads)                                                          | Cancelar Tudo                                                                   |
+| Cancel <x> downloads? / Keep Downloading                                        | Cancelar <x> downloads? / Continuar Baixando                                    |
+| Paused · <x> of <x> (download notification, a paused group's line)              | Pausado · <x> de <x>                                                            |
+| Paused · <x> songs left (a paused group's header)                               | Pausado · <x> músicas restantes                                                 |
+| Pause / Resume / Cancel Downloads (one playlist's or album's)                   | Pausar / Retomar / Cancelar Downloads                                           |
+| Show all                                                                        | Ver tudo                                                                        |
+| Show Songs / Hide Songs                                                         | Mostrar Músicas / Ocultar Músicas                                               |
+| Sign In / Sign Out                                                              | Iniciar Sessão / Finalizar Sessão                                               |
+| Sign Out on All Phones                                                          | Finalizar Sessão em Todos os Celulares                                          |
+| Sign In with Google                                                             | Iniciar Sessão com o Google                                                     |
+| Send to Leo / Save Logs (render-error screen)                                   | Enviar para o Leo / Salvar Logs                                                 |
+| Install Now (Settings' Version History row)                                     | Instalar Agora                                                                  |
+| See All (the What's New card's link to Version History)                         | Ver Tudo                                                                        |
+| **States and messages**                                                         |                                                                                 |
+| Couldn't `<x>` ("Couldn't load the songs")                                      | Não foi possível `<x>` ("Não foi possível carregar as músicas")                 |
+| Try Again                                                                       | Tentar Novamente                                                                |
+| Updating…                                                                       | Atualizando…                                                                    |
+| Loading…                                                                        | Carregando…                                                                     |
+| Scanning…                                                                       | Verificando…                                                                    |
+| Downloading / Downloaded / Waiting                                              | Baixando / Baixada / Aguardando                                                 |
+| Saving                                                                          | Salvando                                                                        |
+| Paused                                                                          | Pausado                                                                         |
+| Failed / `<x>` songs failed                                                     | Falhou / `<x>` músicas falharam                                                 |
+| Not found online                                                                | Não encontrada online                                                           |
+| Local file on Spotify                                                           | Arquivo local no Spotify                                                        |
+| Offline / No connection                                                         | Offline / Sem conexão                                                           |
+| No answer online                                                                | Sem resposta online                                                             |
+| No lyrics                                                                       | Sem letra                                                                       |
+| No Match                                                                        | Nenhum Resultado                                                                |
+| No songs match                                                                  | Nenhuma música encontrada                                                       |
+| No plays yet                                                                    | Nenhuma reprodução ainda                                                        |
+| `<x>` songs (0, 1, 2)                                                           | Nenhuma música, 1 música, 2 músicas                                             |
+| Imported                                                                        | Importada                                                                       |
+| Unfollowed `<x>`                                                                | Você deixou de seguir `<x>`                                                     |
+| `<x>` plays in the last 90 days (1, 2)                                          | 1 reprodução nos últimos 90 dias, 2 reproduções nos últimos 90 dias             |
+| Signed Out / Signing In…                                                        | Sessão finalizada / Iniciando Sessão…                                           |
+| `<x>` of `<y>`                                                                  | `<x>` de `<y>`                                                                  |
+| About `<x>` left                                                                | Cerca de `<x>` restantes                                                        |
+| Song links (Settings › Accounts)                                                | Links de música                                                                 |
+| Open song links in Wave                                                         | Abrir links de música no Wave                                                   |
+| Open by default (Android's page)                                                | Abrir por padrão                                                                |
 
 ### Visual design
 
