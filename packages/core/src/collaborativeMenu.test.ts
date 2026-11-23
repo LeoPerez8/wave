@@ -206,6 +206,22 @@ describe("Members", () => {
     );
   });
 
+  test("each member has their photo, and none where the initial shows", () => {
+    const photo = "https://lh3.googleusercontent.com/a/ana=s96-c";
+    const rows = collaborativeMemberRows(
+      [members[0]!, { ...members[1]!, photoUrl: photo }, { ...members[2]!, photoUrl: photo }],
+      { owned: false },
+    );
+    assert.deepEqual(
+      rows.map(({ initial, photoUrl }) => [initial, photoUrl]),
+      [
+        ["L", null],
+        ["A", photo],
+        ["?", photo],
+      ],
+    );
+  });
+
   test("only the owner sees Remove, and never on themselves", () => {
     const owner = collaborativeMemberRows(members, { owned: true });
     assert.deepEqual(

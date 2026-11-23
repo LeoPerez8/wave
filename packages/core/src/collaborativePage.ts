@@ -1,8 +1,8 @@
 /**
  * What a collaborative playlist shows of its members on the phone (docs/spec.md,
  * "Collaborative playlists", What it shows and Refreshing): each member's photo (else initial)
- * and first name under the playlist's name, the initial and full name of who added each entry, and the
- * page's own pull while it is in sight.
+ * and first name under the playlist's name, the photo (else initial) and full name of who added
+ * each entry, and the page's own pull while it is in sight.
  */
 import type { CollaborationMember } from "./collaborationRequests.ts";
 import type { SyncClock } from "./syncTriggers.ts";
@@ -49,10 +49,14 @@ export const collaborativePageMembers = (
   };
 };
 
-/** Who added an entry: their initial for the row, their full name for the song's menu. */
+/**
+ * Who added an entry: their photo for the row (null where the initial shows), their initial,
+ * and their full name for the song's menu.
+ */
 export interface EntryAdder {
   readonly initial: string;
   readonly name: string;
+  readonly photoUrl: string | null;
 }
 
 /**
@@ -66,8 +70,9 @@ export const entryAdder = (
 ): EntryAdder | null => {
   if (addedBy == null) return null;
   const member = members.find((each) => each.accountId === addedBy);
-  const name = member === undefined ? null : nameOf(member.name);
-  return name === null ? null : { initial: initialOf(name), name };
+  if (member === undefined) return null;
+  const name = nameOf(member.name);
+  return name === null ? null : { initial: initialOf(name), name, photoUrl: member.photoUrl };
 };
 
 export interface CollaborativePagePullInput {

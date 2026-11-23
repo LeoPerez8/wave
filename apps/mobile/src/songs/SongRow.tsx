@@ -53,6 +53,8 @@ export interface SongRowActions {
   readonly tint?: string | undefined;
   /** In a collaborative playlist, the initial of who added the song, at the row's end. */
   readonly addedByInitial?: string | undefined;
+  /** Their photo, shown in place of [addedByInitial]; null or absent shows the initial. */
+  readonly addedByPhotoUrl?: string | null | undefined;
 }
 
 const NO_ACTIONS: readonly AccessibilityActionInfo[] = [];
@@ -199,7 +201,9 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
             {props.starred && <IconStarFilled size={14} color={highlight} />}
           </View>
         )}
-        {props.addedByInitial !== undefined && <MemberCircle initial={props.addedByInitial} />}
+        {props.addedByInitial !== undefined && (
+          <MemberCircle initial={props.addedByInitial} photoUrl={props.addedByPhotoUrl} />
+        )}
         {props.trailing && (
           <Text
             numberOfLines={1}

@@ -53,12 +53,24 @@ describe("collaborativePageMembers", () => {
 });
 
 describe("entryAdder", () => {
-  test("names the member who added the entry, with their initial", () => {
-    assert.deepEqual(entryAdder("ana", [LEO, ANA]), { initial: "A", name: "Ana Souza" });
+  test("names the member who added the entry, with their initial and photo", () => {
+    assert.deepEqual(entryAdder("ana", [LEO, ANA]), {
+      initial: "A",
+      name: "Ana Souza",
+      photoUrl: ANA_PHOTO,
+    });
   });
 
-  test("the owner's own entries resolve through the full member list too", () => {
-    assert.deepEqual(entryAdder("leo", [LEO, ANA]), { initial: "L", name: "Leo Perez" });
+  test("an adder without a photo has none, so the row shows the initial", () => {
+    assert.deepEqual(entryAdder("leo", [LEO, ANA]), {
+      initial: "L",
+      name: "Leo Perez",
+      photoUrl: null,
+    });
+  });
+
+  test("a photo without a name shows no one", () => {
+    assert.equal(entryAdder("x", [member("x", " ", false, false, ANA_PHOTO)]), null);
   });
 
   test("shows no one for an entry of a deleted account, an unknown one or none", () => {

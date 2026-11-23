@@ -535,7 +535,10 @@ export function PlaylistItems({
       const entry = entryOf(item);
       const adder = entry === null ? null : entryAdder(entry.addedBy, members);
       if (adder !== null) {
-        row = cloneElement(row as ReactElement<SongRowActions>, { addedByInitial: adder.initial });
+        row = cloneElement(row as ReactElement<SongRowActions>, {
+          addedByInitial: adder.initial,
+          addedByPhotoUrl: adder.photoUrl,
+        });
       }
       if (showReleaseYear && entry) {
         const dated = entryReleaseSong(entry);

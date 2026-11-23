@@ -80,6 +80,33 @@ test("the circle is hidden from accessibility, photo or initial", () => {
   }
 });
 
+test("a row's circle is 22dp and the Members sheet's 36dp, photo or initial", () => {
+  const widthOf = (props: Props): number => {
+    const renderer = drawn(props);
+    const style = renderer.root.findAllByType("view" as never)[0]!.props.style as {
+      width: number;
+      height: number;
+      borderRadius: number;
+    };
+    act(() => renderer.unmount());
+    assert.equal(style.height, style.width);
+    assert.equal(style.borderRadius, style.width / 2);
+    return style.width;
+  };
+  for (const photoUrl of [PHOTO, null]) {
+    assert.equal(widthOf({ initial: "A", photoUrl }), 22);
+    assert.equal(widthOf({ initial: "A", photoUrl, size: "sheet" }), 36);
+  }
+});
+
+test("the Members sheet's circle shows the photo, else the initial", () => {
+  const withPhoto = drawn({ initial: "A", photoUrl: PHOTO, size: "sheet" });
+  assert.equal(shown(withPhoto), PHOTO);
+  failToLoad(withPhoto);
+  assert.equal(shown(withPhoto), "A");
+  act(() => withPhoto.unmount());
+});
+
 test("a stacked circle overlaps the one before it; one alone doesn't", () => {
   const marginOf = (stacked: boolean): number => {
     const renderer = drawn({ initial: "A", photoUrl: null, stacked });
