@@ -125,7 +125,8 @@ export const downloadsToCancelAll = (jobs: readonly YtDownloadJournalJob[]): str
 export const downloadsToCancelInGroup = (
   jobs: readonly YtDownloadJournalJob[],
   key: string,
-): string[] => jobs.filter((job) => notDownloaded(job) && groupOf(job) === key).map((job) => job.id);
+): string[] =>
+  jobs.filter((job) => notDownloaded(job) && groupOf(job) === key).map((job) => job.id);
 
 /** A group's Pause or Resume, and the songs its Cancel takes. */
 export interface DownloadGroupControls {
