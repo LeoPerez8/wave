@@ -175,13 +175,23 @@ export const trackDetails = (db: Database, id: number) =>
     .where(eq(schema.tracks.id, id))
     .get() ?? null;
 
-/** The colours read from a cover, by its artwork path; null for a path Wave holds no colours for. */
-export const artworkPalette = (db: Database, path: string) =>
-  db
-    .select({ palette: schema.artwork.palette })
-    .from(schema.artwork)
-    .where(eq(schema.artwork.path, path))
-    .get()?.palette ?? null;
+/**
+ * The colours read from a cover, by its artwork path; null for a path Wave holds no colours for
+ * (a playlist's own image, a YouTube address). The artwork store names each cover `<hash>.<ext>`,
+ * so the row is found by its hash, the table's key: `path` has no index.
+ */
+export const artworkPalette = (db: Database, path: string) => {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return null;
+  return (
+    db
+      .select({ palette: schema.artwork.palette })
+      .from(schema.artwork)
+      .where(and(eq(schema.artwork.hash, name.slice(0, dot)), eq(schema.artwork.path, path)))
+      .get()?.palette ?? null
+  );
+};
 
 export const indexedFiles = (db: Database, paths: readonly string[]) =>
   chunks(paths).flatMap((chunk) =>

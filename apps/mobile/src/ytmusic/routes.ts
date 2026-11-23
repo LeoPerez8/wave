@@ -27,9 +27,18 @@ const open = (screen: YtListScreen, id: string, head: YtListHead): void => {
 export const openYtAlbum = (browseId: string, head: YtListHead): void =>
   open("yt-album", browseId, head);
 
-/** Opens a YT Music playlist's songs ([playlistId], without the `VL` its page adds), on the Library stack. */
-export const openYtPlaylist = (playlistId: string, head: YtListHead): void => {
-  keepYtPlaylistHead(playlistId, head);
+/**
+ * Opens a YT Music playlist's songs ([playlistId], without the `VL` its page adds), on the
+ * Library stack. [head] is kept for Recently played's card unless [read] is false: an opener
+ * that only stands in for the playlist's head (that card before the page was ever read). The
+ * page keeps its own head once it's read either way.
+ */
+export const openYtPlaylist = (
+  playlistId: string,
+  head: YtListHead,
+  { read = true }: { readonly read?: boolean } = {},
+): void => {
+  if (read) keepYtPlaylistHead(playlistId, head);
   open("yt-playlist", playlistId, head);
 };
 
