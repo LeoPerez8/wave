@@ -961,6 +961,7 @@ export {
   createLibraryQueries,
   longListBurstPace,
   libraryChangeAffects,
+  waitsForSight,
 } from "./libraryQueries.ts";
 export type {
   LibraryChange,
