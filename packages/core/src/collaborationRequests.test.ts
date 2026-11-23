@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
-  accountNameCall,
-  accountPhotoCall,
+  accountCall,
   collaborationAnswer,
   createInviteCall,
   endCollaborationCall,
@@ -42,8 +41,7 @@ const collaboration = {
 };
 
 const every: readonly CollaborationCall<unknown>[] = [
-  accountNameCall("Ana Souza"),
-  accountPhotoCall(PHOTO),
+  accountCall({ name: "Ana Souza", photoUrl: PHOTO }),
   makeCollaborationCall(LIST),
   endCollaborationCall(LIST),
   membersCall(LIST),
@@ -64,8 +62,11 @@ describe("collaboration requests", () => {
     assert.deepEqual(
       every.map(({ request }) => request),
       [
-        { method: "PUT", path: "/v1/account/name", body: '{"name":"Ana Souza"}' },
-        { method: "PUT", path: "/v1/account/photo", body: `{"photoUrl":"${PHOTO}"}` },
+        {
+          method: "PUT",
+          path: "/v1/account/name",
+          body: `{"name":"Ana Souza","photoUrl":"${PHOTO}"}`,
+        },
         { method: "POST", path: "/v1/collaboration", body: `{"playlistId":"${LIST}"}` },
         { method: "DELETE", path: `/v1/collaboration?playlist=${LIST}`, body: null },
         { method: "GET", path: `/v1/collaboration/members?playlist=${LIST}`, body: null },
@@ -87,6 +88,18 @@ describe("collaboration requests", () => {
     );
   });
 
+  test("the account's name and photo go in one request, each only when given", () => {
+    assert.deepEqual(
+      [accountCall({ name: "Ana Souza" }), accountCall({ photoUrl: PHOTO })].map(
+        ({ request }) => request,
+      ),
+      [
+        { method: "PUT", path: "/v1/account/name", body: '{"name":"Ana Souza"}' },
+        { method: "PUT", path: "/v1/account/name", body: `{"photoUrl":"${PHOTO}"}` },
+      ],
+    );
+  });
+
   test("an invite token goes in the body, never in a path", () => {
     for (const call of [lookUpInviteCall(TOKEN), joinInviteCall(TOKEN)])
       assert.ok(!call.request.path.includes(TOKEN));
@@ -103,8 +116,7 @@ describe("collaboration requests", () => {
       ["PUT", "/v1/collaboration"],
       ["POST", "/v1/collaboration?playlist=x"],
       ["GET", "/v1/account/name"],
-      ["GET", "/v1/account/photo"],
-      ["PUT", "/v1/account/photo?x=1"],
+      ["PUT", "/v1/account/photo"],
       ["DELETE", "/v1/account"],
       ["DELETE", "/v1/collaboration"],
       ["DELETE", "/v1/collaboration?playlist="],

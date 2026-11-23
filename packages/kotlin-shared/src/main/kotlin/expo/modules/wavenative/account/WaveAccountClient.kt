@@ -236,10 +236,9 @@ class WaveAccountClient(
     )
     /** An id or cursor as the collaboration routes take it in a query (Core's `ID`). */
     const val ID = "[0-9A-Za-z_-]{1,128}"
-    /** Core's `isCollaborationRequest`: the account's name and photo, collaborations, invites, a member's push and pull. */
+    /** Core's `isCollaborationRequest`: the account's name, collaborations, invites, a member's push and pull. */
     val COLLABORATION = listOf(
       "PUT" to Regex("""^/v1/account/name$"""),
-      "PUT" to Regex("""^/v1/account/photo$"""),
       "POST" to Regex("""^/v1/collaboration$"""),
       "DELETE" to Regex("""^/v1/collaboration\?playlist=$ID$"""),
       "GET" to Regex("""^/v1/collaboration/members\?playlist=$ID$"""),

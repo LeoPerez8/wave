@@ -1,9 +1,8 @@
 /**
  * The sync service's routes for collaborative playlists (`apps/sync/README.md`, Collaborative
- * playlists, Invite links, `PUT /v1/account/name` and `PUT /v1/account/photo`), as the app calls
- * them. The session token stays with the phone's native module and the desktop's main process,
- * which send each request only when `isCollaborationRequest` takes it; this builds the requests
- * and reads the answers.
+ * playlists, Invite links, `PUT /v1/account/name`), as the app calls them. The session token
+ * stays with the phone's native module and the desktop's main process, which send each request
+ * only when `isCollaborationRequest` takes it; this builds the requests and reads the answers.
  * An answer is what the route gives, a refusal the caller can act on, or a failure.
  */
 import { accountPhotoUrl } from "./accountPhoto.ts";
@@ -183,13 +182,23 @@ const call = <T>(
 
 const collaborationOf = some((body) => readCollaboration(parse(body)));
 
-/** `PUT /v1/account/name`: keeps [name] (the Google account name) for the session's account. */
-export const accountNameCall = (name: string): CollaborationCall<null> =>
-  call("PUT", "/v1/account/name", { name }, nothing);
+/** What an app sends of its Google account: its name, its photo, or both. */
+export interface AccountFields {
+  readonly name?: string;
+  readonly photoUrl?: string;
+}
 
-/** `PUT /v1/account/photo`: keeps [photoUrl] (the Google account photo) for the session's account. */
-export const accountPhotoCall = (photoUrl: string): CollaborationCall<null> =>
-  call("PUT", "/v1/account/photo", { photoUrl }, nothing);
+/**
+ * `PUT /v1/account/name`: keeps the Google account name and photo [fields] gives for the
+ * session's account, in one request; a field left out isn't sent.
+ */
+export const accountCall = ({ name, photoUrl }: AccountFields): CollaborationCall<null> =>
+  call(
+    "PUT",
+    "/v1/account/name",
+    { ...(name === undefined ? {} : { name }), ...(photoUrl === undefined ? {} : { photoUrl }) },
+    nothing,
+  );
 
 /** `POST /v1/collaboration`: makes a playlist of the account collaborative, owned by it. */
 export const makeCollaborationCall = (playlistId: string): CollaborationCall<Collaboration> =>
@@ -321,7 +330,6 @@ const ID = "[0-9A-Za-z_-]{1,128}";
 /** Every request the app may send for collaborative playlists, by method. */
 const ALLOWED: readonly (readonly [CollaborationMethod, RegExp])[] = [
   ["PUT", /^\/v1\/account\/name$/],
-  ["PUT", /^\/v1\/account\/photo$/],
   ["POST", /^\/v1\/collaboration$/],
   ["DELETE", new RegExp(`^/v1/collaboration\\?playlist=${ID}$`)],
   ["GET", new RegExp(`^/v1/collaboration/members\\?playlist=${ID}$`)],

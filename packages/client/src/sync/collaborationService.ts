@@ -7,8 +7,7 @@
  * and reads its answer; each call resolves to what it came to and rejects only for a bug.
  */
 import {
-  accountNameCall,
-  accountPhotoCall,
+  accountCall,
   collaborationAnswer,
   createInviteCall,
   endCollaborationCall,
@@ -22,6 +21,7 @@ import {
   readInviteCall,
   removeMemberCall,
   turnOffInviteCall,
+  type AccountFields,
   type ActiveInvite,
   type Collaboration,
   type CollaborationCall,
@@ -43,10 +43,11 @@ export interface CollaborationTransport {
 }
 
 export interface CollaborationService {
-  /** Keeps the Google account name for the account (an app signed in before names were kept). */
-  readonly setAccountName: (name: string) => Promise<CollaborationResult<null>>;
-  /** Keeps the Google account photo for the account (an app signed in before photos were kept). */
-  readonly setAccountPhoto: (photoUrl: string) => Promise<CollaborationResult<null>>;
+  /**
+   * Keeps the Google account name and photo for the account, in one request (an app signed in
+   * before the service kept them).
+   */
+  readonly setAccount: (fields: AccountFields) => Promise<CollaborationResult<null>>;
   /** Makes the account's playlist collaborative, with the account as owner. */
   readonly make: (playlistId: string) => Promise<CollaborationResult<Collaboration>>;
   /** The owner ends it: every other member goes, the playlist stays the owner's. */
@@ -107,8 +108,7 @@ export const collaborationService = (transport: CollaborationTransport): Collabo
   const send = <T>(call: CollaborationCall<T>): Promise<CollaborationResult<T>> =>
     sendCollaborationCall(transport, call);
   return {
-    setAccountName: (name) => send(accountNameCall(name)),
-    setAccountPhoto: (photoUrl) => send(accountPhotoCall(photoUrl)),
+    setAccount: (fields) => send(accountCall(fields)),
     make: (playlistId) => send(makeCollaborationCall(playlistId)),
     end: (playlistId) => send(endCollaborationCall(playlistId)),
     members: (playlistId) => send(membersCall(playlistId)),

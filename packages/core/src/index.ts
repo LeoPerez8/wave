@@ -1179,8 +1179,7 @@ export {
   memberPlaylistFields,
 } from "./collaborativeRows.ts";
 export {
-  accountNameCall,
-  accountPhotoCall,
+  accountCall,
   collaborationAnswer,
   createInviteCall,
   endCollaborationCall,
@@ -1225,6 +1224,7 @@ export type {
   PullMembership,
 } from "./collaborativeSync.ts";
 export type {
+  AccountFields,
   ActiveInvite,
   Collaboration,
   CollaborationCall,
