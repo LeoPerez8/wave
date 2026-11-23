@@ -961,6 +961,7 @@ export {
   createLibraryQueries,
   longListBurstPace,
   libraryChangeAffects,
+  waitsForSight,
 } from "./libraryQueries.ts";
 export type {
   LibraryChange,
@@ -2059,6 +2060,8 @@ export {
   knownGain,
   MEASURE_AHEAD,
   measureCandidates,
+  MEASURE_PAGE,
+  nextMeasureCandidates,
   albumGain,
   entryGain,
   readNormalizeVolume,
@@ -3437,6 +3440,13 @@ export {
   djMoodFit,
 } from "./djMood.ts";
 export type { DjAudioFeatures, DjMoodFit, DjMoodPools, DjMoodRankable } from "./djMood.ts";
+export {
+  MAGIC_STAND_IN_SONGS,
+  magicStandIn,
+  magicStandInDue,
+  magicStandInSteps,
+} from "./magicStandIn.ts";
+export type { MagicStandIn, MagicStandInOptions } from "./magicStandIn.ts";
 export { djAudioFeaturesByIsrc, isrcFromTag } from "./isrcTag.ts";
 export {
   DJ_NEW_RELEASE_BOOST,

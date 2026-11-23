@@ -20,7 +20,12 @@
  * and keeps nothing of it; turning it on picks up there. Shared by the phone
  * and the desktop app.
  */
-import { measureCandidates, songsToMeasure, type AlbumLoudness, type QueueState } from "@wave/core";
+import {
+  nextMeasureCandidates,
+  songsToMeasure,
+  type AlbumLoudness,
+  type QueueState,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import type { SongMeasurement, SongToMeasure } from "./db/loudness.ts";
@@ -87,10 +92,17 @@ export const createSongMeasurements = (deps: SongMeasurementsDeps) => {
     if (!deps.on()) return DONE;
     const { state, album } = yield* deps.queue();
     const toMeasure = new Map<number, SongToMeasure>();
-    for (const song of yield* deps.songsToMeasure(measureCandidates(state, album))) {
-      if (!unreadable.has(fileKey(song))) toMeasure.set(song.id, song);
+    const needsMeasuring = (id: number) => toMeasure.has(id) || done.has(id);
+    // A page of the queue at a time, until the five ahead are found (#1489).
+    for (let asked = 0; ;) {
+      const page = nextMeasureCandidates(state, needsMeasuring, asked, album);
+      if (page.length === 0) break;
+      asked += page.length;
+      for (const song of yield* deps.songsToMeasure(page)) {
+        if (!unreadable.has(fileKey(song))) toMeasure.set(song.id, song);
+      }
     }
-    const line = songsToMeasure(state, (id) => toMeasure.has(id) || done.has(id), album);
+    const line = songsToMeasure(state, needsMeasuring, album);
     const song = line.flatMap((id) => toMeasure.get(id) ?? [])[0];
     if (song === undefined) return DONE;
     const answer = yield* Effect.promise(() =>

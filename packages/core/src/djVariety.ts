@@ -26,7 +26,7 @@ export interface DjCandidatePools<S> {
 }
 
 /** How many hops from the selected artists each step allows. */
-const REACH: { readonly [K in DjVariety]: number } = { low: 0, medium: 1, high: 2 };
+export const REACH: { readonly [K in DjVariety]: number } = { low: 0, medium: 1, high: 2 };
 
 /** Where an artist the graph doesn't reach within two hops stands. */
 const OUTSIDE = 3;
@@ -36,7 +36,7 @@ const OUTSIDE = 3;
  * selected artists in [graph]: 0 for a selected one, `OUTSIDE` for one the
  * graph doesn't reach within two hops.
  */
-const djArtistHops = (
+export const djArtistHops = (
   session: MagicSession,
   graph: ArtistGraph | null,
 ): ((artists: readonly string[]) => number) => {
