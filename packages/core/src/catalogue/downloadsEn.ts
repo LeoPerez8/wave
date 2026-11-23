@@ -33,9 +33,13 @@ export const downloadsEn = {
   downloaded: "Downloaded",
   /** The page head's progress line. */
   progress: (saved: number, total: number): string => `Downloading · ${saved} of ${total}`,
+  /** The same line while the list's downloads are paused (#1475). */
+  pausedProgress: (saved: number, total: number): string => `Paused · ${saved} of ${total}`,
   /** The group of songs asked for on their own. */
   songsGroup: "Songs",
   songsLeft: (count: number): string => `${songs(count)} left`,
+  /** A paused group's header, with no run to count it. */
+  pausedSongsLeft: (count: number): string => `Paused · ${songs(count)} left`,
   /** The groups replacement runs wait in, by direction. */
   qualityGroups: {
     upgrade: "Quality upgrade",
@@ -69,5 +73,11 @@ export const downloadsEn = {
       `Cancel ${n(count)} ${plural("en", count, { one: "download", other: "downloads" })}?`,
     cancelAllMessage: "Songs already downloaded stay, and failed songs stay in the failed list.",
     keepDownloading: "Keep Downloading",
+    /** One playlist's, album's or other group's Cancel (#1475), asking with `cancelAllTitle`. */
+    cancelGroup: "Cancel Downloads",
+    cancelGroupMessage: "Songs already downloaded stay.",
+    /** A group's Pause and Resume in a playlist's or album's menu. */
+    pauseGroup: "Pause Downloads",
+    resumeGroup: "Resume Downloads",
   },
 };

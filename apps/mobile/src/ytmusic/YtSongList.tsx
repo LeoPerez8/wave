@@ -28,7 +28,7 @@ import {
   listDuration,
 } from "@wave/core";
 import { useLocalisation } from "@/localisation/localisation";
-import type { DownloadOrigin } from "@wave/core";
+import { downloadGroupKey, type DownloadOrigin } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -77,6 +77,7 @@ import { occurrenceKeys } from "@/songs/songRowState";
 
 import { artistOpeningRequest } from "@wave/client/ytArtistFetch";
 import { askYtMusic } from "./askYtMusic";
+import { DownloadProgressLine } from "./DownloadGroupControls";
 import { keepYtList, keptYtList } from "./knownYtPages";
 import {
   useInLibraryBetweenFrames,
@@ -329,6 +330,16 @@ export const listDownloadAction = (download: YtListDownloadButton | null): LastL
       };
 
 /**
+ * A page's download: its progress line ("Downloading · 3 of 10", "Paused · 3 of 10"), the group
+ * its Pause and Cancel act on while it shows (Core's `downloadGroupKey`), and its button.
+ */
+export interface YtListDownload {
+  readonly progress: string | null;
+  readonly group: string | null;
+  readonly button: YtListDownloadButton | null;
+}
+
+/**
  * Downloading the YT Music album whose songs are [songs] (none: no album):
  * its progress line ("Downloading · 3 of 10") and its button, or null. The
  * songs it queues remember [origin], the album or mix (Settings › Downloads
@@ -337,16 +348,18 @@ export const listDownloadAction = (download: YtListDownloadButton | null): LastL
 export const useYtAlbumDownloadButton = (
   songs: readonly NativeYtSong[],
   origin: DownloadOrigin | null,
-): { readonly progress: string | null; readonly button: YtListDownloadButton | null } => {
+): YtListDownload => {
   const settled = useScreenSettled();
   const active = settled && songs.length > 0;
   const inLibrary = useLoadedInLibrary(active);
   const loaded = useLoadedLibraryFinder(active) !== null;
-  const download = useYtAlbumDownload(songs, inLibrary);
+  const group = origin === null ? null : downloadGroupKey(origin);
+  const download = useYtAlbumDownload(songs, inLibrary, group);
   const { language } = useLocalisation();
   const button = ytAlbumDownloadButton(download, language);
   return {
     progress: download.line,
+    group: download.line === null ? null : group,
     button:
       songs.length === 0
         ? null
@@ -364,13 +377,15 @@ export const useYtAlbumDownloadButton = (
 export const useYtPlaylistDownloadButton = (
   entries: readonly PlaylistItem<NativeYtSong, { readonly path: string | null }>[],
   origin: DownloadOrigin | null,
-): { readonly progress: string | null; readonly button: YtListDownloadButton | null } => {
+): YtListDownload => {
   const { inLibrary, loaded } = useInLibraryBetweenFrames(entries);
-  const download = useYtPlaylistDownload(entries, inLibrary);
+  const group = origin === null ? null : downloadGroupKey(origin);
+  const download = useYtPlaylistDownload(entries, inLibrary, group);
   const { language } = useLocalisation();
   const button = ytPlaylistDownloadButton(download, language);
   return {
     progress: download.line,
+    group: download.line === null ? null : group,
     button: pageButton(button, loaded, language, (action) =>
       runYtPlaylistDownloadAction(action, entries, inLibrary, origin),
     ),
@@ -394,8 +409,8 @@ function Head({
   head: YtListHead | undefined;
   loading: boolean;
   furniture: string | null;
-  /** An album's download progress ("Downloading · 3 of 10"). */
-  progress: string | null;
+  /** An album's download progress ("Downloading · 3 of 10") and the group its controls act on. */
+  progress: Pick<YtListDownload, "progress" | "group">;
   onPlay: ((shuffle: boolean) => void) | null;
   /** The album's download button (Core's `ytAlbumDownloadButton`). */
   download: YtListDownloadButton | null;
@@ -435,14 +450,7 @@ function Head({
             {furniture}
           </Text>
         )}
-        {progress !== null && (
-          <Text
-            className="font-sans text-footnote text-accent"
-            style={{ fontVariant: ["tabular-nums"] }}
-          >
-            {progress}
-          </Text>
-        )}
+        <DownloadProgressLine download={progress} />
       </View>
       {loading ? (
         <PlayShuffleSkeleton />
@@ -586,7 +594,7 @@ function YtSongListPage({
           head={head}
           loading={loading}
           furniture={furniture}
-          progress={download.progress}
+          progress={download}
           onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
           download={download.button}
         />

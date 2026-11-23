@@ -7,7 +7,7 @@ import org.junit.Test
 
 /**
  * The owner's Pause, Resume and Cancel All, from Settings › Downloads and the notification (#1474),
- * as the journal mirrors Core's `downloadHeld`, `downloadRequested` and `downloadsToCancelAll`.
+ * and one group's Pause and Resume (#1475), as the journal mirrors Core's `downloadHeld`, `downloadRequested` and `downloadsToCancelAll`.
  */
 class DurableOwnerPauseTest {
   @Test fun pauseStopsEverySongNotDownloadedAndNothingStartsUntilResume() = inFolder { folder ->
@@ -120,6 +120,97 @@ class DurableOwnerPauseTest {
     for (id in listOf("a", "b", "c")) assertEquals("cancelled", job(owner, id)["phase"])
     assertTrue(cancelled.containsAll(listOf("a", "b", "c")))
   }
+
+  @Test fun aGroupsPauseHoldsOnlyItsSongs() = inFolder { folder ->
+    val owner = DurableDownloads(File(folder, "jobs"))
+    val cancelled = mutableListOf<String>()
+    val transport = transfer(onCancel = { cancelled += it }) { _, source -> served(source) }
+    owner.enqueue(song("a"), null, emptyMap(), "soulseek", roadTrip)
+    owner.enqueue(song("b"), null, emptyMap(), "soulseek", album)
+    prepareSoulseek(owner, "a", folder)
+
+    owner.pauseGroup("playlist:12", transport)
+    assertEquals(setOf("playlist:12"), owner.pausedGroups())
+    assertFalse("the global pause stays off", owner.ownerPaused())
+    assertEquals("queued", job(owner, "a")["phase"])
+    assertTrue("a" in cancelled)
+    owner.advance(transport, Untouched)
+    assertEquals("queued", job(owner, "a")["phase"])
+    assertEquals("preparing", job(owner, "b")["phase"])
+    assertNull(owner.claim("a"))
+    assertEquals(1, owner.heldCount())
+
+    owner.resumeGroup("playlist:12")
+    assertEquals(emptySet<String>(), owner.pausedGroups())
+    assertEquals(0, owner.heldCount())
+    owner.advance(transport, Untouched)
+    assertEquals("preparing", job(owner, "a")["phase"])
+  }
+
+  @Test fun songsAskedForOnTheirOwnPauseAsAGroup() = inFolder { folder ->
+    val owner = DurableDownloads(File(folder, "jobs"))
+    owner.enqueue(song("a"), null, emptyMap(), "soulseek")
+    owner.enqueue(song("b"), null, emptyMap(), "soulseek", roadTrip)
+    owner.pauseGroup("songs", NoTransfer)
+    owner.advance(NoTransfer, Untouched)
+    assertEquals("queued", job(owner, "a")["phase"])
+    assertEquals("preparing", job(owner, "b")["phase"])
+  }
+
+  @Test fun theGlobalResumeResumesEveryGroupAndItsPauseKeepsThem() = inFolder { folder ->
+    val owner = DurableDownloads(File(folder, "jobs"))
+    owner.enqueue(song("a"), null, emptyMap(), "soulseek", roadTrip)
+    owner.pauseGroup("playlist:12", NoTransfer)
+    owner.pauseAll(NoTransfer)
+    owner.resumeAll()
+    assertEquals(emptySet<String>(), owner.pausedGroups())
+    owner.pauseGroup("playlist:12", NoTransfer)
+    owner.pauseAll(NoTransfer)
+    assertEquals(setOf("playlist:12"), owner.pausedGroups())
+  }
+
+  @Test fun downloadPlaylistAgainResumesItsGroupAndASongDownloadsAlone() = inFolder { folder ->
+    val owner = DurableDownloads(File(folder, "jobs"))
+    owner.enqueue(song("a"), null, emptyMap(), "soulseek", roadTrip)
+    owner.enqueue(song("b"), null, emptyMap(), "soulseek", roadTrip)
+    owner.enqueue(song("c"), null, emptyMap(), "soulseek", album)
+    owner.pauseGroup("playlist:12", NoTransfer)
+    owner.pauseGroup("album:3", NoTransfer)
+    // A song's own Download: it downloads, and its playlist stays paused.
+    owner.enqueueAll(listOf(DurableDownloads.Request(song("a"), null, source = "soulseek", release = true)))
+    owner.advance(NoTransfer, Untouched)
+    assertEquals("preparing", job(owner, "a")["phase"])
+    assertEquals("queued", job(owner, "b")["phase"])
+    // Retry stays paused.
+    owner.enqueueAll(listOf(DurableDownloads.Request(song("b"), null, source = "soulseek", origin = roadTrip)))
+    assertEquals(setOf("playlist:12", "album:3"), owner.pausedGroups())
+    // Download Playlist again resumes the playlist, and only it.
+    owner.enqueueAll(listOf(DurableDownloads.Request(song("b"), null, source = "soulseek", origin = roadTrip, release = true, resumesGroup = true)))
+    assertEquals(setOf("album:3"), owner.pausedGroups())
+    owner.advance(NoTransfer, Untouched)
+    assertEquals("preparing", job(owner, "b")["phase"])
+    assertEquals("queued", job(owner, "c")["phase"])
+  }
+
+  @Test fun aPausedGroupStaysPausedAcrossARestart() = inFolder { folder ->
+    val journal = File(folder, "jobs")
+    val first = DurableDownloads(journal)
+    first.enqueue(song("a"), null, emptyMap(), "soulseek", roadTrip)
+    first.enqueue(song("b"), null, emptyMap(), "soulseek")
+    first.pauseGroup("playlist:12", NoTransfer)
+    first.flush()
+    val restored = DurableDownloads(journal)
+    assertEquals(setOf("playlist:12"), restored.pausedGroups())
+    assertFalse(restored.ownerPaused())
+    restored.refreshPolicy(listOf(folder.path), emptyList())
+    restored.advance(NoTransfer, Untouched)
+    assertEquals("queued", job(restored, "a")["phase"])
+    assertEquals("preparing", job(restored, "b")["phase"])
+    assertEquals(setOf("playlist:12"), DurableDownloads(journal).pausedGroups())
+  }
+
+  private val roadTrip = mapOf("kind" to "playlist", "id" to "12", "name" to "Road Trip")
+  private val album = mapOf("kind" to "album", "id" to "3", "name" to "Album")
 
   private fun song(id: String) = mapOf("videoId" to id, "title" to "Recording $id", "durationMs" to 12_000L)
   private fun job(owner: DurableDownloads, id: String) = owner.snapshot().single { it["id"] == id }

@@ -166,9 +166,12 @@ class YtDownloadService : Service() {
     return builder
   }
 
-  /** Pause or Resume, and Cancel All (#1474); each starts the service, which acts on it. */
-  private fun ownerActions(builder: Notification.Builder) {
-    val paused = downloads.jobs.ownerPaused()
+  /**
+   * Pause or Resume, and Cancel All (#1474); each starts the service, which acts on it. Resume
+   * resumes paused playlists and albums too (#1475), so the leftover notification offers it
+   * ([paused]) whatever paused its songs.
+   */
+  private fun ownerActions(builder: Notification.Builder, paused: Boolean = downloads.jobs.ownerPaused()) {
     builder.addAction(ownerAction(if (paused) RESUME else PAUSE, NativeText.get(if (paused) "resume" else "pause"), if (paused) 3 else 2))
     builder.addAction(ownerAction(CANCEL_ALL, NativeText.get("cancelAll"), 4))
   }
@@ -181,7 +184,7 @@ class YtDownloadService : Service() {
   private fun pausedNotification(): Notification {
     val builder = builder().setOngoing(false).setContentTitle(NativeText.get("paused"))
       .setContentText(countText("leftCount", downloads.jobs.heldCount()))
-    ownerActions(builder)
+    ownerActions(builder, paused = true)
     return builder.build()
   }
 

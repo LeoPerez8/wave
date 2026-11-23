@@ -92,6 +92,8 @@ class DurableDownloads(
   @Volatile private var pauseView: YoutubePause? = null
   /** The owner's pause ([pauseAll]) as readers see it, read without the lock. */
   @Volatile private var ownerPauseView = false
+  /** The playlists, albums and other groups the owner paused on their own ([pauseGroup]; Core's `downloadGroupKey`). */
+  @Volatile private var pausedGroupsView: Set<String> = emptySet()
   /** The jobs asked for again while the owner paused ([Request.release]), which download anyway. */
   @Volatile private var releasedView: Set<String> = emptySet()
   private val published get() = view.jobs
@@ -233,6 +235,8 @@ class DurableDownloads(
      * while downloads are paused it downloads anyway, and the rest stays paused.
      */
     val release: Boolean = false,
+    /** A list's Download (Core's `requestResumesGroup`): it resumes [origin]'s group if it's paused. */
+    val resumesGroup: Boolean = false,
   )
 
   /** [enqueue] for each of [requests], in order, written in one write; the jobs' ids. */
@@ -243,9 +247,14 @@ class DurableDownloads(
 
   private fun add(request: Request): String {
     val id = addJob(request)
-    if (request.release && ownerPauseView && id !in releasedView) {
+    val group = groupKey(request.origin)
+    if (request.resumesGroup && request.origin != null && group in pausedGroupsView) {
+      pausedGroupsView = pausedGroupsView - group
+      savePause()
+    }
+    if (request.release && anyPause() && id !in releasedView) {
       releasedView = releasedView + id
-      policy[OWNER_PAUSE] = mapOf("released" to releasedView.toList())
+      savePause()
     }
     return id
   }
@@ -483,16 +492,44 @@ class DurableDownloads(
   @Synchronized fun pauseAll(transport: DurableTransfer) {
     val before = view.revision
     ownerPauseView = true; releasedView = emptySet()
-    policy[OWNER_PAUSE] = mapOf("released" to emptyList<String>())
+    savePause()
     for (job in jobs.values) if (job["phase"] in CHARGED && job["importFailure"] == null) requeue(job, transport)
     persistNow(); announce(before)
   }
 
+  /**
+   * A playlist's, album's or other group's Pause (Core's `pauseDownloadGroup`): the group's songs
+   * not downloaded yet stop at once and go back in line, as [pauseAll] does for every song, and the
+   * other groups go on. [key] is Core's `downloadGroupKey` ("playlist:12", "songs"). Its songs
+   * asked for meanwhile are held again. Written at once, so it survives a restart.
+   */
+  @Synchronized fun pauseGroup(key: String, transport: DurableTransfer) {
+    val before = view.revision
+    pausedGroupsView = pausedGroupsView + key
+    releasedView = releasedView.filterTo(mutableSetOf()) { id -> jobs[id]?.let { groupKey(it["origin"] as? Map<*, *>) } != key }
+    savePause()
+    for (job in jobs.values)
+      if (job["phase"] in CHARGED && job["importFailure"] == null && groupKey(job["origin"] as? Map<*, *>) == key) requeue(job, transport)
+    persistNow(); announce(before)
+  }
+
+  /** The group's Resume (Core's `resumeDownloadGroup`): its songs go on, the ones stopped mid-download from the start. */
+  @Synchronized fun resumeGroup(key: String) {
+    if (key !in pausedGroupsView) return
+    val before = view.revision
+    pausedGroupsView = pausedGroupsView - key
+    savePause()
+    persistNow(); announce(before)
+  }
+
+  /** The groups paused on their own ([pauseGroup]). Read without the journal's lock. */
+  fun pausedGroups(): Set<String> = pausedGroupsView
+
   /** Resume (Core's `resumeAllDownloads`): everything paused goes on, the songs stopped mid-download from the start. */
   @Synchronized fun resumeAll() {
-    if (policy.remove(OWNER_PAUSE) == null && !ownerPauseView) return
+    if (policy.remove(OWNER_PAUSE) == null && !anyPause()) return
     val before = view.revision
-    ownerPauseView = false; releasedView = emptySet()
+    ownerPauseView = false; pausedGroupsView = emptySet(); releasedView = emptySet()
     persistNow(); announce(before)
   }
 
@@ -520,7 +557,24 @@ class DurableDownloads(
   private fun notDownloaded(job: Map<String, Any?>) = job["phase"] in NOT_DOWNLOADED && job["importFailure"] == null
 
   /** Held by the owner's pause (Core's `downloadHeld`): not downloaded yet, and not asked for again since. */
-  private fun ownerHeld(job: Map<String, Any?>) = ownerPauseView && notDownloaded(job) && job["id"] !in releasedView
+  private fun ownerHeld(job: Map<String, Any?>) =
+    anyPause() && notDownloaded(job) && job["id"] !in releasedView &&
+      (ownerPauseView || groupKey(job["origin"] as? Map<*, *>) in pausedGroupsView)
+
+  private fun anyPause() = ownerPauseView || pausedGroupsView.isNotEmpty()
+
+  /** Core's `downloadGroupKey`: "kind:id" for a job's origin, "songs" for none. */
+  private fun groupKey(origin: Map<*, *>?): String = if (origin == null) "songs" else "${origin["kind"]}:${origin["id"]}"
+
+  /**
+   * Writes the owner's pause into the policy: `all` for [pauseAll], `groups` for [pauseGroup] and
+   * the released jobs. With neither left it drops, and the released jobs with it (Core's
+   * `resumeDownloadGroup`).
+   */
+  private fun savePause() {
+    if (!anyPause()) { releasedView = emptySet(); policy.remove(OWNER_PAUSE); return }
+    policy[OWNER_PAUSE] = mapOf("all" to ownerPauseView, "released" to releasedView.toList(), "groups" to pausedGroupsView.toList())
+  }
 
   /** A pause that changed no job still moves the revision, so readers following [changesSince] hear of it. */
   private fun announce(before: Long) {
@@ -534,9 +588,11 @@ class DurableDownloads(
    */
   private fun loadOwnerPause() {
     val pause = policy[OWNER_PAUSE] as? Map<*, *> ?: return
-    ownerPauseView = true
+    // A pause saved before groups could pause (#1474) has no `all`: it paused everything.
+    ownerPauseView = pause["all"] as? Boolean ?: true
+    pausedGroupsView = (pause["groups"] as? List<*>).orEmpty().filterIsInstance<String>().toSet()
     releasedView = (pause["released"] as? List<*>).orEmpty().filterIsInstance<String>().filter { id -> jobs[id]?.let(::pending) == true }.toSet()
-    policy[OWNER_PAUSE] = mapOf("released" to releasedView.toList())
+    savePause()
     for (job in jobs.values) if (job["phase"] in CHARGED && ownerHeld(job)) requeue(job, null)
   }
 

@@ -53,6 +53,7 @@ import {
   FailedSectionHeader,
 } from "@/settings/FailedDownloadsSection";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
+import { DownloadGroupControls } from "@/ytmusic/DownloadGroupControls";
 import { useDownloadRun } from "@/ytmusic/downloadRun";
 import { useDownloadingList, useQueuedDownloadLine } from "@/ytmusic/downloadingRows";
 import { cancelQueuedDownload, useFailedDownloads } from "@/ytmusic/YtDownloads";
@@ -91,9 +92,9 @@ function HandleSlot({ handle }: { handle: Handle }) {
   return <ReorderHandle gesture={handle === "drawn" ? undefined : handle} />;
 }
 
-/** Two group headers show the same name and line. */
+/** Two group headers show the same name, line and Pause or Resume. */
 const sameGroupLine = (a: DownloadGroup<NativeYtSong>, b: DownloadGroup<NativeYtSong>) =>
-  a.name === b.name && a.line === b.line;
+  a.name === b.name && a.line === b.line && a.paused === b.paused;
 
 /** Two groups' run counts are the same (or both absent). */
 const sameRunCounts = (a: DownloadRunCounts | undefined, b: DownloadRunCounts | undefined) =>
@@ -183,7 +184,8 @@ function DownloadGroupHeader({
   onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
 }) {
   const { language } = useLocalisation();
-  const line = progress === undefined ? group.line : downloadRunGroupLine(progress, language);
+  const line =
+    progress === undefined ? group.line : downloadRunGroupLine(progress, language, group.paused);
   return (
     <View>
       <View className="flex-row items-center" style={{ gap: CELL * 1.5, paddingTop: CELL }}>
@@ -211,6 +213,7 @@ function DownloadGroupHeader({
         </View>
         <HandleSlot handle={handle} />
       </View>
+      <DownloadGroupControls group={group.key} />
       {progress !== undefined && (
         <View style={{ paddingTop: CELL, paddingBottom: CELL / 2 }}>
           <RunBar fraction={downloadRunLines(progress).fraction} />
