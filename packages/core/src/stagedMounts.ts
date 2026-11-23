@@ -36,6 +36,19 @@ export const stagedMounts = ({ estimates, viewport, gap = 0 }: StagedMountsInput
   return counts.length === 0 ? [0] : counts;
 };
 
+/**
+ * How a page builds from the top down (#1487): the first frame mounts the
+ * sections that start on screen, as `stagedMounts` does, and every section
+ * below takes a turn of its own, one more a turn, so no turn pays for more
+ * than one section. Cumulative counts, ending with all of them.
+ */
+export const topDownMounts = (input: StagedMountsInput): number[] => {
+  const first = stagedMounts(input)[0]!;
+  const counts = [first];
+  for (let mounted = first + 1; mounted <= input.estimates.length; mounted++) counts.push(mounted);
+  return counts;
+};
+
 export type PagerMountsInput = {
   /** How many pages the row holds. */
   readonly count: number;

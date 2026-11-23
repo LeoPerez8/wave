@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { listMounts, pagerMounts, stagedMounts } from "./index.ts";
+import { listMounts, pagerMounts, stagedMounts, topDownMounts } from "./index.ts";
 
 describe("stagedMounts", () => {
   test("the first frame mounts the sections that start inside the viewport, the next one the rest", () => {
@@ -28,6 +28,27 @@ describe("stagedMounts", () => {
 
   test("an empty page mounts nothing", () => {
     assert.deepEqual(stagedMounts({ estimates: [], viewport: 800 }), [0]);
+  });
+});
+
+describe("topDownMounts", () => {
+  test("the first frame mounts the first screen, then each later section takes its own turn", () => {
+    assert.deepEqual(
+      topDownMounts({ estimates: [100, 100, 100, 100, 100, 100], viewport: 250 }),
+      [3, 4, 5, 6],
+    );
+  });
+
+  test("sections that start on screen behind ones of no height still mount at once", () => {
+    assert.deepEqual(topDownMounts({ estimates: [0, 0, 300, 400, 200], viewport: 250 }), [3, 4, 5]);
+  });
+
+  test("a page that fits mounts whole in its first frame", () => {
+    assert.deepEqual(topDownMounts({ estimates: [50, 50], viewport: 800 }), [2]);
+  });
+
+  test("an empty page mounts nothing", () => {
+    assert.deepEqual(topDownMounts({ estimates: [], viewport: 800 }), [0]);
   });
 });
 

@@ -5,7 +5,7 @@ import { useScreenContent } from "@/lib/screenTiming";
 import { IconMusic, IconSettings } from "@tabler/icons-react-native";
 import { homeItems, type RecapPeriod } from "@wave/core";
 import { Link, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { router } from "@/lib/timingRouter";
 import { Pressable, Text, View, useWindowDimensions } from "react-native";
 
@@ -17,12 +17,8 @@ import { StagedSections } from "@/components/StagedSections";
 import { useHomeArrangement, homeTitleLongPress } from "@/home/homeArrangement";
 import { HomeSection } from "@/home/HomeSection";
 import { useHomeScreenContent } from "@/home/homeContent";
-import {
-  afterHomeFrame,
-  homeItemEstimate,
-  homeOpeningState,
-  SECTION_GAP,
-} from "@/home/homeOpening";
+import { homeItemEstimate, homeOpeningState, SECTION_GAP } from "@/home/homeOpening";
+import { useHomeContentDrawn } from "@/home/homeContentDrawn";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { startSavingHomeSnapshot } from "@/home/homeSnapshot";
 import { useHomeWorkSight } from "@/home/useHomeWorkSight";
@@ -73,20 +69,13 @@ export default function HomeScreen() {
   useRenderCost("HomeScreen");
   // Home's mixes and sections build only while Home is in sight (#1351).
   useHomeWorkSight();
-  const [painted, setPainted] = useState(false);
-  const newRecap = useRecapToAnnounce(painted);
-  useEffect(
-    () =>
-      afterHomeFrame(() => setPainted(true), {
-        request: requestAnimationFrame,
-        cancel: cancelAnimationFrame,
-      }),
-    [],
-  );
+  const [drawn, setDrawn] = useState(false);
+  const newRecap = useRecapToAnnounce(drawn);
   // The first frame draws Home's sections from memory or the cold-start snapshot (#1353);
-  // the follow cards' and Recap's reads wait until it has painted.
+  // the follow cards' and Recap's reads, Home's mixes and its lower sections wait until
+  // its first content is drawn (#1487).
   return (
-    <HomeFollowProvider reading={painted}>
+    <HomeFollowProvider reading={drawn}>
       <LargeTitleScreen
         title={strings.home.title}
         waves
@@ -99,13 +88,21 @@ export default function HomeScreen() {
           />
         }
       >
-        <HomeContent newRecap={newRecap} />
+        <HomeContent newRecap={newRecap} drawn={drawn} onDrawn={setDrawn} />
       </LargeTitleScreen>
     </HomeFollowProvider>
   );
 }
 
-function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
+function HomeContent({
+  newRecap,
+  drawn,
+  onDrawn,
+}: {
+  newRecap: RecapPeriod | null;
+  drawn: boolean;
+  onDrawn: (drawn: true) => void;
+}) {
   const { strings } = useLocalisation();
   useRenderCost("HomeContent");
   const home = useHomeScreenContent();
@@ -114,11 +111,12 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
   useFocusEffect(useCallback(() => () => endSelection(), [endSelection]));
   const { empty, nothingPlayed, ready } = homeOpeningState(home);
   useScreenContent(ready);
+  useHomeContentDrawn(ready, onDrawn);
   const arrangement = useHomeArrangement();
   const { fontScale, width } = useWindowDimensions();
   const ytMusic = useYtMusicEnabled();
-  // The first frame mounts the sections that start on screen; the rest follow a screen a
-  // frame, before a scroll can reach them (#1380).
+  // The first frame mounts the sections that start on screen; once they're drawn, each one
+  // below takes a frame of its own, into room kept for it (#1380, #1487).
   const shown = homeItems(arrangement, { nothingPlayed });
 
   return (
@@ -145,6 +143,8 @@ function HomeContent({ newRecap }: { newRecap: RecapPeriod | null }) {
           <View style={newRecap === null ? FIRST_SECTION : undefined}>
             <StagedSections
               estimate={(index) => homeItemEstimate(shown[index]!, fontScale, width, ytMusic)}
+              topDown
+              waitFor={drawn}
             >
               {shown.map((item, index) =>
                 item === "no-sections" ? (

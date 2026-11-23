@@ -59,9 +59,8 @@ function ShowCard({ show, artist }: { show: FollowShow; artist: FollowedArtist }
   const { language, strings } = useLocalisation();
   const copy = strings.upcomingShows;
   const { width, fontScale } = useWindowDimensions();
-  const scale = Math.max(1, fontScale);
-  const cardWidth = Math.min(CARD * scale, width - grid.margin * 2 - CELL * 3);
-  const stubWidth = STUB * Math.min(scale, 1.5);
+  const cardWidth = showCardWidth(width, fontScale);
+  const stubWidth = STUB * Math.min(Math.max(1, fontScale), 1.5);
   const date = showCardDate(language, show.startsAt);
   const openTickets = () => {
     void Linking.openURL(show.ticketUrl).catch(() => showMessage(artist.name, copy.openFailed));
@@ -153,13 +152,24 @@ function ShowCard({ show, artist }: { show: FollowShow; artist: FollowedArtist }
   );
 }
 
-/** Home's Upcoming Shows: absent until a shows-level artist has a show coming in the country. */
+/** A card's width in a window [width] wide, at [fontScale]: it grows with the text. */
+const showCardWidth = (width: number, fontScale: number): number =>
+  Math.min(CARD * Math.max(1, fontScale), width - grid.margin * 2 - CELL * 3);
+
+/**
+ * Home's Upcoming Shows: absent until a shows-level artist has a show coming
+ * in the country. Its row mounts the cards in sight first and the rest in the
+ * frames after: every card is a ticket of some ninety views, and an owner
+ * following many touring artists held Home's first rows for most of a second
+ * drawing them all at once (#1487).
+ */
 export function UpcomingShows({ title }: { title: string }) {
   const { showCards: cards, follows } = useHomeFollow();
+  const { width, fontScale } = useWindowDimensions();
   if (cards.length === 0) return null;
   return (
     <TitledSection title={title}>
-      <CoverRow>
+      <CoverRow staged tile={showCardWidth(width, fontScale)}>
         {cards.flatMap((show) => {
           const artist = follows.find((f) => f.key === show.artistKey);
           return artist === undefined

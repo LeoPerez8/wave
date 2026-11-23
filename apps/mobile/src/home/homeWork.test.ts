@@ -113,6 +113,27 @@ test("a Home screen that unmounts stops holding the gate open", async () => {
   assert.equal(ran, false);
 });
 
+test("Home's work waits until Home's first content has been drawn (#1487)", async () => {
+  const work = createHomeWork();
+  const drawn = work.waitForContent();
+  const home = sightOf(true);
+  work.follow(home.sight);
+  let ran = false;
+  void runTestPromise(work.turn).then(() => (ran = true));
+  await setImmediate();
+  assert.equal(ran, false);
+  drawn();
+  await setImmediate();
+  assert.equal(ran, true);
+});
+
+test("someone off Home waiting for the work doesn't wait for Home's content", async () => {
+  const work = createHomeWork();
+  work.waitForContent();
+  work.follow(sightOf(true).sight);
+  assert.equal(await runTestPromise(work.wanted(Effect.as(work.turn, "ran"))), "ran");
+});
+
 /** Stepped work with one step a slice, as a long build's slices go. */
 const runStepsOneAtATime = <A>(steps: Generator<void, A>, between: Effect.Effect<void>) =>
   pacedSteps(

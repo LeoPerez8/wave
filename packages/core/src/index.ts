@@ -3483,6 +3483,7 @@ export {
   listMounts,
   pagerMounts,
   stagedMounts,
+  topDownMounts,
   type ListMountsInput,
   type PagerMountsInput,
   type StagedMountsInput,
