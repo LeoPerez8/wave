@@ -80,6 +80,7 @@ export const testCollaborationWorld = (
       members: record.members.map((each) => ({
         accountId: each.accountId,
         name: each.accountId,
+        photoUrl: null,
         joinedAt: each.joinedAt,
         owner: each.accountId === record.owner,
         self: each.accountId === accountId,

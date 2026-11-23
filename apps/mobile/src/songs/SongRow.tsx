@@ -19,7 +19,7 @@ import { Artwork } from "@/catalog/Artwork";
 import { SONG_ROW_COVER, SongCover } from "@/catalog/cards/SongCard";
 import { ExplicitBadge } from "@/catalog/ExplicitBadge";
 import { CELL, grid } from "@/catalog/grid";
-import { MemberInitial } from "@/catalog/MemberInitial";
+import { MemberCircle } from "@/catalog/MemberCircle";
 import { useLocalisation } from "@/localisation/localisation";
 import { RankNumber } from "@/catalog/RankNumber";
 import { SwipeableRow, swipeAccessibility, type SwipeSide } from "@/catalog/SwipeableRow";
@@ -199,7 +199,7 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
             {props.starred && <IconStarFilled size={14} color={highlight} />}
           </View>
         )}
-        {props.addedByInitial !== undefined && <MemberInitial initial={props.addedByInitial} />}
+        {props.addedByInitial !== undefined && <MemberCircle initial={props.addedByInitial} />}
         {props.trailing && (
           <Text
             numberOfLines={1}

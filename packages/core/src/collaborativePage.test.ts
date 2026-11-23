@@ -15,23 +15,29 @@ const member = (
   name: string | null,
   owner = false,
   self = false,
-): CollaborationMember => ({ accountId, name, joinedAt: 1, owner, self });
+  photoUrl: string | null = null,
+): CollaborationMember => ({ accountId, name, photoUrl, joinedAt: 1, owner, self });
+
+const ANA_PHOTO = "https://lh3.googleusercontent.com/a/ana=s96-c";
 
 const LEO = member("leo", "Leo Perez", true, true);
-const ANA = member("ana", "Ana Souza");
+const ANA = member("ana", "Ana Souza", false, false, ANA_PHOTO);
 const CAIO = member("caio", "caio lima");
 
 describe("collaborativePageMembers", () => {
   test("gives each member's initial and first name, the owner first as the record keeps them", () => {
     assert.deepEqual(collaborativePageMembers([LEO, ANA, CAIO]), {
       initials: ["L", "A", "C"],
+      photoUrls: [null, ANA_PHOTO, null],
       firstNames: ["Leo", "Ana", "caio"],
     });
   });
 
   test("leaves out a member the service has no name for", () => {
-    assert.deepEqual(collaborativePageMembers([LEO, member("x", null), member("y", "   ")]), {
+    const unnamed = member("x", null, false, false, ANA_PHOTO);
+    assert.deepEqual(collaborativePageMembers([LEO, unnamed, member("y", "   ")]), {
       initials: ["L"],
+      photoUrls: [null],
       firstNames: ["Leo"],
     });
   });

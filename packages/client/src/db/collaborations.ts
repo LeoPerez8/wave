@@ -10,6 +10,7 @@
 import {
   membershipChanges,
   privateCopyId,
+  readCollaborationMember,
   type Collaboration,
   type CollaborationMember,
   type CreatedInvite,
@@ -38,7 +39,10 @@ export interface CollaborativePlaylist {
 const readMembers = (stored: string): CollaborationMember[] => {
   try {
     const members = JSON.parse(stored) as unknown;
-    return Array.isArray(members) ? (members as CollaborationMember[]) : [];
+    // Read as the service's are, so a member kept before photos were kept has none.
+    return Array.isArray(members)
+      ? members.flatMap((member: unknown) => readCollaborationMember(member) ?? [])
+      : [];
   } catch {
     return [];
   }

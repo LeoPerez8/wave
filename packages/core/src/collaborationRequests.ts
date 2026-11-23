@@ -5,6 +5,7 @@
  * only when `isCollaborationRequest` takes it; this builds the requests and reads the answers.
  * An answer is what the route gives, a refusal the caller can act on, or a failure.
  */
+import { accountPhotoUrl } from "./accountPhoto.ts";
 import {
   readPullPage,
   readPushAnswer,
@@ -28,6 +29,11 @@ export interface CollaborationMember {
   readonly accountId: string;
   /** The Google account name; null when the service has none. */
   readonly name: string | null;
+  /**
+   * The Google account's photo, an address `accountPhotoUrl` accepts; null when the service has
+   * none, or sent none (one from before photos were kept, or a member stored before them).
+   */
+  readonly photoUrl: string | null;
   readonly joinedAt: number;
   readonly owner: boolean;
   /** The account that asked. */
@@ -113,7 +119,12 @@ const parse = (body: string): unknown => {
 const textOrNull = (value: unknown): value is string | null =>
   value === null || typeof value === "string";
 
-const readMember = (raw: unknown): CollaborationMember | null =>
+/**
+ * Reads one member as the service lists it, or as a device kept it: a member without a photo
+ * (from a service, or a record, from before photos were kept) has none. Null when [raw] isn't
+ * a member's shape.
+ */
+export const readCollaborationMember = (raw: unknown): CollaborationMember | null =>
   isRecord(raw) &&
   typeof raw.accountId === "string" &&
   textOrNull(raw.name) &&
@@ -123,6 +134,7 @@ const readMember = (raw: unknown): CollaborationMember | null =>
     ? {
         accountId: raw.accountId,
         name: raw.name,
+        photoUrl: accountPhotoUrl(raw.photoUrl),
         joinedAt: raw.joinedAt as number,
         owner: raw.owner,
         self: raw.self,
@@ -139,7 +151,7 @@ export const readCollaboration = (raw: unknown): Collaboration | null => {
     return null;
   return {
     playlistId: raw.playlistId,
-    members: raw.members.flatMap((member: unknown) => readMember(member) ?? []),
+    members: raw.members.flatMap((member: unknown) => readCollaborationMember(member) ?? []),
   };
 };
 

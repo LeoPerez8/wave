@@ -13,6 +13,7 @@ import {
   membersCall,
   playlistPullCall,
   playlistPushCall,
+  readCollaborationMember,
   readInviteCall,
   removeMemberCall,
   turnOffInviteCall,
@@ -22,12 +23,20 @@ import {
 const LIST = "5f0c1a2b3c4d5e6f708192a3b4c5d6e7";
 const ANA = "0b6e1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b";
 const TOKEN = "A".repeat(43);
+const PHOTO = "https://lh3.googleusercontent.com/a/ana=s96-c";
 
 const collaboration = {
   playlistId: LIST,
   members: [
-    { accountId: ANA, name: "Ana Souza", joinedAt: 1, owner: true, self: true },
-    { accountId: "bea", name: null, joinedAt: 2, owner: false, self: false },
+    {
+      accountId: ANA,
+      name: "Ana Souza",
+      photoUrl: PHOTO,
+      joinedAt: 1,
+      owner: true,
+      self: true,
+    },
+    { accountId: "bea", name: null, photoUrl: null, joinedAt: 2, owner: false, self: false },
   ],
 };
 
@@ -189,6 +198,34 @@ describe("collaboration requests", () => {
     });
   });
 
+  test("a member the service sends without a photo reads as having none", () => {
+    // A service from before photos were kept, or a record the client stored before them.
+    const { photoUrl: _, ...withoutPhoto } = collaboration.members[0]!;
+    const answer = collaborationAnswer(
+      membersCall(LIST),
+      200,
+      JSON.stringify({ playlistId: LIST, members: [withoutPhoto] }),
+    );
+    assert.deepEqual(answer, {
+      type: "done",
+      value: { playlistId: LIST, members: [{ ...withoutPhoto, photoUrl: null }] },
+    });
+  });
+
+  test("a photo address off Google's photo host reads as none, and the member stays", () => {
+    for (const photoUrl of ["https://example.com/a.jpg", "http://lh3.googleusercontent.com/a", 7]) {
+      const answer = collaborationAnswer(
+        membersCall(LIST),
+        200,
+        JSON.stringify({ playlistId: LIST, members: [{ ...collaboration.members[0], photoUrl }] }),
+      );
+      assert.deepEqual(answer, {
+        type: "done",
+        value: { playlistId: LIST, members: [{ ...collaboration.members[0], photoUrl: null }] },
+      });
+    }
+  });
+
   test("a 2xx answer that isn't the route's shape is a failure", () => {
     const cases: readonly [CollaborationCall<unknown>, string][] = [
       [membersCall(LIST), "{}"],
@@ -253,5 +290,21 @@ describe("collaboration requests", () => {
         type: "failed",
         status,
       });
+  });
+});
+
+describe("readCollaborationMember", () => {
+  test("reads a member as the service sends it", () => {
+    assert.deepEqual(readCollaborationMember(collaboration.members[0]), collaboration.members[0]);
+  });
+
+  test("a member kept before photos were kept reads as having none", () => {
+    const { photoUrl: _, ...stored } = collaboration.members[0]!;
+    assert.deepEqual(readCollaborationMember(stored), { ...stored, photoUrl: null });
+  });
+
+  test("gives null for what isn't a member", () => {
+    assert.equal(readCollaborationMember("ana"), null);
+    assert.equal(readCollaborationMember({ ...collaboration.members[0], accountId: 7 }), null);
   });
 });

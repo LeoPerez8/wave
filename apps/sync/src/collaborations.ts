@@ -11,11 +11,13 @@
 
 import type { Client, InStatement, ResultSet, Transaction } from "@libsql/client";
 
-/** A member as the other members see it: the Google account's name, never its email. */
+/** A member as the other members see it: the Google account's name and photo, never its email. */
 export interface CollaborationMember {
   readonly accountId: string;
   /** Null for an account the service has no name for. */
   readonly name: string | null;
+  /** The Google account's photo (`@wave/core`'s `accountPhotoUrl`); null when it has none. */
+  readonly photoUrl: string | null;
   readonly joinedAt: number;
   readonly owner: boolean;
   /** Whether it's the account that asked. */
@@ -51,7 +53,7 @@ export type CollaborationRefusal =
   /** The account to remove isn't in the playlist. */
   | "not_found";
 
-const MEMBER_COLUMNS = `m.playlist_id, m.account_id, m.joined_at, a.name,
+const MEMBER_COLUMNS = `m.playlist_id, m.account_id, m.joined_at, a.name, a.photo_url,
                         m.account_id = c.owner_id AS owner`;
 const MEMBER_ORDER = "m.playlist_id, owner DESC, m.joined_at, m.account_id";
 
@@ -64,6 +66,7 @@ const membersFrom = (result: ResultSet | undefined, accountId: string): Collabor
     members.push({
       accountId: String(row.account_id),
       name: typeof row.name === "string" ? row.name : null,
+      photoUrl: typeof row.photo_url === "string" ? row.photo_url : null,
       joinedAt: Number(row.joined_at),
       owner: Number(row.owner) === 1,
       self: row.account_id === accountId,

@@ -1,7 +1,7 @@
 /**
  * What a collaborative playlist shows of its members on the phone (docs/spec.md,
- * "Collaborative playlists", What it shows and Refreshing): each member's initial and first
- * name under the playlist's name, the initial and full name of who added each entry, and the
+ * "Collaborative playlists", What it shows and Refreshing): each member's photo (else initial)
+ * and first name under the playlist's name, the initial and full name of who added each entry, and the
  * page's own pull while it is in sight.
  */
 import type { CollaborationMember } from "./collaborationRequests.ts";
@@ -26,21 +26,27 @@ const firstNameOf = (name: string): string => name.split(/\s+/)[0] ?? name;
 export interface CollaborativePageMembers {
   /** One per named member, in the record's order (the owner first). */
   readonly initials: readonly string[];
+  /** Each initial's member's photo, at the same place; null where the initial shows. */
+  readonly photoUrls: readonly (string | null)[];
   readonly firstNames: readonly string[];
 }
 
 /**
- * The initials and first names of [members] (the owner first, then the others in the order
- * they joined). A member the service has no name for shows neither.
+ * The initials, photos and first names of [members] (the owner first, then the others in the
+ * order they joined). A member the service has no name for shows none of them.
  */
 export const collaborativePageMembers = (
   members: readonly CollaborationMember[],
 ): CollaborativePageMembers => {
   const named = members.flatMap((member) => {
     const name = nameOf(member.name);
-    return name === null ? [] : [name];
+    return name === null ? [] : [{ name, photoUrl: member.photoUrl }];
   });
-  return { initials: named.map(initialOf), firstNames: named.map(firstNameOf) };
+  return {
+    initials: named.map(({ name }) => initialOf(name)),
+    photoUrls: named.map(({ photoUrl }) => photoUrl),
+    firstNames: named.map(({ name }) => firstNameOf(name)),
+  };
 };
 
 /** Who added an entry: their initial for the row, their full name for the song's menu. */

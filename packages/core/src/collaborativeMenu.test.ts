@@ -176,6 +176,7 @@ describe("the questions", () => {
 const member = (fields: Partial<CollaborationMember>): CollaborationMember => ({
   accountId: "a",
   name: "Leo Perez",
+  photoUrl: null,
   joinedAt: 0,
   owner: false,
   self: false,

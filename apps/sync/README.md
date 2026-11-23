@@ -75,8 +75,13 @@ its Wave account (keyed by Google's `sub`).
 
 `name` is the name the service keeps for the account, `null` when it has none. Every sign-in
 stores the ID token's `name` claim, cleaned and cut to 100 characters by Core's `accountName`
-(`packages/core/src/accountName.ts`); a token without the claim leaves the name there is. The
-members of a collaborative playlist see the account by it, and nothing else of it.
+(`packages/core/src/accountName.ts`); a token without the claim leaves the name there is.
+Every sign-in also stores the token's `picture` claim as the account's photo when Core's
+`accountPhotoUrl` (`packages/core/src/accountPhoto.ts`) accepts it: an `https:` address on a
+host ending in `.googleusercontent.com`. A token without one, or with any other address, stores
+none, so a photo removed on Google goes. The members of a collaborative playlist see the account
+by its name and photo, and nothing else of it. Migration `0020_account_photo` adds the
+`photo_url` column, empty for the accounts there were until they sign in.
 
 `401 { "error": "invalid_id_token" }` when the token doesn't check out,
 `403 { "error": "not_allowed" }` when `ALLOWED_EMAILS` is set and the email isn't on it,
@@ -293,6 +298,7 @@ A `Collaboration`, with the owner first and the others in the order they joined:
     {
       "accountId": "0b6e…",
       "name": "Ana Souza",
+      "photoUrl": "https://lh3.googleusercontent.com/a/…",
       "joinedAt": 1760443200000,
       "owner": true,
       "self": true
@@ -301,8 +307,9 @@ A `Collaboration`, with the owner first and the others in the order they joined:
 }
 ```
 
-`name` is the account's Google account name, `null` when the service has none; no email is
-ever given. `self` marks the account that asked. `accountId` is the service's id of the
+`name` is the account's Google account name and `photoUrl` its Google photo, each `null` when
+the service has none; no email is ever given. The app reads a member without `photoUrl` (from a
+service before photos were kept) as having none. `self` marks the account that asked. `accountId` is the service's id of the
 account, the one `DELETE /v1/collaboration/members` takes.
 
 | Route                                                         | Who                          | What it does                                                                                                  |
