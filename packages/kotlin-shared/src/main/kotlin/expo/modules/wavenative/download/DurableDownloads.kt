@@ -235,7 +235,7 @@ class DurableDownloads(
      * while downloads are paused it downloads anyway, and the rest stays paused.
      */
     val release: Boolean = false,
-    /** A list's Download (Core's `requestResumesGroup`): it resumes [origin]'s group if it's paused. */
+    /** A list's Download (Core's `requestResumesGroup`): it resumes [origin]'s group (Songs with none) if it's paused. */
     val resumesGroup: Boolean = false,
   )
 
@@ -248,7 +248,8 @@ class DurableDownloads(
   private fun add(request: Request): String {
     val id = addJob(request)
     val group = groupKey(request.origin)
-    if (request.resumesGroup && request.origin != null && group in pausedGroupsView) {
+    // A list with no origin (Settings › Wave Account's Download All) resumes Songs, as Core's `downloadRequested` does.
+    if (request.resumesGroup && group in pausedGroupsView) {
       pausedGroupsView = pausedGroupsView - group
       savePause()
     }

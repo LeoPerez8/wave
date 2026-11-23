@@ -185,6 +185,14 @@ describe("Pause on one playlist's or album's downloads", () => {
     assert.equal(downloadHeld(asked, theirs("c")), true);
   });
 
+  test("a list asked for with no origin (Download All) resumes Songs, as the journal does", () => {
+    const songs = pauseDownloadGroup(paused, "songs", []);
+    const asked = downloadRequested(songs, ["a"], "list", null);
+    assert.equal(downloadGroupPaused(asked, "songs"), false);
+    assert.equal(downloadHeld(asked, job("b")), false);
+    assert.equal(downloadGroupPaused(asked, "playlist:1"), true);
+  });
+
   test("a song asked for on its own downloads, and the rest of its group stays paused", () => {
     const asked = downloadRequested(paused, ["a"], "song");
     assert.equal(downloadHeld(asked, mine("a")), false);
