@@ -303,7 +303,12 @@ const JAZZ = genreFamily("Jazz")!.key;
 const ROCK = genreFamily("Rock")!.key;
 
 /** A song of the genre family [genre], with the style of the genre [tag] when given. */
-const tagged = (trackId: string, artist: string, genre: string | null, tag?: string): MagicSong => ({
+const tagged = (
+  trackId: string,
+  artist: string,
+  genre: string | null,
+  tag?: string,
+): MagicSong => ({
   ...song(trackId, artist),
   genre,
   style: tag === undefined ? null : songStyle({ genre: tag }),

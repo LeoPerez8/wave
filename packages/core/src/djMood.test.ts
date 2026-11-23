@@ -197,7 +197,13 @@ describe("a mood filters a ranking", () => {
     const { matched, unknown } = djMoodFiltered(
       [
         { trackId: "1", source: "library" as const, score: 10, song: null, style: heavy },
-        { trackId: "2", source: "library" as const, score: 9, song: { videoId: "v" }, style: heavy },
+        {
+          trackId: "2",
+          source: "library" as const,
+          score: 9,
+          song: { videoId: "v" },
+          style: heavy,
+        },
         { trackId: "3", source: "library" as const, score: 8, song: null },
       ],
       "relaxing",

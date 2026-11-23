@@ -105,7 +105,12 @@ const featuresOf = (row: {
     ? null
     : row.mode !== 0 && row.mode !== 1
       ? null
-      : { energy: row.energy, valence: row.valence, acousticness: row.acousticness, mode: row.mode };
+      : {
+          energy: row.energy,
+          valence: row.valence,
+          acousticness: row.acousticness,
+          mode: row.mode,
+        };
 
 /**
  * Every Library song's found features, by Track id as Core's candidates name it (`String(id)`):
