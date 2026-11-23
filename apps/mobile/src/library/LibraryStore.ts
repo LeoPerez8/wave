@@ -1962,8 +1962,7 @@ const make = Effect.gen(function* () {
       attempt("read the Now Playing song", (db) => selectNowPlayingSong(db, target)),
 
     trackDetails: (id) => attempt("read the playing track", (db) => trackDetails(db, id)),
-    artworkPalette: (path) =>
-      attempt("read a cover's colours", (db) => artworkPalette(db, path)),
+    artworkPalette: (path) => attempt("read a cover's colours", (db) => artworkPalette(db, path)),
 
     listAlbums: attempt("list albums", (db) => selectAlbums(db, undefined)),
 

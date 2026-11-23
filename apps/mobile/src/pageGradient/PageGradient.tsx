@@ -6,12 +6,7 @@ import {
   type PageCover,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
-import {
-  useEffect,
-  useSyncExternalStore,
-  type ReactElement,
-  type ReactNode,
-} from "react";
+import { useEffect, useSyncExternalStore, type ReactElement, type ReactNode } from "react";
 import { StyleSheet, useWindowDimensions } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 
