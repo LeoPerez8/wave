@@ -69,6 +69,7 @@ import { occurrenceKeys } from "@/songs/songRowState";
 import { ytArtistNote, YtReleaseTile } from "@/ytmusic/YtArtistSection";
 import { useLocalisation } from "@/localisation/localisation";
 import { openYtArtistSongs, useOpenedArtistCover, YT_ARTIST_BY_NAME } from "@/ytmusic/routes";
+import { PageTopGradient } from "@/pageGradient/PageGradient";
 
 type Song = DiscoverSong<NativeYtSong, SongRow>;
 type Release = YtArtistRelease<AlbumRow>;
@@ -586,6 +587,7 @@ function YtArtistScreenOf({ shows }: { shows: ArtistView }) {
   return (
     <CompactTitleFrame title={page.name ?? undefined}>
       <View className="flex-1 bg-background">
+        <PageTopGradient />
         <ScreenHeader />
         <YtArtistList page={page} cover={cover} shows={shows} opened={opened} />
       </View>

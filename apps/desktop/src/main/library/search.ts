@@ -5,7 +5,9 @@
 import {
   createSearchCatalog,
   findLyricMatch,
+  isLyricPhraseQuery,
   normalizeSearchText,
+  songNamedByQuery,
   type SearchCatalog,
   type SearchIndex,
   type SearchKind,
@@ -162,6 +164,7 @@ const NOTHING: LibrarySearchView = {
   groups: [],
   lyrics: [],
   lyricsFirst: false,
+  namesSong: false,
 };
 
 /**
@@ -178,16 +181,21 @@ export const searchLibrary = (db: LibraryDatabase, query: string): LibrarySearch
     items: rowsOf(db, group.kind, group.items),
     total: group.total,
   }));
+  // A query naming a song by its title and artist has that song on top (#1470).
+  const named = songNamedByQuery(
+    trimmed,
+    results.groups.find((group) => group.kind === "song")?.items ?? [],
+    (hit) => ({ title: hit.name, artists: hit.also?.slice(0, 1) ?? [] }),
+  );
+  const best = named ?? results.top;
   const top: SearchResult | null =
-    results.top === null
-      ? null
-      : { kind: results.top.kind, row: rowsOf(db, results.top.kind, [results.top])[0]! };
+    best === null ? null : { kind: best.kind, row: rowsOf(db, best.kind, [best])[0]! };
   const shown = new Set(
     results.groups
       .filter((group) => group.kind === "song")
       .flatMap((group) => group.items.map((hit) => hit.id)),
   );
-  if (results.top?.kind === "song") shown.add(results.top.id);
+  if (best?.kind === "song") shown.add(best.id);
   const matches = selectLyricsCandidates(db, trimmed).flatMap((candidate) => {
     if (shown.has(candidate.trackId)) return [];
     const match = findLyricMatch(candidate.lyrics, trimmed);
@@ -208,7 +216,8 @@ export const searchLibrary = (db: LibraryDatabase, query: string): LibrarySearch
     top,
     groups,
     lyrics,
-    lyricsFirst: normalizeSearchText(trimmed).split(" ").filter(Boolean).length >= 3,
+    lyricsFirst: isLyricPhraseQuery(trimmed, named !== null),
+    namesSong: named !== null,
   };
 };
 

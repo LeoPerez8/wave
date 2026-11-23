@@ -11,6 +11,7 @@ import {
   type DownloadOrigin,
   type UnsearchedSong,
   isUnsearchedTrackId,
+  downloadGroupKey,
   playlistDownloadOrigin,
   ytPlaylistMenuDownloads,
 } from "@wave/core";
@@ -39,6 +40,7 @@ import { followUp, openOverlay } from "@/overlay/overlay";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
 import { showToast } from "@/overlay/toast";
 import { useLoadedInLibrary, useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
+import { useDownloadGroupMenuEntries } from "@/ytmusic/DownloadGroupControls";
 import { runYtPlaylistDownloadAction, useYtPlaylistDownload } from "@/ytmusic/YtDownloads";
 
 import { targetHeading, type ActionItems, type Heading, type PlaylistPlace } from "./actionTargets";
@@ -273,7 +275,8 @@ function SectionActionsMenu({ target, close }: { target: ActionItems; close: () 
  * Playlist, or Cancel Playlist Download while its songs are on their way,
  * then Retry Failed, else Downloaded (a tap only says so); none without YT
  * Music or unsearched entries. The songs they queue remember [origin], the
- * playlist.
+ * playlist. Pause Downloads or Resume Downloads comes first while its songs are on their way
+ * (#1475).
  */
 function usePlaylistDownloadEntries(
   entries: readonly PlaylistEntryRow[],
@@ -283,8 +286,10 @@ function usePlaylistDownloadEntries(
   const { strings } = useLocalisation();
   const inLibrary = useLoadedInLibrary();
   const libraryRead = useLoadedLibraryFinder() !== null;
-  const download = useYtPlaylistDownload(entries, inLibrary);
-  return ytPlaylistMenuDownloads(download, libraryRead).map((action) =>
+  const group = origin === null ? null : downloadGroupKey(origin);
+  const download = useYtPlaylistDownload(entries, inLibrary, group);
+  const pauseEntries = useDownloadGroupMenuEntries(group, download.line !== null, close);
+  const entryChoices = ytPlaylistMenuDownloads(download, libraryRead).map((action): MenuChoice =>
     action === "downloaded"
       ? {
           action,
@@ -304,6 +309,7 @@ function usePlaylistDownloadEntries(
           destructive: false,
         },
   );
+  return [...pauseEntries, ...entryChoices];
 }
 
 /**

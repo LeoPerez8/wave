@@ -149,3 +149,36 @@ test("an old membership read cannot undo a playlist edit or a hidden screen, and
   assert.equal(reads, 4);
   stopAgain();
 });
+
+test("a paused playlist's or album's line says Paused, and only its own (#1475)", async () => {
+  const journal = makeExternalStore<readonly YtDownloadJournalJob[]>([job("a"), job("b")]);
+  const paused = makeExternalStore<{ readonly all: boolean; readonly groups: readonly string[] }>({
+    all: false,
+    groups: [],
+  });
+  const progress = createListDownloadProgressStore({
+    journal,
+    paused,
+    subscribeMembership: () => () => {},
+    read: async () =>
+      new Map([
+        ["playlist:1", [{ kind: "song", videoId: "a" }]],
+        ["album:2", [{ kind: "song", videoId: "b" }]],
+      ]),
+  });
+  let heard = 0;
+  const stops = [
+    progress.subscribe("playlist:1", () => heard++),
+    progress.subscribe("album:2", () => {}),
+  ];
+  await flush();
+  paused.set({ all: false, groups: ["playlist:1"] });
+  assert.equal(progress.get("playlist:1", "en"), "Paused · 0 of 1");
+  assert.equal(progress.get("playlist:1", "pt-BR"), "Pausado · 0 de 1");
+  assert.equal(progress.get("album:2", "en"), "Downloading · 0 of 1");
+  assert.equal(heard, 2);
+  paused.set({ all: true, groups: [] });
+  assert.equal(progress.get("album:2", "en"), "Paused · 0 of 1");
+  for (const stop of stops) stop();
+  assert.equal(paused.listenerCount(), 0);
+});

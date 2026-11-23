@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  NO_DOWNLOAD_PAUSE,
   albumDownloadOrigin,
   applyJournalChanges,
   catalogueOf,
@@ -9,6 +10,7 @@ import {
   moveDownloadGroup,
   moveDownloadInGroup,
   moveQueuedJobs,
+  pauseDownloadGroup,
   playlistDownloadOrigin,
   queuedDownloadLines,
   sameDownloadingList,
@@ -368,5 +370,25 @@ describe("The Downloading list's membership, apart from each song's progress (#1
       ],
     );
     assert.equal(queuedDownloadLines(ticking(42), catalogueOf("pt-BR")).get("a"), "Baixando · 42%");
+  });
+});
+
+describe("A paused group (#1475)", () => {
+  test("its header says Paused, and the others don't", () => {
+    const jobs = [job("a", { origin: roadTrip }), job("b", { origin: focus })];
+    const pause = pauseDownloadGroup(NO_DOWNLOAD_PAUSE, "playlist:7", jobs);
+    const list = downloadingList(jobs, "en", pause);
+    assert.deepEqual(
+      list.groups.map((group) => [group.name, group.paused, group.line]),
+      [
+        ["Road Trip", true, "Paused · 1 song left"],
+        ["Focus", false, "1 song left"],
+      ],
+    );
+    assert.equal(
+      downloadingList(jobs, "pt-BR", pause).groups[0]?.line,
+      "Pausado · 1 música restante",
+    );
+    assert.equal(sameDownloadingList(list, downloadingList(jobs, "en")), false);
   });
 });

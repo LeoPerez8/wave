@@ -670,6 +670,11 @@ export const OPENING_REQUESTS: Record<string, Exception> = {
     reason:
       "The playlist Download/Retry/Cancel button invokes this action after a press, not while its page mounts.",
   },
+  "ytmusic/DownloadGroupControls.tsx#cancelDownloadGroup": {
+    kind: "gesture",
+    reason:
+      "A group's Cancel Downloads runs after a press and its alert; showing its progress line never runs it.",
+  },
   "playback/itemActions.ts#itemActionPress": {
     kind: "gesture",
     reason:
@@ -1207,6 +1212,18 @@ export const MODULE_COLLECTIONS: Record<string, { readonly bound: string }> = {
   },
   "lib/persistedSetting.ts#pendingWrites": {
     bound: "writes waiting for their delay, one per setting at most",
+  },
+  "pageGradient/PageGradient.tsx#libraryPalettes": {
+    bound: "the playing song's colours and the 7 before it (KEPT_PALETTES), the oldest dropped",
+  },
+  "pageGradient/PageGradient.tsx#loading": {
+    bound: "playing songs whose colours are being read, removed as each read settles",
+  },
+  "pageGradient/PageGradient.tsx#coverPalettes": {
+    bound: "the colours of the last 32 covers opened (KEPT_COVERS), the oldest dropped",
+  },
+  "pageGradient/PageGradient.tsx#coversLoading": {
+    bound: "covers whose colours are being read, removed as each read settles",
   },
   "lib/radioDeadline.ts#checks": { bound: "radio deadlines running now, removed as each settles" },
   "stats/hooks.ts#statsQueries": {

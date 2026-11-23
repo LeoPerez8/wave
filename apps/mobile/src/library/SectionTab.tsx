@@ -1,6 +1,6 @@
 import { useStackScreenOptions } from "@/chrome/tabScreens";
 import { timingStackListeners } from "@/lib/timing";
-import { screenCostLayout } from "@/lib/renderCost";
+import { pageScreenLayout } from "@/pageGradient/PageGradient";
 import type { LibrarySectionSlug } from "@wave/core";
 import { Stack, useFocusEffect } from "expo-router";
 import { useCallback } from "react";
@@ -13,6 +13,7 @@ import { useLocalisation } from "@/localisation/localisation";
 import { SectionList } from "./SectionList";
 import { sectionTitleLongPress } from "./sectionTitleLongPress";
 import { openArmedAnchoredMenu } from "@/motion/menuRequest";
+import { PageTopGradient } from "@/pageGradient/PageGradient";
 
 /**
  * A section tab's own stack (each section tab's `_layout`): what its list
@@ -24,7 +25,7 @@ export function SectionTabStack() {
   return (
     <Stack
       screenListeners={timingStackListeners}
-      screenLayout={screenCostLayout}
+      screenLayout={pageScreenLayout}
       screenOptions={screenOptions}
     />
   );
@@ -46,6 +47,7 @@ export function SectionTabScreen({ slug }: { slug: LibrarySectionSlug }) {
   const section = findSection(slug);
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: top }}>
+      <PageTopGradient />
       <LargeTitle title={strings.tabs[slug]} titleLongPress={sectionTitleLongPress(section)} />
       <SectionList section={section} />
     </View>

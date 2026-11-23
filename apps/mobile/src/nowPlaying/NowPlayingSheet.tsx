@@ -241,8 +241,6 @@ export function NowPlayingSheet() {
   const settled = useNowPlayingSettled();
   usePreparePlayingSong(songTarget, shown, settled);
   const palette = useNowPlayingPalette(trackId, details);
-  const gradient = useNowPlayingGradient(palette);
-  const ground = useBackgroundColors(gradient, shown);
   const [view, setView] = useState<NowPlayingView>("player");
   const ytMusic = useYtMusicEnabled();
   const showPlayer = useCallback(() => setView("player"), []);
@@ -250,6 +248,9 @@ export function NowPlayingSheet() {
   // Related rises over them.
   const pages = useScreenPages();
   const { screen, editing, page, turning, send } = pages;
+  // Lyrics and the Queue set text all down the ground; the player only from its title.
+  const gradient = useNowPlayingGradient(palette, view === "lyrics" || screen !== "player");
+  const ground = useBackgroundColors(gradient, shown);
   // Related needs YouTube Music: turned off, it goes in this render, ahead of
   // the effect that takes the screens back to the player.
   // Settled, Related covers the pages: what is under it rests until it moves.

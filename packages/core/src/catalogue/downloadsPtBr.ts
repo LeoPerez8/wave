@@ -24,7 +24,13 @@ export const downloadsPtBr: typeof downloadsEn = {
   },
   downloaded: "Baixado",
   progress: (saved, total) => `Baixando · ${saved} de ${total}`,
+  pausedProgress: (saved, total) => `Pausado · ${saved} de ${total}`,
   songsGroup: "Músicas",
+  pausedSongsLeft: (count) =>
+    plural("pt-BR", count, {
+      one: `Pausado · ${n(count)} música restante`,
+      other: `Pausado · ${n(count)} músicas restantes`,
+    }),
   songsLeft: (count) =>
     plural("pt-BR", count, {
       one: `${n(count)} música restante`,
@@ -49,5 +55,19 @@ export const downloadsPtBr: typeof downloadsEn = {
     mobileData: (size) => `Baixa cerca de ${size}, e o celular não está no Wi-Fi.`,
     replace: "Substituir",
     notNow: "Agora não",
+  },
+  run: {
+    pause: "Pausar",
+    resume: "Retomar",
+    cancelAll: "Cancelar Tudo",
+    cancelAllTitle: (count) =>
+      `Cancelar ${n(count)} ${plural("pt-BR", count, { one: "download", other: "downloads" })}?`,
+    cancelAllMessage:
+      "As músicas já baixadas ficam, e as que falharam continuam na lista de falhas.",
+    keepDownloading: "Continuar Baixando",
+    cancelGroup: "Cancelar Downloads",
+    cancelGroupMessage: "As músicas já baixadas ficam.",
+    pauseGroup: "Pausar Downloads",
+    resumeGroup: "Retomar Downloads",
   },
 };

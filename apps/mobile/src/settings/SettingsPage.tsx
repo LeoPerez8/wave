@@ -1,16 +1,19 @@
 import { useLocalisation } from "@/localisation/localisation";
 import { type Catalogue, type SettingsIcon, type SettingsPage } from "@wave/core";
 import { memo, type ReactNode } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import Animated from "react-native-reanimated";
 
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { StagedSections } from "@/components/StagedSections";
+import { useListScroll } from "@/lib/useListScroll";
 import { useListScrollable } from "@/motion/heldTouch";
 import { Press } from "@/motion/Press";
 
 import { SETTINGS_GLYPH_GAP, SettingsGlyph } from "./SettingsGlyph";
+import { PageTopGradient } from "@/pageGradient/PageGradient";
 
 /** Room between a page's sections. */
 export const SECTION_GAP = 48;
@@ -40,10 +43,15 @@ const pageTitle = (id: PageId, strings: Catalogue): string => {
 export function SettingsPageScreen({ children, ...id }: PageId & { children: ReactNode }) {
   const { strings } = useLocalisation();
   const scrollable = useListScrollable();
+  // Its scroll moves the page-top gradient.
+  const { scrollRef } = useListScroll(0);
   return (
     <View className="flex-1 bg-background">
+      <PageTopGradient />
       <ScreenHeader title={pageTitle(id, strings)} />
-      <ScrollView
+      <Animated.ScrollView
+        ref={scrollRef}
+        scrollEventThrottle={16}
         scrollEnabled={scrollable}
         contentContainerStyle={{
           paddingHorizontal: grid.margin,
@@ -54,7 +62,7 @@ export function SettingsPageScreen({ children, ...id }: PageId & { children: Rea
         <StagedSections estimate={SECTION_ESTIMATE} gap={SECTION_GAP}>
           {children}
         </StagedSections>
-      </ScrollView>
+      </Animated.ScrollView>
     </View>
   );
 }
@@ -68,6 +76,7 @@ export function SettingsEditorScreen({ children, ...id }: PageId & { children: R
   const { strings } = useLocalisation();
   return (
     <View className="flex-1 bg-background">
+      <PageTopGradient />
       <ScreenHeader title={pageTitle(id, strings)} />
       {children}
     </View>

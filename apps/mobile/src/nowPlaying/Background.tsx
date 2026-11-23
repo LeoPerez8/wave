@@ -1,4 +1,4 @@
-import { crossfadeGround, type Gradient, type GroundLayers } from "@wave/core";
+import { crossfadeGround, sameGround, type GroundGradient, type GroundLayers } from "@wave/core";
 import { useEffect, useState } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
 import Animated, {
@@ -27,12 +27,12 @@ export interface GroundColors {
   readonly layers: GroundLayers;
   readonly fade: SharedValue<number>;
   /** The colours the ground settles on. */
-  readonly target: Gradient;
+  readonly target: GroundGradient;
   /** Counts the changes: the incoming layer mounts anew with each, at its new fade's 0. */
   readonly change: number;
 }
 
-const settled = (gradient: Gradient, change: number): GroundColors => ({
+const settled = (gradient: GroundGradient, change: number): GroundColors => ({
   layers: { base: gradient, incoming: null },
   fade: makeMutable(1),
   target: gradient,
@@ -51,17 +51,17 @@ const fadeProgress = (fade: SharedValue<number>): number => {
 
 /**
  * The Now Playing ground's colours: a top-to-bottom gradient from the
- * artwork's palette (already toned for legibility by Core's
- * `paletteGradient`). On a track change they crossfade from wherever they are
+ * artwork's palette into the theme's ground, its stops already toned for
+ * legibility by Core's `groundGradient`. On a track change they crossfade from wherever they are
  * to the new colours, even mid-fade (Core's `crossfadeGround`); out of sight
  * (`animate` off) they change straight away, so the sheet opens on the right
  * colours. A phone drawing the simple effects (`@/glass/phoneEffects`) always
  * changes them straight away.
  */
-export function useBackgroundColors(gradient: Gradient, animate: boolean): GroundColors {
+export function useBackgroundColors(gradient: GroundGradient, animate: boolean): GroundColors {
   const reduceMotion = useReducedMotion();
   const [ground, setGround] = useState(() => settled(gradient, 0));
-  if (ground.target.top !== gradient.top || ground.target.bottom !== gradient.bottom) {
+  if (!sameGround(ground.target, gradient)) {
     // Adjusted while rendering, so the new layers commit with the render that brought the colours.
     // A phone measured weak (#1357) changes colours without the crossfade, as with reduced motion.
     const instant = reduceMotion || !animate || phoneEffects() === "simple";
@@ -89,13 +89,13 @@ export function useBackgroundColors(gradient: Gradient, animate: boolean): Groun
   return ground;
 }
 
-/** One layer's two-stop gradient, top to bottom. */
-const gradientStyle = ({ top, bottom }: Gradient) => ({
+/** One layer's gradient, top to bottom, each colour at its stop. */
+const gradientStyle = (gradient: GroundGradient) => ({
   backgroundImage: [
     {
       type: "linear-gradient" as const,
       direction: "to bottom",
-      colorStops: [{ color: top }, { color: bottom }],
+      colorStops: gradient.map(({ color, at }) => ({ color, positions: [`${at * 100}%`] })),
     },
   ],
 });
@@ -105,7 +105,7 @@ function IncomingLayer({
   fade,
   height,
 }: {
-  gradient: Gradient;
+  gradient: GroundGradient;
   fade: SharedValue<number>;
   height: number;
 }) {

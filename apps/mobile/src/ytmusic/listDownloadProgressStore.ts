@@ -11,6 +11,15 @@ interface Sources {
   readonly journal: Pick<ExternalStore<readonly YtDownloadJournalJob[]>, "get" | "subscribe">;
   readonly subscribeMembership: (changed: () => void) => () => void;
   readonly read: (scope: ListDownloadsScope) => Promise<DownloadListMembers>;
+  /**
+   * The owner's pause (#1475): everything, or the groups paused on their own by Core's
+   * `downloadGroupKey`, which matches a list's key ("playlist:12"). A paused list's line reads
+   * "Paused · N of M".
+   */
+  readonly paused?: Pick<
+    ExternalStore<{ readonly all: boolean; readonly groups: readonly string[] }>,
+    "get" | "subscribe"
+  >;
 }
 
 /**
@@ -34,10 +43,12 @@ export const createListDownloadProgressStore = (sources: Sources) => {
 
   const publish = (): void => {
     const next = new Map<DownloadListKey, { en: string | null; "pt-BR": string | null }>();
+    const pause = sources.paused?.get();
     if (index.active)
       for (const [key, entries] of members) {
-        const en = index.line(entries, "en");
-        if (en !== null) next.set(key, { en, "pt-BR": index.line(entries, "pt-BR") });
+        const paused = pause !== undefined && (pause.all || pause.groups.includes(key));
+        const en = index.line(entries, "en", paused);
+        if (en !== null) next.set(key, { en, "pt-BR": index.line(entries, "pt-BR", paused) });
       }
     const before = lines;
     lines = next;
@@ -107,6 +118,7 @@ export const createListDownloadProgressStore = (sources: Sources) => {
             revision++;
             schedule();
           }),
+          ...(sources.paused === undefined ? [] : [sources.paused.subscribe(publish)]),
         ];
         schedule();
       }

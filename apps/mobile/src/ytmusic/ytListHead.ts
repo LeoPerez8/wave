@@ -9,3 +9,10 @@ export const shownYtListHead = (
   load: YtListLoad,
   known: YtListHead | undefined,
 ): YtListHead | undefined => (load.status === "loaded" ? load.page.head : known);
+
+/**
+ * The head a YT Music playlist page keeps for Recently played's card: its own once read,
+ * never what the opener stood in with (a card's word for a playlist).
+ */
+export const ytListHeadToKeep = (load: YtListLoad): YtListHead | undefined =>
+  load.status === "loaded" && load.page.head.title !== "" ? load.page.head : undefined;

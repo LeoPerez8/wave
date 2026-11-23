@@ -18,6 +18,7 @@ import {
   IconPencil,
   IconPhotoEdit,
   IconPhotoOff,
+  IconPlayerPause,
   IconPlayerPlay,
   IconPlaylistAdd,
   IconPlaylistX,
@@ -73,6 +74,8 @@ export type MenuAction =
   | "addToShazam"
   | "removeColour"
   | "follow"
+  | "pauseDownloads"
+  | "resumeDownloads"
   | "openTickets"
   | "restoreGraveyard"
   | "forgetGraveyard"
@@ -95,6 +98,8 @@ export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
   graveyard: IconTrash,
   follow: IconUserPlus,
   openTickets: IconTicket,
+  pauseDownloads: IconPlayerPause,
+  resumeDownloads: IconPlayerPlay,
   play: IconPlayerPlay,
   shuffle: IconArrowsShuffle,
   playNext: IconArrowForwardUp,
