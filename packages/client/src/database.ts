@@ -45,12 +45,16 @@ export const migrateDatabase = (db: LibraryDatabase, bundle = migrations): void 
   });
   db.run(sql`CREATE TABLE IF NOT EXISTS __drizzle_migrations (
     id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric)`);
-  const last = db.get<{ created_at: number }>(
+  // `all`, not `get`: on the phone, `get` answers an empty table with `null` and leaves its
+  // statement open after a row, and an open statement makes a later DROP TABLE on this
+  // connection fail with "database table is locked" (#1494). `all` reads to the end.
+  const [last] = db.all<{ created_at: number }>(
     sql`SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 1`,
   );
+  const applied = last == null ? null : Number(last.created_at);
   db.transaction((tx) => {
     for (const migration of pending) {
-      if (last !== undefined && Number(last.created_at) >= migration.when) continue;
+      if (applied !== null && applied >= migration.when) continue;
       for (const statement of migration.statements) tx.run(sql.raw(statement));
       tx.run(
         sql`INSERT INTO __drizzle_migrations (hash, created_at) VALUES ('', ${migration.when})`,
