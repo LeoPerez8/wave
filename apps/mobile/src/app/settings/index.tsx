@@ -10,7 +10,8 @@ import {
 import { useFocusEffect } from "expo-router";
 import { memo, useCallback, useState } from "react";
 import { router } from "@/lib/timingRouter";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
+import Animated from "react-native-reanimated";
 
 import { grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
@@ -27,6 +28,8 @@ import { SettingsPageRow } from "@/settings/SettingsPage";
 import { useSettingsSummaries } from "@/settings/settingsSummaries";
 import { InstallNowButton } from "@/updates/InstallNowButton";
 import { UpdateCheckRefreshControl } from "@/updates/UpdateCheckRefreshControl";
+import { PageTopGradient } from "@/pageGradient/PageGradient";
+import { useListScroll } from "@/lib/useListScroll";
 
 /**
  * One page's row, from primitives so a summary that changes redraws only its
@@ -97,6 +100,8 @@ export default function SettingsScreen() {
   const summaries = useSettingsSummaries();
   const developerVisible = useDeveloperSettingsVisible();
   const [titleTaps] = useState(createDeveloperTitleTaps);
+  // Its scroll moves the page-top gradient.
+  const { scrollRef } = useListScroll(0);
   useFocusEffect(useCallback(() => () => titleTaps.reset(), [titleTaps]));
 
   const onTitlePress = (): void => {
@@ -108,14 +113,17 @@ export default function SettingsScreen() {
 
   return (
     <View className="flex-1 bg-background">
+      <PageTopGradient />
       <ScreenHeader title={strings.settings.settings} onTitlePress={onTitlePress} />
-      <ScrollView
+      <Animated.ScrollView
+        ref={scrollRef}
+        scrollEventThrottle={16}
         refreshControl={<UpdateCheckRefreshControl />}
         contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: 48 }}
       >
         <Hairline />
         <SettingsPageRows summaries={summaries} developerVisible={developerVisible} />
-      </ScrollView>
+      </Animated.ScrollView>
     </View>
   );
 }

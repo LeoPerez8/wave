@@ -199,6 +199,7 @@ export {
   groundGradient,
   lyricsDimOpacity,
   NOW_PLAYING_FADE,
+  PAGE_TOP_FADE,
   paletteGradient,
   sameGround,
 } from "./palette.ts";
@@ -271,6 +272,8 @@ export {
   storedKeepFindVisible,
 } from "./keepFindVisible.ts";
 export type { FindFieldPlacement } from "./keepFindVisible.ts";
+export { pageGradientPalette, readPageGradient, storedPageGradient } from "./pageGradient.ts";
+export type { PageCover } from "./pageGradient.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export {
   compareSongReadOrder,
@@ -2154,8 +2157,21 @@ export {
 export type { PerfEntry, PerfFlush, PerfMeta, PerfRecorder, PerfTiming } from "./perfLog.ts";
 export { createPagedRows, PAGED_ROWS_LIMITS } from "./pagedRows.ts";
 export type { PagedRows, PagedRowsLimits, PagedRowsStats } from "./pagedRows.ts";
-export { recentlyPlayedAlbums } from "./recentlyPlayed.ts";
-export type { LatestPlayedSong } from "./recentlyPlayed.ts";
+export {
+  mixReplayContext,
+  recentlyPlayedAlbums,
+  recentlyPlayedContext,
+  recentlyPlayedContexts,
+  recordedPlayContext,
+  SONG_PLAY_CONTEXT,
+} from "./recentlyPlayed.ts";
+export type {
+  LatestPlayedSong,
+  RecentlyPlayedContext,
+  RecentlyPlayedKind,
+  RecentPlay,
+  RecordedSession,
+} from "./recentlyPlayed.ts";
 export {
   APP_LOG_LIMITS,
   describeLogArgs,
@@ -3019,6 +3035,8 @@ export {
   uniqueGeniusLyricsHits,
 } from "./geniusLyricsSearch.ts";
 export type { GeniusLyricsSearchRequest, GeniusLyricsSearchState } from "./geniusLyricsSearch.ts";
+export { isLyricPhraseQuery, queryNamesSong, songNamedByQuery } from "./titleArtistQuery.ts";
+export type { NamedSong } from "./titleArtistQuery.ts";
 export { GENIUS_LOADING_NOTE_DELAY_MS, geniusLoadingNote } from "./geniusLoading.ts";
 export type { GeniusInsightState } from "./geniusLoading.ts";
 export {

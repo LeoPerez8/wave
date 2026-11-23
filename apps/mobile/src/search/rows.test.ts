@@ -13,7 +13,13 @@ import type { SongRow } from "@wave/client";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import type { LocalLyricsHit } from "./lyricsSearch.ts";
 import type { SearchHit } from "./searchIndex.ts";
-import { resultRows, ytFooterRows, type PlacedYtSongs } from "./rows.ts";
+import {
+  namedSongOnTop,
+  namesTopSong,
+  resultRows,
+  ytFooterRows,
+  type PlacedYtSongs,
+} from "./rows.ts";
 
 const noPlaced: PlacedYtSongs = { songs: [], rowOf: new Map() };
 const empty: SearchResults<SearchHit> = { top: null, groups: [] };
@@ -648,5 +654,119 @@ describe("Search's Community playlists shelf", () => {
       rows.map((row) => row.key),
       ["heading:community-playlists", "yt-playlist:a"],
     );
+  });
+});
+
+describe("a query naming a song by its title and artist (#1470)", () => {
+  const librarySong = (id: number, title: string, artist: string): SearchHit => {
+    const song = { id, title, artist, album: "Album" } as SongRow;
+    return { kind: "song", name: title, also: [artist, "Album"], song };
+  };
+  const luck = librarySong(11, "Try My Luck", "WayV");
+  const cover = librarySong(12, "Try My Luck", "Someone");
+  const artistHit: SearchHit = {
+    kind: "artist",
+    name: "WayV Try My Luck Fans",
+    artist: { id: 9, name: "WayV Try My Luck Fans" },
+  } as SearchHit;
+  const found: SearchResults<SearchHit> = {
+    top: artistHit,
+    groups: [
+      { kind: "artist", items: [artistHit], total: 1 },
+      { kind: "song", items: [cover, luck], total: 2 },
+    ],
+  };
+  const keys = (rows: ReturnType<typeof resultRows>): string[] => rows.map((row) => row.key);
+
+  test("puts the Library song it names on top, title and artist in either order", () => {
+    for (const query of ["try my luck wayV", "wayV try my luck"]) {
+      const ranked = namedSongOnTop(found, query);
+      assert.equal(ranked.top, luck);
+      assert.equal(ranked.groups, found.groups);
+    }
+    assert.equal(namedSongOnTop(found, "try my luck"), found);
+    assert.equal(namedSongOnTop(found, "wayv"), found);
+  });
+
+  test("Lyrics follow Songs, as for a short query, and the query names the song shown", () => {
+    const ranked = namedSongOnTop(found, "try my luck wayv");
+    assert.equal(namesTopSong(ranked, null, "try my luck wayv"), true);
+    const rows = resultRows(
+      ranked,
+      new Set(),
+      null,
+      noPlaced,
+      null,
+      "en",
+      lyricHits(1),
+      false,
+      "try my luck wayv",
+      geniusHits(1),
+    );
+    assert.deepEqual(keys(rows).slice(0, 2), ["heading:top", "top:song:11"]);
+    const songs = keys(rows).indexOf("heading:song");
+    const lyrics = keys(rows).indexOf("heading:lyrics");
+    assert.ok(songs >= 0 && lyrics > songs);
+  });
+
+  test("puts YT Music's song it names on top when the Library lacks the song", () => {
+    const streamed: NativeYtSong = {
+      videoId: "luck",
+      title: "Try My Luck",
+      artists: ["WayV"],
+      album: null,
+      albumId: null,
+      durationMs: 200_000,
+      artworkUrl: null,
+      explicit: false,
+    };
+    const yt: YtSectionView<NativeYtSong> = {
+      songs: [streamed],
+      artists: [],
+      albums: [],
+      playlists: [],
+      top: { kind: "song", song: streamed },
+      note: null,
+      loading: false,
+      integrated: true,
+    };
+    const placed: PlacedYtSongs = {
+      songs: [{ source: "stream", song: streamed }],
+      rowOf: new Map([["luck", 0]]),
+    };
+    const library: SearchResults<SearchHit> = {
+      top: artistHit,
+      groups: [{ kind: "artist", items: [artistHit], total: 1 }],
+    };
+    assert.equal(namesTopSong(library, yt, "try my luck wayv"), true);
+    const rows = resultRows(
+      library,
+      new Set(),
+      yt,
+      placed,
+      null,
+      "en",
+      lyricHits(1),
+      false,
+      "try my luck wayv",
+    );
+    assert.deepEqual(keys(rows).slice(0, 2), ["heading:top", "top:yt:luck"]);
+    assert.notEqual(keys(rows)[0], "heading:lyrics");
+  });
+
+  test("a lyric phrase that isn't a title still puts Lyrics first", () => {
+    assert.equal(namesTopSong(found, null, "under a pink moon"), false);
+    const rows = resultRows(
+      found,
+      new Set(),
+      null,
+      noPlaced,
+      null,
+      "en",
+      lyricHits(1),
+      false,
+      "under a pink moon",
+    );
+    assert.equal(rows[0]?.key, "heading:lyrics");
   });
 });

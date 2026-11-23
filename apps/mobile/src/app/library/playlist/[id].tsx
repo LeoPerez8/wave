@@ -223,6 +223,7 @@ export default function PlaylistScreen() {
       detail={shown}
       noun="playlist"
       compactTitle={({ playlist }) => playlist.name}
+      cover={({ playlist }) => playlist.artworkPaths[0] ?? null}
       goneMessage={strings.playlists.deleted}
     >
       {({ playlist, items }) => (

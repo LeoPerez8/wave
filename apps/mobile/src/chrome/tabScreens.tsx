@@ -23,6 +23,7 @@ import { Screen } from "react-native-screens";
 
 import { RenderCost } from "@/lib/renderCost";
 import { router } from "@/lib/timingRouter";
+import { PageGradientScope } from "@/pageGradient/PageGradient";
 import { PERF_ENABLED, perfMark, registerPerfMeta } from "@/perf/perf";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -133,7 +134,8 @@ function TabCommitMark({
  * Renders the tab screens for `TabSlot` as expo-router's default does, with
  * `TAB_SCREENS`' choices: a tab not [kept] isn't rendered while hidden (a kept
  * one is, even before its first visit), a
- * hidden tab freezes and can keep its layout. Perf builds mark each tab's commit
+ * hidden tab freezes and can keep its layout. Each tab has its page-top gradient's scope
+ * (`PageGradientScope`). Perf builds mark each tab's commit
  * and layout (`tab.commit`, `tab.layout`).
  */
 export const renderTabScreens =
@@ -161,15 +163,17 @@ export const renderTabScreens =
             : undefined
         }
       >
-        <RenderCost name={`tab:${name}`}>
-          {PERF_ENABLED ? (
-            <TabCommitMark name={name} focused={isFocused}>
-              {descriptor.render()}
-            </TabCommitMark>
-          ) : (
-            descriptor.render()
-          )}
-        </RenderCost>
+        <PageGradientScope>
+          <RenderCost name={`tab:${name}`}>
+            {PERF_ENABLED ? (
+              <TabCommitMark name={name} focused={isFocused}>
+                {descriptor.render()}
+              </TabCommitMark>
+            ) : (
+              descriptor.render()
+            )}
+          </RenderCost>
+        </PageGradientScope>
       </Screen>
     );
   };

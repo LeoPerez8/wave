@@ -1,8 +1,8 @@
 /** Genius's role in Search's Lyrics section (ticket #1097). */
 
-import { normalizeSearchText } from "./search.ts";
 import type { GeniusLyricsHit } from "./genius.ts";
 import { isSameSong, titleName, type SongLookup } from "./lyricsAndGenre.ts";
+import { isLyricPhraseQuery } from "./titleArtistQuery.ts";
 
 export const GENIUS_LYRICS_SEARCH_DELAY_MS = 300;
 export const GENIUS_LYRICS_SEARCH_LIMIT = 20;
@@ -13,13 +13,17 @@ export interface GeniusLyricsSearchRequest {
   readonly delayMs: number;
 }
 
-/** An eligible query waits for a typing pause; fewer than three words or the switch being off asks nothing. */
+/**
+ * A lyric phrase (`isLyricPhraseQuery`) waits for a typing pause. Fewer than three words, a query
+ * that names a song Search shows ([namesSong], #1470), or the switch being off asks nothing.
+ */
 export const geniusLyricsSearchRequest = (
   query: string,
   enabled: boolean,
+  namesSong = false,
 ): GeniusLyricsSearchRequest | null => {
   const trimmed = query.trim();
-  if (!enabled || normalizeSearchText(trimmed).split(" ").filter(Boolean).length < 3) return null;
+  if (!enabled || !isLyricPhraseQuery(trimmed, namesSong)) return null;
   return { query: trimmed, delayMs: GENIUS_LYRICS_SEARCH_DELAY_MS };
 };
 

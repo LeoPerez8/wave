@@ -6,6 +6,7 @@ import {
   groundGradient,
   lyricsDimOpacity,
   NOW_PLAYING_FADE,
+  PAGE_TOP_FADE,
   type GroundFade,
   type GroundGradient,
 } from "./index.ts";
@@ -183,15 +184,7 @@ describe("groundGradient's other fades", () => {
   test("a short, subtle fade is a change of its options: softer and done sooner", () => {
     // The page-top gradient's look: the main colour toned a little more, mixed
     // well toward the ground, gone before half the height.
-    const subtle: GroundFade = {
-      tone: { dark: 0.2, light: 0.12 },
-      soft: 0.6,
-      hold: 0,
-      reach: 0.42,
-      second: null,
-      legibleFrom: 0,
-      steps: 12,
-    };
+    const subtle = PAGE_TOP_FADE;
     const gradient = groundGradient(sunset, dark, subtle);
     // #e8573a 20% to black is #ba462e; 60% of the way on to black is #4a1c12.
     assert.equal(gradient[0]!.color, "#4a1c12");

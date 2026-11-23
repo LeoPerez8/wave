@@ -12,6 +12,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { newSongsOf, useDiscoverMix, useLibraryTracks } from "@/home/discoverMixes";
 import { useLibraryFinder } from "@/ytmusic/libraryFinder";
 import { YtSongList, type YtListLoad } from "@/ytmusic/YtSongList";
+import { PageTopGradient } from "@/pageGradient/PageGradient";
 
 /**
  * One of Home's Discover mixes, as the owner's level blends it: its cover
@@ -65,6 +66,7 @@ function GoneMix() {
   const bottomInset = useChromeInset();
   return (
     <View className="flex-1 bg-background">
+      <PageTopGradient />
       <ScreenHeader />
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: bottomInset }}>
         <EmptyState

@@ -211,6 +211,23 @@ describe("ytSectionView", () => {
     assert.deepEqual(noSongs?.top, { kind: "artist", artist: artist("Beyoncé") });
   });
 
+  test("a query naming a song by its title and artist puts that song on top, in either order", () => {
+    const luck = { ...song("luck"), title: "Try My Luck", artists: ["WayV"] };
+    const answer = (query: string) =>
+      results(
+        [{ ...song("cover"), title: "Try My Luck", artists: ["Someone"] }, luck],
+        [artist("WayV")],
+        [album("Try My Luck", "WayV")],
+        query,
+      );
+    for (const query of ["try my luck wayV", "wayV try my luck"])
+      assert.deepEqual(ytSectionView(answer(query), library)?.top, { kind: "song", song: luck });
+    assert.deepEqual(ytSectionView(answer("try my luck"), library)?.top, {
+      kind: "album",
+      album: album("Try My Luck", "WayV"),
+    });
+  });
+
   test("YT Music's best is never something the Library has", () => {
     const view = ytSectionView(
       results([], [artist("Mine"), artist("Minnie")], [], "mine"),

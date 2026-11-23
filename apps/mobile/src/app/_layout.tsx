@@ -1,5 +1,6 @@
 import { useLyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
-import { PerfProfiler, screenCostLayout } from "@/lib/renderCost";
+import { PerfProfiler } from "@/lib/renderCost";
+import { pageScreenLayout } from "@/pageGradient/PageGradient";
 import { startMediumCovers } from "@/library/mediumCovers";
 import "../../global.css";
 // Lays the chosen theme colours over global.css's, in the chosen appearance, before anything renders.
@@ -285,7 +286,7 @@ export default function RootLayout() {
             <UnderNowPlaying>
               <Stack
                 screenListeners={timingStackListeners}
-                screenLayout={screenCostLayout}
+                screenLayout={pageScreenLayout}
                 screenOptions={screenOptions}
               >
                 <Stack.Protected guard={granted}>
