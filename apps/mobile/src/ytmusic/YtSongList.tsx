@@ -94,6 +94,7 @@ import {
 } from "./YtDownloads";
 import { shownYtListHead } from "./ytListHead";
 import type { YtMusic, YtMusicError } from "./YtMusic";
+import { PageTopGradient } from "@/pageGradient/PageGradient";
 
 const NO_SONGS: readonly NativeYtSong[] = [];
 
@@ -611,6 +612,7 @@ function YtSongListPage({
 
   return (
     <View className="flex-1 bg-background">
+      <PageTopGradient />
       <ScreenHeader />
       <FindFrame find={findInList}>
         <SongList

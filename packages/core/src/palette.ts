@@ -181,6 +181,22 @@ export const NOW_PLAYING_FADE: GroundFade = {
   steps: 12,
 };
 
+/**
+ * The page-top gradient's look ("Curto bem sutil"): the main colour toned a
+ * little, then taken 60% of the way into the theme's ground, fading into it
+ * 42% of the screen down with no second colour. Text sits all over a page, so
+ * the whole height keeps 4.5:1.
+ */
+export const PAGE_TOP_FADE: GroundFade = {
+  tone: { dark: 0.2, light: 0.12 },
+  soft: 0.6,
+  hold: 0,
+  reach: 0.42,
+  second: null,
+  legibleFrom: 0,
+  steps: 12,
+};
+
 /** Which swatch is the main colour, best first: the most vivid one there is. */
 const MAIN: readonly Swatch[] = [
   "vibrant",

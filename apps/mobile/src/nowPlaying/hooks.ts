@@ -3,6 +3,7 @@ import {
   NOW_PLAYING_FADE,
   parseTrackId,
   type ArtworkPalette,
+  type GroundFade,
   type GroundGradient,
   type QueueEntry,
 } from "@wave/core";
@@ -102,15 +103,13 @@ const isHex = (colour: string): boolean => /^#[0-9a-f]{6}$/i.test(colour);
 const TEXT_EVERYWHERE = { ...NOW_PLAYING_FADE, legibleFrom: 0 };
 
 /**
- * The ground for the playing artwork (Core's `groundGradient`): its main
- * colour at the top, through its second, into the theme's ground, toned so
- * Wave's ink, graphite and teal stay readable where text sits. On the player
- * that is from the title down; [textEverywhere] (Lyrics, the Queue) keeps the
- * whole height readable. The plain ground without a palette.
+ * The ground for [palette] along [fade] (Core's `groundGradient`), toned so
+ * Wave's ink, graphite and teal stay readable where [fade] keeps text. The
+ * plain ground without a palette, or while the theme's colours aren't plain hex.
  */
-export const useNowPlayingGradient = (
+export const useThemedGround = (
   palette: ArtworkPalette | null,
-  textEverywhere: boolean,
+  fade: GroundFade,
 ): GroundGradient => {
   const scheme = useColorScheme() === "dark" ? "dark" : "light";
   const ground = useThemeColor("background");
@@ -125,10 +124,20 @@ export const useNowPlayingGradient = (
         { color: ground, at: 1 },
       ];
     }
-    const fade = textEverywhere ? TEXT_EVERYWHERE : NOW_PLAYING_FADE;
     return groundGradient(palette, { scheme, ground, ink }, fade);
-  }, [palette, textEverywhere, scheme, ground, foreground, secondary, accent]);
+  }, [palette, fade, scheme, ground, foreground, secondary, accent]);
 };
+
+/**
+ * The ground for the playing artwork: its main colour at the top, through its
+ * second, into the theme's ground (`useThemedGround`). On the player text is
+ * kept readable from the title down; [textEverywhere] (Lyrics, the Queue)
+ * keeps the whole height readable.
+ */
+export const useNowPlayingGradient = (
+  palette: ArtworkPalette | null,
+  textEverywhere: boolean,
+): GroundGradient => useThemedGround(palette, textEverywhere ? TEXT_EVERYWHERE : NOW_PLAYING_FADE);
 
 /**
  * The queue's tracks by id, as the Queue service learned them with the

@@ -13,6 +13,7 @@ import {
   excludedFolders,
   countTracks,
   trackDetails,
+  artworkPalette,
   indexedFiles,
   databaseWrites,
   markScanned,
@@ -87,7 +88,7 @@ import {
   followReleaseListening,
   type FollowReleaseCache,
 } from "@wave/client/db/followReleases";
-import type { FollowRelease, LeavingSong } from "@wave/core";
+import type { ArtworkPalette, FollowRelease, LeavingSong } from "@wave/core";
 import type { FollowedArtist, FollowLevel } from "@wave/core";
 import {
   selectFollow,
@@ -938,6 +939,10 @@ export class LibraryStore extends Context.Service<
       target: PlayingSongTarget,
     ) => Effect.Effect<PlayingSongAnswer, LibraryStoreError>;
     readonly trackDetails: (id: number) => Effect.Effect<TrackDetails | null, LibraryStoreError>;
+    /** A cover's colours by its artwork path, for the page-top gradient; null when none are known. */
+    readonly artworkPalette: (
+      path: string,
+    ) => Effect.Effect<ArtworkPalette | null, LibraryStoreError>;
     /** The recent searches, newest first. */
     readonly listRecentSearches: Effect.Effect<readonly string[], LibraryStoreError>;
     /** Adds a search to the recent ones (see Core's `rememberSearch`); returns them, newest first. */
@@ -1960,6 +1965,7 @@ const make = Effect.gen(function* () {
       attempt("read the Now Playing song", (db) => selectNowPlayingSong(db, target)),
 
     trackDetails: (id) => attempt("read the playing track", (db) => trackDetails(db, id)),
+    artworkPalette: (path) => attempt("read a cover's colours", (db) => artworkPalette(db, path)),
 
     listAlbums: attempt("list albums", (db) => selectAlbums(db, undefined)),
 

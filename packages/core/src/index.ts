@@ -199,6 +199,7 @@ export {
   groundGradient,
   lyricsDimOpacity,
   NOW_PLAYING_FADE,
+  PAGE_TOP_FADE,
   paletteGradient,
   sameGround,
 } from "./palette.ts";
@@ -271,6 +272,8 @@ export {
   storedKeepFindVisible,
 } from "./keepFindVisible.ts";
 export type { FindFieldPlacement } from "./keepFindVisible.ts";
+export { pageGradientPalette, readPageGradient, storedPageGradient } from "./pageGradient.ts";
+export type { PageCover } from "./pageGradient.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export {
   compareSongReadOrder,

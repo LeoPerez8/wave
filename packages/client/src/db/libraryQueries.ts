@@ -175,6 +175,14 @@ export const trackDetails = (db: Database, id: number) =>
     .where(eq(schema.tracks.id, id))
     .get() ?? null;
 
+/** The colours read from a cover, by its artwork path; null for a path Wave holds no colours for. */
+export const artworkPalette = (db: Database, path: string) =>
+  db
+    .select({ palette: schema.artwork.palette })
+    .from(schema.artwork)
+    .where(eq(schema.artwork.path, path))
+    .get()?.palette ?? null;
+
 export const indexedFiles = (db: Database, paths: readonly string[]) =>
   chunks(paths).flatMap((chunk) =>
     db
