@@ -67,6 +67,17 @@ export const libraryChangeAffects = (reads: LibraryReads, change: LibraryChange)
   return change.ids.some((id) => read.includes(id));
 };
 
+/**
+ * Whether a kept query no screen in sight shows lets [change] wait (#1489):
+ * a play's burst moves a total by one play, and reading the totals again
+ * while the owner looks at another screen (the playlist they started it
+ * from) costs that screen's JS turns several times per song. The query
+ * catches up at once when a screen showing it comes into sight, or at the
+ * kept pace once Wave leaves the screen (`away`). Edits never wait.
+ */
+export const waitsForSight = (change: LibraryChange): boolean =>
+  change.burst === true && change.kind === "plays";
+
 /** How the registry paces reads and how much it keeps that nobody shows. */
 export interface LibraryQueryLimits {
   /** A query re-reads for `burst` changes at most this often. */
@@ -78,6 +89,7 @@ export interface LibraryQueryLimits {
   /**
    * A kept query (`keep`) no screen in sight shows re-reads for bursts at most
    * this often, so the next screen to open it draws data at most this old.
+   * Plays are the exception (`waitsForSight`).
    */
   readonly keptThrottleMs: number;
 }
@@ -174,10 +186,18 @@ export interface LibraryQueries<V> {
    * show it (#1352): it is read now, kept however long nobody shows it, and
    * read again when a change reaches it (an edit at once, bursts at most every
    * `keptThrottleMs` while no screen in sight shows it), so a screen opening
-   * it starts from a current result and reads nothing. Returns the release:
+   * it starts from a current result and reads nothing. A play's burst waits
+   * for a screen in sight, which reads it at once, or for `away`
+   * (`waitsForSight`). Returns the release:
    * once every keep is released it is retained as any result nobody shows.
    */
   readonly keep: (key: string, reads: LibraryReads, traits?: LibraryQueryTraits<V>) => () => void;
+  /**
+   * Wave left the screen ([away] true: the home screen, another app, the
+   * screen off) or came back. While away, kept queries catch up on the
+   * changes that wait for sight (`waitsForSight`) at the kept pace.
+   */
+  readonly away: (away: boolean) => void;
   /** The query's current result, or undefined before its first read. The same box until it changes. */
   readonly current: (key: string) => LibraryQueryResult<V> | undefined;
   readonly state: (key: string) => LibraryQueryState;
@@ -208,6 +228,8 @@ interface Entry<V> {
   failed: boolean;
   /** A change reached the query since its last read started. */
   stale: boolean;
+  /** Every change since its last read started waits for sight (`waitsForSight`). */
+  waits: boolean;
   /** The pending re-read shouldn't wait for the throttle (an edit, a screen coming back). */
   urgent: boolean;
   /** The read under way (its number), or null. */
@@ -239,6 +261,9 @@ interface Entry<V> {
  *   once, when one is shown again. Edits re-read it even hidden, so no screen
  *   comes back showing a removed item. A first read happens even hidden, so
  *   a warmed screen has its content. Queries in sight read first;
+ * - a kept query (`keep`) re-reads for bursts even hidden, at the kept pace,
+ *   except plays, which wait until a screen showing it is in sight or Wave
+ *   is away (`waitsForSight`);
  * - a result an edit made out of date while it was read is dropped, and the
  *   query reads again;
  * - with no consumer left, a current result is kept for `retainMs`, at most
@@ -258,6 +283,7 @@ export const createLibraryQueries = <V>(options: {
   const limits: LibraryQueryLimits = { ...LIBRARY_QUERY_LIMITS, ...options.limits };
   const entries = new Map<string, Entry<V>>();
   let nextRead = 0;
+  let isAway = false;
   const counts = { reads: 0, shared: 0, paused: 0, discarded: 0, evicted: 0 };
 
   const stateOf = (entry: Entry<V>): LibraryQueryState =>
@@ -331,8 +357,9 @@ export const createLibraryQueries = <V>(options: {
     trimRetained();
   };
 
-  /** A change reached [entry]: it re-reads, at once when [edit]. */
-  const invalidate = (entry: Entry<V>, edit: boolean): void => {
+  /** A change reached [entry]: it re-reads, at once when [edit]; [waits] as `waitsForSight` says. */
+  const invalidate = (entry: Entry<V>, edit: boolean, waits = false): void => {
+    entry.waits = waits && (entry.waits || !entry.stale);
     entry.stale = true;
     if (edit) {
       entry.urgent = true;
@@ -347,6 +374,7 @@ export const createLibraryQueries = <V>(options: {
     entry.forEdit = entry.urgent;
     entry.outdated = false;
     entry.stale = false;
+    entry.waits = false;
     entry.urgent = false;
     entry.readAt = now();
     entry.failed = false;
@@ -393,8 +421,14 @@ export const createLibraryQueries = <V>(options: {
     if (entry.reading !== null) return;
     if (!entry.stale) return;
     // Paused: bursts wait while only hidden screens show it. Edits and its first read don't.
-    // A kept one keeps reading, at the kept pace (`burstReadAt`).
-    if (entry.result !== undefined && !entry.urgent && !inSight(entry) && entry.keepers === 0)
+    // A kept one keeps reading, at the kept pace (`burstReadAt`), but plays wait for sight
+    // while Wave is on the screen (`waitsForSight`).
+    if (
+      entry.result !== undefined &&
+      !entry.urgent &&
+      !inSight(entry) &&
+      (entry.keepers === 0 || (entry.waits && !isAway))
+    )
       return;
     const wait = entry.urgent || entry.result === undefined ? 0 : burstReadAt(entry) - now();
     if (wait > 0) {
@@ -418,6 +452,7 @@ export const createLibraryQueries = <V>(options: {
     result: undefined,
     failed: false,
     stale: true,
+    waits: false,
     urgent: true,
     reading: null,
     forEdit: false,
@@ -462,6 +497,8 @@ export const createLibraryQueries = <V>(options: {
         if (entry.result !== undefined || entry.reading !== null) counts.shared++;
         // Its first read failed: this screen tries again.
         else entry.stale = true;
+        // Opening on stale data (a kept query a play reached): read it now, as `show` does.
+        if (visible && entry.stale && entry.result !== undefined) entry.urgent = true;
         entry.cancelExpiry?.();
         entry.cancelExpiry = null;
       }
@@ -494,6 +531,11 @@ export const createLibraryQueries = <V>(options: {
         },
       };
     },
+    away: (away) => {
+      if (isAway === away) return;
+      isAway = away;
+      if (away) for (const entry of entries.values()) plan(entry);
+    },
     current: (key) => entries.get(key)?.result,
     state: (key) => {
       const entry = entries.get(key);
@@ -516,7 +558,7 @@ export const createLibraryQueries = <V>(options: {
           counts.evicted++;
           continue;
         }
-        invalidate(entry, edit);
+        invalidate(entry, edit, waitsForSight(change));
         if (inSight(entry)) plan(entry);
         else hidden.push(entry);
       }

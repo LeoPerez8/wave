@@ -961,6 +961,7 @@ export {
   createLibraryQueries,
   longListBurstPace,
   libraryChangeAffects,
+  waitsForSight,
 } from "./libraryQueries.ts";
 export type {
   LibraryChange,
@@ -2059,6 +2060,8 @@ export {
   knownGain,
   MEASURE_AHEAD,
   measureCandidates,
+  MEASURE_PAGE,
+  nextMeasureCandidates,
   albumGain,
   entryGain,
   readNormalizeVolume,
