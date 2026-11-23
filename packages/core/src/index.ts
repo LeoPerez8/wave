@@ -955,6 +955,7 @@ export {
   warmTab,
 } from "./tabScreens.ts";
 export type { TabScreens } from "./tabScreens.ts";
+export { rememberPathStates } from "./pathStates.ts";
 export {
   LIBRARY_QUERY_LIMITS,
   createLibraryQueries,
