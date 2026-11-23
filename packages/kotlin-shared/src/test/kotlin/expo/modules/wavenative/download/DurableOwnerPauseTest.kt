@@ -192,6 +192,21 @@ class DurableOwnerPauseTest {
     assertEquals("queued", job(owner, "c")["phase"])
   }
 
+  @Test fun aListWithNoOriginResumesSongsAsCoreDoes() = inFolder { folder ->
+    val owner = DurableDownloads(File(folder, "jobs"))
+    owner.enqueue(song("a"), null, emptyMap(), "soulseek")
+    owner.enqueue(song("b"), null, emptyMap(), "soulseek")
+    owner.enqueue(song("c"), null, emptyMap(), "soulseek", roadTrip)
+    owner.pauseGroup("songs", NoTransfer)
+    owner.pauseGroup("playlist:12", NoTransfer)
+    // Download All (a list with no origin): Core's `downloadRequested` resumes Songs, and the playlist stays paused.
+    owner.enqueueAll(listOf(DurableDownloads.Request(song("a"), null, source = "soulseek", release = true, resumesGroup = true)))
+    assertEquals(setOf("playlist:12"), owner.pausedGroups())
+    owner.advance(NoTransfer, Untouched)
+    assertEquals("preparing", job(owner, "b")["phase"])
+    assertEquals("queued", job(owner, "c")["phase"])
+  }
+
   @Test fun aPausedGroupStaysPausedAcrossARestart() = inFolder { folder ->
     val journal = File(folder, "jobs")
     val first = DurableDownloads(journal)

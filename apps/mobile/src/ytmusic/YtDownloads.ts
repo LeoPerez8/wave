@@ -179,6 +179,7 @@ import {
 import { followDownloadRuns } from "./downloadRun";
 import { createDownloadRecovery } from "./downloadRecovery";
 import { currentLibraryFinderInSlices, useLoadedLibraryFinder } from "./libraryFinder";
+import { createOwnerPauseRequests } from "./ownerPauseRequests";
 import { followYoutubeThrottle } from "./youtubeThrottle";
 import type { YtMusicError } from "./YtMusic";
 
@@ -1230,9 +1231,12 @@ const refresh = async (): Promise<void> => {
       const snapshotJobs = applyJournalChanges(followed, changes);
       followed = snapshotJobs;
       followedRevision = changes.revision;
-      // A pause or resume moves the journal's revision, so it's read here.
-      downloadsPausedByOwner.set(WaveSoulseek.downloadsPaused());
-      showPausedGroups(WaveSoulseek.pausedDownloadGroups());
+      // A pause or resume moves the journal's revision, so it's read here; one still on its way
+      // keeps what the owner pressed.
+      if (!ownerPauses.pending()) {
+        downloadsPausedByOwner.set(WaveSoulseek.downloadsPaused());
+        showPausedGroups(WaveSoulseek.pausedDownloadGroups());
+      }
       // YouTube refusing songs in a burst pauses its downloads (Core's `ytThrottle`).
       void followYoutubeThrottle(snapshotJobs);
       // A failed Library read keeps the journal intact and mustn't hide new progress or decisions.
@@ -1269,6 +1273,20 @@ const hasFailed = (job: NativeDownloadJob): boolean =>
   job.phase === "failed" || job.importFailure !== undefined;
 
 let requests = Promise.resolve();
+
+/** The owner's Pause and Resume, which reach the journal at once rather than behind [requests]. */
+const ownerPauses = createOwnerPauseRequests({
+  native: {
+    pauseAll: () => WaveSoulseek.pauseDownloads(),
+    resumeAll: () => WaveSoulseek.resumeDownloads(),
+    pauseGroup: (key) => WaveSoulseek.pauseDownloadGroup(key),
+    resumeGroup: (key) => WaveSoulseek.resumeDownloadGroup(key),
+  },
+  queue: (work) => {
+    requests = requests.then(work).catch(() => undefined);
+  },
+  landed: () => refresh(),
+});
 
 /**
  * The downloads only a star asked for, by job id (Core's `readStarDownloads`): unstarring the
@@ -1913,12 +1931,7 @@ export const onDownloadsChanged = (listener: () => void): (() => void) =>
  */
 export const pauseDownloads = (): void => {
   downloadsPausedByOwner.set(true);
-  requests = requests
-    .then(async () => {
-      await WaveSoulseek.pauseDownloads();
-      await refresh();
-    })
-    .catch(() => undefined);
+  ownerPauses.pauseAll();
 };
 
 /** Resume (Core's `resumeAllDownloads`): everything paused goes on, songs stopped mid-download from the start. */
@@ -1926,12 +1939,7 @@ export const resumeDownloads = (): void => {
   downloadsPausedByOwner.set(false);
   // It resumes every paused playlist and album too (#1475).
   pausedDownloadGroups.set([]);
-  requests = requests
-    .then(async () => {
-      await WaveSoulseek.resumeDownloads();
-      await refresh();
-    })
-    .catch(() => undefined);
+  ownerPauses.resumeAll();
 };
 
 /** [groups] as the journal said, kept as they were while they name the same groups. */
@@ -1949,23 +1957,13 @@ const showPausedGroups = (groups: readonly string[]): void => {
 export const pauseDownloadGroup = (key: string): void => {
   if (!pausedDownloadGroups.get().includes(key))
     pausedDownloadGroups.set([...pausedDownloadGroups.get(), key]);
-  requests = requests
-    .then(async () => {
-      await WaveSoulseek.pauseDownloadGroup(key);
-      await refresh();
-    })
-    .catch(() => undefined);
+  ownerPauses.pauseGroup(key);
 };
 
 /** The group's Resume (Core's `resumeDownloadGroup`): its songs go on. */
 export const resumeDownloadGroup = (key: string): void => {
   pausedDownloadGroups.set(pausedDownloadGroups.get().filter((paused) => paused !== key));
-  requests = requests
-    .then(async () => {
-      await WaveSoulseek.resumeDownloadGroup(key);
-      await refresh();
-    })
-    .catch(() => undefined);
+  ownerPauses.resumeGroup(key);
 };
 
 /**
