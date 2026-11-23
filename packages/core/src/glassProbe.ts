@@ -48,12 +48,30 @@ export interface GlassLayers {
   readonly refraction: number;
   /** Share one backdrop recording between the glass views over it (the candidate change). */
   readonly coalesce: boolean;
+  /**
+   * Draw the theme's opaque surface instead of glass, as below Android 12: no
+   * native glass view, no backdrop, blur, tint or rim.
+   */
+  readonly opaque: boolean;
 }
+
+/** What a weak phone's shipped glass draws: the opaque surface (#1491). */
+const OPAQUE: GlassLayers = {
+  backdrop: false,
+  blur: 0,
+  refraction: 0,
+  coalesce: false,
+  opaque: true,
+};
 
 /**
  * The layers a glass view draws for [settings] under [probe], on a phone
- * drawing [effects] (`phoneEffects.ts`): the simple effects blur at half the
- * radius, rounded up, and drop the refraction shader.
+ * drawing [effects] (`phoneEffects.ts`). The simple effects draw the opaque
+ * surface: on the emulator its live blurred backdrop cost about 11 ms on a
+ * tab switch's first frame and 15 ms on Now Playing's, and half its frames
+ * late (#1491, docs/performance/1491-simple-effects.md). A probe still draws
+ * glass on a weak phone, the simple glass #1357 shipped (half the blur radius,
+ * rounded up, and no refraction), so one perf build compares the two.
  */
 export const glassLayers = (
   settings: GlassSettings,
@@ -61,10 +79,11 @@ export const glassLayers = (
   effects: PhoneEffects = "full",
 ): GlassLayers => {
   const simple = effects === "simple";
+  if (simple && probe === "live") return OPAQUE;
   const backdrop = probe !== "off";
   const radius = simple ? Math.ceil(settings.blur / 2) : settings.blur;
   const blur = probe === "record" || probe === "off" ? 0 : radius;
   const refraction =
     !simple && (probe === "live" || probe === "coalesced") ? settings.refraction : 0;
-  return { backdrop, blur, refraction, coalesce: probe === "coalesced" };
+  return { backdrop, blur, refraction, coalesce: probe === "coalesced", opaque: false };
 };

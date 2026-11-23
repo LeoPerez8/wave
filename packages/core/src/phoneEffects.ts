@@ -6,7 +6,7 @@
  * animated windows came in.
  *
  * - `full`: the effects as designed (a strong phone looks exactly as before).
- * - `simple`: the glass blurs at half its radius with no refraction, and Now
+ * - `simple`: the glass is the theme's opaque surface (#1491), and Now
  *   Playing's ground changes colour without its crossfade.
  */
 export type PhoneEffects = "full" | "simple";
