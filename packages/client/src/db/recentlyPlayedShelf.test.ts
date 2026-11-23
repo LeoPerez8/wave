@@ -110,7 +110,9 @@ test("Recently played shows where each play came from, the latest first, each on
 
 test("a streamed album's card opens its page; its details are its latest song's", async () => {
   const { db } = await seed();
-  const album = homePlays(db).recentlyPlayed.find((entry) => entry.kind === "album" && "online" in entry.album);
+  const album = homePlays(db).recentlyPlayed.find(
+    (entry) => entry.kind === "album" && "online" in entry.album,
+  );
   assert.ok(album?.kind === "album" && "online" in album.album);
   assert.equal(album.album.albumId, "MPREb_s");
   assert.equal(album.album.artworkUrl, "https://cover/a1");
@@ -124,7 +126,10 @@ test("a song played on its own shows the song, its Library row once it's downloa
   stream(db, streamed("s1", "Elsewhere", "S"), 1_000, { kind: "song", id: "yt:s1" });
   stream(db, streamed("r1", "Related", "R"), 1_100, { kind: "song", id: "yt:s1" });
   stream(db, streamed("dl", "Downloaded", "K"), 1_200, { kind: "search", id: null });
-  assert.deepEqual(homePlays(db).recentlyPlayed.map(card), ["song Kept", "song Song s1 (streamed)"]);
+  assert.deepEqual(homePlays(db).recentlyPlayed.map(card), [
+    "song Kept",
+    "song Song s1 (streamed)",
+  ]);
 });
 
 test("a mix played again from its card stays one card", async () => {
@@ -175,7 +180,10 @@ test("Recently played reads a page of plays at a time, however long the history"
       id: "MPREb_same",
     });
   for (let index = 0; index < 11; index++)
-    stream(db, streamed(`g${index}`, `Album ${index}`, "G"), 500 + index, { kind: "search", id: null });
+    stream(db, streamed(`g${index}`, `Album ${index}`, "G"), 500 + index, {
+      kind: "search",
+      id: null,
+    });
   const shelf = homePlays(db).recentlyPlayed;
   assert.equal(shelf.length, 12);
   assert.equal(card(shelf[0]!), "album Same album (online)");

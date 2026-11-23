@@ -1625,10 +1625,9 @@ export const selectPlaylistsById = (
   ids.length === 0
     ? new Map()
     : new Map(
-        playlistRows(db, and(livePlaylist, inArray(schema.playlists.id, [...ids]))!, false).map((row) => [
-          row.id,
-          row,
-        ]),
+        playlistRows(db, and(livePlaylist, inArray(schema.playlists.id, [...ids]))!, false).map(
+          (row) => [row.id, row],
+        ),
       );
 
 /**

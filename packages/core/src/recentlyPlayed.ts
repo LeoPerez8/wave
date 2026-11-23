@@ -163,7 +163,8 @@ export const recentlyPlayedContext = (
   if (context?.kind === MIX_REPLAY && context.id !== null)
     return { kind: "mix", context: replayedMix(context.id) };
   if (context !== null && MIXES.has(context.kind)) return { kind: "mix", context };
-  if (page !== undefined) return { kind: page.kind, context: { kind: page.context, id: context!.id } };
+  if (page !== undefined)
+    return { kind: page.kind, context: { kind: page.context, id: context!.id } };
   // A plain play's session (a Search tap, a song's Play) is its song's, whatever plays after it.
   const song = context?.kind === SONG_PLAY_CONTEXT && context.id !== null ? context.id : trackId;
   return { kind: "song", context: { kind: SONG_PLAY_CONTEXT, id: song } };

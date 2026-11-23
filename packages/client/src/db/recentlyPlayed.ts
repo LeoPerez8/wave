@@ -81,8 +81,7 @@ const playedContexts = (db: LibraryDatabase, limit: number): readonly RecentlyPl
       .limit(page)
       .all()
       .map((row) => ({
-        context:
-          row.contextType === null ? null : { kind: row.contextType, id: row.contextId },
+        context: row.contextType === null ? null : { kind: row.contextType, id: row.contextId },
         trackId: trackIdOf(row),
         startedAt: row.startedAt,
       }));

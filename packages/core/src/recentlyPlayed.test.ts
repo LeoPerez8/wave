@@ -147,9 +147,16 @@ describe("recentlyPlayedContexts", () => {
 
 describe("recentlyPlayedContexts, read a page at a time", () => {
   test("stops at the limit", () => {
-    const read = plays(["album", "1", "1", 900], ["album", "2", "2", 800], ["album", "3", "3", 700]);
+    const read = plays(
+      ["album", "1", "1", 900],
+      ["album", "2", "2", 800],
+      ["album", "3", "3", 700],
+    );
 
-    assert.deepEqual(shown(recentlyPlayedContexts(read, 2, false)), ["album album:1", "album album:2"]);
+    assert.deepEqual(shown(recentlyPlayedContexts(read, 2, false)), [
+      "album album:1",
+      "album album:2",
+    ]);
   });
 
   test("needs more plays while those read hold too few contexts and others remain", () => {
