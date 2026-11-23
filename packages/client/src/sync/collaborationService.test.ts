@@ -32,7 +32,9 @@ const coded = (code: string): Error => Object.assign(new Error(code), { code });
 
 const collaboration = {
   playlistId: LIST,
-  members: [{ accountId: "ana", name: "Ana", joinedAt: 1, owner: true, self: true }],
+  members: [
+    { accountId: "ana", name: "Ana", photoUrl: null, joinedAt: 1, owner: true, self: true },
+  ],
 };
 
 describe("collaborationService", () => {
