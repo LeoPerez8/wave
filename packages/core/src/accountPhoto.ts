@@ -1,8 +1,9 @@
 /**
  * The photo a Wave account is shown with to the other members of a collaborative playlist
  * (docs/spec.md, "Collaborative playlists"): the Google account's photo, as the sync service
- * keeps it. Only an address on Google's photo host is kept, so no app can make the other
- * members' phones load an address of its choosing.
+ * keeps it. Only an address on Google's photo host is kept, so the other members' phones load
+ * nothing off that host. Once the account has signed in since photos were kept, the address is
+ * the ID token's; before that, an app can send any address on the host.
  */
 
 /** The longest photo address kept, in characters. */

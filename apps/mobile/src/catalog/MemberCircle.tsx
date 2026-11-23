@@ -39,7 +39,8 @@ export function MemberCircle({
   stacked?: boolean;
   size?: keyof typeof SIZES;
 }) {
-  // The address that failed to load: it shows the initial until another address comes.
+  // The address that failed to load: it shows the initial until another address comes or the
+  // circle is drawn anew, and is not tried again before.
   const [failed, setFailed] = useState<string | null>(null);
   const photo = photoUrl !== null && photoUrl !== failed ? photoUrl : null;
   const { side, circle, letter } = SIZES[size];
