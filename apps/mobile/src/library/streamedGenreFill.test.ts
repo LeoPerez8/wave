@@ -77,3 +77,30 @@ test("a failing video does not block later pages and is retried on a later run",
   assert.deepEqual([...saved.keys()], ["b", "c"]);
   assert.deepEqual(failures, ["a", "a"]);
 });
+
+test("lookups failing in a row, as offline, end the run until the next one", async () => {
+  const videos = Array.from({ length: 50 }, (_, i) => `v${String(i).padStart(2, "0")}`);
+  let online = false;
+  const asks: string[] = [];
+  const saved: string[] = [];
+  const run = () =>
+    fillStreamedGenres({
+      enabled: () => true,
+      turn: async () => {},
+      page: async (after) =>
+        videos.filter((id) => id > after && !saved.includes(id)).slice(0, 10),
+      lookup: async (id) => {
+        asks.push(id);
+        if (!online) throw new Error("offline");
+        return "Rock";
+      },
+      save: async (id) => {
+        saved.push(id);
+      },
+    });
+  await run();
+  assert.deepEqual(asks, ["v00", "v01", "v02"]);
+  online = true;
+  await run();
+  assert.equal(saved.length, 50);
+});
