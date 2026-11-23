@@ -541,8 +541,14 @@ class DurableDownloads(
   }
 
   /** Why the download service stops once there's no work ([hasWork]): the last song cancelled, or none left. */
-  fun idleStop(): DownloadServiceStop =
-    if (lastEnd == "cancelled") DownloadServiceStop.CANCELLED else DownloadServiceStop.QUEUE_EMPTY
+  fun idleStop(): DownloadServiceStop = when {
+    heldCount() > 0 -> DownloadServiceStop.PAUSED
+    lastEnd == "cancelled" -> DownloadServiceStop.CANCELLED
+    else -> DownloadServiceStop.QUEUE_EMPTY
+  }
+
+  /** The songs the owner's pause holds back ([ownerHeld]): what the paused notification offers to resume. */
+  fun heldCount(): Int = published.count(::ownerHeld)
 
   /** The songs started and not yet in the Library, and those still waiting to start; the notification shows both. */
   fun counts(): DownloadCounts = DownloadCounts.of(published)

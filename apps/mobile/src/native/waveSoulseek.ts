@@ -157,6 +157,17 @@ declare class WaveSoulseekModule extends NativeModule<{
   showDownloadRun(notice: DownloadRunNotice | null): void;
   cancelJob(id: string): Promise<void>;
   /**
+   * Pause (Core's `pauseAllDownloads`): every song not downloaded yet stops at once, kept across
+   * a restart; songs asked for meanwhile with `release` still download.
+   */
+  pauseDownloads(): Promise<void>;
+  /** Resume (Core's `resumeAllDownloads`): everything paused goes on. */
+  resumeDownloads(): Promise<void>;
+  /** Cancel All for the songs [ids] (Core's `downloadsToCancelAll`), which the alert counted. */
+  cancelAllDownloads(ids: readonly string[]): Promise<void>;
+  /** Whether the owner paused downloads, as the journal keeps it. */
+  downloadsPaused(): boolean;
+  /**
    * Settings › Downloads' drag: the waiting jobs [ids] take the places they held, in this order,
    * so they start in it (Core's `moveQueuedJobs`); kept across a restart.
    */
@@ -186,6 +197,8 @@ export interface JobRequest {
   readonly equivalentId: string | null;
   readonly source: DownloadSource | null;
   readonly origin: DownloadOrigin | null;
+  /** The owner asked for it (Core's `requestRunsWhilePaused`): it downloads while downloads are paused. */
+  readonly release?: boolean;
 }
 
 /**

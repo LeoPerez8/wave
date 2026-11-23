@@ -29,9 +29,12 @@ class DurableOwnerPauseTest {
     assertEquals(listOf("queued", "queued"), owner.snapshot().map { it["phase"] })
     assertNull(owner.claim("a"))
     assertFalse("the service stops once only paused songs are left", owner.hasWork())
+    assertEquals(DownloadServiceStop.PAUSED, owner.idleStop())
+    assertEquals(2, owner.heldCount())
 
     owner.resumeAll()
     assertFalse(owner.ownerPaused())
+    assertEquals(0, owner.heldCount())
     owner.advance(transport, Untouched)
     assertEquals("preparing", job(owner, "a")["phase"])
     assertTrue(owner.hasWork())
