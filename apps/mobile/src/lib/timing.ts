@@ -68,6 +68,12 @@ export const timingTouchEnded = (event: GestureResponderEvent): void => {
 /** A native scroll or gesture took the touch over: its lift goes unheard, so this is its end. */
 export const timingTouchTakenOver = session.touchEnded;
 export const hasTimingTouch = session.hasTouch;
+/**
+ * Android's Back came. Every Back listener calls this first, since the first to consume Back
+ * stops the rest: a touch whose end JS never heard is dropped, so what Back begins counts from
+ * Back (#1488).
+ */
+export const timingBackPressed = session.backPressed;
 
 let surface: string | undefined;
 export const setTimingSurface = (name: string | undefined): void => {
@@ -150,6 +156,7 @@ export const timingStackListeners = {
   transitionStart: (event: { target?: string; data: { closing: boolean } }): void => {
     let active = session.active();
     if (active === null && event.data.closing) {
+      timingBackPressed();
       beginTiming("pop", "Back");
       active = session.active();
     }

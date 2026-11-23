@@ -4,6 +4,7 @@ import {
   TIMING_BUDGETS,
   tabOfPath,
   createSlowTapLines,
+  lostTouchEndLine,
   slowScreenLine,
   speedSummaryLine,
   type TimingKind,
@@ -219,6 +220,18 @@ export const createTimingSession = (ports: Ports) => {
       if (touchAt !== undefined) touchEndedAt ??= ports.now();
     },
     hasTouch: (): boolean => liveTouch() !== undefined,
+    /**
+     * Android's Back, before the handler it reaches begins anything. No finger is on Wave's screen
+     * then, so a touch JS still holds lost its end: Android drops the events of a view removed
+     * under the finger (a slot's long press into edit mode). Back counts from itself, not from that
+     * touch seconds ago (#1488). A touch whose end JS heard stays for its grace: the system's back
+     * gesture takes over a touch that began on Wave's screen (#866).
+     */
+    backPressed: (): void => {
+      if (touchAt === undefined || touchEndedAt !== undefined) return;
+      if (liveTouch() !== undefined) write(lostTouchEndLine(ports.now() - touchAt));
+      forgetTouch();
+    },
     /** The app left the screen: the touch's end may never come. */
     forgetTouch,
     /** A gesture counted from the touch that made it (or from now, with none), using that touch up. */
