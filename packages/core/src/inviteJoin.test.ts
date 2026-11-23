@@ -156,7 +156,7 @@ describe("inviteJoinView", () => {
 describe("inviteJoinOutcome", () => {
   const collaboration = {
     playlistId: "list",
-    members: [{ accountId: "leo", name: "Leo", joinedAt: 1, owner: true, self: false }],
+    members: [{ accountId: "leo", name: "Leo", photoUrl: null, joinedAt: 1, owner: true, self: false }],
   };
 
   test("joining gives the playlist to wait for", () => {
