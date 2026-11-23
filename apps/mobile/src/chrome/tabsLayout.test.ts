@@ -21,6 +21,8 @@ const harness = {
   layoutRenders: 0,
   /** The tabs the layout told the tab switches it showed (`useTabSwitches().shown`). */
   shown: [] as (string | null)[],
+  /** The paths the router read a route from (`getStateFromPath`). */
+  routerReads: [] as string[],
 };
 Object.assign(globalThis, { __tabsLayoutTest: harness });
 
@@ -46,8 +48,37 @@ const [{ default: TabsLayout }] = await loadWithStubs<[typeof import("../app/(ta
        };
        export const usePathname = () => useSyncExternalStore(subscribe, () => ${t}.pathname);`,
     ),
+    // The router's linking, which reads a path's route as expo-router's does: anew each time.
+    "expo-router/react-navigation": stubModule(
+      `import { createContext } from ${react};
+       const config = { screens: {} };
+       const getStateFromPath = (path) => {
+         ${t}.routerReads.push(path);
+         return { routes: [{ name: path, state: { routes: [{ name: "index" }] } }] };
+       };
+       export const LinkingContext = createContext({ options: { config, getStateFromPath } });
+       ${t}.LinkingContext = LinkingContext;`,
+    ),
+    // As expo-router's headless tabs do, the navigator follows the route and, on every
+    // navigation, reads each tab's route from its path with the route's segments.
     "expo-router/ui": stubModule(
-      `export const Tabs = ({ children }) => { ${t}.tabsRenders++; return children; };
+      `import { createElement, Fragment, use, useSyncExternalStore } from ${react};
+       const subscribe = (listener) => {
+         ${t}.listeners.add(listener);
+         return () => ${t}.listeners.delete(listener);
+       };
+       const TabRoutes = () => {
+         const pathname = useSyncExternalStore(subscribe, () => ${t}.pathname);
+         const { options } = use(${t}.LinkingContext);
+         const segments = pathname.split("/").filter(Boolean);
+         for (const path of ["/", "/library", "/albums", "/search"])
+           options.getStateFromPath(path, options.config, segments);
+         return null;
+       };
+       export const Tabs = ({ children }) => {
+         ${t}.tabsRenders++;
+         return createElement(Fragment, null, createElement(TabRoutes), children);
+       };
        export const TabSlot = () => null, TabList = () => null, TabTrigger = () => null;`,
     ),
     "@/lib/renderCost": stubModule(
@@ -194,6 +225,25 @@ test("a tab kept for the first time draws the layout to keep it", async () => {
     const kept = harness.layoutRenders;
     await act(() => go("/"));
     assert.equal(harness.layoutRenders, kept);
+  } finally {
+    await layout.close();
+  }
+});
+
+test("switching through kept tabs again reads no tab's route from the router (#1486)", async () => {
+  // expo-router's tabs read every tab's route from its path on each navigation, and the
+  // router builds its route config anew for each read.
+  const layout = await drawn();
+  try {
+    await act(() => go("/library"));
+    await act(() => go("/albums"));
+    await act(() => go("/"));
+    const before = harness.routerReads.length;
+    await act(() => go("/library"));
+    await act(() => go("/albums"));
+    await act(() => go("/"));
+    assert.ok(harness.tabsRenders > 0);
+    assert.deepEqual(harness.routerReads.slice(before), []);
   } finally {
     await layout.close();
   }

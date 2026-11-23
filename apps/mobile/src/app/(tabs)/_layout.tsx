@@ -10,6 +10,7 @@ import Animated from "react-native-reanimated";
 import { BACKDROP, ChromeProvider } from "@/chrome/chrome";
 import { TabBar } from "@/chrome/TabBar";
 import { useTabEntry } from "@/chrome/tabEntry";
+import { RememberedLinking } from "@/chrome/tabLinking";
 import { renderTabScreens, TAB_SCREENS, useKeptTabs } from "@/chrome/tabScreens";
 import { useTabSwitches } from "@/chrome/tabSwitches";
 import { openNowPlaying } from "@/nowPlaying/sheet";
@@ -98,7 +99,8 @@ type TabsShownProps = {
 /**
  * The tab navigator and its chrome. Memoized: the layout renders again for the
  * bar or a newly kept tab, and those change nothing here unless the kept tabs
- * did (#1439).
+ * did (#1439). The navigator reads each tab's route from the router once
+ * (`RememberedLinking`, #1486).
  */
 const TabsShown = memo(function TabsShown({ kept, entryStyle, onTabTap }: TabsShownProps) {
   useRenderCount("TabsShown");
@@ -107,33 +109,35 @@ const TabsShown = memo(function TabsShown({ kept, entryStyle, onTabTap }: TabsSh
   const selecting = useIsSelecting();
   return (
     <ChromeProvider tabBar>
-      <Tabs style={{ flex: 1, backgroundColor: background }}>
-        <View nativeID={BACKDROP.tabs} collapsable={false} className="flex-1">
-          <Animated.View style={[{ flex: 1 }, entryStyle]}>
-            <TabSlot detachInactiveScreens={TAB_SCREENS.detach} renderFn={renderTabs} />
-          </Animated.View>
-        </View>
-        {/* Declares every tab; the visible triggers, those on the bar, live in TabBar. */}
-        <TabList style={{ display: "none" }}>
-          {TABS.map(([name, href]) => (
-            <TabTrigger key={name} name={name} href={href} />
-          ))}
-        </TabList>
-        {/* A list selecting swaps the mini player and tab bar for its selection bar. */}
-        {selecting ? (
-          <SelectionChrome backdropId={BACKDROP.tabs} />
-        ) : (
-          <>
-            <UpdatePill />
-            <PerfProfiler id="MiniPlayer">
-              <MiniPlayer backdropId={BACKDROP.tabs} onOpen={openNowPlaying} />
-            </PerfProfiler>
-            <PerfProfiler id="TabBar">
-              <TabBar onTabTap={onTabTap} />
-            </PerfProfiler>
-          </>
-        )}
-      </Tabs>
+      <RememberedLinking>
+        <Tabs style={{ flex: 1, backgroundColor: background }}>
+          <View nativeID={BACKDROP.tabs} collapsable={false} className="flex-1">
+            <Animated.View style={[{ flex: 1 }, entryStyle]}>
+              <TabSlot detachInactiveScreens={TAB_SCREENS.detach} renderFn={renderTabs} />
+            </Animated.View>
+          </View>
+          {/* Declares every tab; the visible triggers, those on the bar, live in TabBar. */}
+          <TabList style={{ display: "none" }}>
+            {TABS.map(([name, href]) => (
+              <TabTrigger key={name} name={name} href={href} />
+            ))}
+          </TabList>
+          {/* A list selecting swaps the mini player and tab bar for its selection bar. */}
+          {selecting ? (
+            <SelectionChrome backdropId={BACKDROP.tabs} />
+          ) : (
+            <>
+              <UpdatePill />
+              <PerfProfiler id="MiniPlayer">
+                <MiniPlayer backdropId={BACKDROP.tabs} onOpen={openNowPlaying} />
+              </PerfProfiler>
+              <PerfProfiler id="TabBar">
+                <TabBar onTabTap={onTabTap} />
+              </PerfProfiler>
+            </>
+          )}
+        </Tabs>
+      </RememberedLinking>
     </ChromeProvider>
   );
 });
