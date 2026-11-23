@@ -718,7 +718,13 @@ export const startDjMagicQueue = (
         sliders: magicSessionSliders(drawnLibrary.session, discoverSliders.get()),
       },
     );
-    const initialLibraryBatch = completeMagicRadioBatch(drawnLibrary.session, rankedLibrary, []);
+    // A mood's unknown songs only fill what its matched ones can't, so a known match leads.
+    const initialLibraryBatch = completeMagicRadioBatch(
+      drawnLibrary.session,
+      rankedLibrary.matched,
+      [],
+      () => ({ seed: rankedLibrary.unknown, liked: [] }),
+    );
     const initialLibraryOrder = new Map(
       initialLibraryBatch.trackIds.map((trackId, index) => [trackId, index] as const),
     );
