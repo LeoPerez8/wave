@@ -283,8 +283,10 @@ const withTime = (detail: string, time: string | null): string =>
 export const downloadRunGroupLine = (
   counts: DownloadRunCounts,
   language: AppLanguage = "en",
+  paused = false,
 ): string => {
   const lines = downloadRunLines(counts, language);
+  if (paused) return catalogueOf(language).downloadNotice.pausedTitle(lines.count);
   return `${lines.count} · ${lines.detail}`;
 };
 

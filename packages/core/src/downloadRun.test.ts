@@ -276,6 +276,12 @@ describe("Settings › Downloads: the run panel's lines", () => {
       "40 of 120 · 2 failed · 78 left",
     );
   });
+
+  test("a paused group says Paused with its counts (#1475)", () => {
+    const counts = { done: 40, failed: 2, left: 78, total: 120 };
+    assert.equal(downloadRunGroupLine(counts, "en", true), "Paused · 40 of 120");
+    assert.equal(downloadRunGroupLine(counts, "pt-BR", true), "Pausado · 40 de 120");
+  });
 });
 
 describe("the download notification: the run", () => {

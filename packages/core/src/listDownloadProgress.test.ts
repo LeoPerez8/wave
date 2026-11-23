@@ -150,3 +150,22 @@ test("a Library album's own download counts from its first request, and two albu
   assert.equal(index.line(members.get(4) ?? [], "pt-BR"), "Baixando · 1 de 3");
   assert.deepEqual([...members.keys()].toSorted(), [3, 4]);
 });
+
+test("a paused list's line says Paused, on its page head and in the lists (#1475)", () => {
+  const members = [
+    { kind: "song", videoId: "a" },
+    { kind: "song", videoId: "b" },
+  ] as const;
+  const jobs = [job("a", { phase: "completed", acknowledged: true, saved: { path: "/a" } }), job("b")];
+  assert.equal(indexListDownloads(jobs).line(members, "en", true), "Paused · 1 of 2");
+  assert.equal(indexListDownloads(jobs).line(members, "pt-BR", true), "Pausado · 1 de 2");
+  const songs = jobs.map((entry) => entry.song);
+  assert.equal(
+    ytAlbumDownload(songs, { inLibrary: () => false, jobs, paused: true }).line,
+    "Paused · 1 of 2",
+  );
+  assert.equal(
+    ytAlbumDownload(songs, { inLibrary: () => false, jobs }).line,
+    "Downloading · 1 of 2",
+  );
+});

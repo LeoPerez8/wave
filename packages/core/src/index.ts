@@ -3480,11 +3480,18 @@ export { knownPages, type KnownPages } from "./knownPages.ts";
 export {
   NO_DOWNLOAD_PAUSE,
   cancelAllDownloadsAlert,
+  cancelGroupDownloadsAlert,
+  downloadGroupControls,
+  downloadGroupPaused,
   downloadsToCancelAll,
+  downloadsToCancelInGroup,
   downloadHeld,
   downloadRequested,
+  requestResumesGroup,
   requestRunsWhilePaused,
   pauseAllDownloads,
+  pauseDownloadGroup,
   resumeAllDownloads,
+  resumeDownloadGroup,
 } from "./downloadPause.ts";
-export type { DownloadPause, DownloadRequest } from "./downloadPause.ts";
+export type { DownloadGroupControls, DownloadPause, DownloadRequest } from "./downloadPause.ts";
