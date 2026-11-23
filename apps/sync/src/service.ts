@@ -450,13 +450,15 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
           args: [at - SESSION_UNUSED_MS, identity.sub],
         },
         {
-          // A token without a name leaves the name there is.
-          sql: "UPDATE accounts SET email = ?, name = coalesce(?, name) WHERE google_sub = ?",
-          args: [identity.email, identity.name, identity.sub],
+          // A token without a name leaves the name there is; one without a photo leaves none:
+          // the photo was removed on Google, and the initial comes back.
+          sql: `UPDATE accounts SET email = ?, name = coalesce(?, name), photo_url = ?
+                WHERE google_sub = ?`,
+          args: [identity.email, identity.name, identity.photoUrl, identity.sub],
         },
         {
-          sql: `INSERT INTO accounts (id, google_sub, email, name, created_at)
-                SELECT ?, ?, ?, ?, ?
+          sql: `INSERT INTO accounts (id, google_sub, email, name, photo_url, created_at)
+                SELECT ?, ?, ?, ?, ?, ?
                 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE google_sub = ?)
                   AND (SELECT count(*) FROM accounts) < ?
                   AND (SELECT count(*) FROM accounts WHERE created_at > ?) < ?`,
@@ -465,6 +467,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
             identity.sub,
             identity.email,
             identity.name,
+            identity.photoUrl,
             at,
             identity.sub,
             limits.maxAccounts,
