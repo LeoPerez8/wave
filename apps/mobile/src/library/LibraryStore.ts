@@ -1206,9 +1206,9 @@ export class LibraryStore extends Context.Service<
     readonly homePlays: Effect.Effect<HomePlays, LibraryStoreError>;
     /** Home's Favorites: stars change it. */
     readonly homeFavorites: Effect.Effect<Pick<HomeSections, "favorites">, LibraryStoreError>;
-    /** The play recorded last, to pick back up when JS restarts while the player kept going. */
     /** The songs played in the mix [mix], each once, in the order they played: what its Recently played card plays again. */
     readonly contextSongs: (mix: PlayContext) => Effect.Effect<RecentSong[], LibraryStoreError>;
+    /** The play recorded last, to pick back up when JS restarts while the player kept going. */
     readonly latestPlay: Effect.Effect<RecordedPlay | null, LibraryStoreError>;
     /** Counted plays with saved display metadata, newest first, 50 per page. */
     readonly listeningHistory: (
