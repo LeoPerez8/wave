@@ -19,6 +19,7 @@ import { promptForMusicFolder } from "@/library/promptForMusicFolder";
 import type { ScanRootSummary } from "@wave/client";
 import { includeMusicFolder, removeMusicFolder } from "@/library/runtime";
 import { confirmAction, showError } from "@/overlay/alert";
+import { PageTopGradient } from "@/pageGradient/PageGradient";
 
 const failed = (title: string) => (error: unknown) => showError(title, error);
 
@@ -99,6 +100,7 @@ export default function MusicFoldersScreen() {
   const scanning = useScanStatus() === "scanning";
   return (
     <View className="flex-1 bg-background">
+      <PageTopGradient />
       <ScreenHeader title={strings.settings.musicFolders} />
       <ScrollView
         contentContainerStyle={{

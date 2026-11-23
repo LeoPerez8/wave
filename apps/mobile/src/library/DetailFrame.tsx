@@ -8,6 +8,7 @@ import { CompactTitleFrame } from "@/components/CompactTitle";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { useLocalisation } from "@/localisation/localisation";
+import { PageTopGradient } from "@/pageGradient/PageGradient";
 
 type Props<A> = {
   /** `undefined` while loading, `null` once the item left the library. */
@@ -17,23 +18,41 @@ type Props<A> = {
   title?: (detail: A) => string;
   /** The title the content scrolls away, for beside Back; its list runs `useCompactTitleList`. */
   compactTitle?: (detail: A) => string;
+  /**
+   * Its cover's artwork path (null without one), for the page-top gradient's colours; a page
+   * without it takes the playing song's.
+   */
+  cover?: (detail: A) => string | null;
   /** The gone state's message, when "its files are gone" isn't why (a deleted playlist). */
   goneMessage?: string;
   children: (detail: A) => ReactNode;
 };
 
-/** A pushed detail screen: Back (and the title), then the content once it has loaded. */
+/**
+ * A pushed detail screen: Back (and the title), then the content once it has loaded, under
+ * the page-top gradient from its [cover].
+ */
 export function DetailFrame<A>({
   detail,
   noun,
   title,
   compactTitle,
+  cover,
   goneMessage,
   children,
 }: Props<A>) {
   const { strings } = useLocalisation();
   const frame = (
     <View className="flex-1 bg-background">
+      <PageTopGradient
+        cover={
+          cover === undefined || detail === null
+            ? undefined
+            : detail === undefined
+              ? "loading"
+              : cover(detail)
+        }
+      />
       <ScreenHeader title={detail != null && title !== undefined ? title(detail) : undefined} />
       {detail === null ? (
         <View style={{ paddingHorizontal: grid.margin }}>
