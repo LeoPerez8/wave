@@ -83,6 +83,8 @@ export interface CollaborativeMemberRow {
   readonly accountId: string;
   /** The name's first letter, upper case; "?" without a name. */
   readonly initial: string;
+  /** The Google account's photo; null where the initial shows. */
+  readonly photoUrl: string | null;
   readonly name: string;
   /** Owner, You, both, or nothing. */
   readonly detail: string | null;
@@ -96,8 +98,8 @@ const initialOf = (name: string | null): string => {
 };
 
 /**
- * Members as the list shows them, in the service's order (the owner first): an initial and
- * the Google account name, the owner and the account signed in marked, and Remove on the
+ * Members as the list shows them, in the service's order (the owner first): a photo (else an
+ * initial) and the Google account name, the owner and the account signed in marked, and Remove on the
  * others while that account [owned] the playlist.
  */
 export const collaborativeMemberRows = (
@@ -111,6 +113,7 @@ export const collaborativeMemberRows = (
     return {
       accountId: member.accountId,
       initial: initialOf(name),
+      photoUrl: member.photoUrl,
       name: name ?? t.noName,
       detail:
         member.owner && member.self
