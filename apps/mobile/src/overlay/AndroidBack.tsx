@@ -3,7 +3,7 @@ import { useNavigationContainerRef } from "expo-router";
 import { useEffect, useState } from "react";
 import { AppState, BackHandler, Platform } from "react-native";
 
-import { beginTiming } from "@/lib/timing";
+import { beginTiming, timingBackPressed } from "@/lib/timing";
 import { currentLocalisation } from "@/localisation/localisation";
 import { closeNowPlaying, isNowPlayingShown, onNowPlayingShownChange } from "@/nowPlaying/sheet";
 import { useIsSelecting } from "@/selection/selection";
@@ -31,6 +31,7 @@ export function AndroidBack(): null {
     const activity = AppState.addEventListener("change", reset);
     const player = onNowPlayingShownChange(reset);
     const back = BackHandler.addEventListener("hardwareBackPress", () => {
+      timingBackPressed();
       if (dismissTopOverlay()) {
         reset();
         return true;

@@ -9,6 +9,7 @@ import {
   type TimingTap,
   TAP_BLOCKS_WAIT_MS,
   createSlowTapLines,
+  lostTouchEndLine,
 } from "./index.ts";
 
 const tap: TimingTap = {
@@ -254,4 +255,15 @@ describe("a slow tap's line waits for the JS blocks of its window (#1446)", () =
     run();
     assert.equal(lines.length, 2);
   });
+});
+
+test("a Back press after a touch whose end went unheard says how old that touch was (#1488)", () => {
+  assert.equal(
+    lostTouchEndLine(5600),
+    "Back pressed 5.6 s after a touch whose end Wave never heard: Back counts from itself",
+  );
+  assert.equal(
+    lostTouchEndLine(420),
+    "Back pressed 420 ms after a touch whose end Wave never heard: Back counts from itself",
+  );
 });

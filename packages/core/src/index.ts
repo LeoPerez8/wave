@@ -2852,6 +2852,7 @@ export {
   lateFrame,
   hitchLine,
   missedFramesLine,
+  lostTouchEndLine,
   type TimingFrames,
   timingDuration,
   timingBudgetExceeded,
