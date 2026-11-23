@@ -167,6 +167,19 @@ export const useMagicQueueLabel = (): string | null => {
  * null while none is.
  */
 const picking = makeExternalStore<MagicSession["id"] | null>(null);
+
+const queueLengths = makeQueueLengths();
+
+/**
+ * A queue song's length, as far as it's known, for how early the Magic Queue
+ * asks for its next batch (Core's `MAGIC_ASK_AHEAD`): from its queue track,
+ * else as `queueLengths` read it.
+ */
+const songLength = (trackId: string): number | null => {
+  const tracks = queueTracks.get();
+  const known = tracks.get(trackId)?.durationMs;
+  return known != null && known > 0 ? known : queueLengths.of(trackId, tracks);
+};
 const failedBatch = makeExternalStore<MagicSession["id"] | null>(null);
 /** The id of the session whose last pick found no songs (`magicBatchEmpty`, `magicPickDue`); null while none has. */
 const emptyBatch = makeExternalStore<MagicSession["id"] | null>(null);
@@ -184,6 +197,7 @@ const batchFailedNow = (): boolean =>
     failedBatch.get(),
     queueState.get(),
     sleepTimerState.get(),
+    songLength,
   );
 const subscribeBatchFailed = subscribeAll(queueState, magicSession, failedBatch, sleepTimerState);
 
@@ -192,7 +206,13 @@ export const useMagicBatchFailed = (): boolean =>
 
 const emptySeedNow = (): string | null => {
   const session = activeMagicSession();
-  return magicBatchEmpty(session, emptyBatch.get(), queueState.get(), sleepTimerState.get())
+  return magicBatchEmpty(
+    session,
+    emptyBatch.get(),
+    queueState.get(),
+    sleepTimerState.get(),
+    songLength,
+  )
     ? (session?.seed.title ?? null)
     : null;
 };
@@ -206,7 +226,13 @@ export const useMagicBatchEmptySeed = (): string | null =>
   useSyncExternalStore(subscribeBatchEmpty, emptySeedNow);
 
 const batchLoadingNow = (): boolean =>
-  magicBatchLoading(activeMagicSession(), picking.get(), queueState.get(), sleepTimerState.get());
+  magicBatchLoading(
+    activeMagicSession(),
+    picking.get(),
+    queueState.get(),
+    sleepTimerState.get(),
+    songLength,
+  );
 
 const subscribeBatchLoading = subscribeAll(queueState, magicSession, picking, sleepTimerState);
 
@@ -225,6 +251,7 @@ const footnoteNow = (): boolean =>
     { picking: picking.get(), failed: failedBatch.get(), empty: emptyBatch.get() },
     queueState.get(),
     sleepTimerState.get(),
+    songLength,
   );
 const subscribeFootnote = subscribeAll(
   queueState,
@@ -248,8 +275,6 @@ let batchStart: { readonly id: string; readonly at: number; readonly first: bool
 
 /** How many of the seed songs' video ids a session keeps: its song radio reads the first. */
 const SEED_VIDEO_IDS = 5;
-
-const queueLengths = makeQueueLengths();
 
 /** Whether the player has started [state]'s current entry, including after restoration. */
 const playingCurrentEntry = (state: QueueState): boolean => {
@@ -971,7 +996,7 @@ export const layer = Layer.effectDiscard(
         const session = activeMagicSession();
         if (
           session?.id !== wanted.id ||
-          !wantsMagicBatch(session, queueState.get(), sleepTimerState.get())
+          !wantsMagicBatch(session, queueState.get(), sleepTimerState.get(), songLength)
         )
           return { kind: "dropped" } satisfies MagicBatchOutcome;
         const candidates = yt.candidates;
@@ -1015,7 +1040,13 @@ export const layer = Layer.effectDiscard(
       if (wanted?.id === pendingDjFirstBatch) return Effect.succeed(false);
       if (
         wanted === null ||
-        !magicPickDue(wanted, emptyBatch.get(), queueState.get(), sleepTimerState.get())
+        !magicPickDue(
+          wanted,
+          emptyBatch.get(),
+          queueState.get(),
+          sleepTimerState.get(),
+          songLength,
+        )
       ) {
         // Marked as picked when the session started, and held back since (an End of Queue timer).
         if (wanted !== null && picking.get() === wanted.id) picking.set(null);
@@ -1075,6 +1106,7 @@ export const layer = Layer.effectDiscard(
               activeMagicSession(),
               queueState.get(),
               sleepTimerState.get(),
+              songLength,
             );
             picking.set(ended.picking);
             again = ended.again || askedMeanwhile;
@@ -1198,7 +1230,7 @@ export const layer = Layer.effectDiscard(
         followQueueEnd();
         return;
       }
-      if (wantsMagicBatch(session, state) && batchStart?.id !== session.id)
+      if (wantsMagicBatch(session, state, null, songLength) && batchStart?.id !== session.id)
         batchStart = { id: session.id, at: Date.now(), first: session.used.length <= 1 };
       const { added, removed } = magicQueueEdits(session, before, state);
       teach("added", added);

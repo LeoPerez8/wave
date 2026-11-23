@@ -381,12 +381,44 @@ describe("A Magic Queue in the queue", () => {
     assert.equal(show(state), "[s1] q a b c d");
   });
 
-  test("wants a batch once no recommendation is left in Up Next", () => {
-    assert.equal(wantsMagicBatch(session, playing), false);
-    const last = run(playing, { type: "next" }, { type: "next" });
+  test("wants a batch while two recommendations are left in Up Next, not three", () => {
+    const three = run(EMPTY_QUEUE, {
+      type: "play",
+      trackIds: ["s1", "a", "b", "c"],
+      startIndex: 0,
+      context,
+    });
+    assert.equal(wantsMagicBatch(session, three), false);
+    const two = run(three, { type: "next" });
+    assert.equal(wantsMagicBatch(session, two), true);
+    const last = run(two, { type: "next" }, { type: "next" });
     assert.equal(wantsMagicBatch(session, last), true);
     // Songs lined up by hand don't hold the batch back.
-    assert.equal(wantsMagicBatch(session, run(last, { type: "playNext", trackIds: ["q"] })), true);
+    assert.equal(
+      wantsMagicBatch(session, run(two, { type: "playNext", trackIds: ["q", "r", "t"] })),
+      true,
+    );
+  });
+
+  test("wants a batch sooner when the recommendations left play for under eight minutes", () => {
+    const three = run(EMPTY_QUEUE, {
+      type: "play",
+      trackIds: ["s1", "a", "b", "c"],
+      startIndex: 0,
+      context,
+    });
+    const minutes = (lengths: Record<string, number>) => (trackId: string) =>
+      trackId in lengths ? lengths[trackId]! * 60_000 : null;
+    assert.equal(wantsMagicBatch(session, three, null, minutes({ a: 2, b: 2, c: 2 })), true);
+    assert.equal(wantsMagicBatch(session, three, null, minutes({ a: 2, b: 3, c: 3 })), false);
+    // A song of unknown length counts as a typical song of three and a half minutes.
+    assert.equal(wantsMagicBatch(session, three, null, minutes({})), false);
+    assert.equal(wantsMagicBatch(session, three, null, minutes({ a: 1, b: 1 })), true);
+    // The song playing doesn't count, however long.
+    assert.equal(wantsMagicBatch(session, three, null, minutes({ s1: 1, a: 3, b: 3, c: 3 })), false);
+    // Nor do songs lined up by hand.
+    const lined = run(three, { type: "playNext", trackIds: ["q"] });
+    assert.equal(wantsMagicBatch(session, lined, null, minutes({ q: 30, a: 2, b: 2, c: 2 })), true);
   });
 
   test("is over once something else plays", () => {
@@ -425,7 +457,7 @@ describe("A Magic Queue in the queue", () => {
     assert.equal(magicBatchLoading(session, "m1", seedOnly), true);
     assert.equal(magicBatchLoading(session, null, seedOnly), false);
     // The batch in Up Next takes the loading's place, before the picking is cleared.
-    const landed = run(seedOnly, { type: "append", trackIds: ["a", "b"] });
+    const landed = run(seedOnly, { type: "append", trackIds: ["a", "b", "c"] });
     assert.equal(magicBatchLoading(session, "m1", landed), false);
   });
 
@@ -457,7 +489,7 @@ describe("A Magic Queue in the queue", () => {
     assert.equal(magicBatchFailed(session, "m1", seedOnly), true);
     assert.equal(magicBatchFailed(session, null, seedOnly), false);
     assert.equal(magicBatchFailed(session, "m0", seedOnly), false);
-    const landed = run(seedOnly, { type: "append", trackIds: ["a", "b"] });
+    const landed = run(seedOnly, { type: "append", trackIds: ["a", "b", "c"] });
     assert.equal(magicBatchFailed(session, "m1", landed), false);
     const other = run(seedOnly, {
       type: "play",
@@ -474,7 +506,7 @@ describe("A Magic Queue in the queue", () => {
     assert.equal(magicBatchEmpty(session, null, seedOnly), false);
     assert.equal(magicBatchEmpty(session, "m0", seedOnly), false);
     assert.equal(
-      magicBatchEmpty(session, "m1", run(seedOnly, { type: "append", trackIds: ["a"] })),
+      magicBatchEmpty(session, "m1", run(seedOnly, { type: "append", trackIds: ["a", "b", "c"] })),
       false,
     );
     const other = run(seedOnly, {
@@ -502,6 +534,25 @@ describe("A Magic Queue in the queue", () => {
       assert.equal(magicPickDue(session, null, seedOnly, other), true);
       assert.equal(magicPickEnded("m0", "m1", session, seedOnly, other).again, true);
     }
+  });
+
+  test("its pick and Up Next's loading rows follow the songs' lengths too", () => {
+    const three = run(EMPTY_QUEUE, {
+      type: "play",
+      trackIds: ["s1", "a", "b", "c"],
+      startIndex: 0,
+      context,
+    });
+    const short = () => 60_000;
+    assert.equal(magicPickDue(session, null, three), false);
+    assert.equal(magicPickDue(session, null, three, null, short), true);
+    assert.equal(magicBatchLoading(session, "m1", three, null, short), true);
+    assert.equal(magicBatchFailed(session, "m1", three, null, short), true);
+    assert.equal(magicBatchEmpty(session, "m1", three, null, short), true);
+    assert.equal(magicPickEnded("m0", null, session, three, null, short).again, true);
+    const none = { picking: "m1", failed: null, empty: null };
+    assert.equal(magicQueueFootnote(session, none, three), true);
+    assert.equal(magicQueueFootnote(session, none, three, null, short), false);
   });
 
   test("a footnote sits under its songs once they're loaded (#1376)", () => {

@@ -729,24 +729,57 @@ export const isMagicQueue = (session: MagicSession, state: QueueState): boolean 
 /** A recommendation: a context entry of a Magic Queue (songs lined up by hand have none). */
 const recommended = (entry: QueueState["entries"][number]): boolean => entry.contextIndex !== null;
 
+/** A song's length by track id, null while it isn't known. */
+export type MagicSongLength = (trackId: string) => number | null;
+
+/**
+ * How early a Magic Queue asks for its next batch, so a slow batch (a slow
+ * network, a phone that held it back) lands before Up Next runs dry: once
+ * [songs] recommendations or fewer are left after the song playing, or once
+ * those left play for less than [ms], whichever comes first. A song of
+ * unknown length counts as [unknownSongMs], a typical song.
+ */
+export const MAGIC_ASK_AHEAD = {
+  songs: 2,
+  ms: 8 * 60_000,
+  unknownSongMs: 210_000,
+} as const;
+
+/**
+ * Whether the recommendations after the song playing in [state] are few
+ * enough, or short enough, to ask for the next batch (`MAGIC_ASK_AHEAD`).
+ */
+const fewLeft = (state: QueueState, length: MagicSongLength | null): boolean => {
+  let songs = 0;
+  let ms = 0;
+  for (const entry of state.entries.slice(state.index + 1)) {
+    if (!recommended(entry)) continue;
+    songs += 1;
+    ms += length?.(entry.trackId) ?? MAGIC_ASK_AHEAD.unknownSongMs;
+    if (songs > MAGIC_ASK_AHEAD.songs && ms >= MAGIC_ASK_AHEAD.ms) return false;
+  }
+  return true;
+};
+
 /**
  * Whether [session] should add its next batch to [state]: it's still the
- * session's queue and Up Next holds no recommendation, so the batch is
- * picked once the previous one was weighed. Songs lined up by hand don't
- * hold it back, nor do the songs a continued queue still has to play: its
- * first batch joins them at once.
+ * session's queue and Up Next is running low on recommendations
+ * (`MAGIC_ASK_AHEAD`, by the songs' [length]s), so the batch is picked
+ * while the previous one still plays, early enough to land in time. Songs
+ * lined up by hand don't hold it back, nor do the songs a continued queue
+ * still has to play: its first batch joins them at once.
  */
 export const wantsMagicBatch = (
   session: MagicSession,
   state: QueueState,
   sleepTimer: SleepTimer | null = null,
+  length: MagicSongLength | null = null,
 ): boolean =>
   sleepTimer?.type !== "endOfQueue" &&
   (!session.continuation || state.repeat === "off") &&
   isMagicQueue(session, state) &&
   state.index >= 0 &&
-  ((session.continuation === true && session.batches === 0) ||
-    !state.entries.slice(state.index + 1).some(recommended));
+  ((session.continuation === true && session.batches === 0) || fewLeft(state, length));
 
 /**
  * Whether Up Next shows [session]'s next batch loading (skeleton rows where
@@ -762,8 +795,11 @@ export const magicBatchLoading = (
   picking: MagicSession["id"] | null,
   state: QueueState,
   sleepTimer: SleepTimer | null = null,
+  length: MagicSongLength | null = null,
 ): boolean =>
-  session !== null && picking === session.id && wantsMagicBatch(session, state, sleepTimer);
+  session !== null &&
+  picking === session.id &&
+  wantsMagicBatch(session, state, sleepTimer, length);
 
 /**
  * Whether Up Next shows that [session]'s next batch couldn't be picked (a
@@ -777,8 +813,11 @@ export const magicBatchFailed = (
   failed: MagicSession["id"] | null,
   state: QueueState,
   sleepTimer: SleepTimer | null = null,
+  length: MagicSongLength | null = null,
 ): boolean =>
-  session !== null && failed === session.id && wantsMagicBatch(session, state, sleepTimer);
+  session !== null &&
+  failed === session.id &&
+  wantsMagicBatch(session, state, sleepTimer, length);
 
 /**
  * Whether Up Next says that [session]'s last pick found no songs (a quiet
@@ -791,8 +830,11 @@ export const magicBatchEmpty = (
   empty: MagicSession["id"] | null,
   state: QueueState,
   sleepTimer: SleepTimer | null = null,
+  length: MagicSongLength | null = null,
 ): boolean =>
-  session !== null && empty === session.id && wantsMagicBatch(session, state, sleepTimer);
+  session !== null &&
+  empty === session.id &&
+  wantsMagicBatch(session, state, sleepTimer, length);
 
 /**
  * Whether the footnote "More songs arrive as the Magic Queue learns…" sits
@@ -811,6 +853,7 @@ export const magicQueueFootnote = (
   },
   state: QueueState,
   sleepTimer: SleepTimer | null = null,
+  length: MagicSongLength | null = null,
 ): boolean =>
   session !== null &&
   isMagicQueue(session, state) &&
@@ -818,9 +861,9 @@ export const magicQueueFootnote = (
   state.index < state.entries.length - 1 &&
   sleepTimer?.type !== "endOfQueue" &&
   (!session.continuation || state.repeat === "off") &&
-  !magicBatchLoading(session, marks.picking, state, sleepTimer) &&
-  !magicBatchFailed(session, marks.failed, state, sleepTimer) &&
-  !magicBatchEmpty(session, marks.empty, state, sleepTimer);
+  !magicBatchLoading(session, marks.picking, state, sleepTimer, length) &&
+  !magicBatchFailed(session, marks.failed, state, sleepTimer, length) &&
+  !magicBatchEmpty(session, marks.empty, state, sleepTimer, length);
 
 /**
  * Whether [session] should pick its next batch now: it wants one
@@ -834,7 +877,8 @@ export const magicPickDue = (
   empty: MagicSession["id"] | null,
   state: QueueState,
   sleepTimer: SleepTimer | null = null,
-): boolean => empty !== session.id && wantsMagicBatch(session, state, sleepTimer);
+  length: MagicSongLength | null = null,
+): boolean => empty !== session.id && wantsMagicBatch(session, state, sleepTimer, length);
 
 /** What follows a batch's picking once it ends (`magicPickEnded`). */
 export interface MagicPickEnd {
@@ -861,9 +905,11 @@ export const magicPickEnded = (
   session: MagicSession | null,
   state: QueueState,
   sleepTimer: SleepTimer | null = null,
+  length: MagicSongLength | null = null,
 ): MagicPickEnd => ({
   picking: picking === ran ? null : picking,
-  again: session !== null && session.id !== ran && wantsMagicBatch(session, state, sleepTimer),
+  again:
+    session !== null && session.id !== ran && wantsMagicBatch(session, state, sleepTimer, length),
 });
 
 /** What the owner did to a Magic Queue between two states of it, by track id. */
