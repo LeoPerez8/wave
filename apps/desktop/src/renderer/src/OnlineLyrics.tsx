@@ -18,6 +18,8 @@ export interface OnlineLyricsProps {
   readonly ready: boolean;
   /** The songs Search's Lyrics rows show. */
   readonly shown: readonly SongLookup[];
+  /** The query names the top result's song by its title and artist: Genius isn't asked (#1470). */
+  readonly namesSong: boolean;
   /** "Genius insights" and the Wave account; a change asks again. */
   readonly access: GeniusAccess;
   readonly onSignIn: () => void;
@@ -35,6 +37,7 @@ export function OnlineLyrics({
   query,
   ready,
   shown,
+  namesSong,
   access,
   onSignIn,
   onOpen,
@@ -45,7 +48,7 @@ export function OnlineLyrics({
   const [expanded, setExpanded] = useState<string>();
   const [selected, setSelected] = useState<number>();
   const [opening, setOpening] = useState<number>();
-  const request = access === "off" ? null : geniusLyricsSearchRequest(query, true);
+  const request = access === "off" ? null : geniusLyricsSearchRequest(query, true, namesSong);
   const asked = request?.query;
   const delay = request?.delayMs;
   const key = `${access}:${attempt}:${asked}`;

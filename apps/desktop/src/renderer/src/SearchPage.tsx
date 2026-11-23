@@ -320,6 +320,7 @@ export function SearchPage(props: SearchPageProps) {
           query={trimmed}
           ready={current !== undefined}
           shown={(current?.lyrics ?? []).map((hit) => hit.row)}
+          namesSong={current?.namesSong ?? false}
           onError={onError}
         />
       </YtResults>
