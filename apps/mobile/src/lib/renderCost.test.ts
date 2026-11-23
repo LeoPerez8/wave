@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Activity, createElement, type ComponentProps, type ReactNode } from "react";
+import {
+  Activity,
+  createElement,
+  type ComponentProps,
+  type ComponentType,
+  type ReactNode,
+} from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
 import { loadWithStubs, nativeStubs, stubModule } from "../perf/renderHarness.ts";
@@ -71,7 +77,11 @@ test("a hidden screen shown again without rendering reports no span", async () =
 
 test("a timed screen shown again without rendering reports that it showed again (#1490)", async () => {
   spans().length = 0;
-  const screen = createElement(RenderCost, { name: "tab:playlists" }, createElement("text", null, "Playlists"));
+  const screen = createElement(
+    RenderCost as ComponentType<{ name: string }>,
+    { name: "tab:playlists" },
+    createElement("text", null, "Playlists"),
+  );
   let renderer: ReactTestRenderer | undefined;
   await act(() => {
     renderer = create(shell("visible", screen));

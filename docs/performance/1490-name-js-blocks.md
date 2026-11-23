@@ -14,12 +14,12 @@ Playlists: 59, 56 and 204 ms. #1489's runs saw 169 to 178 ms ones opening a play
 A temporary React commit hook found what ran in each block. The hook was put at the top of the
 bundle, since the renderer loads before the app's entry. It was never committed.
 
-| Block | What ran | Why nothing named it |
-| --- | --- | --- |
-| Playlists, 115–187 ms, while scrolling | `ArrangeablePlaylists` re-rendering, about 495 components | Its own state renders it, without `PlaylistsList` or the tab's span around it |
+| Block                                  | What ran                                                                                                                | Why nothing named it                                                               |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Playlists, 115–187 ms, while scrolling | `ArrangeablePlaylists` re-rendering, about 495 components                                                               | Its own state renders it, without `PlaylistsList` or the tab's span around it      |
 | Playlists, 190–227 ms, tapping the tab | The frozen tab showing again: a 5–24 ms render, then a commit of about 190–226 ms that re-runs the tab's layout effects | `useRenderCost` sees layout effects with no render and, by design, reports nothing |
-| DJ, 56–64 ms | `DjScreen` re-rendering its own state | Not under the stack screen's span |
-| Home, 52–130 ms, rarely | Once a commit topped by an animated view; once nothing that timers, frame callbacks or events saw | See "Left over" |
+| DJ, 56–64 ms                           | `DjScreen` re-rendering its own state                                                                                   | Not under the stack screen's span                                                  |
+| Home, 52–130 ms, rarely                | Once a commit topped by an animated view; once nothing that timers, frame callbacks or events saw                       | See "Left over"                                                                    |
 
 ## What changed
 

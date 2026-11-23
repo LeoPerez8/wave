@@ -274,7 +274,12 @@ export const createJsBlockLog = ({ write, screen, later }: JsBlockLogPorts): JsB
     shownAgain: (name, startedAt, durationMs) => {
       keep(
         renders,
-        { name: `showing ${name} again`, from: startedAt, to: startedAt + durationMs, logged: false },
+        {
+          name: `showing ${name} again`,
+          from: startedAt,
+          to: startedAt + durationMs,
+          logged: false,
+        },
         KEPT_RENDERS,
       );
     },
