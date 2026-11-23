@@ -30,6 +30,7 @@ const view = (value: Partial<LibrarySearchView>): LibrarySearchView => ({
   groups: [],
   lyrics: [],
   lyricsFirst: false,
+  namesSong: false,
   ...value,
 });
 const lyric = (id: number) => ({ row: row(id), line: "a line", ranges: [] });
