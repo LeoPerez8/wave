@@ -51,6 +51,7 @@ describe("collaborationService", () => {
     const service = transport({ status: 204, body: "" });
     const calls = collaborationService(service);
     await calls.setAccountName("Ana");
+    await calls.setAccountPhoto("https://lh3.googleusercontent.com/a/ana=s96-c");
     await calls.make(LIST);
     await calls.end(LIST);
     await calls.members(LIST);
@@ -67,6 +68,7 @@ describe("collaborationService", () => {
       service.sent.map(({ method, path }) => `${method} ${path.split("?")[0]}`),
       [
         "PUT /v1/account/name",
+        "PUT /v1/account/photo",
         "POST /v1/collaboration",
         "DELETE /v1/collaboration",
         "GET /v1/collaboration/members",
