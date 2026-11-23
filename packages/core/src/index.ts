@@ -193,8 +193,25 @@ export {
 export type { FramingSquare, FramingView, ImageFraming, ImageSize } from "./imageFraming.ts";
 export { elapsedWavePath } from "./elapsedWave.ts";
 export type { ElapsedWave } from "./elapsedWave.ts";
-export { contrastRatio, crossfadeGround, lyricsDimOpacity, paletteGradient } from "./palette.ts";
-export type { ArtworkPalette, Gradient, GradientTheme, GroundLayers } from "./palette.ts";
+export {
+  contrastRatio,
+  crossfadeGround,
+  groundGradient,
+  lyricsDimOpacity,
+  NOW_PLAYING_FADE,
+  paletteGradient,
+  sameGround,
+} from "./palette.ts";
+export type {
+  ArtworkPalette,
+  Gradient,
+  GradientTheme,
+  GroundFade,
+  GroundGradient,
+  GroundLayers,
+  GroundStop,
+  SchemeAmount,
+} from "./palette.ts";
 export { pixelPalette } from "./pixelPalette.ts";
 export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
