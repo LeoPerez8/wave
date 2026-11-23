@@ -12,12 +12,9 @@ import { dismissTopOverlay } from "./overlay";
  * Returns the unsubscribe.
  */
 export const addScreenBackHandler = (handler: () => boolean): (() => void) => {
-  const subscription = BackHandler.addEventListener(
-    "hardwareBackPress",
-    () => {
-      timingBackPressed();
-      return dismissTopOverlay() || handler();
-    },
-  );
+  const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+    timingBackPressed();
+    return dismissTopOverlay() || handler();
+  });
   return () => subscription.remove();
 };
