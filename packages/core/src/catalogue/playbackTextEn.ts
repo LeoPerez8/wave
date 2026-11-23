@@ -44,6 +44,8 @@ export const playbackTextEn = {
   /** Also shown by tile notifications when the entry is already saved. */
   alreadyInShazam: "Already in Shazam",
   couldntDownloadTheSong: "Couldn't download the song",
+  /** A tapped Genius result in Search that is neither in the Library nor on YT Music. */
+  couldntFindThisSong: "Couldn't find this song",
   couldntOpenTheArtist: "Couldn't open the artist",
   couldntPlayTheSong: "Couldn't play the song",
   couldntPlayThisFile: "Couldn't play this file",

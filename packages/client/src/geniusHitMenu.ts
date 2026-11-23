@@ -66,15 +66,17 @@ const playableOf = <L extends RecognizeTrack, S extends YtSong>(
 /** What a tap on a Genius result does. */
 export interface GeniusHitTapEffects<L, S> {
   readonly play: (song: GeniusHitPlayable<L, S>) => void;
-  readonly openUrl: (url: string) => void;
-  /** The hit whose song is being looked up, then null once it plays or opens. */
+  /** Neither the Library nor YT Music has the hit's song, or the lookup failed: the screen says so (`couldntFindThisSong`). */
+  readonly notFound: () => void;
+  /** The hit whose song is being looked up, then null once it plays or isn't found. */
   readonly pending: (hit: GeniusLyricsHit | null) => void;
 }
 
 /**
  * Taps on Genius results: each resolves as its long press does (`resolveGeniusHit`) and plays
- * the Library song or the streamed one, else opens the hit on Genius. One at a time: a tap
- * while one resolves is ignored, so a double tap searches YT Music once and plays once.
+ * the Library song or the streamed one, else says the song wasn't found. A tap never opens
+ * Genius; only the long-press menu's Open in Genius does. One at a time: a tap while one
+ * resolves is ignored, so a double tap searches YT Music once and plays once.
  */
 export const geniusHitOpener = <L extends RecognizeTrack, S extends YtSong>(
   lookup: RecognitionLookup<L, S>,
@@ -91,7 +93,7 @@ export const geniusHitOpener = <L extends RecognizeTrack, S extends YtSong>(
       );
       const playable = result === null ? null : playableOf(result);
       if (playable !== null) effects.play(playable);
-      else effects.openUrl(hit.url);
+      else effects.notFound();
     } finally {
       opening = false;
       effects.pending(null);
