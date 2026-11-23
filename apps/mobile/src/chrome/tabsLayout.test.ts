@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createElement } from "react";
+import { createElement, useSyncExternalStore, type ComponentType } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
 import { loadWithStubs, nativeStubs, stubModule } from "../perf/renderHarness.ts";
@@ -8,7 +8,8 @@ import { loadWithStubs, nativeStubs, stubModule } from "../perf/renderHarness.ts
 // The tabs layout follows the route to know the tab showing. A screen pushed
 // over the tabs (Settings, an album from the Library) and popped again, or a
 // push inside a section tab, leaves the tabs as they were: the navigator and
-// what it holds aren't drawn again for it (#1439).
+// what it holds aren't drawn again for it (#1439). A switch between kept tabs
+// doesn't draw the layout either: only the tab shown renders for it (#1486).
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -17,6 +18,9 @@ const harness = {
   listeners: new Set<() => void>(),
   tabsRenders: 0,
   chromeRenders: 0,
+  layoutRenders: 0,
+  /** The tabs the layout told the tab switches it showed (`useTabSwitches().shown`). */
+  shown: [] as (string | null)[],
 };
 Object.assign(globalThis, { __tabsLayoutTest: harness });
 
@@ -75,11 +79,13 @@ const [{ default: TabsLayout }] = await loadWithStubs<[typeof import("../app/(ta
        };`,
     ),
     "@/chrome/tabSwitches": stubModule(
-      `const tap = () => {};
-       export const useTabSwitches = () => tap;`,
+      `const switches = { tap: () => {}, shown: (tab) => ${t}.shown.push(tab) };
+       export const useTabSwitches = () => switches;`,
     ),
     "@/nowPlaying/sheet": stubModule(`export const openNowPlaying = () => {};`),
-    "@/perf/perf": stubModule(`export const useRenderCount = () => {};`),
+    "@/perf/perf": stubModule(
+      `export const useRenderCount = (name) => { if (name === "TabsLayout") ${t}.layoutRenders++; };`,
+    ),
     "@/playback/MiniPlayer": nothing("MiniPlayer"),
     "@/selection/selection": stubModule(`export const useIsSelecting = () => false;`),
     "@/selection/SelectionChrome": nothing("SelectionChrome"),
@@ -92,11 +98,26 @@ const [{ default: TabsLayout }] = await loadWithStubs<[typeof import("../app/(ta
   },
 );
 
+const subscribe = (listener: () => void) => {
+  harness.listeners.add(listener);
+  return () => harness.listeners.delete(listener);
+};
+
+/**
+ * The layout as expo-router renders it: its route renders on every navigation and hands the
+ * layout a new element each time (`useScreens`' BaseRoute), with the route's segment.
+ */
+const Layout = TabsLayout as ComponentType<{ segment: string }>;
+function Route() {
+  useSyncExternalStore(subscribe, () => harness.pathname);
+  return createElement(Layout, { segment: "(tabs)" });
+}
+
 const drawn = async () => {
   go("/");
   let renderer: ReactTestRenderer | undefined;
   await act(() => {
-    renderer = create(createElement(TabsLayout));
+    renderer = create(createElement(Route));
   });
   return { close: () => act(() => renderer!.unmount()) };
 };
@@ -140,6 +161,39 @@ test("a switch back to a kept tab doesn't draw the tabs' chrome again (#1438)", 
     await act(() => go("/"));
     await act(() => go("/library"));
     assert.equal(harness.chromeRenders, before);
+  } finally {
+    await layout.close();
+  }
+});
+
+test("a switch between kept tabs doesn't draw the layout, and the switch still hears it (#1486)", async () => {
+  const layout = await drawn();
+  try {
+    await act(() => go("/library"));
+    await act(() => go("/albums"));
+    const before = harness.layoutRenders;
+    harness.shown.length = 0;
+    await act(() => go("/"));
+    await act(() => go("/library"));
+    await act(() => go("/albums/album/3"));
+    await act(() => go("/settings"));
+    await act(() => go("/albums"));
+    assert.equal(harness.layoutRenders, before);
+    assert.deepEqual(harness.shown, ["index", "library", "albums", null, "albums"]);
+  } finally {
+    await layout.close();
+  }
+});
+
+test("a tab kept for the first time draws the layout to keep it", async () => {
+  const layout = await drawn();
+  try {
+    const before = harness.layoutRenders;
+    await act(() => go("/library"));
+    assert.ok(harness.layoutRenders > before, "the layout keeps Library");
+    const kept = harness.layoutRenders;
+    await act(() => go("/"));
+    assert.equal(harness.layoutRenders, kept);
   } finally {
     await layout.close();
   }
