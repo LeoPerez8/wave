@@ -955,6 +955,7 @@ export {
   warmTab,
 } from "./tabScreens.ts";
 export type { TabScreens } from "./tabScreens.ts";
+export { rememberPathStates } from "./pathStates.ts";
 export {
   LIBRARY_QUERY_LIMITS,
   createLibraryQueries,
@@ -1053,6 +1054,7 @@ export {
   searchSongTap,
   streamedSongMagicStart,
   wantsMagicBatch,
+  MAGIC_ASK_AHEAD,
 } from "./magicQueue.ts";
 export type {
   MagicArtistKey,
@@ -1066,6 +1068,7 @@ export type {
   MagicSeedSong,
   MagicSession,
   MagicSongRadioSeed,
+  MagicSongLength,
   MagicSignal,
   MagicSignalKind,
   MagicSong,
