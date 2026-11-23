@@ -7,6 +7,7 @@ import { beforeEach, describe, test } from "node:test";
 import { libraryCounts, sectionSongCounts } from "./counts.ts";
 import {
   homeSections,
+  recentlyPlayedAlbumShelf,
   latestPlay,
   listFavorites,
   playedRecordingKeys,
@@ -83,7 +84,7 @@ describe("History of removed files", () => {
 
     const home = homeSections(db);
     assert.deepEqual(
-      home.recentlyPlayed.map((row) => row.title),
+      recentlyPlayedAlbumShelf(db).map((row) => row.title),
       ["Here"],
     );
     assert.deepEqual(
@@ -234,7 +235,7 @@ describe("Favorites", () => {
   });
 });
 
-describe("Recently Played", () => {
+describe("Recently played's album shelf", () => {
   test("lists the albums of the tracks played, the latest first", () => {
     const blue = addTrack(db, { title: "Blue in Green", album: "Kind of Blue" });
     const so = addTrack(db, { title: "So What", album: "Kind of Blue" });
@@ -246,7 +247,7 @@ describe("Recently Played", () => {
     recordPlay(db, play(so, 3_000));
 
     assert.deepEqual(
-      homeSections(db).recentlyPlayed.map((row) => row.title),
+      recentlyPlayedAlbumShelf(db).map((row) => row.title),
       ["Kind of Blue", "The Köln Concert"],
     );
   });
@@ -454,7 +455,7 @@ describe("Play source", () => {
     const home = homeSections(v1);
     assert.deepEqual(trackPlayTotals(v1, allTime), totalsBefore);
     assert.deepEqual(
-      home.recentlyPlayed.map((played) => played.title),
+      recentlyPlayedAlbumShelf(v1).map((played) => played.title),
       ["Second", "First"],
     );
     assert.deepEqual(

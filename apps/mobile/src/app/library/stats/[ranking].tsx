@@ -16,6 +16,7 @@ import {
   RankedArtistList,
   RankedSongList,
 } from "@/stats/StatsViews";
+import { PageTopGradient } from "@/pageGradient/PageGradient";
 
 /** The list's opening: the period it covers. */
 function PeriodLine({ period }: { period: StatsPeriod }) {
@@ -94,6 +95,7 @@ export default function StatsSeeAllScreen() {
   const seeAll = statsSeeAll(params.ranking, params.period);
   return (
     <View className="flex-1 bg-background">
+      <PageTopGradient />
       <ScreenHeader
         title={
           seeAll === undefined

@@ -27,11 +27,15 @@ export interface ListDownloadAlbumSong {
 export type ListDownloadsScope = Pick<ListDownloadsIndex, "videoIds" | "savedPaths"> &
   Partial<Pick<ListDownloadsIndex, "albumSongs">>;
 
-/** Shared by page heads and listed playlists or albums. Failed songs stay in the denominator. */
+/**
+ * Shared by page heads and listed playlists or albums. Failed songs stay in the denominator.
+ * While the list's downloads are [paused] (#1475) it reads "Paused · N of M".
+ */
 export const listDownloadLine = (
   statuses: readonly (YtDownloadStatus | null)[],
   landed: number,
   language: AppLanguage,
+  paused = false,
 ): string | null => {
   let total = landed;
   let saved = landed;
@@ -43,7 +47,9 @@ export const listDownloadLine = (
     if (status.kind === "queued" || status.kind === "downloading" || status.kind === "saving")
       active = true;
   }
-  return active ? catalogueOf(language).downloads.progress(saved, total) : null;
+  if (!active) return null;
+  const strings = catalogueOf(language).downloads;
+  return paused ? strings.pausedProgress(saved, total) : strings.progress(saved, total);
 };
 
 /** One journal index, shared by all listed playlists and albums; no Library matching or action planning. */
@@ -53,7 +59,12 @@ export interface ListDownloadsIndex {
   readonly savedPaths: readonly string[];
   readonly albumSongs: readonly ListDownloadAlbumSong[];
   readonly statusOf: (videoId: string) => YtDownloadStatus | null;
-  readonly line: (members: readonly DownloadListMember[], language?: AppLanguage) => string | null;
+  /** [paused] while the list's own group is paused (`downloadGroupPaused`). */
+  readonly line: (
+    members: readonly DownloadListMember[],
+    language?: AppLanguage,
+    paused?: boolean,
+  ) => string | null;
 }
 
 /** Reuse [before] while the journal changes nothing a list's line can show. */
@@ -97,14 +108,18 @@ export const indexListDownloads = (
     albumSongs: jobs.flatMap((job) =>
       job.phase === "cancelled" ? [] : [albumSong(job, statusOf(job.song.videoId))],
     ),
-    line: (members: readonly DownloadListMember[], language: AppLanguage = "en"): string | null => {
+    line: (
+      members: readonly DownloadListMember[],
+      language: AppLanguage = "en",
+      paused = false,
+    ): string | null => {
       let landed = 0;
       const statuses: (YtDownloadStatus | null)[] = [];
       for (const member of members) {
         if (member.kind === "song") statuses.push(statusOf(member.videoId));
         else if (paths.has(member.path)) landed++;
       }
-      return listDownloadLine(statuses, landed, language);
+      return listDownloadLine(statuses, landed, language, paused);
     },
   };
 };

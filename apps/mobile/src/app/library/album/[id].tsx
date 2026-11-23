@@ -65,6 +65,7 @@ import { useListSelection } from "@/selection/useListSelection";
 import { albumJoinedItems } from "@/ytmusic/albumOpening";
 import { useYtAlbumSection } from "@/ytmusic/albumSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
+import { DownloadProgressLine } from "@/ytmusic/DownloadGroupControls";
 import { listDownloadAction, useYtAlbumDownloadButton } from "@/ytmusic/YtSongList";
 
 type Entry = YtAlbumEntry<NativeYtSong, SongRow>;
@@ -219,14 +220,7 @@ function AlbumHead({
         >
           {furniture}
         </Text>
-        {download.progress !== null && (
-          <Text
-            className="font-sans text-footnote text-accent"
-            style={{ fontVariant: ["tabular-nums"] }}
-          >
-            {download.progress}
-          </Text>
-        )}
+        <DownloadProgressLine download={download} />
       </View>
       <PlayShuffle
         onPlay={() => play(false)}
@@ -394,7 +388,12 @@ export default function AlbumScreen() {
       ? { album: known, genre: null, tracks: undefined }
       : detail;
   return (
-    <DetailFrame detail={shown} noun="album" compactTitle={({ album }) => album.title}>
+    <DetailFrame
+      detail={shown}
+      noun="album"
+      compactTitle={({ album }) => album.title}
+      cover={({ album }) => album.artworkPath}
+    >
       {(album) => <AlbumTracks shown={album} openedIntegrated={openedIntegrated} />}
     </DetailFrame>
   );

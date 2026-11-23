@@ -34,7 +34,6 @@ import {
   magicQueueShare,
   magicSessionSliders,
   magicSignal,
-  parseMagicSession,
   sliderStepLabel,
   startDjQueue as startDjSession,
   startMagicQueue as startSession,
@@ -62,6 +61,7 @@ import { magicProfileOf, magicProfileOfSteps } from "@/home/artistGenres";
 import { recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { discoverLevel, discoverSliders } from "@/lib/discoverSettings";
 import { makeExternalStore, subscribeAll } from "@wave/client/externalStore";
+import { MAGIC_SESSION_KEY, magicSession } from "./magicSessionStore";
 import { oneAtATime } from "@/lib/oneAtATime";
 import { freeTurnEffect } from "@/lib/backgroundWork";
 import { type BackgroundWorkName, namedWork, runSteps } from "@/lib/stepped";
@@ -107,32 +107,15 @@ import { cacheYtCoversInBackground, ytQueueTrack } from "./ytQueueTracks";
  * Wave restarts, while the queue is still its own.
  */
 
-const KEY = "playback.magicQueue";
 let startingLibrary: {
   readonly songs: readonly SongRow[];
   readonly artists: readonly ArtistRow[];
 } = { songs: [], artists: [] };
 
-const readSaved = (): MagicSession | null => {
-  try {
-    const stored = Storage.getItemSync(KEY);
-    return stored === null ? null : parseMagicSession(JSON.parse(stored));
-  } catch {
-    return null;
-  }
-};
-
-/**
- * The latest Magic Queue session, kept after something else plays so Undo
- * on "New queue playing" can go back to it; it's only under way while the
- * queue is its own (`activeMagicSession`).
- */
-const magicSession = makeExternalStore<MagicSession | null>(readSaved());
-
 const save = (session: MagicSession): void => {
   magicSession.set(session);
   try {
-    Storage.setItemSync(KEY, JSON.stringify(session));
+    Storage.setItemSync(MAGIC_SESSION_KEY, JSON.stringify(session));
   } catch {
     // Saving is best effort: the session goes on in memory.
   }

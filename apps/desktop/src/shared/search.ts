@@ -48,8 +48,13 @@ export interface LibrarySearchView {
   readonly groups: readonly SearchGroupView[];
   /** Songs found by their lyrics that the Songs group doesn't already show. */
   readonly lyrics: readonly LyricsHitView[];
-  /** Three or more words put Lyrics before everything else. */
+  /** A lyric phrase (Core's `isLyricPhraseQuery`) puts Lyrics before everything else. */
   readonly lyricsFirst: boolean;
+  /**
+   * The query names the top result's song by its title and artist (Core's `queryNamesSong`):
+   * it isn't a lyric phrase, and Genius isn't asked (#1470).
+   */
+  readonly namesSong: boolean;
 }
 
 /** What a section shows: some of its matches, and whether "Show all" or the cap note follows. */
@@ -85,7 +90,8 @@ export type SearchExpansion = ReadonlySet<SearchKind | "lyrics">;
  * The desktop's Search page: the top result, the Songs table, then the other groups as shelves
  * in Albums, Artists, Playlists, Genres order. A group shows a preview with "Show all",
  * unless it's opened or the only one. Lyrics follow Songs, follow the top result when no song
- * matches, and lead when the query has three or more words.
+ * matches, and lead when the query is a lyric phrase (three or more words that don't name the
+ * top song by its title and artist).
  */
 export const searchSections = (
   view: LibrarySearchView,

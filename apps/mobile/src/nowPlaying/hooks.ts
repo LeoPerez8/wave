@@ -1,8 +1,10 @@
 import {
-  paletteGradient,
+  groundGradient,
+  NOW_PLAYING_FADE,
   parseTrackId,
   type ArtworkPalette,
-  type Gradient,
+  type GroundFade,
+  type GroundGradient,
   type QueueEntry,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -97,11 +99,18 @@ export const useNowPlayingPalette = (
 
 const isHex = (colour: string): boolean => /^#[0-9a-f]{6}$/i.test(colour);
 
+/** Now Playing's ground with text over all of it: the whole height kept readable. */
+const TEXT_EVERYWHERE = { ...NOW_PLAYING_FADE, legibleFrom: 0 };
+
 /**
- * The background gradient for the playing artwork, toned so Wave's ink,
- * graphite and teal stay readable on it. The plain ground without a palette.
+ * The ground for [palette] along [fade] (Core's `groundGradient`), toned so
+ * Wave's ink, graphite and teal stay readable where [fade] keeps text. The
+ * plain ground without a palette, or while the theme's colours aren't plain hex.
  */
-export const useNowPlayingGradient = (palette: ArtworkPalette | null): Gradient => {
+export const useThemedGround = (
+  palette: ArtworkPalette | null,
+  fade: GroundFade,
+): GroundGradient => {
   const scheme = useColorScheme() === "dark" ? "dark" : "light";
   const ground = useThemeColor("background");
   const foreground = useThemeColor("foreground");
@@ -109,10 +118,26 @@ export const useNowPlayingGradient = (palette: ArtworkPalette | null): Gradient 
   const accent = useThemeColor("accent");
   return useMemo(() => {
     const ink = [foreground, secondary, accent];
-    if (!isHex(ground) || !ink.every(isHex)) return { top: ground, bottom: ground };
-    return paletteGradient(palette, { scheme, ground, ink });
-  }, [palette, scheme, ground, foreground, secondary, accent]);
+    if (!isHex(ground) || !ink.every(isHex)) {
+      return [
+        { color: ground, at: 0 },
+        { color: ground, at: 1 },
+      ];
+    }
+    return groundGradient(palette, { scheme, ground, ink }, fade);
+  }, [palette, fade, scheme, ground, foreground, secondary, accent]);
 };
+
+/**
+ * The ground for the playing artwork: its main colour at the top, through its
+ * second, into the theme's ground (`useThemedGround`). On the player text is
+ * kept readable from the title down; [textEverywhere] (Lyrics, the Queue)
+ * keeps the whole height readable.
+ */
+export const useNowPlayingGradient = (
+  palette: ArtworkPalette | null,
+  textEverywhere: boolean,
+): GroundGradient => useThemedGround(palette, textEverywhere ? TEXT_EVERYWHERE : NOW_PLAYING_FADE);
 
 /**
  * The queue's tracks by id, as the Queue service learned them with the

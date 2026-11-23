@@ -124,6 +124,8 @@ interface SongsDownloadInput<S extends YtSong> {
   readonly jobs: readonly YtDownloadJournalJob<S>[];
   /** The progress line's language; English when absent. */
   readonly language?: AppLanguage;
+  /** Whether the list's own downloads are paused (#1475): its line then reads "Paused · N of M". */
+  readonly paused?: boolean;
 }
 
 /**
@@ -133,7 +135,7 @@ interface SongsDownloadInput<S extends YtSong> {
  */
 const songsDownload = <S extends YtSong>(
   songs: readonly S[],
-  { inLibrary, jobs, language = "en" }: SongsDownloadInput<S>,
+  { inLibrary, jobs, language = "en", paused = false }: SongsDownloadInput<S>,
   downloads: YtDownloads<S>,
   landed: number,
 ): YtSongsDownload<S> => {
@@ -163,7 +165,7 @@ const songsDownload = <S extends YtSong>(
   if (toCancel.length > 0) actions.push("cancel");
   return {
     actions,
-    line: listDownloadLine(statuses, landed, language),
+    line: listDownloadLine(statuses, landed, language, paused),
     toDownload,
     toRetry,
     toCancel,

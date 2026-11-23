@@ -43,6 +43,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   /** Also shown by tile notifications when the entry is already saved. */
   alreadyInShazam: "Já está no Shazam",
   couldntDownloadTheSong: "Não foi possível baixar a música",
+  couldntFindThisSong: "Não encontrei essa música",
   couldntOpenTheArtist: "Não foi possível abrir o artista",
   couldntPlayTheSong: "Não foi possível reproduzir a música",
   couldntPlayThisFile: "Não foi possível reproduzir este arquivo",
@@ -288,4 +289,9 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   sleepDuration: (hours: number, minutes: number) =>
     hours === 0 ? `${minutes} min` : minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`,
   lyricsOnline: "Letras online",
+  restartTheSong: "Recomeçar",
+  forwardFiveSeconds: "Avançar 5 segundos",
+  backFiveSeconds: "Voltar 5 segundos",
+  holdSkipForward: (seconds: number) => `+${seconds} s`,
+  holdSkipBack: (seconds: number) => `−${seconds} s`,
 };

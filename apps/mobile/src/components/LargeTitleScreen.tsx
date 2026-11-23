@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { grid } from "@/catalog/grid";
 import { useChromeInset } from "@/chrome/chrome";
+import { PageTopGradient } from "@/pageGradient/PageGradient";
 import { useListScrollable } from "@/motion/heldTouch";
 import { useRenderCount } from "@/perf/perf";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -157,7 +158,8 @@ export const useLargeTitleTop = (): number => useSafeAreaInsets().top + 16;
 
 /**
  * A screen with a quiet large title that scrolls with the content, under the
- * floating chrome. Tapping its tab while it is current scrolls back to the top.
+ * floating chrome, and the page-top gradient scrolling with them. Tapping its tab
+ * while it is current scrolls back to the top.
  */
 export function LargeTitleScreen({
   title,
@@ -182,6 +184,7 @@ export function LargeTitleScreen({
       contentInsetAdjustmentBehavior="never"
       refreshControl={refreshControl}
     >
+      <PageTopGradient inScroll />
       <LargeTitle title={title} waves={waves} action={action} titleLongPress={titleLongPress} />
       <View style={{ paddingHorizontal: grid.margin }}>{children}</View>
     </ScrollView>

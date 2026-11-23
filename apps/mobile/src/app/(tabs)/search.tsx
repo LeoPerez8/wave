@@ -1,5 +1,5 @@
 import { useRenderCost } from "@/lib/renderCost";
-import { useLocalisation } from "@/localisation/localisation";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
 import { IconSearch } from "@tabler/icons-react-native";
 import {
@@ -19,7 +19,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Linking, ScrollView, Text, TextInput, View } from "react-native";
+import { ScrollView, Text, TextInput, View } from "react-native";
 import Animated, { LayoutAnimationConfig, useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -29,6 +29,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
+import { showToast } from "@/overlay/toast";
 import { TextButton } from "@/components/TextButton";
 import { rise, riseReduced } from "@/motion/entry";
 import { perfMark, useRenderCount } from "@/perf/perf";
@@ -42,6 +43,8 @@ import {
   type TrackItem,
 } from "@/playback/actionTargets";
 import {
+  namedSongOnTop,
+  namesTopSong,
   noLibraryResultsRow,
   RESULT_LIMIT,
   resultRows,
@@ -66,6 +69,7 @@ import { SearchResultsList } from "@/search/SearchResultsList";
 import { useListSelection } from "@/selection/useListSelection";
 import { useLineToggle } from "@/ytmusic/OnlineToggle";
 import { useHeldSongs, useSongsInPlace } from "@/ytmusic/songsInPlace";
+import { PageTopGradient } from "@/pageGradient/PageGradient";
 
 const NO_YT_SONGS: readonly NativeYtSong[] = [];
 const NO_TRACKS: ReadonlySet<number> = new Set();
@@ -145,17 +149,17 @@ export default function SearchScreen() {
     () => (find === null ? NO_TRACKS : heldTracks(holding.held, find, trackId)),
     [holding.held, find],
   );
-  const results = useMemo(
-    () =>
-      index?.search(deferredQuery, {
-        limit: RESULT_LIMIT,
-        skip:
-          downloads.size === 0
-            ? undefined
-            : (hit) => hit.kind === "song" && downloads.has(hit.song.id),
-      }) ?? null,
-    [index, deferredQuery, downloads],
-  );
+  // A query naming a Library song by its title and artist has that song on top (#1470).
+  const results = useMemo(() => {
+    const found = index?.search(deferredQuery, {
+      limit: RESULT_LIMIT,
+      skip:
+        downloads.size === 0
+          ? undefined
+          : (hit) => hit.kind === "song" && downloads.has(hit.song.id),
+    });
+    return found === undefined ? null : namedSongOnTop(found, deferredQuery);
+  }, [index, deferredQuery, downloads]);
   const libraryEmpty = results !== null && results.groups.length === 0;
   // YT Music is asked once Online is picked on the toggle beside the field, or on
   // its own when the library has nothing, or as you type with Search online set to
@@ -199,9 +203,12 @@ export default function SearchScreen() {
     library?.songs ?? NO_SONG_ROWS,
     lyricsSkipIds,
   );
+  // Genius isn't asked for a query that names the song on top by its title and artist.
+  const namesSong = results !== null && namesTopSong(results, ytView, deferredQuery);
   const { state: geniusLyrics, retry: retryGeniusLyrics } = useGeniusLyricsSearch(
     deferredQuery,
     index !== null,
+    namesSong,
   );
   // A Library artist on top, with Online, counts the songs their online page adds.
   const topArtist = results?.top?.kind === "artist" ? results.top.artist : null;
@@ -310,12 +317,13 @@ export default function SearchScreen() {
   );
   const showAllLyrics = useCallback(() => setExpansion(showAllLyricsOf), []);
   // A tapped Genius result plays what its long press would, one at a time; its row shows
-  // it's being looked up meanwhile.
+  // it's being looked up meanwhile. One found nowhere shows a toast and stays in Search.
   const [pendingGeniusHit, setPendingGeniusHit] = useState<number | null>(null);
   const [openGeniusHit] = useState(() =>
     geniusHitOpener(geniusHitLookup, {
       play: (song) => void playSearchSong(song),
-      openUrl: (url) => void Linking.openURL(url).catch(() => undefined),
+      notFound: () =>
+        void showToast(currentLocalisation().strings.playbackText.couldntFindThisSong),
       pending: (hit) => setPendingGeniusHit(hit?.id ?? null),
     }),
   );
@@ -342,6 +350,7 @@ export default function SearchScreen() {
     deferredQuery === query;
   return (
     <View className="flex-1 bg-background">
+      <PageTopGradient />
       <View style={{ paddingTop: insets.top + 16, paddingHorizontal: grid.margin, gap: 16 }}>
         <Text
           accessibilityRole="header"

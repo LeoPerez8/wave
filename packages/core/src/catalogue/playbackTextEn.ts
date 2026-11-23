@@ -44,6 +44,8 @@ export const playbackTextEn = {
   /** Also shown by tile notifications when the entry is already saved. */
   alreadyInShazam: "Already in Shazam",
   couldntDownloadTheSong: "Couldn't download the song",
+  /** A tapped Genius result in Search that is neither in the Library nor on YT Music. */
+  couldntFindThisSong: "Couldn't find this song",
   couldntOpenTheArtist: "Couldn't open the artist",
   couldntPlayTheSong: "Couldn't play the song",
   couldntPlayThisFile: "Couldn't play this file",
@@ -288,4 +290,11 @@ export const playbackTextEn = {
   sleepDuration: (hours: number, minutes: number) =>
     hours === 0 ? `${minutes} min` : minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`,
   lyricsOnline: "Lyrics online",
+  /** Hold actions of Now Playing's transport, as TalkBack offers them (story 38d). */
+  restartTheSong: "Restart",
+  forwardFiveSeconds: "Forward 5 seconds",
+  backFiveSeconds: "Back 5 seconds",
+  /** The label over a held Next / Previous: the seconds moved so far. */
+  holdSkipForward: (seconds: number) => `+${seconds} s`,
+  holdSkipBack: (seconds: number) => `−${seconds} s`,
 };

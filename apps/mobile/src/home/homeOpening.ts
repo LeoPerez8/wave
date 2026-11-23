@@ -114,9 +114,10 @@ export const homePlaceholderHeight = (
     case "favorites":
       return grid.row * 10;
     case "recently-added":
-    case "recently-played":
     case "most-played-albums":
       return CELL * 19 + CELL + 40 * Math.max(1, fontScale);
+    // Recently played's playlist cards have their sleeves.
+    case "recently-played":
     case "from-your-library":
       return PLAYLIST_SLEEVE_ROOM + CELL * 19 + CELL + 40 * Math.max(1, fontScale);
     case "most-played-artists":

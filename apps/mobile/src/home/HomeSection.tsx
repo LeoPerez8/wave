@@ -83,6 +83,7 @@ import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
 import { AlbumShelf, ArtistShelf, MostPlayedRows, SongRows } from "./HomeSections";
 import { HomeStats } from "./HomeStats";
+import { RecentlyPlayedShelf } from "./RecentlyPlayedShelf";
 import { HomeSectionSpace } from "./HomeSectionSpace";
 import { noteCarouselPage, snapshotCarouselPage } from "./homeSnapshot";
 import {
@@ -964,7 +965,7 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
     home.recentlyPlayed !== undefined &&
     home.recentlyPlayed.length > 0 && (
       <TitledSection title={title} selecting={selection.selecting}>
-        <AlbumShelf albums={home.recentlyPlayed} selection={selection} />
+        <RecentlyPlayedShelf entries={home.recentlyPlayed} selection={selection} />
       </TitledSection>
     ),
   "most-played": ({ home, title, selection }) =>

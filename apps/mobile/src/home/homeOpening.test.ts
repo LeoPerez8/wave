@@ -272,9 +272,10 @@ test("Home reserves matching shelf, list and adaptive Magic Queue dimensions at 
     assert.equal(homePlaceholderHeight("most-played", scale, 312), 560);
     assert.equal(homePlaceholderHeight("favorites", scale, 312), 560);
     assert.equal(homePlaceholderHeight("recently-added", scale, 312), scale === 1 ? 200 : 212);
+    // Recently played's playlist cards have their sleeves, as From your library's do.
     assert.equal(
       homePlaceholderHeight("recently-played", scale, 312),
-      homePlaceholderHeight("recently-added", scale, 312),
+      homePlaceholderHeight("from-your-library", scale, 312),
     );
     assert.equal(
       homePlaceholderHeight("most-played-albums", scale, 312),

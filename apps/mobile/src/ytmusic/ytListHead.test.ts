@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { YtListHead } from "./routes.ts";
-import { shownYtListHead } from "./ytListHead.ts";
+import { shownYtListHead, ytListHeadToKeep } from "./ytListHead.ts";
 import type { YtListLoad } from "./YtSongList.tsx";
 
 const tapped: YtListHead = { title: "From the cover", line: "", artworkUrl: null };
@@ -35,5 +35,27 @@ describe("shownYtListHead", () => {
   it("keeps what the cover knew on a page that couldn't be read at all", () => {
     assert.equal(shownYtListHead({ status: "quiet", reason: "offline" }, tapped), tapped);
     assert.equal(shownYtListHead({ status: "quiet", reason: "failed" }, undefined), undefined);
+  });
+});
+
+describe("ytListHeadToKeep", () => {
+  it("keeps nothing before the page is read, whatever the opener stood in with", () => {
+    assert.equal(ytListHeadToKeep({ status: "loading" }), undefined);
+    assert.equal(ytListHeadToKeep({ status: "quiet", reason: "offline" }), undefined);
+    assert.equal(ytListHeadToKeep({ status: "quiet", reason: "failed" }), undefined);
+  });
+
+  it("keeps the page's own head from its first page on", () => {
+    assert.equal(ytListHeadToKeep(loaded("reading")), read);
+    assert.equal(ytListHeadToKeep(loaded("failed")), read);
+  });
+
+  it("keeps no head without a title", () => {
+    const untitled: YtListLoad = {
+      status: "loaded",
+      page: { head: { ...read, title: "" }, kind: { type: "playlist" }, songs: [] },
+      rest: "read",
+    };
+    assert.equal(ytListHeadToKeep(untitled), undefined);
   });
 });
