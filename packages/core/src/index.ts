@@ -3477,3 +3477,14 @@ export {
   type StagedMountsInput,
 } from "./stagedMounts.ts";
 export { knownPages, type KnownPages } from "./knownPages.ts";
+export {
+  NO_DOWNLOAD_PAUSE,
+  cancelAllDownloadsAlert,
+  downloadsToCancelAll,
+  downloadHeld,
+  downloadRequested,
+  requestRunsWhilePaused,
+  pauseAllDownloads,
+  resumeAllDownloads,
+} from "./downloadPause.ts";
+export type { DownloadPause, DownloadRequest } from "./downloadPause.ts";

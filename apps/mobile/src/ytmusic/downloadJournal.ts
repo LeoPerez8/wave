@@ -10,6 +10,12 @@ import type { NativeDownloadJob } from "@/native/waveSoulseek";
  * (`downloadRun`).
  */
 export const journal = makeExternalStore<readonly NativeDownloadJob[]>([]);
+
+/**
+ * Whether the owner paused downloads (Settings › Downloads' or the notification's Pause), as the
+ * journal keeps it; `YtDownloads` reads it with each journal change.
+ */
+export const downloadsPausedByOwner = makeExternalStore(false);
 // Reuse the journal's existing memoized counts, and sample only while a transition is active.
 registerTimingBackground("downloads", () => {
   const counts = queuedCountsNow();

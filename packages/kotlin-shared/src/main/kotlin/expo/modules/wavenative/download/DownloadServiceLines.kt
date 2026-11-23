@@ -9,6 +9,8 @@ enum class DownloadServiceStop(val line: String) {
   QUEUE_EMPTY("its queue is empty"),
   /** Nothing is left because the last song on its way was cancelled. */
   CANCELLED("the last song was cancelled"),
+  /** Only songs the owner paused are left (#1474). */
+  PAUSED("downloads are paused"),
   /** Android ended it on the time limit it gives data-sync services. */
   TIME_LIMIT("Android's time limit"),
   /** Android destroyed it with work left. */

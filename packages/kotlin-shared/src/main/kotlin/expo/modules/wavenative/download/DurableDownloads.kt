@@ -90,6 +90,10 @@ class DurableDownloads(
   @Volatile private var view = JournalView(emptyList(), 0L, 0L)
   /** The pause on YouTube downloads as readers see it ([youtubePause]). */
   @Volatile private var pauseView: YoutubePause? = null
+  /** The owner's pause ([pauseAll]) as readers see it, read without the lock. */
+  @Volatile private var ownerPauseView = false
+  /** The jobs asked for again while the owner paused ([Request.release]), which download anyway. */
+  @Volatile private var releasedView: Set<String> = emptySet()
   private val published get() = view.jobs
   /** What jobs' budgets are charged on ([budgetNow]). */
   private val budget: BudgetClock
@@ -143,6 +147,7 @@ class DurableDownloads(
       // Nothing of theirs runs any more: they wait, at the front of the line, until the queue
       // takes each up again (its next step, or JS's decision), and aren't counted downloading.
       for (job in jobs.values) if (job["phase"] in ACQUIRING) job["resumed"] = true
+      loadOwnerPause()
       sweepParts()
       // A full disk mustn't stop Wave or the download service from opening the journal: the
       // jobs stay in memory (and readable), and the next change that can be written saves them.
@@ -223,6 +228,11 @@ class DurableDownloads(
     val recording: Map<String, Any?> = emptyMap(),
     val source: String? = null,
     val origin: Map<String, Any?>? = null,
+    /**
+     * The owner asked for it (a song's Download, a list's, a star: Core's `requestRunsWhilePaused`):
+     * while downloads are paused it downloads anyway, and the rest stays paused.
+     */
+    val release: Boolean = false,
   )
 
   /** [enqueue] for each of [requests], in order, written in one write; the jobs' ids. */
@@ -232,6 +242,15 @@ class DurableDownloads(
   }
 
   private fun add(request: Request): String {
+    val id = addJob(request)
+    if (request.release && ownerPauseView && id !in releasedView) {
+      releasedView = releasedView + id
+      policy[OWNER_PAUSE] = mapOf("released" to releasedView.toList())
+    }
+    return id
+  }
+
+  private fun addJob(request: Request): String {
     val (song, equivalentId, recording, source, origin) = request
     val id = song["videoId"] as String
     val existing = jobs.values.firstOrNull { it["id"] == id || it.maps("aliases").any { alias -> alias["videoId"] == id } }
@@ -285,6 +304,7 @@ class DurableDownloads(
   @Synchronized fun claim(id: String): Map<String, Any?>? {
     val job = jobs[id] ?: return null
     if (job["phase"] !in DECISIONS || job["token"] != null || job["acknowledged"] == true || job["importFailure"] != null || job.number("retryAt") > clock()) return null
+    if (ownerHeld(job)) return null
     // Songs join the Library one at a time: the next is offered once the one before is imported.
     if (job["phase"] == "awaitingPublication" && jobs.values.any { it !== job && saving(it) }) return null
     if (outOfTime(job)) { fail(job, "timedOut", "Out of time before the ${DECISIONS[job["phase"]]} decision"); persist(); return null }
@@ -385,8 +405,10 @@ class DurableDownloads(
   @Synchronized fun refreshPolicy(roots: List<String>, excluded: List<String>): Long {
     if (policy["roots"] != roots || policy["excluded"] != excluded) {
       val pause = policy[YOUTUBE_PAUSE]
+      val ownerPause = policy[OWNER_PAUSE]
       policy = mutableMapOf("roots" to roots.toList(), "excluded" to excluded.toList(), "revision" to policy.number("revision") + 1)
       if (pause != null) policy[YOUTUBE_PAUSE] = pause
+      if (ownerPause != null) policy[OWNER_PAUSE] = ownerPause
       persist()
     }
     return policy.number("revision")
@@ -448,11 +470,85 @@ class DurableDownloads(
     persist()
   }
 
-  fun hasWork(): Boolean = published.any(::pending)
+  /** Songs on their way that may move: paused ones ([ownerHeld]) don't keep the service. */
+  fun hasWork(): Boolean = published.any { pending(it) && !ownerHeld(it) }
+
+  /**
+   * Settings › Downloads' and the notification's Pause (Core's `pauseAllDownloads`, which this
+   * mirrors): every song not downloaded yet stops at once and goes back in line in its place,
+   * uncharged, as [interrupt] puts it; one already downloaded finishes saving. Nothing starts
+   * until [resumeAll], except songs the owner asks for meanwhile ([Request.release]). Written at
+   * once, so it survives closing Wave and restarting the phone.
+   */
+  @Synchronized fun pauseAll(transport: DurableTransfer) {
+    val before = view.revision
+    ownerPauseView = true; releasedView = emptySet()
+    policy[OWNER_PAUSE] = mapOf("released" to emptyList<String>())
+    for (job in jobs.values) if (job["phase"] in CHARGED && job["importFailure"] == null) requeue(job, transport)
+    persistNow(); announce(before)
+  }
+
+  /** Resume (Core's `resumeAllDownloads`): everything paused goes on, the songs stopped mid-download from the start. */
+  @Synchronized fun resumeAll() {
+    if (policy.remove(OWNER_PAUSE) == null && !ownerPauseView) return
+    val before = view.revision
+    ownerPauseView = false; releasedView = emptySet()
+    persistNow(); announce(before)
+  }
+
+  /** Whether the owner paused downloads ([pauseAll]). Read without the journal's lock. */
+  fun ownerPaused(): Boolean = ownerPauseView
+
+  /**
+   * Cancel All (Core's `downloadsToCancelAll`): cancels every song waiting or downloading, for
+   * every requester, among [ids] (Settings › Downloads' list, which it asked about) or all of them
+   * (null: the notification's, which doesn't ask). Downloaded songs finish saving and failed ones
+   * stay failed. One write for them all.
+   */
+  @Synchronized fun cancelAll(ids: List<String>?, transport: DurableTransfer) {
+    val named = ids?.toSet()
+    val ending = jobs.values.filter { notDownloaded(it) && (named == null || it["id"] in named) }
+    if (ending.isEmpty()) return
+    lastEnd = "cancelled"
+    for (job in ending) { job["phase"] = "cancelled"; job["generation"] = job.number("generation") + 1; job.remove("token") }
+    ending.firstOrNull(::replacement)?.let(::replacementEnded)
+    persistNow()
+    for (job in ending) { transport.cancel(job["id"] as String); cleanup(job) }
+  }
+
+  /** Not downloaded yet: what the owner's pause holds and Cancel All cancels (Core's `downloadHeld`). */
+  private fun notDownloaded(job: Map<String, Any?>) = job["phase"] in NOT_DOWNLOADED && job["importFailure"] == null
+
+  /** Held by the owner's pause (Core's `downloadHeld`): not downloaded yet, and not asked for again since. */
+  private fun ownerHeld(job: Map<String, Any?>) = ownerPauseView && notDownloaded(job) && job["id"] !in releasedView
+
+  /** A pause that changed no job still moves the revision, so readers following [changesSince] hear of it. */
+  private fun announce(before: Long) {
+    val current = view
+    if (current.revision == before) view = JournalView(current.entries, current.revision + 1, current.orderRevision)
+  }
+
+  /**
+   * The owner's pause as the journal kept it: its released jobs only while they're on their way,
+   * and the songs it holds back in line (a restart left them waiting at the front, [ACQUIRING]).
+   */
+  private fun loadOwnerPause() {
+    val pause = policy[OWNER_PAUSE] as? Map<*, *> ?: return
+    ownerPauseView = true
+    releasedView = (pause["released"] as? List<*>).orEmpty().filterIsInstance<String>().filter { id -> jobs[id]?.let(::pending) == true }.toSet()
+    policy[OWNER_PAUSE] = mapOf("released" to releasedView.toList())
+    for (job in jobs.values) if (job["phase"] in CHARGED && ownerHeld(job)) requeue(job, null)
+  }
 
   /** Why the download service stops once there's no work ([hasWork]): the last song cancelled, or none left. */
-  fun idleStop(): DownloadServiceStop =
-    if (lastEnd == "cancelled") DownloadServiceStop.CANCELLED else DownloadServiceStop.QUEUE_EMPTY
+  fun idleStop(): DownloadServiceStop = when {
+    heldCount() > 0 -> DownloadServiceStop.PAUSED
+    lastEnd == "cancelled" -> DownloadServiceStop.CANCELLED
+    else -> DownloadServiceStop.QUEUE_EMPTY
+  }
+
+  /** The songs the owner's pause holds back ([ownerHeld]): what the paused notification offers to resume. */
+  fun heldCount(): Int = published.count(::ownerHeld)
 
   /** The songs started and not yet in the Library, and those still waiting to start; the notification shows both. */
   fun counts(): DownloadCounts = DownloadCounts.of(published)
@@ -484,7 +580,7 @@ class DurableDownloads(
     var changed = false
     for (job in jobs.values) {
       if (busy >= slots || startedCount >= slots * 2) break
-      if (job["phase"] != "queued" || (youtubePaused && job["source"] == YOUTUBE)) continue
+      if (job["phase"] != "queued" || (youtubePaused && job["source"] == YOUTUBE) || ownerHeld(job)) continue
       startBudget(job); startSoulseekTurn(job); transition(job, "preparing")
       busy++; startedCount++; changed = true
     }
@@ -578,18 +674,23 @@ class DurableDownloads(
     var changed = false
     for (job in jobs.values) {
       if (job["phase"] !in CHARGED || job["importFailure"] != null) continue
-      val id = job["id"] as String
-      if (job["phase"] == "transferring") endings[id] = "stopped"
-      transport.cancel(id)
-      cleanup(job)
-      for (key in listOf("candidates", "peer", "received", "total", "queuePosition", "queueDeadline", "attemptDeadline", "resumeAttemptDeadline", "resumeQueueDeadline", "soulseekDeadline", "leaseUntil")) job.remove(key)
-      job["generation"] = job.number("generation") + 1
-      job["attempts"] = 0L; job["candidateIndex"] = 0L
-      transition(job, "queued")
+      requeue(job, transport)
       changed = true
     }
     // Written at once: the service is going, and the process may go with it.
     if (changed) persistNow()
+  }
+
+  /** A song not downloaded yet goes back in line in its place, uncharged, its transfer stopped ([interrupt], [pauseAll]). */
+  private fun requeue(job: MutableMap<String, Any?>, transport: DurableTransfer?) {
+    val id = job["id"] as String
+    if (job["phase"] == "transferring") endings[id] = "stopped"
+    transport?.cancel(id)
+    cleanup(job)
+    for (key in listOf("candidates", "peer", "received", "total", "queuePosition", "queueDeadline", "attemptDeadline", "resumeAttemptDeadline", "resumeQueueDeadline", "soulseekDeadline", "leaseUntil")) job.remove(key)
+    job["generation"] = job.number("generation") + 1
+    job["attempts"] = 0L; job["candidateIndex"] = 0L
+    transition(job, "queued")
   }
 
   /**
@@ -728,7 +829,7 @@ class DurableDownloads(
     admit()
     for (job in jobs.values) {
       val id = job["id"] as String
-      if (id in running || job.number("retryAt") > clock() || youtubeHeld(job)) continue
+      if (id in running || job.number("retryAt") > clock() || youtubeHeld(job) || ownerHeld(job)) continue
       if (job["phase"] == "prepared") {
         if (job.number("attempts") >= MAX_ATTEMPTS || job.number("candidateIndex") >= job.maps("candidates").size) { fail(job, exhausted(job), exhaustion(job)); persist(); continue }
         if (soulseekTurnOver(job)) { fail(job, "timedOut", SOULSEEK_OUT_OF_TIME); persist(); continue }
@@ -1315,6 +1416,10 @@ class DurableDownloads(
     const val SOULSEEK = "soulseek"
     /** Where the journal keeps the pause on YouTube downloads ([pauseYoutube]), beside the Library policy. */
     private const val YOUTUBE_PAUSE = "youtubePause"
+    /** Where the journal keeps the owner's pause ([pauseAll]) and the jobs released from it; present while paused. */
+    private const val OWNER_PAUSE = "ownerPause"
+    /** Not downloaded yet ([notDownloaded]). */
+    private val NOT_DOWNLOADED = setOf("queued", "preparing", "prepared", "transferring")
     const val YOUTUBE = "youtube"
     /** What a job saves: Soulseek's original MP3 320, or YouTube's M4A as served. */
     private const val MP3_320 = "mp3-320"
