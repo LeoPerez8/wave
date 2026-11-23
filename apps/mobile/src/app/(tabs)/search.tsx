@@ -1,5 +1,5 @@
 import { useRenderCost } from "@/lib/renderCost";
-import { useLocalisation } from "@/localisation/localisation";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { useScreenContent } from "@/lib/screenTiming";
 import { IconSearch } from "@tabler/icons-react-native";
 import {
@@ -19,7 +19,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Linking, ScrollView, Text, TextInput, View } from "react-native";
+import { ScrollView, Text, TextInput, View } from "react-native";
 import Animated, { LayoutAnimationConfig, useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -29,6 +29,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
+import { showToast } from "@/overlay/toast";
 import { TextButton } from "@/components/TextButton";
 import { rise, riseReduced } from "@/motion/entry";
 import { perfMark, useRenderCount } from "@/perf/perf";
@@ -316,12 +317,13 @@ export default function SearchScreen() {
   );
   const showAllLyrics = useCallback(() => setExpansion(showAllLyricsOf), []);
   // A tapped Genius result plays what its long press would, one at a time; its row shows
-  // it's being looked up meanwhile.
+  // it's being looked up meanwhile. One found nowhere shows a toast and stays in Search.
   const [pendingGeniusHit, setPendingGeniusHit] = useState<number | null>(null);
   const [openGeniusHit] = useState(() =>
     geniusHitOpener(geniusHitLookup, {
       play: (song) => void playSearchSong(song),
-      openUrl: (url) => void Linking.openURL(url).catch(() => undefined),
+      notFound: () =>
+        void showToast(currentLocalisation().strings.playbackText.couldntFindThisSong),
       pending: (hit) => setPendingGeniusHit(hit?.id ?? null),
     }),
   );

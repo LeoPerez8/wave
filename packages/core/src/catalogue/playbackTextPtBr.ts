@@ -43,6 +43,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   /** Also shown by tile notifications when the entry is already saved. */
   alreadyInShazam: "Já está no Shazam",
   couldntDownloadTheSong: "Não foi possível baixar a música",
+  couldntFindThisSong: "Não encontrei essa música",
   couldntOpenTheArtist: "Não foi possível abrir o artista",
   couldntPlayTheSong: "Não foi possível reproduzir a música",
   couldntPlayThisFile: "Não foi possível reproduzir este arquivo",
