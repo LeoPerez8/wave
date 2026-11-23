@@ -1,7 +1,7 @@
 /** Desktop presentation of the phone's Home queries. Rankings and arrangement stay shared. */
 import type { LibraryDatabase } from "@wave/client/db/database";
 import { libraryCounts } from "@wave/client/db/counts";
-import { homeSections } from "@wave/client/db/playHistory";
+import { homeSections, recentlyPlayedAlbumShelf } from "@wave/client/db/playHistory";
 import { playedArtistTotals, playedEntityTotals } from "@wave/client/db/playedEntities";
 import { listeningSums } from "@wave/client/db/playTotals";
 import {
@@ -29,6 +29,8 @@ export const readHome = (db: LibraryDatabase, stored: string | null): Omit<HomeV
   const arrangement = parseHomeArrangement(stored, DESKTOP_SKIPPED_SECTIONS);
   // The Library's shelves. Discover and the followed artists' sections fill their own places.
   const home = homeSections(db);
+  // The desktop keeps Recently played's album shelf; the phone's shows where each play came from.
+  const recentlyPlayed = recentlyPlayedAlbumShelf(db);
   const now = Date.now();
   const totals = playedEntityTotals(db, statsWindow("all", now));
   const ranked = (kind: "albums" | "artists", limit: number): HomeRow[] => {
@@ -70,7 +72,7 @@ export const readHome = (db: LibraryDatabase, stored: string | null): Omit<HomeV
     "recently-played": browseRows(
       db,
       "albums",
-      home.recentlyPlayed.flatMap((r) => (typeof r.id === "number" ? [r.id] : [])),
+      recentlyPlayed.flatMap((r) => (typeof r.id === "number" ? [r.id] : [])),
     ),
     "most-played": mostPlayed,
     "most-played-albums": ranked("albums", STATS_TOP),
@@ -103,7 +105,7 @@ export const readHome = (db: LibraryDatabase, stored: string | null): Omit<HomeV
       ? []
       : [{ id: local, kind: kinds[local], rows: page(rows[local]) }];
   });
-  const nothingPlayed = home.recentlyPlayed.length === 0 && home.mostPlayed.length === 0;
+  const nothingPlayed = recentlyPlayed.length === 0 && home.mostPlayed.length === 0;
   return {
     ...page(items),
     discoverRows: arrangement.discoverRows,

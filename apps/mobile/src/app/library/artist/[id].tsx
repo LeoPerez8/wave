@@ -719,7 +719,12 @@ function ArtistScreenOf({ view }: { view: ArtistView }) {
         ? null
         : { artist: detail.artist, detail };
   return (
-    <DetailFrame detail={shown} noun="artist" compactTitle={({ artist }) => artist.name}>
+    <DetailFrame
+      detail={shown}
+      noun="artist"
+      compactTitle={({ artist }) => artist.name}
+      cover={({ artist }) => artist.artworkPath}
+    >
       {(artist) => <ArtistContent shown={artist} openedIntegrated={openedIntegrated} view={view} />}
     </DetailFrame>
   );

@@ -17,6 +17,7 @@ import "@/settings/followedArtists";
 import "@/settings/genius";
 import "@/settings/glass";
 import "@/settings/keepFindVisible";
+import "@/settings/pageGradient";
 import "@/settings/longPressDelay";
 import "@/settings/normalizeVolume";
 import "@/settings/lyricsAndGenre";

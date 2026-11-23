@@ -12,7 +12,7 @@ import { test } from "node:test";
 import * as Effect from "effect/Effect";
 
 import { creditSplits, relinkCredits } from "./credits.ts";
-import { homePlays, recordPlay } from "./playHistory.ts";
+import { recentlyPlayedAlbumShelf, recordPlay } from "./playHistory.ts";
 import {
   keptArtistSongs,
   playedArtistSongs,
@@ -145,7 +145,7 @@ test("a download transfers streamed plays to its current album and credits", asy
   );
 });
 
-test("Recently played includes streamed albums in latest-play order and Auto stays file-only", async () => {
+test("Recently played's album shelf includes streamed albums in latest-play order and Auto stays file-only", async () => {
   const db = await openTestDatabase();
   const local = addTrack(db, { title: "Local", artist: "A", album: "Album" });
   relinkCredits(db, creditSplits());
@@ -160,11 +160,11 @@ test("Recently played includes streamed albums in latest-play order and Auto sta
   };
   recordPlay(db, play("yt:other", 3_000, false), false, online);
   assert.deepEqual(
-    homePlays(db).recentlyPlayed.map((album) => album.title),
+    recentlyPlayedAlbumShelf(db).map((album) => album.title),
     ["Online album", "Album"],
   );
   assert.deepEqual(
-    homePlays(db, "files").recentlyPlayed.map((album) => album.title),
+    recentlyPlayedAlbumShelf(db, "files").map((album) => album.title),
     ["Album"],
   );
 });

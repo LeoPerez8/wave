@@ -394,7 +394,12 @@ export default function AlbumScreen() {
       ? { album: known, genre: null, tracks: undefined }
       : detail;
   return (
-    <DetailFrame detail={shown} noun="album" compactTitle={({ album }) => album.title}>
+    <DetailFrame
+      detail={shown}
+      noun="album"
+      compactTitle={({ album }) => album.title}
+      cover={({ album }) => album.artworkPath}
+    >
       {(album) => <AlbumTracks shown={album} openedIntegrated={openedIntegrated} />}
     </DetailFrame>
   );

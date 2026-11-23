@@ -8,6 +8,7 @@ import {
   rememberSearchSync,
   listRecentSearchesSync,
   countTracks,
+  artworkPalette,
 } from "./libraryQueries.ts";
 import { creditSplits } from "./credits.ts";
 import { addTrack, closeTestDatabase, openTestDatabase } from "./testDatabase.ts";
@@ -35,6 +36,17 @@ test("scan roots keep songs under remaining roots and searches keep their recent
     rememberSearchSync(db, "Radiohead", 10);
     rememberSearchSync(db, "Björk", 20);
     assert.deepEqual(listRecentSearchesSync(db), ["Björk", "Radiohead"]);
+  } finally {
+    closeTestDatabase(db);
+  }
+});
+
+test("a cover's colours are found by its artwork path", async () => {
+  const db = await openTestDatabase();
+  try {
+    addTrack(db, { title: "One", album: "Album", artworkHash: "cover" });
+    assert.deepEqual(artworkPalette(db, "/covers/cover.jpg"), {});
+    assert.equal(artworkPalette(db, "/covers/unknown.jpg"), null);
   } finally {
     closeTestDatabase(db);
   }

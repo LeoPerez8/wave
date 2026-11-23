@@ -68,6 +68,7 @@ import { SearchResultsList } from "@/search/SearchResultsList";
 import { useListSelection } from "@/selection/useListSelection";
 import { useLineToggle } from "@/ytmusic/OnlineToggle";
 import { useHeldSongs, useSongsInPlace } from "@/ytmusic/songsInPlace";
+import { PageTopGradient } from "@/pageGradient/PageGradient";
 
 const NO_YT_SONGS: readonly NativeYtSong[] = [];
 const NO_TRACKS: ReadonlySet<number> = new Set();
@@ -347,6 +348,7 @@ export default function SearchScreen() {
     deferredQuery === query;
   return (
     <View className="flex-1 bg-background">
+      <PageTopGradient />
       <View style={{ paddingTop: insets.top + 16, paddingHorizontal: grid.margin, gap: 16 }}>
         <Text
           accessibilityRole="header"
