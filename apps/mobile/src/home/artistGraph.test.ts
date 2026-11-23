@@ -84,4 +84,30 @@ describe("the artist graph the app derives", () => {
       ],
     );
   });
+
+  test("gives the JavaScript thread back while it reads a big Library's credits (#1487)", () => {
+    const turnsWith = (credits: number): number => {
+      let turns = 0;
+      const between = Effect.sync(() => {
+        turns++;
+      });
+      runTestSync(
+        readArtistGraph(
+          {
+            ...store({ reads: 0 }),
+            mixCreditNames: Effect.succeed(
+              Array.from({ length: credits }, (_, i) => `Artist ${i}, Band ${i}`),
+            ),
+            graphPlays: Effect.succeed([
+              { ...play("1", 0), artists: ["Artist 1, Band 1"], streamed: true },
+            ]),
+          },
+          between,
+        ),
+      );
+      return turns;
+    };
+    // A slice takes at most 512 steps: 5,000 credits need several of them, not one task.
+    assert.ok(turnsWith(5000) >= turnsWith(0) + 9);
+  });
 });

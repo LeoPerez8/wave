@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   createLibraryQueries,
   libraryChangeAffects,
+  waitsForSight,
   type LibraryQueryLimits,
   type LibraryQueryOutcome,
 } from "./index.ts";
@@ -33,6 +34,15 @@ describe("which Library changes a query follows", () => {
     const play = { kind: "plays", ids: [12] } as const;
     assert.equal(libraryChangeAffects({ tracks: true, favorites: true }, play), false);
     assert.equal(libraryChangeAffects({ tracks: true, plays: true }, play), true);
+  });
+});
+
+describe("which changes a kept query waits out while Wave is on screen (#1489)", () => {
+  test("a play's burst waits; an edit of the history and a scan's batch don't", () => {
+    assert.equal(waitsForSight({ kind: "plays", ids: [4], burst: true }), true);
+    assert.equal(waitsForSight({ kind: "plays" }), false);
+    assert.equal(waitsForSight({ kind: "tracks", ids: [4], burst: true, scanned: true }), false);
+    assert.equal(waitsForSight({ kind: "playlists", ids: [7], burst: true }), false);
   });
 });
 
@@ -514,6 +524,82 @@ describe("kept queries (#1352)", () => {
     assert.deepEqual(queries.current("albums"), { value: "B" });
   });
 
+  test("a play doesn't re-read a kept query no screen in sight shows while Wave is in front (#1489)", () => {
+    const { queries, answer, readsOf, advance } = setup({ throttleMs: 1000, keptThrottleMs: 5000 });
+    queries.keep("home:plays", { plays: true });
+    answer("home:plays", "A");
+    queries.change({ kind: "plays", ids: [4], burst: true });
+    advance(60_000);
+    assert.equal(readsOf("home:plays"), 0);
+    assert.deepEqual(queries.current("home:plays"), { value: "A" });
+  });
+
+  test("the screen that shows a kept query reads a play it waited out at once, starting from the last result", () => {
+    const { queries, answer, readsOf, advance } = setup({ throttleMs: 1000, keptThrottleMs: 5000 });
+    queries.keep("home:plays", { plays: true });
+    answer("home:plays", "A");
+    const home = queries.attach(
+      "home:plays",
+      { plays: true },
+      { visible: false, onChange: () => {} },
+    );
+    queries.change({ kind: "plays", ids: [4], burst: true });
+    advance(60_000);
+    assert.equal(readsOf("home:plays"), 0);
+    home.show();
+    assert.deepEqual(queries.current("home:plays"), { value: "A" });
+    assert.equal(readsOf("home:plays"), 1);
+    answer("home:plays", "B");
+    assert.deepEqual(queries.current("home:plays"), { value: "B" });
+  });
+
+  test("a screen opening a kept query a play reached reads it at once", () => {
+    const { queries, answer, readsOf } = setup({ throttleMs: 1000, keptThrottleMs: 5000 });
+    queries.keep("home:plays", { plays: true });
+    answer("home:plays", "A");
+    queries.change({ kind: "plays", ids: [4], burst: true });
+    queries.attach("home:plays", { plays: true }, { visible: true, onChange: () => {} });
+    assert.deepEqual(queries.current("home:plays"), { value: "A" });
+    assert.equal(readsOf("home:plays"), 1);
+  });
+
+  test("once Wave leaves the screen, kept queries catch up on the plays they waited out", () => {
+    const { queries, answer, readsOf, advance } = setup({ throttleMs: 1000, keptThrottleMs: 5000 });
+    queries.keep("home:plays", { plays: true });
+    answer("home:plays", "A");
+    queries.change({ kind: "plays", ids: [4], burst: true });
+    advance(60_000);
+    queries.away(true);
+    assert.equal(readsOf("home:plays"), 1);
+    answer("home:plays", "B");
+    queries.change({ kind: "plays", ids: [5], burst: true });
+    advance(5000);
+    assert.equal(readsOf("home:plays"), 1);
+    answer("home:plays", "C");
+    queries.away(false);
+    queries.change({ kind: "plays", ids: [6], burst: true });
+    advance(60_000);
+    assert.equal(readsOf("home:plays"), 0);
+  });
+
+  test("a scan's batch still re-reads a kept query at the kept pace when a play reached it too", () => {
+    const { queries, answer, readsOf, advance } = setup({ throttleMs: 1000, keptThrottleMs: 5000 });
+    queries.keep("home", { plays: true, tracks: true });
+    answer("home", "A");
+    queries.change({ kind: "plays", ids: [4], burst: true });
+    queries.change({ kind: "tracks", ids: [9], burst: true });
+    advance(5000);
+    assert.equal(readsOf("home"), 1);
+  });
+
+  test("an edit of the play history still re-reads a kept query nobody shows, at once", () => {
+    const { queries, answer, readsOf } = setup({ throttleMs: 1000, keptThrottleMs: 5000 });
+    queries.keep("home:plays", { plays: true });
+    answer("home:plays", "A");
+    queries.change({ kind: "plays" });
+    assert.equal(readsOf("home:plays"), 1);
+  });
+
   test("a kept query a screen in sight shows follows bursts at the screen's pace", () => {
     const { queries, answer, readsOf, advance } = setup({ throttleMs: 1000, keptThrottleMs: 5000 });
     queries.keep("albums", SONGS);
@@ -561,11 +647,6 @@ describe("kept queries (#1352)", () => {
       change: { kind: "playlists", ids: [7], burst: true },
     },
     { write: "a sync pull", reads: { playlists: [7] }, change: { kind: "playlists", ids: [7] } },
-    {
-      write: "a counted play",
-      reads: { plays: true },
-      change: { kind: "plays", ids: [4], burst: true },
-    },
     { write: "a star", reads: { favorites: true }, change: { kind: "favorites", ids: [4] } },
     { write: "a tag edit", reads: SONGS, change: { kind: "tracks", ids: [4] } },
   ] as const;

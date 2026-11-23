@@ -6,6 +6,8 @@ import {
   gainTags,
   knownGain,
   measureCandidates,
+  MEASURE_PAGE,
+  nextMeasureCandidates,
   readNormalizeVolume,
   reduceQueue,
   songGain,
@@ -332,5 +334,53 @@ describe("songsToMeasure", () => {
   test("the candidates are every Library song it may pick, beyond the next five too", () => {
     const state = queue(["1", ytTrackId("dQw4w9WgXcQ"), "3", "4", "5", "6", "7", "8", "3"], 0);
     assert.deepEqual(measureCandidates(state), [1, 3, 4, 5, 6, 7, 8]);
+  });
+
+  /** Asks for candidates as a runner does, answering [needsMeasuring]; gives each ask. */
+  const asks = (state: QueueState, needsMeasuring: (id: number) => boolean) => {
+    const answered = new Set<number>();
+    const pages: number[][] = [];
+    for (;;) {
+      const page = nextMeasureCandidates(
+        state,
+        (id) => answered.has(id) && needsMeasuring(id),
+        pages.flat().length,
+      );
+      if (page.length === 0) return pages;
+      pages.push(page);
+      for (const id of page) answered.add(id);
+    }
+  };
+  const ids = (from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_, i) => String(from + i));
+
+  test("a long queue is asked about a page at a time, and once five are found no more", () => {
+    const state = queue(ids(1, 2000), 0);
+    const pages = asks(state, all);
+    assert.equal(MEASURE_PAGE, 25);
+    assert.deepEqual(pages, [ids(1, 26).map(Number)]);
+  });
+
+  test("songs with a value send it on to the next page, up to the queue's end", () => {
+    const state = queue(ids(1, 70), 0);
+    // Up Next's first 50 have a value: the five are 52 to 56.
+    const pages = asks(state, (id) => id === 1 || id > 51);
+    assert.deepEqual(pages, [
+      ids(1, 26).map(Number),
+      ids(27, 51).map(Number),
+      ids(52, 70).map(Number),
+    ]);
+    const none = asks(state, () => false);
+    assert.equal(none.flat().length, 70);
+  });
+
+  test("what the pages find gives the line the whole queue gives", () => {
+    const state = queue([...ids(1, 40), ytTrackId("dQw4w9WgXcQ"), ...ids(41, 90)], 3);
+    const needs = (id: number) => id % 7 === 0 || id > 60;
+    const asked = new Set(asks(state, needs).flat());
+    assert.deepEqual(
+      songsToMeasure(state, (id) => asked.has(id) && needs(id)),
+      songsToMeasure(state, needs),
+    );
   });
 });

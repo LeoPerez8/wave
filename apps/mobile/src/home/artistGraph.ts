@@ -1,7 +1,7 @@
 /** The graph's database adapter; every read and CPU slice yields through the supplied scheduler. */
 import {
   createArtistGraphBuild,
-  creditSplitter,
+  creditSplitterSteps,
   type ArtistGraph,
   type ArtistGraphCatalogEntry,
 } from "@wave/core";
@@ -45,9 +45,11 @@ export const readArtistGraph = (
     // Streamed credits split as Stats splits them (`streamedCredits`), with
     // the Library's credits, read only when a streamed play needs them.
     let split: ((credit: readonly string[]) => string[]) | null = null;
+    // Both run in steps: a big Library's credits and plays never take one task (#1487).
     if (plays.some((play) => play.streamed)) {
       yield* between;
-      split = creditSplitter(yield* store.mixCreditNames);
+      const credits = yield* store.mixCreditNames;
+      split = yield* runSteps(creditSplitterSteps(credits), between);
     }
     const splitBy = split;
     yield* between;
@@ -55,9 +57,12 @@ export const readArtistGraph = (
       build.plays(
         splitBy === null
           ? plays
-          : plays.map((play) =>
-              play.streamed ? { ...play, artists: [...new Set(splitBy(play.artists))] } : play,
-            ),
+          : (function* () {
+              for (const play of plays)
+                yield play.streamed
+                  ? { ...play, artists: [...new Set(splitBy(play.artists))] }
+                  : play;
+            })(),
       ),
       between,
     );
