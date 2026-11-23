@@ -4,6 +4,7 @@ export const downloadNoticePtBr: typeof downloadNoticeEn = {
   failed: (n, count) => (count === 1 ? `${n} falhou` : `${n} falharam`),
   left: (n, count) => (count === 1 ? `${n} restante` : `${n} restantes`),
   title: (count) => `Baixando ${count}`,
+  pausedTitle: (count) => `Pausado · ${count}`,
   lessThanMinute: "Menos de um minuto restante",
   minutes: (n) => `Cerca de ${n} min restantes`,
   hours: (n) => `Cerca de ${n} h restantes`,
