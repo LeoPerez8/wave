@@ -415,7 +415,10 @@ describe("A Magic Queue in the queue", () => {
     assert.equal(wantsMagicBatch(session, three, null, minutes({})), false);
     assert.equal(wantsMagicBatch(session, three, null, minutes({ a: 1, b: 1 })), true);
     // The song playing doesn't count, however long.
-    assert.equal(wantsMagicBatch(session, three, null, minutes({ s1: 1, a: 3, b: 3, c: 3 })), false);
+    assert.equal(
+      wantsMagicBatch(session, three, null, minutes({ s1: 1, a: 3, b: 3, c: 3 })),
+      false,
+    );
     // Nor do songs lined up by hand.
     const lined = run(three, { type: "playNext", trackIds: ["q"] });
     assert.equal(wantsMagicBatch(session, lined, null, minutes({ q: 30, a: 2, b: 2, c: 2 })), true);

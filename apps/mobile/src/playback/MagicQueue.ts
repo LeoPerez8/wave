@@ -1046,13 +1046,7 @@ export const layer = Layer.effectDiscard(
       if (wanted?.id === pendingDjFirstBatch) return Effect.succeed(false);
       if (
         wanted === null ||
-        !magicPickDue(
-          wanted,
-          emptyBatch.get(),
-          queueState.get(),
-          sleepTimerState.get(),
-          songLength,
-        )
+        !magicPickDue(wanted, emptyBatch.get(), queueState.get(), sleepTimerState.get(), songLength)
       ) {
         // Marked as picked when the session started, and held back since (an End of Queue timer).
         if (wanted !== null && picking.get() === wanted.id) picking.set(null);

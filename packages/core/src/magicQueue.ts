@@ -797,9 +797,7 @@ export const magicBatchLoading = (
   sleepTimer: SleepTimer | null = null,
   length: MagicSongLength | null = null,
 ): boolean =>
-  session !== null &&
-  picking === session.id &&
-  wantsMagicBatch(session, state, sleepTimer, length);
+  session !== null && picking === session.id && wantsMagicBatch(session, state, sleepTimer, length);
 
 /**
  * Whether Up Next shows that [session]'s next batch couldn't be picked (a
@@ -815,9 +813,7 @@ export const magicBatchFailed = (
   sleepTimer: SleepTimer | null = null,
   length: MagicSongLength | null = null,
 ): boolean =>
-  session !== null &&
-  failed === session.id &&
-  wantsMagicBatch(session, state, sleepTimer, length);
+  session !== null && failed === session.id && wantsMagicBatch(session, state, sleepTimer, length);
 
 /**
  * Whether Up Next says that [session]'s last pick found no songs (a quiet
@@ -832,9 +828,7 @@ export const magicBatchEmpty = (
   sleepTimer: SleepTimer | null = null,
   length: MagicSongLength | null = null,
 ): boolean =>
-  session !== null &&
-  empty === session.id &&
-  wantsMagicBatch(session, state, sleepTimer, length);
+  session !== null && empty === session.id && wantsMagicBatch(session, state, sleepTimer, length);
 
 /**
  * Whether the footnote "More songs arrive as the Magic Queue learns…" sits
