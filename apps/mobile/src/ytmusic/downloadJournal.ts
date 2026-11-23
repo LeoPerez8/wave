@@ -1,7 +1,7 @@
 import { registerTimingBackground, timingBackgroundChanged } from "@/lib/timing";
 import { failedJobs, queuedDownloadCounts, type QueuedDownloadCounts } from "@wave/core";
 
-import { makeExternalStore } from "@wave/client/externalStore";
+import { makeExternalStore, subscribeAll } from "@wave/client/externalStore";
 import type { NativeDownloadJob } from "@/native/waveSoulseek";
 
 /**
@@ -16,6 +16,32 @@ export const journal = makeExternalStore<readonly NativeDownloadJob[]>([]);
  * journal keeps it; `YtDownloads` reads it with each journal change.
  */
 export const downloadsPausedByOwner = makeExternalStore(false);
+
+/**
+ * The playlists, albums and other groups the owner paused on their own (#1475), by Core's
+ * `downloadGroupKey` ("playlist:12", "songs"); `YtDownloads` reads it with each journal change.
+ */
+export const pausedDownloadGroups = makeExternalStore<readonly string[]>([]);
+
+/** What the owner paused, everything or groups: one value for whatever shows "Paused". */
+export interface OwnerPause {
+  readonly all: boolean;
+  readonly groups: readonly string[];
+}
+
+let ownerPauseShown: OwnerPause = { all: false, groups: [] };
+
+/** [downloadsPausedByOwner] and [pausedDownloadGroups] together, the same value while neither changes. */
+export const ownerPause = {
+  get: (): OwnerPause => {
+    const all = downloadsPausedByOwner.get();
+    const groups = pausedDownloadGroups.get();
+    if (all !== ownerPauseShown.all || groups !== ownerPauseShown.groups)
+      ownerPauseShown = { all, groups };
+    return ownerPauseShown;
+  },
+  subscribe: subscribeAll(downloadsPausedByOwner, pausedDownloadGroups),
+};
 // Reuse the journal's existing memoized counts, and sample only while a transition is active.
 registerTimingBackground("downloads", () => {
   const counts = queuedCountsNow();

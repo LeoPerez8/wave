@@ -89,6 +89,9 @@ const [{ DownloadsList }, { journal }] = await loadWithStubs<
     const run = { progress: { groups: new Map() } };
     export const useDownloadRun = () => run;
   `),
+    "@/ytmusic/DownloadGroupControls": stubModule(
+      `export const DownloadGroupControls = () => null;`,
+    ),
     "@/ytmusic/YtDownloads": stubModule(`
     const none = [];
     export const cancelQueuedDownload = () => {};

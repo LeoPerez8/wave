@@ -6,11 +6,12 @@ import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import type { DownloadListKey } from "@wave/client/db/listDownloadMembers";
 import { useLocalisation } from "@/localisation/localisation";
-import { journal } from "./downloadJournal";
+import { journal, ownerPause } from "./downloadJournal";
 import { createListDownloadProgressStore } from "./listDownloadProgressStore";
 
 const progress = createListDownloadProgressStore({
   journal,
+  paused: ownerPause,
   subscribeMembership: (changed) =>
     onLibraryChange((change) => {
       if (change.kind === "playlists" || change.kind === "tracks") changed();

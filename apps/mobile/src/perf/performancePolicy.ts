@@ -670,6 +670,16 @@ export const OPENING_REQUESTS: Record<string, Exception> = {
     reason:
       "The playlist Download/Retry/Cancel button invokes this action after a press, not while its page mounts.",
   },
+  "ytmusic/DownloadGroupControls.tsx#cancelDownloadGroup": {
+    kind: "gesture",
+    reason:
+      "A group's Cancel Downloads runs after a press and its alert; showing its progress line never runs it.",
+  },
+  "ytmusic/DownloadGroupControls.tsx#toggleDownloadGroup": {
+    kind: "gesture",
+    reason:
+      "A group's Pause Downloads or Resume Downloads runs after a press; showing its progress line never runs it.",
+  },
   "playback/itemActions.ts#itemActionPress": {
     kind: "gesture",
     reason:
