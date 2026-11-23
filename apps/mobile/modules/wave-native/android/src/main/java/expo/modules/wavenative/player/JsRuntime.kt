@@ -14,8 +14,9 @@ import com.facebook.react.jstasks.HeadlessJsTaskContext
 import expo.modules.wavenative.log.WaveLog
 
 /**
- * Keeps Wave's React Native runtime running for Android Auto, a resumed queue and
- * a Recognize tile session, with or without the Activity.
+ * Keeps Wave's React Native runtime running for Android Auto, a resumed queue,
+ * playback ([PlaybackRuntimeHold]), downloads, a Library lookup and a Recognize tile
+ * session, with or without the Activity. Each holds it as its own owner ([RuntimeOwners]).
  *
  * [ensureStarted] starts the app's (single, lazy) `ReactHost` if it isn't
  * running, so a cold start from Auto or a media button loads the JS bundle headless. The Activity

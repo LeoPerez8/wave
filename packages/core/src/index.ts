@@ -1053,6 +1053,7 @@ export {
   searchSongTap,
   streamedSongMagicStart,
   wantsMagicBatch,
+  MAGIC_ASK_AHEAD,
 } from "./magicQueue.ts";
 export type {
   MagicArtistKey,
@@ -1066,6 +1067,7 @@ export type {
   MagicSeedSong,
   MagicSession,
   MagicSongRadioSeed,
+  MagicSongLength,
   MagicSignal,
   MagicSignalKind,
   MagicSong,
