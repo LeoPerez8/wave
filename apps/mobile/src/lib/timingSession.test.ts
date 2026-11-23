@@ -504,3 +504,32 @@ test("a slow tap's line names a JS block reported after the tap settled (#1446)"
   assert.equal(taps().length, 1);
   assert.match(taps()[0]!, /^Slow tab to \/ .*longest JS block 237 ms$/);
 });
+
+test("a Back press counts from itself when JS never heard the last touch end (#1488)", () => {
+  const h = setup();
+  // A long press on a slot starts edit mode, which swaps the slot's view under the finger:
+  // Android drops the touch's end, so JS still holds the touch when Back comes 5.6 s later.
+  h.at(100);
+  h.session.touch(100);
+  h.at(5700);
+  h.session.backPressed();
+  assert.equal(h.session.hasTouch(), false);
+  const id = h.session.beginTouched("nowPlayingClose", "Now Playing closed");
+  finishPop(h, id, 5700);
+  assert.deepEqual(h.lines, [
+    "Back pressed 5.6 s after a touch whose end Wave never heard: Back counts from itself",
+  ]);
+});
+
+test("a Back gesture still counts from its touch, which the system took over (#866)", () => {
+  const h = setup();
+  h.at(100);
+  h.session.touch(100);
+  h.at(150);
+  h.session.touchEnded(); // The system's back gesture takes the touch over.
+  h.at(300);
+  h.session.backPressed();
+  const id = h.session.beginTouched("pop", "/playlists");
+  finishPop(h, id, 300);
+  assert.match(h.lines[0]!, /^Slow pop to \/playlists from \/: response 210 ms/);
+});

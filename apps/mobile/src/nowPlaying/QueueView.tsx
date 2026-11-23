@@ -1,4 +1,5 @@
 import { useRenderCost } from "@/lib/renderCost";
+import { useStagedCount } from "@/lib/stagedCount";
 import { useLocalisation } from "@/localisation/localisation";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import { AnimatedLegendList } from "@legendapp/list/reanimated";
@@ -13,6 +14,7 @@ import {
 import {
   currentEntry,
   followQueueLabel,
+  listMounts,
   queueHistory,
   upNext,
   upNextMove,
@@ -149,6 +151,13 @@ export function QueueHeader({
 
 /** The sticky bar's height: a hairline and the Up Next heading. */
 const BAR = CELL * 7;
+/**
+ * Song rows Up Next adds a frame as it first mounts (#1488): a screenful in one task blocked JS
+ * for over 100 ms as the Queue showed.
+ */
+const UP_NEXT_PER_FRAME = 4;
+/** Legend List's default draw distance below the screen, which it fills with rows too. */
+const DRAW_DISTANCE = 250;
 
 /** What the sticky bar draws its slice of the Now Playing ground from. */
 type Ground = {
@@ -509,6 +518,22 @@ export function UpNextList({
     [history, entries],
   );
   const barIndex = history.length > 0 ? history.length + 1 : 0;
+  // History sits above the start, out of sight, so only Up Next's rows are staged: a few a
+  // frame until the screen and the draw distance under it are full, then the rest at once,
+  // which the list leaves unmounted below.
+  const { height: windowHeight } = useWindowDimensions();
+  const mounts = useMemo(
+    () =>
+      listMounts({
+        count: entries.length,
+        perFrame: UP_NEXT_PER_FRAME,
+        screen: Math.ceil((windowHeight + DRAW_DISTANCE) / ROW),
+      }).map((count) => barIndex + 1 + count),
+    [entries.length, windowHeight, barIndex],
+  );
+  const mounted = useStagedCount(mounts);
+  const whole = mounted >= rows.length;
+  const drawn = useMemo(() => (whole ? rows : rows.slice(0, mounted)), [whole, rows, mounted]);
   const sticky = useMemo(() => [barIndex], [barIndex]);
   const start = barOffset(history.length);
   // Up Next's start can reach the top however short it is: History stays out of sight.
@@ -521,7 +546,8 @@ export function UpNextList({
   const endSpace = upNextEndSpace(listHeight, {
     bar: BAR,
     row: ROW,
-    count: entries.length,
+    // While rows are still mounting, the room is for the ones drawn, so the start stays in reach.
+    count: Math.min(entries.length, mounted - barIndex - 1),
     bottomInset: endInset,
   });
 
@@ -730,7 +756,7 @@ export function UpNextList({
           ref={listRef}
           refScrollView={scrollRef}
           className="flex-1"
-          data={rows}
+          data={drawn}
           keyExtractor={rowKey}
           getItemType={rowType}
           getFixedItemSize={rowSize}
@@ -740,11 +766,15 @@ export function UpNextList({
           initialScrollOffset={start}
           stickyHeaderIndices={sticky}
           recycleItems
+          // No anchor: Android's anchor held a long Up Next's end in place as the Queue first
+          // showed, so the list jumped to its last rows and drew every row twice (#1488).
+          // Placement keeps the start of Up Next in sight instead (`upNextScroll`).
+          maintainVisibleContentPosition={false}
           alwaysRender={drag === null ? undefined : { keys: [drag.key] }}
           scrollEnabled={drag === null}
           scrollEventThrottle={16}
           contentContainerStyle={{ paddingBottom: endInset }}
-          ListFooterComponent={<View style={{ minHeight: endSpace }}>{footer}</View>}
+          ListFooterComponent={<View style={{ minHeight: endSpace }}>{whole ? footer : null}</View>}
         />
       </BarGroundContext>
       {pill !== null && drag === null && (
