@@ -17,6 +17,7 @@
 import type { YtPick } from "./onlineToggle.ts";
 import { identityKey } from "./library.ts";
 import { createSearchIndex, type SearchEntry } from "./search.ts";
+import { songNamedByQuery } from "./titleArtistQuery.ts";
 import {
   ytArtistMergedSongCount,
   ytArtistQuery,
@@ -262,7 +263,8 @@ export interface YtSectionView<S extends YtSong> extends YtSearchAnswer<S> {
 }
 
 /**
- * YT Music's best of [shown] for [query]: the result that matches it best as
+ * YT Music's best of [shown] for [query]: a song the query names by its title and artist
+ * (`queryNamesSong`), else the result that matches it best as
  * Search ranks the Library's (artists, then albums, then songs among equals);
  * with nothing matching word for word, its first song, else album, else artist.
  */
@@ -290,6 +292,8 @@ const ytTop = <S extends YtSong>(
       top: { kind: "song", song },
     })),
   ];
+  const named = songNamedByQuery(query, shown.songs, (song) => song);
+  if (named !== null) return { kind: "song", song: named };
   const best = createSearchIndex(entries).search(query).top;
   if (best !== null) return best.top;
   const [song] = shown.songs;

@@ -123,7 +123,7 @@ export const make = Effect.gen(function* () {
       const changedAccount = account !== signedIn;
       account = signedIn;
       if (changedAccount) {
-        void accountNameBeforePull(session, collaborations.setAccountName, () => {
+        void accountNameBeforePull(session, collaborations.setAccount, () => {
           if (account === signedIn) signedInTriggers().now();
         });
       }

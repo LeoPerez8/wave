@@ -7,27 +7,28 @@ import {
   type DownloadingList,
   type QueuedDownload,
 } from "@wave/core";
-import { useCallback } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 import { useStoreSelector } from "@/lib/storeSelector";
 import { useLocalisation } from "@/localisation/localisation";
 import type { NativeDownloadJob } from "@/native/waveSoulseek";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
-import { journal } from "./downloadJournal";
+import { journal, ownerPause } from "./downloadJournal";
 
 /**
  * Settings › Downloads' Downloading list (Core's `downloadingList`), following the journal: the
  * songs downloading now, then the waiting ones grouped by the playlist, album or mix they're from.
  * It renders again only when a song joins, leaves, starts or moves, or a group changes (Core's
- * `sameDownloadingList`); a progress tick reaches only the row that shows it
+ * `sameDownloadingList`), or the owner pauses or resumes one (#1475); a progress tick reaches only the row that shows it
  * (`useQueuedDownloadLine`, #1441).
  */
 export const useDownloadingList = (): DownloadingList<NativeYtSong> => {
   const { language } = useLocalisation();
+  const pause = useSyncExternalStore(ownerPause.subscribe, ownerPause.get);
   const select = useCallback(
-    (jobs: readonly NativeDownloadJob[]) => downloadingList(jobs, language),
-    [language],
+    (jobs: readonly NativeDownloadJob[]) => downloadingList(jobs, language, pause),
+    [language, pause],
   );
   return useStoreSelector(journal, select, sameDownloadingList);
 };

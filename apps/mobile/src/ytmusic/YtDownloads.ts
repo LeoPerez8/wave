@@ -98,6 +98,11 @@ import {
   type YtDownloads,
   type YtSong,
   type YtSongSearch,
+  requestRunsWhilePaused,
+  requestResumesGroup,
+  downloadGroupControls,
+  type DownloadGroupControls,
+  type DownloadRequest,
 } from "@wave/core";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
@@ -162,10 +167,19 @@ import {
 import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { readYtAlbum } from "./albumPages";
-import { failedJobsNow, journal, queuedCountsNow } from "./downloadJournal";
+import {
+  downloadsPausedByOwner,
+  failedJobsNow,
+  journal,
+  ownerPause,
+  pausedDownloadGroups,
+  queuedCountsNow,
+  type OwnerPause,
+} from "./downloadJournal";
 import { followDownloadRuns } from "./downloadRun";
 import { createDownloadRecovery } from "./downloadRecovery";
 import { currentLibraryFinderInSlices, useLoadedLibraryFinder } from "./libraryFinder";
+import { createOwnerPauseRequests } from "./ownerPauseRequests";
 import { followYoutubeThrottle } from "./youtubeThrottle";
 import type { YtMusicError } from "./YtMusic";
 
@@ -1217,6 +1231,12 @@ const refresh = async (): Promise<void> => {
       const snapshotJobs = applyJournalChanges(followed, changes);
       followed = snapshotJobs;
       followedRevision = changes.revision;
+      // A pause or resume moves the journal's revision, so it's read here; one still on its way
+      // keeps what the owner pressed.
+      if (!ownerPauses.pending()) {
+        downloadsPausedByOwner.set(WaveSoulseek.downloadsPaused());
+        showPausedGroups(WaveSoulseek.pausedDownloadGroups());
+      }
       // YouTube refusing songs in a burst pauses its downloads (Core's `ytThrottle`).
       void followYoutubeThrottle(snapshotJobs);
       // A failed Library read keeps the journal intact and mustn't hide new progress or decisions.
@@ -1253,6 +1273,20 @@ const hasFailed = (job: NativeDownloadJob): boolean =>
   job.phase === "failed" || job.importFailure !== undefined;
 
 let requests = Promise.resolve();
+
+/** The owner's Pause and Resume, which reach the journal at once rather than behind [requests]. */
+const ownerPauses = createOwnerPauseRequests({
+  native: {
+    pauseAll: () => WaveSoulseek.pauseDownloads(),
+    resumeAll: () => WaveSoulseek.resumeDownloads(),
+    pauseGroup: (key) => WaveSoulseek.pauseDownloadGroup(key),
+    resumeGroup: (key) => WaveSoulseek.resumeDownloadGroup(key),
+  },
+  queue: (work) => {
+    requests = requests.then(work).catch(() => undefined);
+  },
+  landed: () => refresh(),
+});
 
 /**
  * The downloads only a star asked for, by job id (Core's `readStarDownloads`): unstarring the
@@ -1392,6 +1426,18 @@ const songRequest = (
   origin: DownloadOrigin | null,
 ): JobRequest => ({ song, recording: soulseekRecording(song), equivalentId, source, origin });
 
+/**
+ * [requests] as the owner's [request] asks for them: a song's, a list's or a star's download while
+ * downloads are paused (Core's `requestRunsWhilePaused`), and the rest stays paused.
+ */
+const askedBy = (requests: readonly JobRequest[], request: DownloadRequest): JobRequest[] =>
+  requests.map((asked) => ({
+    ...asked,
+    release: requestRunsWhilePaused(request),
+    // A list's Download resumes the list's group if it was paused (#1475).
+    resumesGroup: requestResumesGroup(request),
+  }));
+
 export const downloadYtSong = (song: NativeYtSong): void => {
   publishYtSongSignal("download", [song.videoId]);
   askForNotifications();
@@ -1401,12 +1447,8 @@ export const downloadYtSong = (song: NativeYtSong): void => {
     .then(async () => {
       ownerAsked([song.videoId]);
       const shared = ytDownloadSharedJob(await WaveSoulseek.jobsSnapshot(), song);
-      await WaveSoulseek.enqueueJob(
-        song,
-        soulseekRecording(song),
-        shared,
-        await requestedSource(),
-        null,
+      await enqueueJobs(
+        askedBy([songRequest(song, shared, await requestedSource(), null)], "song"),
       );
       await refresh();
     })
@@ -1451,8 +1493,11 @@ const downloadYtSongs = (
       const jobs = await WaveSoulseek.jobsSnapshot();
       const source = await requestedSource();
       await enqueueJobs(
-        ytSongsDownload(songs, { inLibrary, jobs }).toDownload.map(({ song, sharedJob }) =>
-          songRequest(song, sharedJob, source, origin),
+        askedBy(
+          ytSongsDownload(songs, { inLibrary, jobs }).toDownload.map(({ song, sharedJob }) =>
+            songRequest(song, sharedJob, source, origin),
+          ),
+          "list",
         ),
       );
       await refresh();
@@ -1531,18 +1576,35 @@ export const runYtDownloadAction = (
  */
 const sameListDownload = equalToDepth(3);
 
+/** What the owner paused (#1474, #1475): every download, and the groups paused on their own. */
+export const useOwnerPause = (): OwnerPause =>
+  useSyncExternalStore(ownerPause.subscribe, ownerPause.get);
+
+/**
+ * Whether the group [key] (Core's `downloadGroupKey`; null: none) is paused, on its own or by
+ * the global Pause (#1475), as its progress line says.
+ */
+export const useDownloadGroupPaused = (key: string | null): boolean => {
+  const pause = useOwnerPause();
+  return key !== null && (pause.all || pause.groups.includes(key));
+};
+
 /**
  * Where a YT Music album's download stands (Core's `ytAlbumDownload`), from
- * its [songs], the Library ([inLibrary]) and the journal, following both.
+ * its [songs], the Library ([inLibrary]) and the journal, following both. Its
+ * line says Paused while its [group] (Core's `downloadGroupKey`) is paused.
  */
 export const useYtAlbumDownload = (
   songs: readonly NativeYtSong[],
   inLibrary: InLibrary,
+  group: string | null = null,
 ): YtAlbumDownload<NativeYtSong> => {
   const { language } = useLocalisation();
+  const paused = useDownloadGroupPaused(group);
   const select = useCallback(
-    (jobs: readonly NativeDownloadJob[]) => ytAlbumDownload(songs, { inLibrary, jobs, language }),
-    [songs, inLibrary, language],
+    (jobs: readonly NativeDownloadJob[]) =>
+      ytAlbumDownload(songs, { inLibrary, jobs, language, paused }),
+    [songs, inLibrary, language, paused],
   );
   return useStoreSelector(journal, select, sameListDownload);
 };
@@ -1580,7 +1642,10 @@ export const runYtPlaylistDownloadAction = (
         const source = await requestedSource();
         const asked = action === "downloadPlaylist" ? download.toDownload : download.toRetry;
         await enqueueJobs(
-          asked.map(({ song, sharedJob }) => songRequest(song, sharedJob, source, origin)),
+          askedBy(
+            asked.map(({ song, sharedJob }) => songRequest(song, sharedJob, source, origin)),
+            action === "downloadPlaylist" ? "list" : "retry",
+          ),
         );
       }
       await refresh();
@@ -1590,17 +1655,20 @@ export const runYtPlaylistDownloadAction = (
 
 /**
  * Where a playlist's download stands (Core's `ytPlaylistDownload`), from its
- * [entries], the Library ([inLibrary]) and the journal, following both.
+ * [entries], the Library ([inLibrary]) and the journal, following both. Its
+ * line says Paused while its [group] (Core's `downloadGroupKey`) is paused.
  */
 export const useYtPlaylistDownload = (
   entries: readonly PlaylistEntry[],
   inLibrary: InLibrary,
+  group: string | null = null,
 ): YtPlaylistDownload<NativeYtSong> => {
   const { language } = useLocalisation();
+  const paused = useDownloadGroupPaused(group);
   const select = useCallback(
     (jobs: readonly NativeDownloadJob[]) =>
-      ytPlaylistDownload(entries, { inLibrary, jobs, language }),
-    [entries, inLibrary, language],
+      ytPlaylistDownload(entries, { inLibrary, jobs, language, paused }),
+    [entries, inLibrary, language, paused],
   );
   return useStoreSelector(journal, select, sameListDownload);
 };
@@ -1640,11 +1708,17 @@ const missingSongRequest = (
 /** Asks the journal for missing songs [jobs], in order, each from the source Core picks for it. */
 const enqueueMissingSongs = async (
   jobs: readonly MissingSongJob[],
+  request: DownloadRequest,
   origin: DownloadOrigin | null = null,
 ): Promise<void> => {
   const session = await sessionNow();
   const ytMusicOn = ytMusicEnabled();
-  await enqueueJobs(jobs.map((job) => missingSongRequest(job, session, ytMusicOn, origin)));
+  await enqueueJobs(
+    askedBy(
+      jobs.map((job) => missingSongRequest(job, session, ytMusicOn, origin)),
+      request,
+    ),
+  );
 };
 
 /** The missing songs as they are now ([trackIds] only, when given), as download jobs. */
@@ -1664,7 +1738,7 @@ export const downloadMissingSongs = (trackIds: readonly number[]): void => {
   requests = requests
     .then(async () => {
       ownerAsked(trackIds.map(missingSongJobId));
-      await enqueueMissingSongs(await missingSongJobs(trackIds));
+      await enqueueMissingSongs(await missingSongJobs(trackIds), "song");
       await refresh();
     })
     .catch(() => undefined);
@@ -1739,10 +1813,10 @@ export const runMissingSongsDownloadAction = (
       if (action === "downloadAll") ownerAsked(missing.map((job) => job.videoId));
       switch (action) {
         case "downloadAll":
-          await enqueueMissingSongs(download.toDownload, origin);
+          await enqueueMissingSongs(download.toDownload, "list", origin);
           break;
         case "retryFailed":
-          await enqueueMissingSongs(download.toRetry, origin);
+          await enqueueMissingSongs(download.toRetry, "retry", origin);
           break;
         case "cancel":
           for (const id of download.toCancel) await WaveSoulseek.cancelJob(id);
@@ -1849,6 +1923,71 @@ export const downloadsOnTheirWay = (): boolean => queuedDownloads(journal.get())
 /** Calls [listener] whenever the journal changes; returns how to stop. */
 export const onDownloadsChanged = (listener: () => void): (() => void) =>
   journal.subscribe(listener);
+
+/**
+ * Settings › Downloads' Pause, as the notification's (Core's `pauseAllDownloads`): every song not
+ * downloaded yet stops at once, and a song already downloaded finishes saving. Kept across
+ * restarts; a song, list or star asked for meanwhile downloads anyway.
+ */
+export const pauseDownloads = (): void => {
+  downloadsPausedByOwner.set(true);
+  ownerPauses.pauseAll();
+};
+
+/** Resume (Core's `resumeAllDownloads`): everything paused goes on, songs stopped mid-download from the start. */
+export const resumeDownloads = (): void => {
+  downloadsPausedByOwner.set(false);
+  // It resumes every paused playlist and album too (#1475).
+  pausedDownloadGroups.set([]);
+  ownerPauses.resumeAll();
+};
+
+/** [groups] as the journal said, kept as they were while they name the same groups. */
+const showPausedGroups = (groups: readonly string[]): void => {
+  const shown = pausedDownloadGroups.get();
+  if (groups.length !== shown.length || groups.some((key) => !shown.includes(key)))
+    pausedDownloadGroups.set([...groups]);
+};
+
+/**
+ * A playlist's, album's or other group's Pause (Core's `pauseDownloadGroup`, #1475), from its page,
+ * its menu or its header in Settings › Downloads: its songs not downloaded yet stop at once, and
+ * the others go on. [key] is Core's `downloadGroupKey`. Kept across restarts.
+ */
+export const pauseDownloadGroup = (key: string): void => {
+  if (!pausedDownloadGroups.get().includes(key))
+    pausedDownloadGroups.set([...pausedDownloadGroups.get(), key]);
+  ownerPauses.pauseGroup(key);
+};
+
+/** The group's Resume (Core's `resumeDownloadGroup`): its songs go on. */
+export const resumeDownloadGroup = (key: string): void => {
+  pausedDownloadGroups.set(pausedDownloadGroups.get().filter((paused) => paused !== key));
+  ownerPauses.resumeGroup(key);
+};
+
+/**
+ * The group [key]'s Cancel (Core's `downloadGroupControls`), read from the journal when it's
+ * pressed: what it takes, or null when none of its songs is waiting or downloading any more.
+ */
+export const downloadGroupControlsNow = (key: string): DownloadGroupControls | null => {
+  const { all, groups } = ownerPause.get();
+  return downloadGroupControls({ all, released: [], groups }, journal.get(), key);
+};
+
+/**
+ * Cancel All, once its alert was answered: the songs [ids] (Core's `downloadsToCancelAll`) leave,
+ * for every requester. Downloaded and failed songs stay.
+ */
+export const cancelAllDownloads = (ids: readonly string[]): void => {
+  if (ids.length === 0) return;
+  requests = requests
+    .then(async () => {
+      await WaveSoulseek.cancelAllDownloads(ids);
+      await refresh();
+    })
+    .catch(() => undefined);
+};
 
 /**
  * Settings › Downloads' Cancel on a song on its way: as its menu's Cancel Download, and every
@@ -2038,7 +2177,7 @@ export const downloadStarredSongs = (
         );
         if (step === "queue") queued.push(job.videoId);
       }
-      await enqueueJobs(asked);
+      await enqueueJobs(askedBy(asked, "star"));
       starAsked.set(starAskedAfter(starAsked.get(), { kind: "starred", queued }));
       await refresh();
     })

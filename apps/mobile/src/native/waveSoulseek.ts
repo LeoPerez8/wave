@@ -157,6 +157,26 @@ declare class WaveSoulseekModule extends NativeModule<{
   showDownloadRun(notice: DownloadRunNotice | null): void;
   cancelJob(id: string): Promise<void>;
   /**
+   * Pause (Core's `pauseAllDownloads`): every song not downloaded yet stops at once, kept across
+   * a restart; songs asked for meanwhile with `release` still download.
+   */
+  pauseDownloads(): Promise<void>;
+  /** Resume (Core's `resumeAllDownloads`): everything paused goes on. */
+  resumeDownloads(): Promise<void>;
+  /** Cancel All for the songs [ids] (Core's `downloadsToCancelAll`), which the alert counted. */
+  cancelAllDownloads(ids: readonly string[]): Promise<void>;
+  /** Whether the owner paused downloads, as the journal keeps it. */
+  downloadsPaused(): boolean;
+  /**
+   * A playlist's, album's or other group's Pause (Core's `pauseDownloadGroup`, #1475): its songs
+   * not downloaded yet stop at once, kept across a restart. [key] is Core's `downloadGroupKey`.
+   */
+  pauseDownloadGroup(key: string): Promise<void>;
+  /** The group's Resume (Core's `resumeDownloadGroup`). */
+  resumeDownloadGroup(key: string): Promise<void>;
+  /** The groups paused on their own, as the journal keeps them. */
+  pausedDownloadGroups(): readonly string[];
+  /**
    * Settings › Downloads' drag: the waiting jobs [ids] take the places they held, in this order,
    * so they start in it (Core's `moveQueuedJobs`); kept across a restart.
    */
@@ -186,6 +206,10 @@ export interface JobRequest {
   readonly equivalentId: string | null;
   readonly source: DownloadSource | null;
   readonly origin: DownloadOrigin | null;
+  /** The owner asked for it (Core's `requestRunsWhilePaused`): it downloads while downloads are paused. */
+  readonly release?: boolean;
+  /** A list's Download (Core's `requestResumesGroup`): it resumes [origin]'s paused group. */
+  readonly resumesGroup?: boolean;
 }
 
 /**

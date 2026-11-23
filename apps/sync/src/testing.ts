@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after } from "node:test";
 import { type Client, createClient } from "@libsql/client";
+import { sha256Hex } from "@wave/core";
 import type { Collaboration, EndedCollaboration } from "./collaborations.ts";
 import { GOOGLE_CERTS_URL } from "./google.ts";
 import { type SyncLimits, SYNC_LIMITS } from "./limits.ts";
@@ -130,6 +131,38 @@ export const freshDatabase = async (options: { readonly until?: string } = {}): 
   });
   await migrate(db, options);
   return db;
+};
+
+/**
+ * A session for the Google account [sub], made as the rows an older database held: today's
+ * sign-in writes columns a database stopped at an earlier migration doesn't have yet.
+ */
+export const sessionInOlderDatabase = async (
+  db: Client,
+  at: number,
+  {
+    sub = "google-sub-1",
+    email = "ana@example.com",
+    name = null,
+  }: { readonly sub?: string; readonly email?: string; readonly name?: string | null } = {},
+): Promise<string> => {
+  const sessionToken = base64url(crypto.getRandomValues(new Uint8Array(32)));
+  await db.batch(
+    [
+      {
+        sql: `INSERT INTO accounts (id, google_sub, email, name, created_at)
+              SELECT ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE google_sub = ?)`,
+        args: [crypto.randomUUID(), sub, email, name, at, sub],
+      },
+      {
+        sql: `INSERT INTO sessions (token_hash, account_id, created_at, last_used_at)
+              SELECT ?, id, ?, ? FROM accounts WHERE google_sub = ?`,
+        args: [await sha256Hex(sessionToken), at, at, sub],
+      },
+    ],
+    "write",
+  );
+  return sessionToken;
 };
 
 /** The calls on a libSQL client that reach the database. */

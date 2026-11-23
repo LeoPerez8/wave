@@ -4,7 +4,7 @@
  * against Wave's configured client ids and its expiry. Nothing here logs a token.
  */
 
-import { accountName } from "@wave/core";
+import { accountName, accountPhotoUrl } from "@wave/core";
 
 export const GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 
@@ -26,6 +26,11 @@ export interface GoogleIdentity {
   readonly email: string;
   /** The account's name (`name`), cleaned and cut by Core's `accountName`; null when the token has none. */
   readonly name: string | null;
+  /**
+   * The account's photo (`picture`), when Core's `accountPhotoUrl` accepts it (an `https:`
+   * address on Google's photo host); null otherwise or when the token has none.
+   */
+  readonly photoUrl: string | null;
   /** When Google issued the token (`iat`), in ms since the epoch; null when it doesn't say. */
   readonly issuedAt: number | null;
 }
@@ -143,6 +148,7 @@ export const verifyGoogleIdToken = async (
     sub: payload.sub,
     email: payload.email,
     name: accountName(payload.name),
+    photoUrl: accountPhotoUrl(payload.picture),
     issuedAt,
   };
 };

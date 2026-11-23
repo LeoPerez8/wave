@@ -74,7 +74,9 @@ const setUp = async (
       made.playlistId,
       {
         playlistId: syncId,
-        members: [{ accountId: "ana", name: "Ana", joinedAt: 1, owner: true, self: true }],
+        members: [
+          { accountId: "ana", name: "Ana", photoUrl: null, joinedAt: 1, owner: true, self: true },
+        ],
       },
       now(),
     );

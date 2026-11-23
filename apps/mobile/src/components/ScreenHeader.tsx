@@ -5,6 +5,7 @@ import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { grid } from "@/catalog/grid";
+import { usePageGradient } from "@/settings/pageGradient";
 
 import { CompactTitle } from "./CompactTitle";
 import { IconButton } from "./IconButton";
@@ -16,6 +17,7 @@ import { TitlePress, type TitleLongPress } from "./TitleLongPress";
  * Given [titleLongPress], a long press on the title opens the screen's options
  * next to it, as on a large title. [onTitlePress] handles taps and accessibility activation.
  * Inside a `CompactTitleFrame`, the page's title appears beside Back once scrolled past.
+ * With the page-top gradient on it has no ground of its own, so the tint shows behind it.
  */
 export function ScreenHeader({
   title,
@@ -28,8 +30,9 @@ export function ScreenHeader({
 }) {
   const { strings } = useLocalisation();
   const insets = useSafeAreaInsets();
+  const clear = usePageGradient();
   return (
-    <View className="bg-background" style={{ paddingTop: insets.top + 4 }}>
+    <View className={clear ? undefined : "bg-background"} style={{ paddingTop: insets.top + 4 }}>
       <View className="flex-row items-center" style={{ paddingHorizontal: grid.margin - 12 }}>
         <IconButton
           icon={IconArrowLeft}

@@ -24,6 +24,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { useLocalisation } from "@/localisation/localisation";
 import { SongList } from "@/songs/SongList";
 import type { SongRowPresentation } from "@/songs/songListModel";
+import { PageTopGradient } from "@/pageGradient/PageGradient";
 
 type Entry = PlaylistEntryRow & { readonly removedAt: number };
 const EMPTY: readonly Entry[] = [];
@@ -71,6 +72,7 @@ export default function GraveyardScreen() {
   );
   return (
     <View className="flex-1 bg-background">
+      <PageTopGradient />
       <ScreenHeader title={strings.playlists.graveyard} />
       {items.length > 0 && (
         <View className="items-end px-4">

@@ -22,7 +22,7 @@ import {
   tapLyricLine,
   withOpacity,
   type ArtworkPalette,
-  type Gradient,
+  type GroundGradient,
   type GeniusHighlight,
   type GeniusPlacement,
   type LyricLine,
@@ -980,13 +980,20 @@ export function LyricsView({
   nonDTrackId: string | null;
   item: Item;
   palette: ArtworkPalette | null;
-  gradient: Gradient;
+  gradient: GroundGradient;
   onShowPlayer: () => void;
 }) {
   const { strings } = useLocalisation();
   const foreground = useThemeColor("foreground");
   const dimTone = useMemo(
-    () => withOpacity(foreground, lyricsDimOpacity(gradient, foreground)),
+    () =>
+      withOpacity(
+        foreground,
+        lyricsDimOpacity(
+          gradient.map((stop) => stop.color),
+          foreground,
+        ),
+      ),
     [gradient, foreground],
   );
   const path = file?.path ?? null;

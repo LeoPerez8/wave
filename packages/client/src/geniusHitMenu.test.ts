@@ -190,7 +190,7 @@ const tapRecorder = () => {
     done,
     effects: {
       play: (song: unknown) => void done.push(["play", song]),
-      openUrl: (url: string) => void done.push(["openUrl", url]),
+      notFound: () => void done.push(["notFound"]),
       pending: (pending: { readonly id: number } | null) =>
         void done.push(["pending", pending?.id ?? null]),
     },
@@ -244,9 +244,73 @@ test("a second tap while the first resolves searches nothing more and plays once
   await new Promise((resolve) => setImmediate(resolve));
   answer([]);
   await again;
-  assert.deepEqual(done.slice(3), [
+  assert.deepEqual(done.slice(3), [["pending", 8], ["notFound"], ["pending", null]]);
+});
+
+test("a tapped Genius result found nowhere says so and never opens Genius", async () => {
+  const { ports } = lookup([], []);
+  const { done, effects } = tapRecorder();
+  await geniusHitOpener(ports, effects)(hit);
+  assert.deepEqual(done, [["pending", 8], ["notFound"], ["pending", null]]);
+});
+
+test("a tapped Genius result whose lookup fails says it wasn't found and never opens Genius", async () => {
+  const failing = {
+    library: async () => [],
+    ytMusic: () => true,
+    search: async () => ({ ok: false as const, reason: "failed" as const }),
+  };
+  const throwing = {
+    library: async (): Promise<readonly (typeof track)[]> => {
+      throw new Error("the Library can't be read");
+    },
+    ytMusic: () => true,
+    search: async () => ({ ok: true as const, songs: [online] }),
+  };
+  for (const ports of [failing, throwing]) {
+    const { done, effects } = tapRecorder();
+    await geniusHitOpener(ports, effects)(hit);
+    assert.deepEqual(done, [["pending", 8], ["notFound"], ["pending", null]]);
+  }
+});
+
+test("with YT Music off a tap plays the Library song, else says it wasn't found", async () => {
+  const library = lookup([track], [online], false);
+  const played = tapRecorder();
+  await geniusHitOpener(library.ports, played.effects)(hit);
+  assert.deepEqual(played.done, [
     ["pending", 8],
-    ["openUrl", hit.url],
+    ["play", { source: "library", track }],
     ["pending", null],
   ]);
+
+  const missing = lookup([], [online], false);
+  const unplayed = tapRecorder();
+  await geniusHitOpener(missing.ports, unplayed.effects)(hit);
+  assert.deepEqual(missing.searched, []);
+  assert.deepEqual(unplayed.done, [["pending", 8], ["notFound"], ["pending", null]]);
+});
+
+test("every Genius row plays its own song, not only the first", async () => {
+  const other = {
+    ...hit,
+    id: 9,
+    title: "Angel",
+    url: "https://genius.com/Massive-attack-angel-lyrics",
+  };
+  const angel: YtSong = { ...online, videoId: "angel", title: "Angel" };
+  const { ports, searched } = lookup([], [angel]);
+  const { done, effects } = tapRecorder();
+  await geniusHitOpener(ports, effects)(other);
+  assert.deepEqual(searched, ["Angel Massive Attack"]);
+  assert.deepEqual(done, [
+    ["pending", 9],
+    ["play", { source: "stream", song: angel }],
+    ["pending", null],
+  ]);
+});
+
+test("the not-found toast reads in the app's language", () => {
+  assert.equal(catalogueOf("en").playbackText.couldntFindThisSong, "Couldn't find this song");
+  assert.equal(catalogueOf("pt-BR").playbackText.couldntFindThisSong, "Não encontrei essa música");
 });

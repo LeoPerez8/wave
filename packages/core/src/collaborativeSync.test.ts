@@ -18,6 +18,7 @@ const CAIO = "caio-account";
 const member = (accountId: string, owner: boolean, self: boolean, joinedAt = 1) => ({
   accountId,
   name: accountId,
+  photoUrl: null,
   joinedAt,
   owner,
   self,

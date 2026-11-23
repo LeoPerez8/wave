@@ -79,7 +79,8 @@ const content = (value: unknown): value is HomeContent => {
   const lists = value as Readonly<Record<string, unknown>>;
   const checks: Record<string, (list: unknown) => boolean> = {
     recentlyAdded: albums,
-    recentlyPlayed: albums,
+    // not UI text: field kinds the snapshot check expects
+    recentlyPlayed: homeSnapshotList({ kind: "string", context: "object", playedAt: "number" }),
     // not UI text: field kinds the snapshot check expects
     mostPlayed: homeSnapshotList({ playCount: "number", title: "string" }),
     favorites: songs,

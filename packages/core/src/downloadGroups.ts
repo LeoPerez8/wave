@@ -15,6 +15,7 @@ import {
   type QueuedDownload,
   type QueuedDownloadCounts,
 } from "./queuedDownloads.ts";
+import type { DownloadPause } from "./downloadPause.ts";
 import type { YtSong } from "./ytMusic.ts";
 import type { YtDownloadJournalJob } from "./ytDownloads.ts";
 
@@ -63,6 +64,8 @@ export interface DownloadGroup<S extends YtSong = YtSong> {
   readonly left: number;
   /** The header's count: "12 songs left". */
   readonly line: string;
+  /** Whether its downloads are paused, on their own or by the global Pause (#1475). */
+  readonly paused: boolean;
   /** Its waiting songs, in queue order. */
   readonly queued: readonly QueuedDownload<S>[];
 }
@@ -109,12 +112,14 @@ interface Building<S extends YtSong> {
  * starts them). Groups come in queue order: the one whose next waiting song
  * starts soonest first; a group whose songs are all downloading already comes
  * before them. A group lasts while any of its songs is on its way. Group
- * names and lines are in [language].
+ * names and lines are in [language]; a group [pause] holds says so in its line.
  */
 export const downloadingList = <S extends YtSong>(
   jobs: readonly YtDownloadJournalJob<S>[],
   language: AppLanguage = "en",
+  pause: Pick<DownloadPause, "all" | "groups"> = { all: false, groups: [] },
 ): DownloadingList<S> => {
+  const strings = catalogueOf(language).downloads;
   const rows = queuedDownloads(jobs, catalogueOf(language));
   const place = new Map(jobs.map((job, index) => [job.id, index]));
   const originOf = new Map(jobs.map((job) => [job.id, job.origin ?? null]));
@@ -142,14 +147,18 @@ export const downloadingList = <S extends YtSong>(
   return {
     downloading: rows.filter((row) => !row.waiting),
     counts: queuedDownloadCounts(jobs),
-    groups: sorted.map(([key, group]) => ({
-      key,
-      origin: group.origin,
-      name: groupName(group.origin, language),
-      left: group.left,
-      line: catalogueOf(language).downloads.songsLeft(group.left),
-      queued: group.queued,
-    })),
+    groups: sorted.map(([key, group]) => {
+      const paused = pause.all || pause.groups.includes(key);
+      return {
+        key,
+        origin: group.origin,
+        name: groupName(group.origin, language),
+        left: group.left,
+        line: paused ? strings.pausedSongsLeft(group.left) : strings.songsLeft(group.left),
+        paused,
+        queued: group.queued,
+      };
+    }),
   };
 };
 
@@ -185,6 +194,7 @@ export const sameDownloadingList = <S extends YtSong>(
         group.name === other.name &&
         group.left === other.left &&
         group.line === other.line &&
+        group.paused === other.paused &&
         sameOrigin(group.origin, other.origin) &&
         sameRows(group.queued, other.queued)
       );

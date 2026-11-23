@@ -41,6 +41,7 @@ import { appRuntime } from "@/library/runtime";
 import { songCount } from "@/library/TrackList";
 import { UnavailableTryAgain } from "@/library/UnavailableEntry";
 import { YtLibraryReadLine } from "@/library/YtLibraryReadLine";
+import { DownloadProgressLine } from "@/ytmusic/DownloadGroupControls";
 import { useYtPlaylistDownloadButton } from "@/ytmusic/YtSongList";
 
 const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
@@ -145,14 +146,7 @@ function PlaylistHead({
           </Text>
         )}
         <UnavailableTryAgain playlistId={playlist.id} items={items} />
-        {download.progress !== null && (
-          <Text
-            className="font-sans text-footnote text-accent"
-            style={{ fontVariant: ["tabular-nums"] }}
-          >
-            {download.progress}
-          </Text>
-        )}
+        <DownloadProgressLine download={download} />
         <ImportProgressLine playlistId={playlist.id} />
         <PlaylistImportLine playlistId={playlist.id} />
         <YtLibraryReadLine playlistId={playlist.id} />
@@ -229,6 +223,7 @@ export default function PlaylistScreen() {
       detail={shown}
       noun="playlist"
       compactTitle={({ playlist }) => playlist.name}
+      cover={({ playlist }) => playlist.artworkPaths[0] ?? null}
       goneMessage={strings.playlists.deleted}
     >
       {({ playlist, items }) => (

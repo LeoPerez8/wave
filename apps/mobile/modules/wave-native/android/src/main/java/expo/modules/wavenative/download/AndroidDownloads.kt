@@ -252,6 +252,57 @@ class AndroidDownloads private constructor(private val context: Context) {
     changed()
   }
 
+  /**
+   * Pause, from Settings › Downloads or the notification (#1474): every song not downloaded yet
+   * stops at once; the service stops once only paused songs are left.
+   */
+  fun pauseAll() {
+    jobs.pauseAll(transport)
+    WaveLog.i(TAG, "Downloads paused by the owner")
+    changed()
+  }
+
+  /** Resume: everything paused goes on, so the service starts again if it stopped. */
+  fun resumeAll() {
+    jobs.resumeAll()
+    WaveLog.i(TAG, "Downloads resumed by the owner")
+    changed(); settlePausedNotice(); requestService()
+  }
+
+  /**
+   * A playlist's, album's or other group's Pause (#1475): its songs not downloaded yet stop at
+   * once, and the others go on. [key] is Core's `downloadGroupKey`.
+   */
+  fun pauseGroup(key: String) {
+    jobs.pauseGroup(key, transport)
+    WaveLog.i(TAG, "Downloads of one group paused by the owner")
+    changed()
+  }
+
+  /** The group's Resume: its songs go on, so the service starts again if it stopped. */
+  fun resumeGroup(key: String) {
+    jobs.resumeGroup(key)
+    WaveLog.i(TAG, "Downloads of one group resumed by the owner")
+    changed(); settlePausedNotice(); requestService()
+  }
+
+  /** Cancel All: the songs [ids] (Settings › Downloads' count), or every song not downloaded yet (null: the notification). */
+  fun cancelAll(ids: List<String>?) {
+    jobs.cancelAll(ids, transport)
+    changed(); settlePausedNotice()
+  }
+
+  /** Cancel, from Settings › Downloads: the song [id] for every requester. */
+  fun cancel(id: String) {
+    jobs.cancel(id, transport)
+    changed(); settlePausedNotice()
+  }
+
+  /** With the service stopped and nothing paused left, the "Paused" notification it left goes. */
+  private fun settlePausedNotice() {
+    if (jobs.heldCount() == 0 && synchronized(this) { worker == null }) YtDownloadService.dismissPaused(context)
+  }
+
   /** Called from the user's tap, the resumed Activity or an update's restart. Failure never starts unprotected work. */
   fun requestService() {
     if (!jobs.hasWork()) return

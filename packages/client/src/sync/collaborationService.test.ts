@@ -32,7 +32,9 @@ const coded = (code: string): Error => Object.assign(new Error(code), { code });
 
 const collaboration = {
   playlistId: LIST,
-  members: [{ accountId: "ana", name: "Ana", joinedAt: 1, owner: true, self: true }],
+  members: [
+    { accountId: "ana", name: "Ana", photoUrl: null, joinedAt: 1, owner: true, self: true },
+  ],
 };
 
 describe("collaborationService", () => {
@@ -48,7 +50,10 @@ describe("collaborationService", () => {
   test("every call of the service is there", async () => {
     const service = transport({ status: 204, body: "" });
     const calls = collaborationService(service);
-    await calls.setAccountName("Ana");
+    await calls.setAccount({
+      name: "Ana",
+      photoUrl: "https://lh3.googleusercontent.com/a/ana=s96-c",
+    });
     await calls.make(LIST);
     await calls.end(LIST);
     await calls.members(LIST);

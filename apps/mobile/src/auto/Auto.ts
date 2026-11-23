@@ -36,9 +36,9 @@ import * as Layer from "effect/Layer";
 
 import type { RowPage } from "@wave/client/db/database";
 import type { HomeSections } from "@wave/client/db/playHistory";
+import type { RecentlyPlayedEntry } from "@wave/client/db/recentlyPlayed";
 import { LibraryStore, type LibraryStoreError } from "@/library/LibraryStore";
 import {
-  type AlbumRow,
   type PlaylistEntryRow,
   songHasFile,
   type PlayableSongRow,
@@ -51,6 +51,24 @@ import { tapNotificationStar } from "@/playback/notificationStarState";
 import { Queue, queueState, toQueueTrack, type QueueTrack } from "@/playback/Queue";
 import { toUnsearchedQueueTrack, toYtQueueTrack } from "@/playback/queueTracks";
 import { ytMusicEnabled } from "@/settings/ytMusic";
+
+/**
+ * A Recently played card as Android Auto lists it: a playlist, album or
+ * artist opens as elsewhere in Auto. Auto has no row that plays a song on its
+ * own or a mix again, so those cards are left out.
+ */
+const autoRecentItem = (entry: RecentlyPlayedEntry): AutoItem[] => {
+  switch (entry.kind) {
+    case "playlist":
+      return [autoPlaylistItem(entry.playlist, currentLocalisation().strings, ytMusicEnabled())];
+    case "album":
+      return "online" in entry.album ? [] : [autoAlbumItem(entry.album)];
+    case "artist":
+      return "online" in entry.artist ? [] : [autoArtistItem(entry.artist)];
+    default:
+      return [];
+  }
+};
 
 /** Why Wave can't answer an Auto request; `message` is what Auto shows. */
 export class AutoError extends Data.TaggedError("AutoError")<{ readonly message: string }> {}
@@ -233,18 +251,11 @@ export const layer = Layer.effect(
               ),
             ),
           );
-        // The app's Home shelf: a handful of albums.
+        // The app's Home shelf: its playlists, albums and artists, in its order.
         case "recentlyPlayed":
-          return store.home("files").pipe(
-            Effect.map((home) =>
-              pageOf(
-                home.recentlyPlayed.filter(
-                  (album): album is AlbumRow => typeof album.id === "number",
-                ),
-                page,
-              ).map(autoAlbumItem),
-            ),
-          );
+          return store
+            .home("files")
+            .pipe(Effect.map((home) => pageOf(home.recentlyPlayed.flatMap(autoRecentItem), page)));
         case "artists":
           return store.listArtistsPage(page).pipe(
             Effect.flatMap(withCovers),

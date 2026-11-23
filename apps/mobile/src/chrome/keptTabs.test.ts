@@ -21,6 +21,9 @@ const [{ useKeptTabs, warmTabScreen }] = await loadWithStubs<[typeof import("./t
     ...nativeStubs(),
     "react-native-screens": stubModule(`export const Screen = ({ children }) => children;`),
     "@/lib/renderCost": stubModule(`export const RenderCost = ({ children }) => children;`),
+    "@/pageGradient/PageGradient": stubModule(
+      `export const PageGradientScope = ({ children }) => children;`,
+    ),
     "@/perf/perf": stubModule(
       `export const PERF_ENABLED = false;
        export const perfMark = () => {};

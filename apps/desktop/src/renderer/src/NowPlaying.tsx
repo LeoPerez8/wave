@@ -82,7 +82,7 @@ export function NowPlaying({
   const ground = useMemo<{ gradient: Gradient; dim: number } | null>(() => {
     if (!HEX.test(theme.ground) || !theme.ink.every((ink) => HEX.test(ink))) return null;
     const gradient = paletteGradient(palette, theme);
-    return { gradient, dim: lyricsDimOpacity(gradient, theme.ink[0]!) };
+    return { gradient, dim: lyricsDimOpacity([gradient.top, gradient.bottom], theme.ink[0]!) };
   }, [palette, theme]);
   // Focus moves in, and back to the bar's artwork or title once it closes. It lands on Now
   // Playing itself, not on Close, so Space still plays and pauses; Tab reaches Close next.

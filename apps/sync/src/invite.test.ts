@@ -9,6 +9,7 @@ import {
   type Harness,
   freshDatabase,
   harness,
+  sessionInOlderDatabase,
   pull,
   push,
   requestAccountDeletion,
@@ -544,7 +545,7 @@ describe("the migration", () => {
   test("adds the invite table and leaves the others as they are", async () => {
     const db = await freshDatabase({ until: "0017_collaborations" });
     const before = await harness({}, db);
-    const ana = await before.signIn({ name: "Ana Souza" });
+    const ana = await sessionInOlderDatabase(db, before.now, { name: "Ana Souza" });
     await push(before, ana, { playlists: [playlist("list-1")] });
     // The collaboration as that database held it: today's route needs the later migrations.
     await db.batch(

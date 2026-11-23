@@ -11,7 +11,7 @@ import { useEffect, useMemo } from "react";
 import { Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
-import { MemberInitial } from "@/catalog/MemberInitial";
+import { MemberCircle } from "@/catalog/MemberCircle";
 import { useCollaborations } from "@/collaboration/collaborativePlaylists";
 import { TextButton } from "@/components/TextButton";
 import { useScreenSight } from "@/lib/screenSight";
@@ -117,12 +117,12 @@ export const useCollaborativePage = (
 };
 
 /**
- * The members under a collaborative playlist's name: their initials overlapping, then their
- * first names ("Leo, Ana and Caio").
+ * The members under a collaborative playlist's name: their photos (else initials) overlapping,
+ * then their first names ("Leo, Ana and Caio").
  */
 export function CollaborativeMembers({ collaboration }: { collaboration: CollaborativePlaylist }) {
   const { strings } = useLocalisation();
-  const { initials, firstNames } = useMemo(
+  const { initials, photoUrls, firstNames } = useMemo(
     () => collaborativePageMembers(collaboration.members),
     [collaboration.members],
   );
@@ -137,7 +137,12 @@ export function CollaborativeMembers({ collaboration }: { collaboration: Collabo
     >
       <View className="flex-row">
         {initials.slice(0, 3).map((initial, index) => (
-          <MemberInitial key={index} initial={initial} stacked={index > 0} />
+          <MemberCircle
+            key={index}
+            initial={initial}
+            photoUrl={photoUrls[index]}
+            stacked={index > 0}
+          />
         ))}
       </View>
       <Text numberOfLines={1} className="flex-1 font-sans text-footnote text-secondary">

@@ -200,8 +200,26 @@ export {
 export type { FramingSquare, FramingView, ImageFraming, ImageSize } from "./imageFraming.ts";
 export { elapsedWavePath } from "./elapsedWave.ts";
 export type { ElapsedWave } from "./elapsedWave.ts";
-export { contrastRatio, crossfadeGround, lyricsDimOpacity, paletteGradient } from "./palette.ts";
-export type { ArtworkPalette, Gradient, GradientTheme, GroundLayers } from "./palette.ts";
+export {
+  contrastRatio,
+  crossfadeGround,
+  groundGradient,
+  lyricsDimOpacity,
+  NOW_PLAYING_FADE,
+  PAGE_TOP_FADE,
+  paletteGradient,
+  sameGround,
+} from "./palette.ts";
+export type {
+  ArtworkPalette,
+  Gradient,
+  GradientTheme,
+  GroundFade,
+  GroundGradient,
+  GroundLayers,
+  GroundStop,
+  SchemeAmount,
+} from "./palette.ts";
 export { pixelPalette } from "./pixelPalette.ts";
 export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
@@ -261,6 +279,8 @@ export {
   storedKeepFindVisible,
 } from "./keepFindVisible.ts";
 export type { FindFieldPlacement } from "./keepFindVisible.ts";
+export { pageGradientPalette, readPageGradient, storedPageGradient } from "./pageGradient.ts";
+export type { PageCover } from "./pageGradient.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export {
   compareSongReadOrder,
@@ -1182,6 +1202,7 @@ export {
 } from "./geniusSetting.ts";
 export type { AccountSession, AccountSignInEvent, AccountSignInState } from "./accountSignIn.ts";
 export { ACCOUNT_NAME_MAX_LENGTH, accountName } from "./accountName.ts";
+export { ACCOUNT_PHOTO_URL_MAX_LENGTH, accountPhotoUrl } from "./accountPhoto.ts";
 export {
   COLLABORATIVE_TEXT_MAX_LENGTH,
   collaborativeRow,
@@ -1189,7 +1210,7 @@ export {
   memberPlaylistFields,
 } from "./collaborativeRows.ts";
 export {
-  accountNameCall,
+  accountCall,
   collaborationAnswer,
   createInviteCall,
   endCollaborationCall,
@@ -1202,6 +1223,7 @@ export {
   playlistPullCall,
   playlistPushCall,
   readCollaboration,
+  readCollaborationMember,
   readInviteCall,
   removeMemberCall,
   turnOffInviteCall,
@@ -1233,6 +1255,7 @@ export type {
   PullMembership,
 } from "./collaborativeSync.ts";
 export type {
+  AccountFields,
   ActiveInvite,
   Collaboration,
   CollaborationCall,
@@ -2150,8 +2173,21 @@ export {
 export type { PerfEntry, PerfFlush, PerfMeta, PerfRecorder, PerfTiming } from "./perfLog.ts";
 export { createPagedRows, PAGED_ROWS_LIMITS } from "./pagedRows.ts";
 export type { PagedRows, PagedRowsLimits, PagedRowsStats } from "./pagedRows.ts";
-export { recentlyPlayedAlbums } from "./recentlyPlayed.ts";
-export type { LatestPlayedSong } from "./recentlyPlayed.ts";
+export {
+  mixReplayContext,
+  recentlyPlayedAlbums,
+  recentlyPlayedContext,
+  recentlyPlayedContexts,
+  recordedPlayContext,
+  SONG_PLAY_CONTEXT,
+} from "./recentlyPlayed.ts";
+export type {
+  LatestPlayedSong,
+  RecentlyPlayedContext,
+  RecentlyPlayedKind,
+  RecentPlay,
+  RecordedSession,
+} from "./recentlyPlayed.ts";
 export {
   APP_LOG_LIMITS,
   describeLogArgs,
@@ -3016,6 +3052,8 @@ export {
   uniqueGeniusLyricsHits,
 } from "./geniusLyricsSearch.ts";
 export type { GeniusLyricsSearchRequest, GeniusLyricsSearchState } from "./geniusLyricsSearch.ts";
+export { isLyricPhraseQuery, queryNamesSong, songNamedByQuery } from "./titleArtistQuery.ts";
+export type { NamedSong } from "./titleArtistQuery.ts";
 export { GENIUS_LOADING_NOTE_DELAY_MS, geniusLoadingNote } from "./geniusLoading.ts";
 export type { GeniusInsightState } from "./geniusLoading.ts";
 export {
@@ -3500,3 +3538,21 @@ export {
   type StagedMountsInput,
 } from "./stagedMounts.ts";
 export { knownPages, type KnownPages } from "./knownPages.ts";
+export {
+  NO_DOWNLOAD_PAUSE,
+  cancelAllDownloadsAlert,
+  cancelGroupDownloadsAlert,
+  downloadGroupControls,
+  downloadGroupPaused,
+  downloadsToCancelAll,
+  downloadsToCancelInGroup,
+  downloadHeld,
+  downloadRequested,
+  requestResumesGroup,
+  requestRunsWhilePaused,
+  pauseAllDownloads,
+  pauseDownloadGroup,
+  resumeAllDownloads,
+  resumeDownloadGroup,
+} from "./downloadPause.ts";
+export type { DownloadGroupControls, DownloadPause, DownloadRequest } from "./downloadPause.ts";

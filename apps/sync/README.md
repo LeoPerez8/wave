@@ -75,8 +75,15 @@ its Wave account (keyed by Google's `sub`).
 
 `name` is the name the service keeps for the account, `null` when it has none. Every sign-in
 stores the ID token's `name` claim, cleaned and cut to 100 characters by Core's `accountName`
-(`packages/core/src/accountName.ts`); a token without the claim leaves the name there is. The
-members of a collaborative playlist see the account by it, and nothing else of it.
+(`packages/core/src/accountName.ts`); a token without the claim leaves the name there is.
+Every sign-in also stores the token's `picture` claim as the account's photo when Core's
+`accountPhotoUrl` (`packages/core/src/accountPhoto.ts`) accepts it: an `https:` address on a
+host ending in `.googleusercontent.com`. A token without one, or with any other address, stores
+none, so a photo removed on Google goes, and marks the photo as the sign-ins' for good
+(`photo_from_sign_in`): from then on `PUT /v1/account/name` leaves it. The members of a
+collaborative playlist see the account by its name and photo, and nothing else of it. Migration
+`0020_account_photo` adds the `photo_url` column, empty for the accounts there were until they
+sign in or their app sends one, and `photo_from_sign_in`, 0 for them.
 
 `401 { "error": "invalid_id_token" }` when the token doesn't check out,
 `403 { "error": "not_allowed" }` when `ALLOWED_EMAILS` is set and the email isn't on it,
@@ -293,6 +300,7 @@ A `Collaboration`, with the owner first and the others in the order they joined:
     {
       "accountId": "0b6e…",
       "name": "Ana Souza",
+      "photoUrl": "https://lh3.googleusercontent.com/a/…",
       "joinedAt": 1760443200000,
       "owner": true,
       "self": true
@@ -301,8 +309,9 @@ A `Collaboration`, with the owner first and the others in the order they joined:
 }
 ```
 
-`name` is the account's Google account name, `null` when the service has none; no email is
-ever given. `self` marks the account that asked. `accountId` is the service's id of the
+`name` is the account's Google account name and `photoUrl` its Google photo, each `null` when
+the service has none; no email is ever given. The app reads a member without `photoUrl` (from a
+service before photos were kept) as having none. `self` marks the account that asked. `accountId` is the service's id of the
 account, the one `DELETE /v1/collaboration/members` takes.
 
 | Route                                                         | Who                          | What it does                                                                                                  |
@@ -507,16 +516,24 @@ session itself ended.
 
 ### `PUT /v1/account/name`
 
-Keeps a name for the session's account, as a sign-in keeps the ID token's: an app that signed
-in before names were kept sends its Google account name once.
+Keeps a name and a photo for the session's account, as a sign-in keeps the ID token's: a
+signed-in app sends its Google account name and photo each time it starts or signs in, each only
+when it has one, so an app that signed in before they were kept fills them in.
 
 ```json
-{ "name": "Ana Souza" }
+{ "name": "Ana Souza", "photoUrl": "https://lh3.googleusercontent.com/a/ACg8oc…=s96-c" }
 ```
 
-`204`, no body. The name is cleaned and cut to 100 characters as a sign-in's is.
-`400 { "error": "bad_request" }` when `name` isn't text or is empty, and the name there was
-stays. Deleting the account deletes the name with it.
+Both fields are optional. The name is stored when Core's `accountName` accepts it (text that
+isn't empty once cleaned), cleaned and cut to 100 characters as a sign-in's is. The photo is
+accepted when Core's `accountPhotoUrl` accepts it (an `https:` URL on a host ending in
+`.googleusercontent.com`), and stored only while the account hasn't signed in since photos were
+kept: a sign-in's photo, or its lack of one, is newer than what an older phone holds, so after
+the first such sign-in the body's photo is ignored. A photo that isn't accepted is ignored too,
+and the photo there was stays. So until that sign-in an app can set any address on that host.
+`204`, no body, when it accepted at least one of them, stored or ignored as above.
+`400 { "error": "bad_request" }` when it accepts neither, and nothing changes. Deleting the
+account deletes the name and the photo with it.
 
 ### `GET /v1/genius/search?q=<text>`, `GET /v1/genius/song?id=<id>`, `GET /v1/genius/referents?song=<id>&page=<n>`
 

@@ -369,6 +369,16 @@ const MIGRATIONS: readonly Migration[] = [
         ON playlist_entries (account_id, playlist_id, change_no)`,
     ],
   },
+  {
+    // The Google account's photo, as the members of a collaborative playlist see the account
+    // (`@wave/core`'s `accountPhotoUrl`): each sign-in stores the token's, null when it has none,
+    // and sets `photo_from_sign_in`. Until then the photo an app sends is kept instead.
+    id: "0020_account_photo",
+    statements: [
+      "ALTER TABLE accounts ADD COLUMN photo_url TEXT",
+      "ALTER TABLE accounts ADD COLUMN photo_from_sign_in INTEGER NOT NULL DEFAULT 0",
+    ],
+  },
 ];
 
 /**

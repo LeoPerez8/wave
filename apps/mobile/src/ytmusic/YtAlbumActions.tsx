@@ -1,5 +1,11 @@
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
-import { discoverSongs, menuLayout, ytAlbumSongs, type PlayCard } from "@wave/core";
+import {
+  discoverSongs,
+  downloadGroupKey,
+  menuLayout,
+  ytAlbumSongs,
+  type PlayCard,
+} from "@wave/core";
 import * as Result from "effect/Result";
 import { Text, View } from "react-native";
 
@@ -16,6 +22,7 @@ import { playDiscoverSongs, queueDiscoverSongs } from "@/playback/actions";
 import type { MenuOptions } from "@/playback/ActionsMenu";
 
 import { askYtMusic } from "./askYtMusic";
+import { useDownloadGroupMenuEntries } from "./DownloadGroupControls";
 import { useLibraryFinder, useLoadedInLibrary } from "./libraryFinder";
 import type { YtListHead } from "./routes";
 import { runYtDownloadAction, useYtAlbumDownload } from "./YtDownloads";
@@ -107,7 +114,9 @@ function YtAlbumActionsMenu({
   const { strings } = useLocalisation();
   const find = useLibraryFinder();
   const inLibrary = useLoadedInLibrary();
-  const download = useYtAlbumDownload(songs, inLibrary);
+  const group = downloadGroupKey({ kind: "album", id: album.browseId, name: album.title });
+  const download = useYtAlbumDownload(songs, inLibrary, group);
+  const pauseEntries = useDownloadGroupMenuEntries(group, download.line !== null, close);
   // As its page plays them: the Library's files for the songs it has, the rest streamed.
   const listed = discoverSongs(songs, find);
   const context = { kind: "ytAlbum", id: album.browseId };
@@ -141,6 +150,7 @@ function YtAlbumActionsMenu({
           ),
         },
   );
+  entries.push(...pauseEntries);
   if (releaseEntries !== undefined) {
     entries.push({
       action: "addToPlaylist",

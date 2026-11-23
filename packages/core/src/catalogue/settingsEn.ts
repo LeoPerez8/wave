@@ -435,6 +435,9 @@ export const settingsEn = {
     "Swipe a song sideways in a list to run one of its actions. Up Next doesn't swipe.",
   songRowsDontSwipeEveryActionIs:
     "Song rows don't swipe. Every action is still in a song's long-press menu.",
+  colourAtTheTopOfPages: "Colour at the Top of Pages",
+  aSubtleTintFadesInAtTheTop:
+    "A subtle tint fades in at the top of every page: an album, playlist or artist takes its cover's colours, other pages take the playing song's.",
   keepFindFieldVisible: "Keep Find Field Visible",
   theFindFieldStaysUnderThePages:
     "The Find field stays under the page's header while the list scrolls, instead of waiting above the list until it's pulled down.",

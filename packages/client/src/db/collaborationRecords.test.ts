@@ -26,6 +26,7 @@ import { openTestDatabase } from "./testDatabase.ts";
 const member = (accountId: string, owner = false): CollaborationMember => ({
   accountId,
   name: accountId,
+  photoUrl: null,
   joinedAt: 0,
   owner,
   self: owner,
@@ -50,6 +51,27 @@ test("the members the service listed replace those the record held", async () =>
     selectCollaborations(db).map((each) => each.members.map(({ accountId }) => accountId)),
     [["leo"]],
   );
+});
+
+test("members kept before photos were kept read as having none", async () => {
+  const { db } = await madeCollaborative();
+  const stored = JSON.stringify([
+    { accountId: "leo", name: "Leo", joinedAt: 0, owner: true, self: true },
+  ]);
+  db.run(sql`UPDATE collaborations SET members = ${stored}`);
+  assert.deepEqual(selectCollaborations(db)[0]?.members, [
+    { accountId: "leo", name: "Leo", photoUrl: null, joinedAt: 0, owner: true, self: true },
+  ]);
+});
+
+test("the photo kept with a member reads back", async () => {
+  const { db, syncId } = await madeCollaborative();
+  const photoUrl = "https://lh3.googleusercontent.com/a/leo=s96-c";
+  keepCollaborationMembers(db, {
+    playlistId: syncId,
+    members: [{ ...member("leo", true), photoUrl }],
+  });
+  assert.equal(selectCollaborations(db)[0]?.members[0]?.photoUrl, photoUrl);
 });
 
 test("members of a playlist this device has no record of are not kept", async () => {
