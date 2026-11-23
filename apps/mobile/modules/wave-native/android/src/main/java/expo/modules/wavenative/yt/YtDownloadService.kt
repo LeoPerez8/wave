@@ -29,8 +29,10 @@ import kotlin.concurrent.thread
  * `dataSync` foreground service, so downloads continue with the screen off,
  * beside playback and after Android recreates the process (sticky restart).
  * Its notification shows the current job, or with several songs the whole run
- * as JS follows it ([AndroidDownloads.runNotice]), and offers Cancel; it stops
- * once the journal has no work left.
+ * as JS follows it ([AndroidDownloads.runNotice]), and offers Cancel, Pause or
+ * Resume, and Cancel All; it stops once the journal has no work left. Stopping
+ * with only paused songs left, it leaves a "Paused" notification that resumes
+ * or cancels them.
  */
 class YtDownloadService : Service() {
   private val downloads get() = AndroidDownloads.get(this)
@@ -85,9 +87,35 @@ class YtDownloadService : Service() {
       // Tagging or publication may hold the journal; the main thread never waits for it.
       thread(name = "Wave download cancel") { runCatching { downloads.jobs.cancelJob(id, downloads.transport); downloads.changed() } }
     }
-    // A null intent is Android's sticky restart, after Wave's process was gone.
-    downloads.start(onIdle = { stopping = downloads.jobs.idleStop(); stopSelf() }, refresh = { refresh() }, restarted = intent == null)
+    val owner: (() -> Unit)? = when (intent?.action) {
+      PAUSE -> downloads::pauseAll
+      RESUME -> downloads::resumeAll
+      // The notification's Cancel All acts at once: no alert can open over it.
+      CANCEL_ALL -> { { downloads.cancelAll(null) } }
+      else -> null
+    }
+    if (owner != null) {
+      // The work starts once the journal took the tap, so it doesn't stop on the state before it.
+      thread(name = "Wave download owner") {
+        runCatching(owner).onFailure { WaveLog.w(TAG, "The notification's download action failed", it) }
+        mainExecutor.execute { startWork(restarted = false) }
+      }
+    } else startWork(restarted = intent == null) // A null intent is Android's sticky restart, after Wave's process was gone.
     return START_STICKY
+  }
+
+  private fun startWork(restarted: Boolean) {
+    downloads.start(onIdle = ::idle, refresh = { refresh() }, restarted = restarted)
+  }
+
+  /** No work left: it stops, leaving a "Paused" notification when only paused songs are left. */
+  private fun idle() {
+    stopping = downloads.jobs.idleStop()
+    if (stopping == DownloadServiceStop.PAUSED) {
+      stopForeground(STOP_FOREGROUND_DETACH)
+      getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, pausedNotification())
+    }
+    stopSelf()
   }
 
   override fun onTimeout(startId: Int, fgsType: Int) {
@@ -110,7 +138,7 @@ class YtDownloadService : Service() {
     wakeLock?.acquire(LOCK_MS)
     val current = downloads.jobs.current()
     // Android drops notifications posted too often; only post what changed.
-    val shown = listOf(current?.get("id"), current?.get("phase"), current?.get("queuePosition"), percent(current), downloads.jobs.counts(), downloads.jobs.youtubePausedNow(), downloads.runNotice)
+    val shown = listOf(current?.get("id"), current?.get("phase"), current?.get("queuePosition"), percent(current), downloads.jobs.counts(), downloads.jobs.youtubePausedNow(), downloads.runNotice, downloads.jobs.ownerPaused())
     if (shown == lastShown) return
     // A run's songs change many times a second; its notification follows at most about once a second (the tick reposts).
     val now = SystemClock.elapsedRealtime()
@@ -127,14 +155,38 @@ class YtDownloadService : Service() {
     return if (total > 0) (received * 100 / total).toInt().coerceIn(0, 100) else null
   }
 
-  private fun notification(current: Map<String, Any?>? = downloads.jobs.current()): Notification {
+  private fun builder(): Notification.Builder {
     val builder = Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.wave_notification)
-      .setOngoing(true).setOnlyAlertOnce(true).setCategory(Notification.CATEGORY_PROGRESS)
+      .setOnlyAlertOnce(true).setCategory(Notification.CATEGORY_PROGRESS)
       .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
     packageManager.getLaunchIntentForPackage(packageName)?.let { launch ->
       launch.component?.let { launch.component = LauncherIconSwitcher.launchTarget(packageManager, it) }
       builder.setContentIntent(PendingIntent.getActivity(this, 0, launch, PendingIntent.FLAG_IMMUTABLE))
     }
+    return builder
+  }
+
+  /** Pause or Resume, and Cancel All (#1474); each starts the service, which acts on it. */
+  private fun ownerActions(builder: Notification.Builder) {
+    val paused = downloads.jobs.ownerPaused()
+    builder.addAction(ownerAction(if (paused) RESUME else PAUSE, NativeText.get(if (paused) "resume" else "pause"), if (paused) 3 else 2))
+    builder.addAction(ownerAction(CANCEL_ALL, NativeText.get("cancelAll"), 4))
+  }
+  private fun ownerAction(action: String, label: String, code: Int): Notification.Action {
+    val intent = Intent(this, YtDownloadService::class.java).setAction(action)
+    return Notification.Action.Builder(null, label, PendingIntent.getForegroundService(this, code, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)).build()
+  }
+
+  /** What stays once the service stopped with only paused songs left: it can be swiped away. */
+  private fun pausedNotification(): Notification {
+    val builder = builder().setOngoing(false).setContentTitle(NativeText.get("paused"))
+      .setContentText(countText("leftCount", downloads.jobs.heldCount()))
+    ownerActions(builder)
+    return builder.build()
+  }
+
+  private fun notification(current: Map<String, Any?>? = downloads.jobs.current()): Notification {
+    val builder = builder().setOngoing(true)
     @Suppress("UNCHECKED_CAST")
     val song = current?.get("song") as? Map<String, Any?>
     val saving = current?.get("phase") in listOf("tagging", "awaitingPublication", "publishing", "completed")
@@ -145,9 +197,12 @@ class YtDownloadService : Service() {
     val pause = downloads.jobs.youtubePausedNow()?.takeIf { current?.get("source") == DurableDownloads.YOUTUBE && current["phase"] == "prepared" }
     // With several songs on their way, the whole run (Core's `downloadRunNotice`, as Settings › Downloads counts it).
     val run = downloads.runNotice
+    // Paused by the owner with nothing asked for since on its way: "Paused", and no time left (JS's run says the same).
+    val held = downloads.jobs.ownerPaused() && !downloads.jobs.hasWork()
     val title = when {
       pause != null -> NativeText.get("pausedYoutube")
       run != null -> run.title
+      held -> NativeText.get("paused")
       saving -> NativeText.get("saving")
       queued -> NativeText.get("waiting")
       else -> NativeText.get("downloading")
@@ -159,6 +214,7 @@ class YtDownloadService : Service() {
       val intent = Intent(this, YtDownloadService::class.java).setAction(CANCEL).putExtra("jobId", current["id"] as String)
       builder.addAction(Notification.Action.Builder(null, NativeText.get("cancel"), PendingIntent.getService(this, 1, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)).build())
     }
+    if (current != null) ownerActions(builder)
     return builder.build()
   }
 
@@ -178,12 +234,20 @@ class YtDownloadService : Service() {
     return NativeText.get(form).replace("%s", number)
   }
 
-  private companion object {
+  internal companion object {
     const val TAG = "WaveDownloads"
     const val CHANNEL = "wave_downloads"
     const val NOTIFICATION_ID = 0x5759
     const val CANCEL = "wave.download.CANCEL"
+    const val PAUSE = "wave.download.PAUSE"
+    const val RESUME = "wave.download.RESUME"
+    const val CANCEL_ALL = "wave.download.CANCEL_ALL"
     const val LOCK_MS = 15 * 60_000L
     const val RUN_NOTIFY_MS = 900L
+
+    /** Takes away the "Paused" notification the stopped service left ([idle]), once nothing is paused any more. */
+    fun dismissPaused(context: android.content.Context) {
+      context.getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
+    }
   }
 }

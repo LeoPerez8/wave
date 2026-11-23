@@ -193,8 +193,25 @@ export {
 export type { FramingSquare, FramingView, ImageFraming, ImageSize } from "./imageFraming.ts";
 export { elapsedWavePath } from "./elapsedWave.ts";
 export type { ElapsedWave } from "./elapsedWave.ts";
-export { contrastRatio, crossfadeGround, lyricsDimOpacity, paletteGradient } from "./palette.ts";
-export type { ArtworkPalette, Gradient, GradientTheme, GroundLayers } from "./palette.ts";
+export {
+  contrastRatio,
+  crossfadeGround,
+  groundGradient,
+  lyricsDimOpacity,
+  NOW_PLAYING_FADE,
+  paletteGradient,
+  sameGround,
+} from "./palette.ts";
+export type {
+  ArtworkPalette,
+  Gradient,
+  GradientTheme,
+  GroundFade,
+  GroundGradient,
+  GroundLayers,
+  GroundStop,
+  SchemeAmount,
+} from "./palette.ts";
 export { pixelPalette } from "./pixelPalette.ts";
 export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
@@ -3473,3 +3490,14 @@ export {
   type StagedMountsInput,
 } from "./stagedMounts.ts";
 export { knownPages, type KnownPages } from "./knownPages.ts";
+export {
+  NO_DOWNLOAD_PAUSE,
+  cancelAllDownloadsAlert,
+  downloadsToCancelAll,
+  downloadHeld,
+  downloadRequested,
+  requestRunsWhilePaused,
+  pauseAllDownloads,
+  resumeAllDownloads,
+} from "./downloadPause.ts";
+export type { DownloadPause, DownloadRequest } from "./downloadPause.ts";

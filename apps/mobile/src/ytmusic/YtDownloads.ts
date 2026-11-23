@@ -98,6 +98,8 @@ import {
   type YtDownloads,
   type YtSong,
   type YtSongSearch,
+  requestRunsWhilePaused,
+  type DownloadRequest,
 } from "@wave/core";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
@@ -162,7 +164,7 @@ import {
 import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { readYtAlbum } from "./albumPages";
-import { failedJobsNow, journal, queuedCountsNow } from "./downloadJournal";
+import { downloadsPausedByOwner, failedJobsNow, journal, queuedCountsNow } from "./downloadJournal";
 import { followDownloadRuns } from "./downloadRun";
 import { createDownloadRecovery } from "./downloadRecovery";
 import { currentLibraryFinderInSlices, useLoadedLibraryFinder } from "./libraryFinder";
@@ -1217,6 +1219,8 @@ const refresh = async (): Promise<void> => {
       const snapshotJobs = applyJournalChanges(followed, changes);
       followed = snapshotJobs;
       followedRevision = changes.revision;
+      // A pause or resume moves the journal's revision, so it's read here.
+      downloadsPausedByOwner.set(WaveSoulseek.downloadsPaused());
       // YouTube refusing songs in a burst pauses its downloads (Core's `ytThrottle`).
       void followYoutubeThrottle(snapshotJobs);
       // A failed Library read keeps the journal intact and mustn't hide new progress or decisions.
@@ -1392,6 +1396,13 @@ const songRequest = (
   origin: DownloadOrigin | null,
 ): JobRequest => ({ song, recording: soulseekRecording(song), equivalentId, source, origin });
 
+/**
+ * [requests] as the owner's [request] asks for them: a song's, a list's or a star's download while
+ * downloads are paused (Core's `requestRunsWhilePaused`), and the rest stays paused.
+ */
+const askedBy = (requests: readonly JobRequest[], request: DownloadRequest): JobRequest[] =>
+  requests.map((asked) => ({ ...asked, release: requestRunsWhilePaused(request) }));
+
 export const downloadYtSong = (song: NativeYtSong): void => {
   publishYtSongSignal("download", [song.videoId]);
   askForNotifications();
@@ -1401,12 +1412,8 @@ export const downloadYtSong = (song: NativeYtSong): void => {
     .then(async () => {
       ownerAsked([song.videoId]);
       const shared = ytDownloadSharedJob(await WaveSoulseek.jobsSnapshot(), song);
-      await WaveSoulseek.enqueueJob(
-        song,
-        soulseekRecording(song),
-        shared,
-        await requestedSource(),
-        null,
+      await enqueueJobs(
+        askedBy([songRequest(song, shared, await requestedSource(), null)], "song"),
       );
       await refresh();
     })
@@ -1451,8 +1458,11 @@ const downloadYtSongs = (
       const jobs = await WaveSoulseek.jobsSnapshot();
       const source = await requestedSource();
       await enqueueJobs(
-        ytSongsDownload(songs, { inLibrary, jobs }).toDownload.map(({ song, sharedJob }) =>
-          songRequest(song, sharedJob, source, origin),
+        askedBy(
+          ytSongsDownload(songs, { inLibrary, jobs }).toDownload.map(({ song, sharedJob }) =>
+            songRequest(song, sharedJob, source, origin),
+          ),
+          "list",
         ),
       );
       await refresh();
@@ -1580,7 +1590,10 @@ export const runYtPlaylistDownloadAction = (
         const source = await requestedSource();
         const asked = action === "downloadPlaylist" ? download.toDownload : download.toRetry;
         await enqueueJobs(
-          asked.map(({ song, sharedJob }) => songRequest(song, sharedJob, source, origin)),
+          askedBy(
+            asked.map(({ song, sharedJob }) => songRequest(song, sharedJob, source, origin)),
+            action === "downloadPlaylist" ? "list" : "retry",
+          ),
         );
       }
       await refresh();
@@ -1640,11 +1653,17 @@ const missingSongRequest = (
 /** Asks the journal for missing songs [jobs], in order, each from the source Core picks for it. */
 const enqueueMissingSongs = async (
   jobs: readonly MissingSongJob[],
+  request: DownloadRequest,
   origin: DownloadOrigin | null = null,
 ): Promise<void> => {
   const session = await sessionNow();
   const ytMusicOn = ytMusicEnabled();
-  await enqueueJobs(jobs.map((job) => missingSongRequest(job, session, ytMusicOn, origin)));
+  await enqueueJobs(
+    askedBy(
+      jobs.map((job) => missingSongRequest(job, session, ytMusicOn, origin)),
+      request,
+    ),
+  );
 };
 
 /** The missing songs as they are now ([trackIds] only, when given), as download jobs. */
@@ -1664,7 +1683,7 @@ export const downloadMissingSongs = (trackIds: readonly number[]): void => {
   requests = requests
     .then(async () => {
       ownerAsked(trackIds.map(missingSongJobId));
-      await enqueueMissingSongs(await missingSongJobs(trackIds));
+      await enqueueMissingSongs(await missingSongJobs(trackIds), "song");
       await refresh();
     })
     .catch(() => undefined);
@@ -1739,10 +1758,10 @@ export const runMissingSongsDownloadAction = (
       if (action === "downloadAll") ownerAsked(missing.map((job) => job.videoId));
       switch (action) {
         case "downloadAll":
-          await enqueueMissingSongs(download.toDownload, origin);
+          await enqueueMissingSongs(download.toDownload, "list", origin);
           break;
         case "retryFailed":
-          await enqueueMissingSongs(download.toRetry, origin);
+          await enqueueMissingSongs(download.toRetry, "retry", origin);
           break;
         case "cancel":
           for (const id of download.toCancel) await WaveSoulseek.cancelJob(id);
@@ -1849,6 +1868,46 @@ export const downloadsOnTheirWay = (): boolean => queuedDownloads(journal.get())
 /** Calls [listener] whenever the journal changes; returns how to stop. */
 export const onDownloadsChanged = (listener: () => void): (() => void) =>
   journal.subscribe(listener);
+
+/**
+ * Settings › Downloads' Pause, as the notification's (Core's `pauseAllDownloads`): every song not
+ * downloaded yet stops at once, and a song already downloaded finishes saving. Kept across
+ * restarts; a song, list or star asked for meanwhile downloads anyway.
+ */
+export const pauseDownloads = (): void => {
+  downloadsPausedByOwner.set(true);
+  requests = requests
+    .then(async () => {
+      await WaveSoulseek.pauseDownloads();
+      await refresh();
+    })
+    .catch(() => undefined);
+};
+
+/** Resume (Core's `resumeAllDownloads`): everything paused goes on, songs stopped mid-download from the start. */
+export const resumeDownloads = (): void => {
+  downloadsPausedByOwner.set(false);
+  requests = requests
+    .then(async () => {
+      await WaveSoulseek.resumeDownloads();
+      await refresh();
+    })
+    .catch(() => undefined);
+};
+
+/**
+ * Cancel All, once its alert was answered: the songs [ids] (Core's `downloadsToCancelAll`) leave,
+ * for every requester. Downloaded and failed songs stay.
+ */
+export const cancelAllDownloads = (ids: readonly string[]): void => {
+  if (ids.length === 0) return;
+  requests = requests
+    .then(async () => {
+      await WaveSoulseek.cancelAllDownloads(ids);
+      await refresh();
+    })
+    .catch(() => undefined);
+};
 
 /**
  * Settings › Downloads' Cancel on a song on its way: as its menu's Cancel Download, and every
@@ -2038,7 +2097,7 @@ export const downloadStarredSongs = (
         );
         if (step === "queue") queued.push(job.videoId);
       }
-      await enqueueJobs(asked);
+      await enqueueJobs(askedBy(asked, "star"));
       starAsked.set(starAskedAfter(starAsked.get(), { kind: "starred", queued }));
       await refresh();
     })

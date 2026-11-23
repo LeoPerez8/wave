@@ -254,6 +254,22 @@ describe("Settings › Downloads: the run panel's lines", () => {
     assert.equal(panelLine(null, true, true), "12 failed · 1,254 left");
   });
 
+  test("the owner's Pause says Paused and hides the time left, even while YouTube's pause shows", () => {
+    const counts = { done: 1234, failed: 12, left: 1254, total: 2500 };
+    const line = (throttled: boolean) =>
+      downloadRunPanelLine(counts, { timeLeft: 60_000, paused: false, throttled, held: true });
+    assert.equal(line(false), "12 failed · 1,254 left · Paused");
+    assert.equal(line(true), "12 failed · 1,254 left · Paused");
+    assert.equal(
+      downloadRunPanelLine(
+        counts,
+        { timeLeft: null, paused: false, throttled: false, held: true },
+        "pt-BR",
+      ),
+      "12 falharam · 1.254 restantes · Pausado",
+    );
+  });
+
   test("a group header's line: done of all, then what's left", () => {
     assert.equal(
       downloadRunGroupLine({ done: 40, failed: 2, left: 78, total: 120 }),
@@ -282,6 +298,18 @@ describe("the download notification: the run", () => {
       finished: 3,
       total: 10,
     });
+  });
+
+  test("while the owner paused, it says Paused and hides the time left", () => {
+    assert.deepEqual(
+      downloadRunNotice({ done: 3, failed: 0, left: 7, total: 10 }, 60_000, "en", { held: true }),
+      { title: "Paused · 3 of 10", text: "7 left", finished: 3, total: 10 },
+    );
+    assert.equal(
+      downloadRunNotice({ done: 3, failed: 0, left: 7, total: 10 }, null, "pt-BR", { held: true })
+        ?.title,
+      "Pausado · 3 de 10",
+    );
   });
 
   test("a one-song run, or none, keeps the per-song notification", () => {

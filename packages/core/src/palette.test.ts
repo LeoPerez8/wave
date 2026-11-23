@@ -99,12 +99,12 @@ describe("lyricsDimOpacity", () => {
       ]) {
         const gradient = paletteGradient(palette, theme);
         const ink = theme.ink[0];
-        const alpha = lyricsDimOpacity(gradient, ink);
+        const alpha = lyricsDimOpacity([gradient.top, gradient.bottom], ink);
         const stops = [gradient.top, gradient.bottom];
         assert.ok(alpha > 0 && alpha < 1);
         assert.ok(stops.every((stop) => contrastRatio(over(ink, stop, alpha), stop) >= 3));
         assert.ok(stops.some((stop) => contrastRatio(over(ink, stop, alpha - 1 / 255), stop) < 3));
-        assert.equal(lyricsDimOpacity({ top: gradient.bottom, bottom: gradient.top }, ink), alpha);
+        assert.equal(lyricsDimOpacity([gradient.bottom, gradient.top], ink), alpha);
       }
     }
   });

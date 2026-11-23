@@ -16,7 +16,7 @@ import { useEffect, useState } from "react";
 
 import { WaveSoulseek } from "@/native/waveSoulseek";
 
-import { journal, queuedCountsNow } from "./downloadJournal";
+import { downloadsPausedByOwner, journal, queuedCountsNow } from "./downloadJournal";
 import { onYoutubePauseChanged, youtubePausedUntil } from "./youtubeThrottle";
 
 /**
@@ -46,6 +46,7 @@ export const followDownloadRuns = (): void => {
   });
   // A pause on YouTube's downloads takes the time left away, and its end brings it back.
   onYoutubePauseChanged(showRunSoon);
+  downloadsPausedByOwner.subscribe(showRunSoon);
   subscribeLocalisation(showRunSoon);
 };
 
@@ -71,8 +72,10 @@ const showRun = () => {
     if (kept === null) Storage.removeItemSync(RUN_KEY);
     else Storage.setItemSync(RUN_KEY, kept);
   }
-  const { progress, timeLeft } = downloadRunNow();
-  const notice = downloadRunNotice(progress.overall, timeLeft, currentLocalisation().language);
+  const { progress, timeLeft, held } = downloadRunNow();
+  const notice = downloadRunNotice(progress.overall, timeLeft, currentLocalisation().language, {
+    held,
+  });
   const key = JSON.stringify(notice);
   if (key === runNoticeShown) return;
   runNoticeShown = key;
@@ -89,6 +92,10 @@ export interface DownloadRunState {
    * `downloadsPaused`).
    */
   readonly paused: boolean;
+  /** The owner paused downloads: the panel offers Resume instead of Pause. */
+  readonly ownerPaused: boolean;
+  /** Paused by the owner with nothing on its way: "Paused", whatever YouTube's pause says. */
+  readonly held: boolean;
 }
 
 /** How often the run panel reads the run again: at most about once a second. */
@@ -100,20 +107,24 @@ const downloadRunNow = (): DownloadRunState => {
     youtubePausedUntil: youtubePausedUntil(),
     now,
   });
+  const ownerPaused = downloadsPausedByOwner.get();
   return {
     progress: downloadRunProgress(downloadRun),
     timeLeft: downloadTimeLeft(downloadRun, { now, paused }),
     paused,
+    ownerPaused,
+    held: ownerPaused && paused,
   };
 };
 
 /** What the panel shows of [state], to skip a render when a second changed nothing. */
-const runStateKey = ({ progress, timeLeft, paused }: DownloadRunState): string =>
+const runStateKey = ({ progress, timeLeft, paused, ownerPaused }: DownloadRunState): string =>
   JSON.stringify([
     progress.overall,
     [...progress.groups],
     timeLeft === null ? null : Math.round(timeLeft / 60_000),
     paused,
+    ownerPaused,
   ]);
 
 /**
@@ -123,6 +134,8 @@ const runStateKey = ({ progress, timeLeft, paused }: DownloadRunState): string =
 export const useDownloadRun = (): DownloadRunState => {
   const [state, setState] = useState(downloadRunNow);
   useEffect(() => {
+    // Pause and Resume show at once, not on the next tick.
+    const stop = downloadsPausedByOwner.subscribe(() => setState(downloadRunNow()));
     // The first tick renders once more at most: it may follow a change since the first render.
     let key = "";
     const timer = setInterval(() => {
@@ -132,7 +145,10 @@ export const useDownloadRun = (): DownloadRunState => {
       key = nextKey;
       setState(next);
     }, RUN_PANEL_MS);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      stop();
+    };
   }, []);
   return state;
 };
