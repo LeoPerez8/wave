@@ -182,9 +182,23 @@ const call = <T>(
 
 const collaborationOf = some((body) => readCollaboration(parse(body)));
 
-/** `PUT /v1/account/name`: keeps [name] (the Google account name) for the session's account. */
-export const accountNameCall = (name: string): CollaborationCall<null> =>
-  call("PUT", "/v1/account/name", { name }, nothing);
+/** What an app sends of its Google account: its name, its photo, or both. */
+export interface AccountFields {
+  readonly name?: string;
+  readonly photoUrl?: string;
+}
+
+/**
+ * `PUT /v1/account/name`: keeps the Google account name and photo [fields] gives for the
+ * session's account, in one request; a field left out isn't sent.
+ */
+export const accountCall = ({ name, photoUrl }: AccountFields): CollaborationCall<null> =>
+  call(
+    "PUT",
+    "/v1/account/name",
+    { ...(name === undefined ? {} : { name }), ...(photoUrl === undefined ? {} : { photoUrl }) },
+    nothing,
+  );
 
 /** `POST /v1/collaboration`: makes a playlist of the account collaborative, owned by it. */
 export const makeCollaborationCall = (playlistId: string): CollaborationCall<Collaboration> =>

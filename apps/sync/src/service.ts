@@ -11,6 +11,7 @@ import type { Client } from "@libsql/client";
 import {
   acceptedLanguages,
   accountName,
+  accountPhotoUrl,
   catalogueOf,
   geniusUpstreamUrl,
   resolveAppLanguage,
@@ -669,18 +670,23 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
   });
 
   /**
-   * Keeps the body's name for the session's account, as a sign-in keeps the
-   * ID token's: an app that signed in before names were kept sends it once.
+   * Keeps the body's name and photo for the session's account, as a sign-in keeps the ID
+   * token's: an app that signed in before they were kept sends them once. Each is stored when
+   * Core accepts it (`accountName`, `accountPhotoUrl`); a photo it doesn't accept is ignored.
+   * A body with neither accepted answers 400 and stores nothing.
    */
   const putAccountName = withSession(async ({ request }, session) => {
     const body = await readJson(request);
-    const name = accountName(
-      typeof body === "object" && body !== null && "name" in body ? body.name : undefined,
-    );
-    if (name === null) throw failure(400, "bad_request");
+    const field = (key: string): unknown =>
+      typeof body === "object" && body !== null && key in body
+        ? (body as Record<string, unknown>)[key]
+        : undefined;
+    const name = accountName(field("name"));
+    const photoUrl = accountPhotoUrl(field("photoUrl"));
+    if (name === null && photoUrl === null) throw failure(400, "bad_request");
     await db.execute({
-      sql: "UPDATE accounts SET name = ? WHERE id = ?",
-      args: [name, session.accountId],
+      sql: "UPDATE accounts SET name = coalesce(?, name), photo_url = coalesce(?, photo_url) WHERE id = ?",
+      args: [name, photoUrl, session.accountId],
     });
     return new Response(null, { status: 204 });
   });

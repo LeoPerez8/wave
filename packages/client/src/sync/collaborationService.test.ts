@@ -50,7 +50,10 @@ describe("collaborationService", () => {
   test("every call of the service is there", async () => {
     const service = transport({ status: 204, body: "" });
     const calls = collaborationService(service);
-    await calls.setAccountName("Ana");
+    await calls.setAccount({
+      name: "Ana",
+      photoUrl: "https://lh3.googleusercontent.com/a/ana=s96-c",
+    });
     await calls.make(LIST);
     await calls.end(LIST);
     await calls.members(LIST);

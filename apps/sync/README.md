@@ -514,16 +514,21 @@ session itself ended.
 
 ### `PUT /v1/account/name`
 
-Keeps a name for the session's account, as a sign-in keeps the ID token's: an app that signed
-in before names were kept sends its Google account name once.
+Keeps a name and a photo for the session's account, as a sign-in keeps the ID token's: an app
+that signed in before they were kept sends its Google account name and photo once, each only
+when it has one.
 
 ```json
-{ "name": "Ana Souza" }
+{ "name": "Ana Souza", "photoUrl": "https://lh3.googleusercontent.com/a/ACg8oc…=s96-c" }
 ```
 
-`204`, no body. The name is cleaned and cut to 100 characters as a sign-in's is.
-`400 { "error": "bad_request" }` when `name` isn't text or is empty, and the name there was
-stays. Deleting the account deletes the name with it.
+Both fields are optional. The name is stored when Core's `accountName` accepts it (text that
+isn't empty once cleaned), cleaned and cut to 100 characters as a sign-in's is. The photo is
+stored when Core's `accountPhotoUrl` accepts it (an `https:` URL on a host ending in
+`.googleusercontent.com`); a photo it doesn't accept is ignored, and the photo there was stays.
+`204`, no body, when it stored at least one of them. `400 { "error": "bad_request" }` when it
+accepts neither, and nothing changes. A later sign-in replaces the photo with the token's, or
+with none. Deleting the account deletes the name and the photo with it.
 
 ### `GET /v1/genius/search?q=<text>`, `GET /v1/genius/song?id=<id>`, `GET /v1/genius/referents?song=<id>&page=<n>`
 

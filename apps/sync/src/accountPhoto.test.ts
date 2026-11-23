@@ -29,12 +29,16 @@ interface Listed {
   readonly members: readonly Member[];
 }
 
-/** Makes `list-1` collaborative for [session] (again changes nothing) and gives its members. */
-const madeCollaborative = async (service: Harness, session: string): Promise<Listed> => {
-  await push(service, session, { playlists: [playlist("list-1")] });
+/** Makes [playlistId] collaborative for [session] (again changes nothing) and gives its members. */
+const madeCollaborative = async (
+  service: Harness,
+  session: string,
+  playlistId = "list-1",
+): Promise<Listed> => {
+  await push(service, session, { playlists: [playlist(playlistId)] });
   const response = await service.request("POST", "/v1/collaboration", {
     session,
-    json: { playlistId: "list-1" },
+    json: { playlistId },
   });
   assert.equal(response.status, 200);
   return (await response.json()) as Listed;
@@ -119,6 +123,126 @@ describe("who sees a member's photo", () => {
     assert.equal(listed.status, 403);
     assert.ok(!(await listed.text()).includes(PHOTO));
     assert.deepEqual((await pull(service, stranger)).collaborations, []);
+  });
+});
+
+describe("PUT /v1/account/name with a photo", () => {
+  const put = (service: Harness, session: string | undefined, json: unknown): Promise<Response> =>
+    service.request(
+      "PUT",
+      "/v1/account/name",
+      session === undefined ? { json } : { session, json },
+    );
+
+  /** The name and photo the members of [session]'s playlist [playlistId] see for its account. */
+  const seen = async (
+    service: Harness,
+    session: string,
+    playlistId?: string,
+  ): Promise<{ readonly name: unknown; readonly photoUrl: unknown }> => {
+    const self = (await madeCollaborative(service, session, playlistId)).members.find(
+      (member) => member.self,
+    );
+    return { name: self?.name, photoUrl: self?.photoUrl };
+  };
+
+  test("stores an accepted photo for the session's account, and no other", async () => {
+    const service = await harness();
+    const ana = await service.signIn({ name: "Ana Souza" });
+    const bo = await service.signIn(BO);
+    const response = await put(service, ana, { photoUrl: PHOTO });
+    assert.equal(response.status, 204);
+    assert.deepEqual(await seen(service, ana), { name: "Ana Souza", photoUrl: PHOTO });
+    assert.deepEqual(await seen(service, bo, "list-2"), { name: "Bo Lima", photoUrl: null });
+  });
+
+  test("stores the name and the photo of one body", async () => {
+    const service = await harness();
+    const ana = await service.signIn();
+    assert.equal((await put(service, ana, { name: "Ana Souza", photoUrl: PHOTO })).status, 204);
+    assert.deepEqual(await seen(service, ana), { name: "Ana Souza", photoUrl: PHOTO });
+  });
+
+  test("after the send, another member's pull returns that photo", async () => {
+    const service = await harness();
+    const ana = await service.signIn({ name: "Ana Souza" });
+    const bo = await service.signIn(BO);
+    await madeCollaborative(service, ana);
+    const boId = (
+      await service.db.execute({
+        sql: "SELECT id FROM accounts WHERE google_sub = ?",
+        args: [BO.sub],
+      })
+    ).rows[0]?.id;
+    assert.equal(await addMember(service.db, "list-1", String(boId), service.now), true);
+
+    assert.equal((await put(service, ana, { photoUrl: PHOTO })).status, 204);
+    const pulled = await pull(service, bo);
+    assert.deepEqual(
+      pulled.collaborations[0]?.members.map(({ name, photoUrl }) => ({ name, photoUrl })),
+      [
+        { name: "Ana Souza", photoUrl: PHOTO },
+        { name: "Bo Lima", photoUrl: null },
+      ],
+    );
+  });
+
+  test("a photo that isn't accepted is ignored, and the body's name is still stored", async () => {
+    const service = await harness();
+    const ana = await service.signIn({ name: "Ana", picture: PHOTO });
+    for (const photoUrl of [
+      "",
+      null,
+      7,
+      "http://lh3.googleusercontent.com/a/ACg8ocAna=s96-c",
+      "https://example.com/ana.jpg",
+      "https://googleusercontent.com.example.com/a",
+    ]) {
+      const name = `Ana ${String(photoUrl).length}`;
+      assert.equal((await put(service, ana, { name, photoUrl })).status, 204);
+      assert.deepEqual(await seen(service, ana), { name, photoUrl: PHOTO });
+    }
+  });
+
+  test("a body with neither an accepted name nor an accepted photo answers 400 and changes nothing", async () => {
+    const service = await harness();
+    const ana = await service.signIn({ name: "Ana Souza", picture: PHOTO });
+    for (const body of [
+      {},
+      { photoUrl: "" },
+      { photoUrl: "https://example.com/ana.jpg" },
+      { name: "  ", photoUrl: "http://lh3.googleusercontent.com/a/ACg8ocAna=s96-c" },
+      { name: 7, photoUrl: 7 },
+      PHOTO,
+      null,
+    ]) {
+      const response = await put(service, ana, body);
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: "bad_request" });
+    }
+    assert.deepEqual(await seen(service, ana), { name: "Ana Souza", photoUrl: PHOTO });
+  });
+
+  test("without a session it answers 401 and stores nothing", async () => {
+    const service = await harness();
+    const ana = await service.signIn({ name: "Ana Souza" });
+    for (const session of [undefined, "x".repeat(43)])
+      assert.equal(
+        (await put(service, session, { name: "Ana Lima", photoUrl: PHOTO })).status,
+        401,
+      );
+    assert.deepEqual(await seen(service, ana), { name: "Ana Souza", photoUrl: null });
+  });
+
+  test("there is no route of its own for the photo", async () => {
+    const service = await harness();
+    const ana = await service.signIn();
+    const response = await service.request("PUT", "/v1/account/photo", {
+      session: ana,
+      json: { photoUrl: PHOTO },
+    });
+    assert.equal(response.status, 404);
+    assert.deepEqual(await seen(service, ana), { name: null, photoUrl: null });
   });
 });
 
