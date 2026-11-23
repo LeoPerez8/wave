@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { addMember } from "./collaborations.ts";
 import { migrate } from "./migrations.ts";
-import { type Harness, type TokenClaims, freshDatabase, harness, pull, push } from "./testing.ts";
+import {
+  type Harness,
+  type TokenClaims,
+  freshDatabase,
+  harness,
+  pull,
+  push,
+  sessionInOlderDatabase,
+} from "./testing.ts";
 
 const PHOTO = "https://lh3.googleusercontent.com/a/ACg8ocAna=s96-c";
 const NEW_PHOTO = "https://lh3.googleusercontent.com/a/ACg8ocAna2=s96-c";
@@ -126,6 +134,19 @@ describe("who sees a member's photo", () => {
   });
 });
 
+/**
+ * A service whose database holds Ana's account and session from before photos were kept, with
+ * no sign-in since: the account an app that signed in before sends the photo for.
+ */
+const signedInBefore = async (
+  name: string | null = "Ana Souza",
+): Promise<{ readonly service: Harness; readonly ana: string }> => {
+  const db = await freshDatabase({ until: "0019_collaborative_entries" });
+  const ana = await sessionInOlderDatabase(db, Date.UTC(2026, 9, 14, 11), { name });
+  await migrate(db);
+  return { service: await harness({}, db), ana };
+};
+
 describe("PUT /v1/account/name with a photo", () => {
   const put = (service: Harness, session: string | undefined, json: unknown): Promise<Response> =>
     service.request(
@@ -147,8 +168,7 @@ describe("PUT /v1/account/name with a photo", () => {
   };
 
   test("stores an accepted photo for the session's account, and no other", async () => {
-    const service = await harness();
-    const ana = await service.signIn({ name: "Ana Souza" });
+    const { service, ana } = await signedInBefore();
     const bo = await service.signIn(BO);
     const response = await put(service, ana, { photoUrl: PHOTO });
     assert.equal(response.status, 204);
@@ -157,15 +177,13 @@ describe("PUT /v1/account/name with a photo", () => {
   });
 
   test("stores the name and the photo of one body", async () => {
-    const service = await harness();
-    const ana = await service.signIn();
+    const { service, ana } = await signedInBefore(null);
     assert.equal((await put(service, ana, { name: "Ana Souza", photoUrl: PHOTO })).status, 204);
     assert.deepEqual(await seen(service, ana), { name: "Ana Souza", photoUrl: PHOTO });
   });
 
   test("after the send, another member's pull returns that photo", async () => {
-    const service = await harness();
-    const ana = await service.signIn({ name: "Ana Souza" });
+    const { service, ana } = await signedInBefore();
     const bo = await service.signIn(BO);
     await madeCollaborative(service, ana);
     const boId = (
@@ -188,8 +206,8 @@ describe("PUT /v1/account/name with a photo", () => {
   });
 
   test("a photo that isn't accepted is ignored, and the body's name is still stored", async () => {
-    const service = await harness();
-    const ana = await service.signIn({ name: "Ana", picture: PHOTO });
+    const { service, ana } = await signedInBefore();
+    assert.equal((await put(service, ana, { photoUrl: PHOTO })).status, 204);
     for (const photoUrl of [
       "",
       null,
@@ -223,6 +241,33 @@ describe("PUT /v1/account/name with a photo", () => {
     assert.deepEqual(await seen(service, ana), { name: "Ana Souza", photoUrl: PHOTO });
   });
 
+  test("after a sign-in, the photo an app sends is ignored, and its name still stored", async () => {
+    const service = await harness();
+    const ana = await service.signIn({ name: "Ana Souza" });
+    assert.equal((await put(service, ana, { photoUrl: PHOTO })).status, 204);
+    assert.deepEqual(await seen(service, ana), { name: "Ana Souza", photoUrl: null });
+    assert.equal((await put(service, ana, { name: "Ana Lima", photoUrl: PHOTO })).status, 204);
+    assert.deepEqual(await seen(service, ana), { name: "Ana Lima", photoUrl: null });
+  });
+
+  test("a sign-in's photo stays when an app sends another one", async () => {
+    const service = await harness();
+    const ana = await service.signIn({ name: "Ana Souza", picture: NEW_PHOTO });
+    assert.equal((await put(service, ana, { photoUrl: PHOTO })).status, 204);
+    assert.deepEqual(await seen(service, ana), { name: "Ana Souza", photoUrl: NEW_PHOTO });
+  });
+
+  test("after a later sign-in, the photo an app sent before isn't restored by sending it again", async () => {
+    const { service, ana } = await signedInBefore();
+    assert.equal((await put(service, ana, { photoUrl: PHOTO })).status, 204);
+    assert.deepEqual(await seen(service, ana), { name: "Ana Souza", photoUrl: PHOTO });
+
+    // The photo was removed on Google; another phone signs in, and Ana's old phone sends again.
+    await service.signIn({ name: "Ana Souza" });
+    assert.equal((await put(service, ana, { name: "Ana Souza", photoUrl: PHOTO })).status, 204);
+    assert.deepEqual(await seen(service, ana), { name: "Ana Souza", photoUrl: null });
+  });
+
   test("without a session it answers 401 and stores nothing", async () => {
     const service = await harness();
     const ana = await service.signIn({ name: "Ana Souza" });
@@ -247,7 +292,7 @@ describe("PUT /v1/account/name with a photo", () => {
 });
 
 describe("the migration", () => {
-  test("adds the photo to the accounts there were, as none until they sign in", async () => {
+  test("adds the photo to the accounts there were, as none and not from a sign-in", async () => {
     const db = await freshDatabase({ until: "0019_collaborative_entries" });
     await db.execute({
       sql: `INSERT INTO accounts (id, google_sub, email, name, created_at)
@@ -262,6 +307,7 @@ describe("the migration", () => {
 
     const [after] = await accounts();
     assert.equal(after?.photo_url, null);
+    assert.equal(after?.photo_from_sign_in, 0);
     for (const column of ["id", "google_sub", "email", "name", "created_at", "change_seq"])
       assert.equal(after?.[column], before?.[column]);
 
