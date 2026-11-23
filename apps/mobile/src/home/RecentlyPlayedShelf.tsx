@@ -71,7 +71,7 @@ const playMixAgain = async (context: PlayContext): Promise<void> => {
   }
 };
 
-/** The head a YouTube Music playlist's card shows and opens with: as last opened, or its word and latest song's cover. */
+/** The head a YouTube Music playlist's card shows and opens with: as its page was last read, or its word and latest song's cover. */
 const ytPlaylistHead = (id: string, song: RecentSong | null, fallback: string): YtListHead =>
   keptYtPlaylistHead(id) ?? { title: fallback, line: "", artworkUrl: songCover(song) ?? null };
 
@@ -189,7 +189,7 @@ export function RecentlyPlayedShelf({
                 paths={head.artworkUrl === null ? NO_COVERS : [head.artworkUrl]}
                 size={COVER_ROW_TILE}
                 checked={checked(item)}
-                onPress={press(item, () => openYtPlaylist(id, head))}
+                onPress={press(item, () => openYtPlaylist(id, head, { read: false }))}
                 onLongPress={
                   selecting || onSelect === undefined
                     ? undefined

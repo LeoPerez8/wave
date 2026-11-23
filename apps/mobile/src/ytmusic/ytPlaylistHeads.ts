@@ -20,8 +20,8 @@ const kept = (): Readonly<Record<string, YtListHead>> => {
 };
 
 /**
- * The title, maker and cover of the YouTube Music playlist [playlistId] as it
- * was last opened, which Recently played's card for it shows (the play
+ * The title, maker and cover of the YouTube Music playlist [playlistId] as
+ * its page was last read, which Recently played's card for it shows (the play
  * history keeps only its id).
  */
 export const keptYtPlaylistHead = (playlistId: string): YtListHead | undefined =>
