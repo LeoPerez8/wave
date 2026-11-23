@@ -5,7 +5,8 @@
  * a free turn's work shortly after its turn), else "startup" before the
  * first screen settled, with the startup step under way (#1434), else none. A screen or section rendering in the
  * block (#1423) names it as "rendering <name>" when it held more of the
- * block than any slice did, and beats running work. A block that spans Wave
+ * block than any slice did, and beats running work; a frozen screen shown again without a render
+ * (#1490) names it the same way, as "showing <name> again". A block that spans Wave
  * leaving the screen (#1446) is the phone pausing the process, not work: it is
  * written apart, as "JS paused", so no total of blocks counts it. A block is named when it's
  * judged, so a render whose commit is reported after the long task still names it (#1449).
@@ -81,6 +82,12 @@ export interface JsBlockLog {
    * span may cover a yield, so only a long task the runtime reports says the thread was held.
    */
   readonly renderRan: (name: string, startedAt: number, durationMs: number) => void;
+  /**
+   * A frozen or hidden screen named [name] showed again without rendering (#1490): React re-ran
+   * its layout effects and the views came back, from [startedAt] for [durationMs]. It names a
+   * block as "showing <name> again", weighed as a render is.
+   */
+  readonly shownAgain: (name: string, startedAt: number, durationMs: number) => void;
   /**
    * Startup reached [name] at [at] (#1434): a block before the first screen settles with no named
    * work says the latest step begun before it ended, as "startup (<name>)".
@@ -260,7 +267,19 @@ export const createJsBlockLog = ({ write, screen, later }: JsBlockLogPorts): JsB
     renderRan: (name, startedAt, durationMs) => {
       keep(
         renders,
-        { name, from: startedAt, to: startedAt + durationMs, logged: false },
+        { name: `rendering ${name}`, from: startedAt, to: startedAt + durationMs, logged: false },
+        KEPT_RENDERS,
+      );
+    },
+    shownAgain: (name, startedAt, durationMs) => {
+      keep(
+        renders,
+        {
+          name: `showing ${name} again`,
+          from: startedAt,
+          to: startedAt + durationMs,
+          logged: false,
+        },
         KEPT_RENDERS,
       );
     },
@@ -291,7 +310,7 @@ export const createJsBlockLog = ({ write, screen, later }: JsBlockLogPorts): JsB
         const rendering =
           render !== undefined &&
           (slice === undefined || render.held > overlap(slice, startTime, end))
-            ? `rendering ${render.name}`
+            ? render.name
             : undefined;
         return (
           rendering ??

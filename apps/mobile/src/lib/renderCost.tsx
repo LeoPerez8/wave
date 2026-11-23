@@ -19,12 +19,13 @@ import {
   useLayoutEffect,
   useRef,
   type ProfilerOnRenderCallback,
+  type RefObject,
   type ReactElement,
   type ReactNode,
 } from "react";
 
 import { perfCommitCount, perfMark, PERF_ENABLED } from "@/perf/perf";
-import { renderRan } from "./backgroundWork";
+import { renderRan, shownAgain } from "./backgroundWork";
 import { timingRoute } from "./timing";
 
 /**
@@ -36,6 +37,17 @@ import { timingRoute } from "./timing";
  */
 export function useRenderCost(name: string): void {
   "use no memo";
+  useCommitSpans(name, null);
+}
+
+/**
+ * `useRenderCost`'s spans; with [showStartRef], set by `ShowStart` first thing in the commit's layout
+ * effects, a commit that showed a frozen or hidden screen again without rendering it reports
+ * that span too (#1490): React re-runs every layout effect under it, which can hold the thread
+ * longer than a render.
+ */
+function useCommitSpans(name: string, showStartRef: RefObject<number | null> | null): void {
+  "use no memo";
   const startedAt = useRef<number | null>(null);
   const committedAt = useRef(Number.NEGATIVE_INFINITY);
   // oxlint-disable-next-line react/purity, react/refs -- the render's start is what this hook measures.
@@ -44,10 +56,25 @@ export function useRenderCost(name: string): void {
     const now = performance.now();
     const from = startedAt.current;
     const previous = committedAt.current;
+    const shownFrom = showStartRef?.current ?? null;
     startedAt.current = null;
     committedAt.current = now;
+    if (showStartRef !== null) showStartRef.current = null;
     if (from !== null && from >= previous) renderRan(name, from, now - from);
+    else if (from === null && shownFrom !== null) shownAgain(name, shownFrom, now - shownFrom);
   });
+}
+
+/**
+ * `RenderCost`'s first child: its layout effect runs before those of the rest of the screen, so
+ * it says when a screen shown again began re-running them.
+ */
+function ShowStart({ atRef }: { atRef: RefObject<number | null> }): null {
+  "use no memo";
+  useLayoutEffect(() => {
+    atRef.current = performance.now();
+  });
+  return null;
 }
 
 /** Whether this bundle renders with React's profiling build (perf builds only). */
@@ -80,11 +107,19 @@ export function PerfProfiler({ id, children }: { id: string; children: ReactNode
 
 /**
  * A screen's or section's render cost under [name], when its parent renders it (a push, a pop,
- * a tab switch): `useRenderCost` and, in perf profiler builds, `<PerfProfiler>`.
+ * a tab switch), or when it shows again from frozen without rendering (#1490): `useRenderCost`
+ * and, in perf profiler builds, `<PerfProfiler>`.
  */
 export function RenderCost({ name, children }: { name: string; children: ReactNode }) {
-  useRenderCost(name);
-  return <PerfProfiler id={name}>{children}</PerfProfiler>;
+  "use no memo";
+  const showStartRef = useRef<number | null>(null);
+  useCommitSpans(name, showStartRef);
+  return (
+    <PerfProfiler id={name}>
+      <ShowStart atRef={showStartRef} />
+      {children}
+    </PerfProfiler>
+  );
 }
 
 /** A stack's `screenLayout`: each screen's render cost under its route's name. */

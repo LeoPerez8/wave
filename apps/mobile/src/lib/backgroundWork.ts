@@ -88,6 +88,14 @@ export const inSlice = <A>(name: string, run: () => A): A => {
 export const renderRan = (name: string, startedAt: number, durationMs: number): void =>
   blocks.renderRan(name, startedAt, durationMs);
 
+/**
+ * A frozen or hidden screen showed again without rendering, re-running its layout effects from
+ * [startedAt] (#1490): a long task meanwhile names it ("showing tab:playlists again"), weighed
+ * as a render is. Writes nothing by itself.
+ */
+export const shownAgain = (name: string, startedAt: number, durationMs: number): void =>
+  blocks.shownAgain(name, startedAt, durationMs);
+
 // An off-thread read's replay builds its queries and maps its rows on the JS thread, in passes
 // and in steps of 8 ms that yield to a new task between them (#1435); each is named here, by
 // the name its caller gives if any (#1451).
