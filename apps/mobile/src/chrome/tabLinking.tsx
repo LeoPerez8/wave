@@ -26,9 +26,12 @@ const remember = (read: GetStateFromPath): GetStateFromPath => {
 export function RememberedLinking({ children }: { children: ReactNode }) {
   const linking = use(LinkingContext);
   const value = useMemo(() => {
-    const read = linking.options?.getStateFromPath;
-    if (read === undefined) return linking;
-    return { ...linking, options: { ...linking.options, getStateFromPath: remember(read) } };
+    const options = linking.options;
+    if (options?.getStateFromPath === undefined) return linking;
+    return {
+      ...linking,
+      options: { ...options, getStateFromPath: remember(options.getStateFromPath) },
+    };
   }, [linking]);
   return <LinkingContext.Provider value={value}>{children}</LinkingContext.Provider>;
 }

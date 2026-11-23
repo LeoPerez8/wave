@@ -61,7 +61,9 @@ const [{ default: TabsLayout }] = await loadWithStubs<[typeof import("../app/(ta
        };
        export const usePathname = () => useSyncExternalStore(subscribe, () => ${t}.pathname);`,
     ),
-    "expo-router/react-navigation": stubModule(`export const LinkingContext = ${t}.LinkingContext;`),
+    "expo-router/react-navigation": stubModule(
+      `export const LinkingContext = ${t}.LinkingContext;`,
+    ),
     // As expo-router's headless tabs do, the navigator follows the route and, on every
     // navigation, reads each tab's route from its path with the route's segments.
     "expo-router/ui": stubModule(
