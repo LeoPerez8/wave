@@ -48,8 +48,9 @@ const LINES = [
 /**
  * Settings › Appearance › Glass's sample: a glass card over a fixed, busy
  * backdrop, drawn with the glass settings as they change, while the app's own
- * glass waits until Appearance is left (`holdAppliedGlass`). Below Android 12
- * the card is the opaque surface the app's glass is there.
+ * glass waits until Appearance is left (`holdAppliedGlass`). Below Android 12,
+ * and on a phone drawing the simple effects, the card is the opaque surface the
+ * app's glass is there.
  */
 export function GlassSample() {
   const { strings } = useLocalisation();
