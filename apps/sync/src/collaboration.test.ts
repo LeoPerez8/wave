@@ -9,6 +9,7 @@ import {
   type Pulled,
   freshDatabase,
   harness,
+  sessionInOlderDatabase,
   pull,
   pullAll,
   push,
@@ -124,6 +125,7 @@ describe("making a playlist collaborative", () => {
         {
           accountId: await accountId(service, "google-sub-1"),
           name: "Ana Souza",
+          photoUrl: null,
           joinedAt: service.now,
           owner: true,
           self: true,
@@ -219,7 +221,7 @@ describe("a member's pull", () => {
             { accountId: ids.ana, name: "Ana Souza", joinedAt: joinedAt[0], owner: true },
             { accountId: ids.bo, name: "Bo Lima", joinedAt: joinedAt[1], owner: false },
             { accountId: ids.cy, name: "Cy Reis", joinedAt: joinedAt[2], owner: false },
-          ].map((member) => ({ ...member, self: member.accountId === self })),
+          ].map((member) => ({ ...member, photoUrl: null, self: member.accountId === self })),
         },
       ]);
       assert.ok(!JSON.stringify(pulled.collaborations).includes("@"));
@@ -595,7 +597,7 @@ describe("the migration", () => {
   test("adds tables and leaves the ones there were, and their rows, as they are", async () => {
     const db = await freshDatabase({ until: "0016_account_name" });
     const before = await harness({}, db);
-    const ana = await before.signIn({ name: "Ana Souza" });
+    const ana = await sessionInOlderDatabase(db, before.now, { name: "Ana Souza" });
     // Rows as that database held them: today's push needs the later migrations.
     const id = await accountId(before, "google-sub-1");
     await db.batch(

@@ -30,6 +30,7 @@ import { Share, Text, View } from "react-native";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { EntryRow } from "@/catalog/EntryRow";
 import { CELL, grid } from "@/catalog/grid";
+import { MemberCircle } from "@/catalog/MemberCircle";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import { libraryQuery, useLibraryQuery } from "@/library/hooks";
@@ -390,18 +391,6 @@ export const openMembers = (playlist: CollaborativeTarget, onLeft?: () => void):
   });
 };
 
-function Initial({ letter }: { letter: string }) {
-  return (
-    <View
-      className="items-center justify-center rounded-full bg-fill"
-      style={{ width: CELL * 4.5, height: CELL * 4.5 }}
-      importantForAccessibility="no-hide-descendants"
-    >
-      <Text className="font-sans text-body font-semibold text-secondary">{letter}</Text>
-    </View>
-  );
-}
-
 function MembersCard({
   playlist,
   held,
@@ -464,7 +453,7 @@ function MembersCard({
                 className="flex-row items-center"
                 style={{ minHeight: grid.row, gap: CELL * 1.5, paddingVertical: CELL / 2 }}
               >
-                <Initial letter={row.initial} />
+                <MemberCircle initial={row.initial} photoUrl={row.photoUrl} size="sheet" />
                 <View className="flex-1">
                   <Text numberOfLines={1} className="font-sans text-body text-foreground">
                     {row.name}

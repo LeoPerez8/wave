@@ -1,13 +1,13 @@
 /**
  * The sync service's collaborative-playlist routes for the app (`docs/spec.md`, Collaborative
- * playlists): the account's name, a playlist's collaboration, its invite and a member's push
- * and pull of one playlist. They go through the same transport as the account's push and pull
+ * playlists): the account's name and photo, a playlist's collaboration, its invite and a member's
+ * push and pull of one playlist. They go through the same transport as the account's push and pull
  * (`WaveAccount.request` on the phone, main's `request` on the desktop), which holds the session
  * and sends only the requests Core's `isCollaborationRequest` takes. Core builds each request
  * and reads its answer; each call resolves to what it came to and rejects only for a bug.
  */
 import {
-  accountNameCall,
+  accountCall,
   collaborationAnswer,
   createInviteCall,
   endCollaborationCall,
@@ -21,6 +21,7 @@ import {
   readInviteCall,
   removeMemberCall,
   turnOffInviteCall,
+  type AccountFields,
   type ActiveInvite,
   type Collaboration,
   type CollaborationCall,
@@ -42,8 +43,11 @@ export interface CollaborationTransport {
 }
 
 export interface CollaborationService {
-  /** Keeps the Google account name for the account (an app signed in before names were kept). */
-  readonly setAccountName: (name: string) => Promise<CollaborationResult<null>>;
+  /**
+   * Keeps the Google account name and photo for the account, in one request (an app signed in
+   * before the service kept them).
+   */
+  readonly setAccount: (fields: AccountFields) => Promise<CollaborationResult<null>>;
   /** Makes the account's playlist collaborative, with the account as owner. */
   readonly make: (playlistId: string) => Promise<CollaborationResult<Collaboration>>;
   /** The owner ends it: every other member goes, the playlist stays the owner's. */
@@ -104,7 +108,7 @@ export const collaborationService = (transport: CollaborationTransport): Collabo
   const send = <T>(call: CollaborationCall<T>): Promise<CollaborationResult<T>> =>
     sendCollaborationCall(transport, call);
   return {
-    setAccountName: (name) => send(accountNameCall(name)),
+    setAccount: (fields) => send(accountCall(fields)),
     make: (playlistId) => send(makeCollaborationCall(playlistId)),
     end: (playlistId) => send(endCollaborationCall(playlistId)),
     members: (playlistId) => send(membersCall(playlistId)),

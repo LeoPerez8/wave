@@ -52,7 +52,7 @@ test("every collaborative playlist's route can be called from the desktop", asyn
   const owner = collaborationService(ana);
   const member = collaborationService(bea);
 
-  assert.deepEqual(await owner.setAccountName("Ana Lima"), { type: "done", value: null });
+  assert.deepEqual(await owner.setAccount({ name: "Ana Lima" }), { type: "done", value: null });
   const made = await owner.make(LIST);
   assert.equal(made.type, "done");
   assert.equal(made.type === "done" && made.value.members[0]?.name, "Ana Lima");

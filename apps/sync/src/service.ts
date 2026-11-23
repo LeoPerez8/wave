@@ -11,6 +11,7 @@ import type { Client } from "@libsql/client";
 import {
   acceptedLanguages,
   accountName,
+  accountPhotoUrl,
   catalogueOf,
   geniusUpstreamUrl,
   resolveAppLanguage,
@@ -450,13 +451,18 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
           args: [at - SESSION_UNUSED_MS, identity.sub],
         },
         {
-          // A token without a name leaves the name there is.
-          sql: "UPDATE accounts SET email = ?, name = coalesce(?, name) WHERE google_sub = ?",
-          args: [identity.email, identity.name, identity.sub],
+          // A token without a name leaves the name there is; one without a photo leaves none:
+          // the photo was removed on Google, and the initial comes back. From now on the
+          // account's photo is the sign-ins', and the name route leaves it.
+          sql: `UPDATE accounts SET email = ?, name = coalesce(?, name), photo_url = ?,
+                                    photo_from_sign_in = 1
+                WHERE google_sub = ?`,
+          args: [identity.email, identity.name, identity.photoUrl, identity.sub],
         },
         {
-          sql: `INSERT INTO accounts (id, google_sub, email, name, created_at)
-                SELECT ?, ?, ?, ?, ?
+          sql: `INSERT INTO accounts (id, google_sub, email, name, photo_url, photo_from_sign_in,
+                                      created_at)
+                SELECT ?, ?, ?, ?, ?, 1, ?
                 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE google_sub = ?)
                   AND (SELECT count(*) FROM accounts) < ?
                   AND (SELECT count(*) FROM accounts WHERE created_at > ?) < ?`,
@@ -465,6 +471,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
             identity.sub,
             identity.email,
             identity.name,
+            identity.photoUrl,
             at,
             identity.sub,
             limits.maxAccounts,
@@ -666,18 +673,29 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
   });
 
   /**
-   * Keeps the body's name for the session's account, as a sign-in keeps the
-   * ID token's: an app that signed in before names were kept sends it once.
+   * Keeps the body's name and photo for the session's account, as a sign-in keeps the ID
+   * token's: an app that signed in before they were kept sends them each time it starts. Each
+   * is accepted when Core accepts it (`accountName`, `accountPhotoUrl`), and a body with
+   * neither accepted answers 400 and stores nothing. An accepted photo is stored only while the
+   * account hasn't signed in since photos were kept: after that the sign-ins' photo is newer,
+   * and the app's is ignored with the same 204.
    */
   const putAccountName = withSession(async ({ request }, session) => {
     const body = await readJson(request);
-    const name = accountName(
-      typeof body === "object" && body !== null && "name" in body ? body.name : undefined,
-    );
-    if (name === null) throw failure(400, "bad_request");
+    const field = (key: string): unknown =>
+      typeof body === "object" && body !== null && key in body
+        ? (body as Record<string, unknown>)[key]
+        : undefined;
+    const name = accountName(field("name"));
+    const photoUrl = accountPhotoUrl(field("photoUrl"));
+    if (name === null && photoUrl === null) throw failure(400, "bad_request");
     await db.execute({
-      sql: "UPDATE accounts SET name = ? WHERE id = ?",
-      args: [name, session.accountId],
+      sql: `UPDATE accounts
+            SET name = coalesce(?, name),
+                photo_url = CASE WHEN photo_from_sign_in = 0 THEN coalesce(?, photo_url)
+                                 ELSE photo_url END
+            WHERE id = ?`,
+      args: [name, photoUrl, session.accountId],
     });
     return new Response(null, { status: 204 });
   });
