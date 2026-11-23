@@ -21,6 +21,24 @@ export const homeEn = {
     Exclude<HomeSectionId, "new-releases" | "upcoming-shows" | "community-playlists">,
     string
   >,
+  /** Recently played's cards that name no song, album, artist or Library playlist. */
+  recentlyPlayed: {
+    /** A YouTube Music playlist whose title Wave never kept. */
+    playlist: "Playlist",
+    /** A mix's card, by the kind of mix it was. */
+    mixes: {
+      magic: "Magic Queue",
+      dj: "DJ",
+      discoverMix: "Mix",
+      mix: "Mix",
+      related: "Related",
+      newReleases: "New releases",
+    } as Record<string, string>,
+    /** A mix's card for screen readers: a tap plays it again. */
+    playAgain: (mix: string) => `Play ${mix} again`,
+    /** A mix's card tapped, and its songs couldn't be read. */
+    playAgainFailed: "Couldn't play the mix again",
+  },
   settings: "Settings",
   seeAll: "See all",
   emptyTitle: "Nothing here yet",
