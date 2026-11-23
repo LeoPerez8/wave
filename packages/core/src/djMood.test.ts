@@ -7,11 +7,14 @@ import {
   DJ_MOOD_HIGH_ENERGY,
   DJ_MOOD_LOW_ENERGY,
   DJ_MOOD_SAD_VALENCE,
+  DJ_FIRST_UNKNOWN_WAIT_MS,
   djFirstRadioSong,
+  djFirstSongPick,
   djMedianAudioFeatures,
   djMoodFiltered,
   djMoodFit,
   magicArtistKey,
+  songStyle,
   startMagicQueue,
   ytTrackId,
   type DjAudioFeatures,
@@ -87,6 +90,17 @@ describe("a mood matches a song, rules it off, or doesn't know it", () => {
     assert.equal(djMoodFit("upbeat", null, "Soft Rock"), "unknown");
     assert.equal(djMoodFit("energetic", null, null), "unknown");
   });
+
+  test("with no features or known genre, a song's own style rules it off the same way", () => {
+    const heavy = songStyle({ genre: "Heavy Metal" });
+    const soft = songStyle({ genre: "Acoustic" });
+    assert.equal(djMoodFit("relaxing", null, null, heavy), "off");
+    assert.equal(djMoodFit("energetic", null, null, soft), "off");
+    assert.equal(djMoodFit("energetic", null, null, heavy), "unknown");
+    // A genre read for the song speaks first.
+    assert.equal(djMoodFit("relaxing", null, "Soft Rock", heavy), "unknown");
+    assert.equal(djMoodFit("relaxing", CALM_HAPPY, null, heavy), "matched");
+  });
 });
 
 describe("a mood filters a ranking", () => {
@@ -152,7 +166,7 @@ describe("a mood filters a ranking", () => {
     );
   });
 
-  test("a Library song with no stream match goes by its ISRC tag's features only", () => {
+  test("a Library song with no stream match goes by its Library features, else its own style", () => {
     const { matched, unknown } = djMoodFiltered(
       [
         { trackId: "1", source: "library" as const, score: 10, song: null },
@@ -175,6 +189,25 @@ describe("a mood filters a ranking", () => {
     assert.deepEqual(
       unknown.map(({ trackId }) => trackId),
       ["2", "4"],
+    );
+  });
+
+  test("a Library song's style rules it off as a batch and a stand-in both read it", () => {
+    const heavy = songStyle({ genre: "Heavy Metal" });
+    const { matched, unknown } = djMoodFiltered(
+      [
+        { trackId: "1", source: "library" as const, score: 10, song: null, style: heavy },
+        { trackId: "2", source: "library" as const, score: 9, song: { videoId: "v" }, style: heavy },
+        { trackId: "3", source: "library" as const, score: 8, song: null },
+      ],
+      "relaxing",
+      new Map(),
+      new Map(),
+    );
+    assert.deepEqual(matched, []);
+    assert.deepEqual(
+      unknown.map(({ trackId }) => trackId),
+      ["3"],
     );
   });
 
@@ -308,5 +341,38 @@ describe("a mood session's first song", () => {
       djFirstRadioSong(session, "artist:a", [song("sad")], { profileOf, moodFit }),
       null,
     );
+  });
+
+  describe("with a cold mood cache, starts with a song of unknown mood", () => {
+    const pick = (overrides: Partial<Parameters<typeof djFirstSongPick<string>>[0]>) =>
+      djFirstSongPick<string>({
+        matched: null,
+        unknown: "u",
+        waitedMs: 0,
+        answered: false,
+        settled: false,
+        ...overrides,
+      });
+
+    test("a known match starts at once, whatever else is known", () => {
+      assert.equal(pick({ matched: "m" }), "m");
+    });
+
+    test("waits for a match while the radios are still reading", () => {
+      assert.equal(pick({ waitedMs: DJ_FIRST_UNKNOWN_WAIT_MS - 1 }), undefined);
+      assert.equal(pick({ unknown: null }), undefined);
+    });
+
+    test("once the wait is up, or a radio has answered, or every radio has", () => {
+      assert.equal(DJ_FIRST_UNKNOWN_WAIT_MS, 1500);
+      assert.equal(pick({ waitedMs: DJ_FIRST_UNKNOWN_WAIT_MS }), "u");
+      assert.equal(pick({ answered: true }), "u");
+      assert.equal(pick({ settled: true }), "u");
+    });
+
+    test("gives none once every radio has answered with nothing to start", () => {
+      assert.equal(pick({ unknown: null, settled: true }), null);
+      assert.equal(pick({ unknown: null, waitedMs: 10_000, answered: true }), undefined);
+    });
   });
 });

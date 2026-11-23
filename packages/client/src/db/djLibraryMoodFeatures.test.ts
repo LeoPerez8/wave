@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { normalizeTrack } from "@wave/core";
+import { eq } from "drizzle-orm";
 
 import type { IndexedTrack } from "../types.ts";
+import { addCandidates } from "./candidateCatalog.ts";
 import { creditSplits } from "./credits.ts";
 import {
   DJ_LIBRARY_MOOD_MISS_TTL_MS,
@@ -12,7 +14,9 @@ import {
   pendingDjLibraryMoodSongs,
   selectDjLibraryMoodFeatures,
 } from "./djLibraryMoodFeatures.ts";
+import { keepDjMoodFeatures } from "./djMoodFeatures.ts";
 import { saveBatch } from "./save.ts";
+import { tracks } from "./schema.ts";
 import { openTestDatabase } from "./testDatabase.ts";
 import { trackQuery } from "./tracks.ts";
 
@@ -97,4 +101,36 @@ test("pages follow track ids after the last one", async () => {
   );
   assert.equal(first?.trackId, idOf(db, "A"));
   assert.equal(second?.trackId, idOf(db, "B"));
+});
+
+test("a song downloaded from a video goes by that video's stream features before its ISRC tag's", async () => {
+  const db = await openTestDatabase();
+  save(db, [scanned("Downloaded", "USRC17607839"), scanned("Streamless", null)]);
+  const downloaded = idOf(db, "Downloaded");
+  db.update(tracks).set({ videoId: "v1" }).where(eq(tracks.id, downloaded)).run();
+  keepDjLibraryMoodFeatures(db, [
+    { trackId: downloaded, isrc: "USRC17607839", features: loud, checkedAt: 10 },
+  ]);
+  const calm = { energy: 0.2, valence: 0.6, acousticness: 0.8, mode: 1 as const };
+  addCandidates(
+    db,
+    {
+      songs: [
+        {
+          videoId: "v1",
+          title: "Downloaded",
+          artists: ["Artist"],
+          album: null,
+          albumId: null,
+          durationMs: 1,
+          artworkUrl: null,
+          explicit: false,
+        },
+      ],
+      seed: "Artist",
+    },
+    10,
+  );
+  keepDjMoodFeatures(db, [{ videoId: "v1", isrc: null, features: calm, checkedAt: 10 }]);
+  assert.deepEqual(selectDjLibraryMoodFeatures(db), new Map([[String(downloaded), calm]]));
 });

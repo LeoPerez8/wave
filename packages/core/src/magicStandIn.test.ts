@@ -7,13 +7,18 @@ import {
   EMPTY_QUEUE,
   MAGIC_QUEUE_CONTEXT,
   djArtistTile,
+  djGenreTile,
+  genreFamily,
   magicArtistKey,
+  magicStandInHeld,
   magicStandIn,
   magicStandInDue,
   reduceQueue,
+  songStyle,
   startDjQueue,
   type DjAudioFeatures,
   type DjSettings,
+  type DjTile,
   type MagicSession,
   type MagicSong,
   type QueueCommand,
@@ -150,7 +155,7 @@ describe("Library stand-in while a Magic Queue batch is late", () => {
     assert.equal(magicStandInDue(session, other, { picking: true }), false);
   });
 
-  test("fills with songs of unknown mood only behind the known matches, and never plays an off one", () => {
+  test("fills with songs of unknown mood only behind the known matches, and an off one only as a last resort", () => {
     const session = queued(djSession({ mood: "energetic" }), ["1"]);
     const state = lastPlaying(session, ["1"]);
     const songs = [song("u1", "Picked"), song("off", "Picked"), song("m1", "Picked")];
@@ -177,7 +182,7 @@ describe("Library stand-in while a Magic Queue batch is late", () => {
     );
   });
 
-  test("never stands in a song already in the queue or a disliked one", () => {
+  test("never stands in a disliked song, nor one already queued while others are left", () => {
     const session = queued(djSession(), ["1"]);
     // "q" was added by hand (Add to Queue) and was played before the last song.
     const state = run(
@@ -209,7 +214,7 @@ describe("Library stand-in while a Magic Queue batch is late", () => {
     song("p2", "Picked"),
   ];
 
-  test("plays the selected artists first on Low, and their neighbours too on Medium", () => {
+  test("plays the selected artists first, then their neighbours in reach", () => {
     const low = queued(djSession({ variety: "low" }), ["1"]);
     assert.deepEqual(
       magicStandIn(low, lastPlaying(low, ["1"]), spread, { picking: true, graph })?.trackIds,
@@ -218,6 +223,12 @@ describe("Library stand-in while a Magic Queue batch is late", () => {
     const medium = queued(djSession({ variety: "medium" }), ["1"]);
     assert.deepEqual(
       magicStandIn(medium, lastPlaying(medium, ["1"]), spread, { picking: true, graph })?.trackIds,
+      ["p1", "p2"],
+    );
+    // Once the selection's songs are used, a neighbour in reach plays before the next hop out.
+    const later = { ...medium, used: [...medium.used, "p1", "p2"] };
+    assert.deepEqual(
+      magicStandIn(later, lastPlaying(later, ["1"]), spread, { picking: true, graph })?.trackIds,
       ["n1", "n2"],
     );
   });
@@ -235,7 +246,7 @@ describe("Library stand-in while a Magic Queue batch is late", () => {
     const high = queued(djSession({ variety: "high" }), ["1"]);
     assert.deepEqual(
       magicStandIn(high, lastPlaying(high, ["1"]), spread, { picking: true, graph })?.trackIds,
-      ["f1", "n1"],
+      ["p1", "f1"],
     );
     const one = [song("p1", "Picked"), song("p2", "Picked")];
     assert.deepEqual(
@@ -285,5 +296,177 @@ describe("Library stand-in while a Magic Queue batch is late", () => {
       state = run(state, { type: "next" }, { type: "next" });
     }
     assert.deepEqual(played, ["2", "3", "4", "5"]);
+  });
+});
+
+const JAZZ = genreFamily("Jazz")!.key;
+const ROCK = genreFamily("Rock")!.key;
+
+/** A song of the genre family [genre], with the style of the genre [tag] when given. */
+const tagged = (trackId: string, artist: string, genre: string | null, tag?: string): MagicSong => ({
+  ...song(trackId, artist),
+  genre,
+  style: tag === undefined ? null : songStyle({ genre: tag }),
+});
+
+describe("Library stand-in: the DJ selection first", () => {
+  /** A DJ session from the Jazz family tile, whose artist is Miles. */
+  const jazzSession = (variety: DjSettings["variety"] = "medium"): MagicSession => {
+    const tile: DjTile = { ...djGenreTile("Jazz")!, artists: [{ id: 1, name: "Miles" }] };
+    return queued(
+      startDjQueue([tile], { id: "dj1", settings: { ...DEFAULT_DJ_SETTINGS, variety } })!,
+      ["1"],
+    );
+  };
+  /** Bandmate is a hop from Miles; Outsider isn't in the graph. */
+  const jazzGraph = graphOf({ Miles: ["Bandmate"] });
+
+  test("plays the selected family's songs before a nearer artist's songs of another genre", () => {
+    const session = jazzSession();
+    const songs = [
+      tagged("rock1", "Bandmate", ROCK),
+      tagged("rock2", "Bandmate", ROCK),
+      tagged("jazz1", "Outsider", JAZZ),
+      tagged("jazz2", "Outsider", JAZZ),
+    ];
+    assert.deepEqual(
+      magicStandIn(session, lastPlaying(session, ["1"]), songs, { picking: true, graph: jazzGraph })
+        ?.trackIds,
+      ["jazz1", "jazz2"],
+    );
+  });
+
+  test("counts a family artist's songs in only in that family or with no genre", () => {
+    const session = jazzSession("low");
+    const songs = [
+      tagged("milesRock", "Miles", ROCK),
+      tagged("milesUntagged", "Miles", null),
+      tagged("milesJazz", "Miles", JAZZ),
+    ];
+    assert.deepEqual(
+      magicStandIn(session, lastPlaying(session, ["1"]), songs, { picking: true, graph: jazzGraph })
+        ?.trackIds,
+      ["milesUntagged", "milesJazz"],
+    );
+  });
+
+  test("plays a selected album's songs with the selected artists", () => {
+    const session = queued(
+      {
+        ...djSession({ variety: "low" }),
+        seedSongs: [{ id: "song:a1", title: "A1", artists: ["Guest"], durationMs: null, plays: 0 }],
+      },
+      ["1"],
+    );
+    const songs = [song("s1", "Stranger"), song("a1", "Guest")];
+    assert.deepEqual(
+      magicStandIn(session, lastPlaying(session, ["1"]), songs, { picking: true, graph })?.trackIds,
+      ["a1", "s1"],
+    );
+  });
+});
+
+describe("Library stand-in: the music doesn't stop while the Library has songs", () => {
+  const CALM: DjAudioFeatures = { energy: 0.2, valence: 0.6, acousticness: 0.8, mode: 1 };
+
+  test("replays songs the session used that fit the mood, oldest first, before an off one", () => {
+    const session = queued(djSession({ mood: "energetic" }), ["a", "off", "b", "c"]);
+    const state = lastPlaying(session, ["b", "c"]);
+    const songs = ["c", "off", "b", "a"].map((id) => song(id, "Picked"));
+    const moodFeatures = new Map([
+      ["a", ENERGETIC],
+      ["b", ENERGETIC],
+      ["c", ENERGETIC],
+      ["off", CALM],
+    ]);
+    const standIn = magicStandIn(session, state, songs, { picking: true, moodFeatures });
+    assert.deepEqual(standIn?.trackIds, ["a", "b"]);
+    // Each song is held once, the replayed ones as the latest queued.
+    assert.deepEqual(standIn?.session.used, ["off", "c", "a", "b"]);
+  });
+
+  test("replays the songs known to fit before the ones of unknown mood", () => {
+    const session = queued(djSession({ mood: "energetic" }), ["u", "m", "now"]);
+    const state = lastPlaying(session, ["now"]);
+    const songs = ["u", "m", "now"].map((id) => song(id, "Picked"));
+    const moodFeatures = new Map([
+      ["m", ENERGETIC],
+      ["now", ENERGETIC],
+    ]);
+    assert.deepEqual(
+      magicStandIn(session, state, songs, { picking: true, moodFeatures })?.trackIds,
+      ["m", "now"],
+    );
+  });
+
+  test("plays an off-mood song as a last resort rather than stop", () => {
+    // Offline, Energetic, on a Library of calm songs only.
+    const session = queued(djSession({ mood: "energetic" }), ["1"]);
+    const state = lastPlaying(session, ["1"]);
+    const songs = ["1", "calm1", "calm2"].map((id) => song(id, "Picked"));
+    const moodFeatures = new Map(["1", "calm1", "calm2"].map((id) => [id, CALM]));
+    assert.deepEqual(
+      magicStandIn(session, state, songs, { picking: true, moodFeatures })?.trackIds,
+      ["calm1", "calm2"],
+    );
+  });
+
+  test("stops only when the Library has no song to play", () => {
+    const session = queued(djSession({ mood: "energetic" }), ["1"]);
+    const state = lastPlaying(session, ["1"]);
+    assert.equal(magicStandIn(session, state, [], { picking: true }), null);
+    assert.equal(
+      magicStandIn(session, state, [song("bad", "Picked")], {
+        picking: true,
+        disliked: new Set(["bad"]),
+      }),
+      null,
+    );
+    // The song playing is the only one left: it plays again.
+    assert.deepEqual(
+      magicStandIn(session, state, [song("1", "Picked")], { picking: true })?.trackIds,
+      ["1"],
+    );
+  });
+
+  test("keeps a small Library playing round after round", () => {
+    let session = queued(djSession(), ["1"]);
+    let state = lastPlaying(session, ["1"]);
+    const songs = ["1", "2", "3"].map((id) => song(id, "Picked"));
+    const played: string[] = [];
+    for (let round = 0; round < 4; round++) {
+      const standIn = magicStandIn(session, state, songs, { picking: true });
+      assert.ok(standIn !== null);
+      session = standIn.session;
+      state = run(
+        state,
+        { type: "append", trackIds: standIn.trackIds },
+        { type: "next" },
+        { type: "next" },
+      );
+      played.push(...standIn.trackIds);
+    }
+    assert.deepEqual(played, ["2", "3", "1", "2", "3", "1", "2", "3"]);
+  });
+});
+
+describe("Library stand-in: the same mood verdict as a batch", () => {
+  test("a song's style rules it off when no features are cached", () => {
+    const session = queued(djSession({ mood: "relaxing" }), ["1"]);
+    const songs = [tagged("metal", "Picked", null, "Heavy Metal"), song("u1", "Picked")];
+    // Heavy is off for Relaxing: the song playing replays before it.
+    assert.deepEqual(
+      magicStandIn(session, lastPlaying(session, ["1"]), [...songs, song("1", "Picked")], {
+        picking: true,
+      })?.trackIds,
+      ["u1", "1"],
+    );
+  });
+});
+
+describe("Library stand-in songs held by the latest session", () => {
+  test("holds each song once, the stand-ins as the latest queued", () => {
+    const session = { ...djSession(), used: ["1", "2", "3"] };
+    assert.deepEqual(magicStandInHeld(session, ["2", "4"]).used, ["1", "3", "2", "4"]);
   });
 });
