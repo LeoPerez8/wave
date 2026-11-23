@@ -87,8 +87,7 @@ test("lookups failing in a row, as offline, end the run until the next one", asy
     fillStreamedGenres({
       enabled: () => true,
       turn: async () => {},
-      page: async (after) =>
-        videos.filter((id) => id > after && !saved.includes(id)).slice(0, 10),
+      page: async (after) => videos.filter((id) => id > after && !saved.includes(id)).slice(0, 10),
       lookup: async (id) => {
         asks.push(id);
         if (!online) throw new Error("offline");

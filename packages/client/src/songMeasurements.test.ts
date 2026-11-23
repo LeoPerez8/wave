@@ -37,6 +37,8 @@ const harness = (paths: readonly string[]) => {
   const measured: string[] = [];
   const learned: number[] = [];
   let cancels = 0;
+  // How many songs each read asked the Library about.
+  const asked: number[] = [];
   const songs = (ids: readonly number[]): SongToMeasure[] =>
     ids.flatMap((id) => {
       const path = paths[id - 1];
@@ -45,7 +47,11 @@ const harness = (paths: readonly string[]) => {
   const measurements = createSongMeasurements({
     on: () => on,
     queue: () => Effect.sync(() => ({ state: queue, album: null })),
-    songsToMeasure: (ids) => Effect.sync(() => songs(ids)),
+    songsToMeasure: (ids) =>
+      Effect.sync(() => {
+        asked.push(ids.length);
+        return songs(ids);
+      }),
     measure: (path) =>
       new Promise<AudioMeasurement>((resolve, reject) => {
         measured.push(path);
@@ -72,6 +78,7 @@ const harness = (paths: readonly string[]) => {
     kept,
     measured,
     learned,
+    asked,
     settle,
     get cancels() {
       return cancels;
@@ -113,6 +120,16 @@ const harness = (paths: readonly string[]) => {
 const loud = { kind: "measured", loudness: -8, peak: 1 } as const;
 
 describe("createSongMeasurements", () => {
+  test("a step asks the Library about a page of a long queue, not all of it", async () => {
+    const paths = Array.from({ length: 2000 }, (_, index) => `/${index + 1}.flac`);
+    const h = harness(paths);
+    void h.measurements.wake();
+    await h.answer("/1.flac", loud);
+    await h.settle();
+    assert.deepEqual(h.measured, ["/1.flac", "/2.flac"]);
+    assert.deepEqual(h.asked, [26, 26]);
+  });
+
   test("measures the window's songs one at a time, in order, keeping each result", async () => {
     const h = harness(["/a.mp3", "/b.flac", "/c.ogg"]);
     void h.measurements.wake();

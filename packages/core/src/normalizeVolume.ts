@@ -243,8 +243,18 @@ export const songsToMeasure = (
   needsMeasuring: (id: number) => boolean,
   album?: AlbumLoudness | null,
 ): number[] => {
+  const line = measureLine(state, needsMeasuring, album);
+  return line === null ? [] : [...new Set([...line.first, ...line.albumIds, ...line.ahead])];
+};
+
+/** `songsToMeasure`'s parts: null for an empty queue. */
+const measureLine = (
+  state: QueueState,
+  needsMeasuring: (id: number) => boolean,
+  album?: AlbumLoudness | null,
+) => {
   const current = currentEntry(state);
-  if (current === null) return [];
+  if (current === null) return null;
   const first = libraryTrackIds([current.trackId]).filter(needsMeasuring);
   const ahead: number[] = [];
   for (const entry of upNext(state)) {
@@ -257,7 +267,7 @@ export const songsToMeasure = (
   const albumIds = albumGainApplies(state, album)
     ? album.songs.map((song) => song.id).filter(needsMeasuring)
     : [];
-  return [...new Set([...first, ...albumIds, ...ahead])];
+  return { first, albumIds, ahead };
 };
 
 /**
@@ -275,6 +285,38 @@ export const measureCandidates = (state: QueueState, album?: AlbumLoudness | nul
       ...libraryTrackIds(upNext(state).map((entry) => entry.trackId)),
     ]),
   ];
+};
+
+/** How many Up Next songs a measuring step asks the Library about at once (#1489). */
+export const MEASURE_PAGE = 25;
+
+/**
+ * The next of `measureCandidates` to ask the Library about, after the first [asked] of them,
+ * with [needsMeasuring] answering for those: the current song and the album with the first
+ * `MEASURE_PAGE` of Up Next, then a page at a time. Empty once the asked ones hold the five
+ * ahead, or none are left: `songsToMeasure` with what they answered is then the line the whole
+ * queue gives. So a queue of a 2,000-song playlist asks about 26 songs, not 2,000, each time a
+ * song is measured.
+ */
+export const nextMeasureCandidates = (
+  state: QueueState,
+  needsMeasuring: (id: number) => boolean,
+  asked: number,
+  album?: AlbumLoudness | null,
+): number[] => {
+  const candidates = measureCandidates(state, album);
+  if (asked >= candidates.length) return [];
+  if (asked === 0) {
+    const current = currentEntry(state);
+    const albumIds = albumGainApplies(state, album) ? album.songs.map((song) => song.id) : [];
+    const head = new Set([
+      ...libraryTrackIds(current === null ? [] : [current.trackId]),
+      ...albumIds,
+    ]);
+    return candidates.slice(0, head.size + MEASURE_PAGE);
+  }
+  if ((measureLine(state, needsMeasuring, album)?.ahead.length ?? 0) === MEASURE_AHEAD) return [];
+  return candidates.slice(asked, asked + MEASURE_PAGE);
 };
 
 /** One Library song of an album, including songs with no file or value yet. */

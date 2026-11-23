@@ -2060,6 +2060,8 @@ export {
   knownGain,
   MEASURE_AHEAD,
   measureCandidates,
+  MEASURE_PAGE,
+  nextMeasureCandidates,
   albumGain,
   entryGain,
   readNormalizeVolume,
