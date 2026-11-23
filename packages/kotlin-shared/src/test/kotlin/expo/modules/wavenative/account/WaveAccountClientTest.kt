@@ -158,6 +158,7 @@ class WaveAccountClientTest {
       val list = "5f0c1a2b3c4d5e6f708192a3b4c5d6e7"
       val allowed = listOf(
         "PUT" to "/v1/account/name",
+        "PUT" to "/v1/account/photo",
         "POST" to "/v1/collaboration",
         "DELETE" to "/v1/collaboration?playlist=$list",
         "GET" to "/v1/collaboration/members?playlist=$list",
@@ -184,6 +185,8 @@ class WaveAccountClientTest {
         "GET" to "/v1/collaboration",
         "PUT" to "/v1/collaboration",
         "GET" to "/v1/account/name",
+        "GET" to "/v1/account/photo",
+        "PUT" to "/v1/account/photo?x=1",
         "DELETE" to "/v1/collaboration",
         "DELETE" to "/v1/collaboration?playlist=",
         "DELETE" to "/v1/collaboration?playlist=a/../../soulseek",

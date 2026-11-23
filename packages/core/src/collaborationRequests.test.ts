@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   accountNameCall,
+  accountPhotoCall,
   collaborationAnswer,
   createInviteCall,
   endCollaborationCall,
@@ -42,6 +43,7 @@ const collaboration = {
 
 const every: readonly CollaborationCall<unknown>[] = [
   accountNameCall("Ana Souza"),
+  accountPhotoCall(PHOTO),
   makeCollaborationCall(LIST),
   endCollaborationCall(LIST),
   membersCall(LIST),
@@ -63,6 +65,7 @@ describe("collaboration requests", () => {
       every.map(({ request }) => request),
       [
         { method: "PUT", path: "/v1/account/name", body: '{"name":"Ana Souza"}' },
+        { method: "PUT", path: "/v1/account/photo", body: `{"photoUrl":"${PHOTO}"}` },
         { method: "POST", path: "/v1/collaboration", body: `{"playlistId":"${LIST}"}` },
         { method: "DELETE", path: `/v1/collaboration?playlist=${LIST}`, body: null },
         { method: "GET", path: `/v1/collaboration/members?playlist=${LIST}`, body: null },
@@ -100,6 +103,8 @@ describe("collaboration requests", () => {
       ["PUT", "/v1/collaboration"],
       ["POST", "/v1/collaboration?playlist=x"],
       ["GET", "/v1/account/name"],
+      ["GET", "/v1/account/photo"],
+      ["PUT", "/v1/account/photo?x=1"],
       ["DELETE", "/v1/account"],
       ["DELETE", "/v1/collaboration"],
       ["DELETE", "/v1/collaboration?playlist="],

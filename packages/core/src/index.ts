@@ -1180,6 +1180,7 @@ export {
 } from "./collaborativeRows.ts";
 export {
   accountNameCall,
+  accountPhotoCall,
   collaborationAnswer,
   createInviteCall,
   endCollaborationCall,

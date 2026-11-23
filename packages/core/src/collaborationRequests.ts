@@ -1,8 +1,9 @@
 /**
  * The sync service's routes for collaborative playlists (`apps/sync/README.md`, Collaborative
- * playlists, Invite links, `PUT /v1/account/name`), as the app calls them. The session token
- * stays with the phone's native module and the desktop's main process, which send each request
- * only when `isCollaborationRequest` takes it; this builds the requests and reads the answers.
+ * playlists, Invite links, `PUT /v1/account/name` and `PUT /v1/account/photo`), as the app calls
+ * them. The session token stays with the phone's native module and the desktop's main process,
+ * which send each request only when `isCollaborationRequest` takes it; this builds the requests
+ * and reads the answers.
  * An answer is what the route gives, a refusal the caller can act on, or a failure.
  */
 import { accountPhotoUrl } from "./accountPhoto.ts";
@@ -186,6 +187,10 @@ const collaborationOf = some((body) => readCollaboration(parse(body)));
 export const accountNameCall = (name: string): CollaborationCall<null> =>
   call("PUT", "/v1/account/name", { name }, nothing);
 
+/** `PUT /v1/account/photo`: keeps [photoUrl] (the Google account photo) for the session's account. */
+export const accountPhotoCall = (photoUrl: string): CollaborationCall<null> =>
+  call("PUT", "/v1/account/photo", { photoUrl }, nothing);
+
 /** `POST /v1/collaboration`: makes a playlist of the account collaborative, owned by it. */
 export const makeCollaborationCall = (playlistId: string): CollaborationCall<Collaboration> =>
   call("POST", "/v1/collaboration", { playlistId }, collaborationOf);
@@ -316,6 +321,7 @@ const ID = "[0-9A-Za-z_-]{1,128}";
 /** Every request the app may send for collaborative playlists, by method. */
 const ALLOWED: readonly (readonly [CollaborationMethod, RegExp])[] = [
   ["PUT", /^\/v1\/account\/name$/],
+  ["PUT", /^\/v1\/account\/photo$/],
   ["POST", /^\/v1\/collaboration$/],
   ["DELETE", new RegExp(`^/v1/collaboration\\?playlist=${ID}$`)],
   ["GET", new RegExp(`^/v1/collaboration/members\\?playlist=${ID}$`)],
