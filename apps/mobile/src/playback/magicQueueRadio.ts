@@ -8,8 +8,10 @@ import {
   djMoodFilteredSteps,
   djMoodFit,
   djNewReleasesRankedSteps,
-  djVarietyCandidates,
-  djVarietyCandidatesSteps,
+  djFirstSongPick,
+  djVarietyMoodPools,
+  djVarietyMoodPoolsSteps,
+  DJ_FIRST_UNKNOWN_WAIT_MS,
   identityKey,
   libraryFinderSteps,
   type MixKnownSongs,
@@ -307,21 +309,22 @@ export const magicQueueYtCandidates = (
         );
       });
     // A DJ session's Artist variety limits who a batch may hold; any other keeps every song.
-    // A mood's unknown songs are kept apart, as the batch's fill once its matched ones run out.
+    // A mood's unknown songs are kept apart, as the batch's fill once its matched ones run out,
+    // and varied in the same pass: High credits no matched song's artist again among them.
     const allowed = (size: number) =>
       Effect.gen(function* () {
         const seed = yield* rank(seeds, true);
         const likedRanked = yield* rank(liked, false);
-        const varied = (pools: DjCandidatePools<RankedRadioSong>) =>
-          runSteps(
-            djVarietyCandidatesSteps(sessionNow?.() ?? session, graph, pools, size),
-            freeTurnEffect,
-          );
-        const matched = yield* varied({ seed: seed.matched, liked: likedRanked.matched });
-        const unknown: DjCandidatePools<RankedRadioSong> =
-          seed.unknown.length + likedRanked.unknown.length === 0
-            ? { seed: [], liked: [] }
-            : yield* varied({ seed: seed.unknown, liked: likedRanked.unknown });
+        const { matched, unknown } = yield* runSteps(
+          djVarietyMoodPoolsSteps(
+            sessionNow?.() ?? session,
+            graph,
+            { seed: seed.matched, liked: likedRanked.matched },
+            { seed: seed.unknown, liked: likedRanked.unknown },
+            size,
+          ),
+          freeTurnEffect,
+        );
         return { ...matched, unknown };
       });
     // Unfilled, so a radio short of allowed songs reads its continuations.
@@ -444,17 +447,24 @@ export const magicQueueDjLibraryRanking = (
       moodGenres,
       libraryMoodFeatures,
     );
-    const varied = (songs: readonly RankedRadioSong[]): readonly RankedRadioSong[] =>
-      djVarietyCandidates(session, graph, { seed: songs, liked: [] }, songs.length).seed;
-    return { matched: varied(matched), unknown: varied(unknown) };
+    // Varied in one pass, so High credits no matched song's artist again among the unknown ones.
+    const varied = djVarietyMoodPools(
+      session,
+      graph,
+      { seed: matched, liked: [] },
+      { seed: unknown, liked: [] },
+      matched.length + unknown.length,
+    );
+    return { matched: varied.matched.seed, unknown: varied.unknown.seed };
   });
 
 /**
  * The first song a DJ session's first batch could take (`djFirstRadioSong`:
  * dislikes, used and learned songs, family radios, Artist variety) from any
  * selected radio, while its peers keep loading. With a mood, it's a song the
- * cached features say matches it; a song the mood can't tell starts only once
- * every radio has answered without a match, and an off song never does.
+ * cached features say matches it; with none yet, a song the mood can't tell
+ * starts once `DJ_FIRST_UNKNOWN_WAIT_MS` has passed or a radio has answered
+ * from the network (`djFirstSongPick`), and an off song never does.
  */
 export const magicQueueFirstRadioSong = (
   session: MagicSession,
@@ -478,12 +488,43 @@ export const magicQueueFirstRadioSong = (
     yield* Effect.promise(loadDislikes);
     const first = yield* Deferred.make<YtAlbumSong | null>();
     const mood = session.dj?.mood ?? null;
+    const startedAt = Date.now();
     let chosen = false;
-    /** The first pick the mood couldn't tell, started only if no radio brings a match. */
+    /** The first pick the mood couldn't tell, started if no match comes in time. */
     let unknownFirst: YtAlbumSong | null = null;
+    /** Whether a radio's read has answered, and whether every one has. */
+    let answered = false;
+    let settled = false;
+    /** Starts [matched], or the unknown pick once `djFirstSongPick` says it's time. */
+    const decide = (matched: YtAlbumSong | null, waitedMs = Date.now() - startedAt) =>
+      Effect.suspend(() => {
+        if (chosen) return Effect.void;
+        const song = djFirstSongPick({
+          matched,
+          unknown: unknownFirst,
+          waitedMs,
+          answered,
+          settled,
+        });
+        if (song === undefined) return Effect.void;
+        chosen = true;
+        return Deferred.succeed(first, song).pipe(Effect.asVoid);
+      });
+    // A radio with a cached page is told of it before its read answers.
+    const cachedFirst = new Set(
+      readers
+        .current(session.id, seeds)
+        .filter(({ page }) => page !== null)
+        .map(({ seed }) => seed.id),
+    );
     const onPage = ({ seed, page }: SongRadioRead): Effect.Effect<void> =>
       Effect.gen(function* () {
-        if (page === null || chosen) return;
+        const fromRead = !cachedFirst.delete(seed.id);
+        if (chosen) return;
+        if (page === null) {
+          answered ||= fromRead;
+          return yield* decide(null);
+        }
         const videoIds = page.songs.map((song) => song.videoId);
         const known =
           mood === null
@@ -507,14 +548,17 @@ export const magicQueueFirstRadioSong = (
           disliked: dislikedSongsNow(),
           moodFit,
         });
-        if (song === null) return;
-        if (moodFit(song) !== "matched") {
-          unknownFirst ??= song;
-          return;
-        }
-        chosen = true;
-        yield* Deferred.succeed(first, song);
+        answered ||= fromRead;
+        if (song !== null && moodFit(song) === "matched") return yield* decide(song);
+        if (song !== null) unknownFirst ??= song;
+        yield* decide(null);
       });
+    if (mood !== null)
+      yield* Effect.forkDetach(
+        Effect.sleep(DJ_FIRST_UNKNOWN_WAIT_MS).pipe(
+          Effect.andThen(decide(null, DJ_FIRST_UNKNOWN_WAIT_MS)),
+        ),
+      );
     yield* Effect.forkDetach(
       readers
         .read(session.id, seeds, {
@@ -525,7 +569,10 @@ export const magicQueueFirstRadioSong = (
         })
         .pipe(
           Effect.tap(() =>
-            chosen ? Effect.void : Deferred.succeed(first, unknownFirst).pipe(Effect.asVoid),
+            Effect.suspend(() => {
+              settled = true;
+              return decide(null);
+            }),
           ),
           Effect.ensuring(Effect.sync(onSettled)),
         ),

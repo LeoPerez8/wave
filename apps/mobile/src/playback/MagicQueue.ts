@@ -11,6 +11,7 @@ import {
   magicPickDue,
   magicPickEnded,
   magicStandInDue,
+  magicStandInHeld,
   magicStandInSteps,
   mapSteps,
   magicQueueDislikedEntries,
@@ -1205,8 +1206,11 @@ export const layer = Layer.effectDiscard(
             const row = rows.get(id);
             return row !== undefined && songHasFile(row) ? [toQueueTrack(row)] : [];
           });
-          save(picked.session);
           yield* queue.dispatch({ type: "append", trackIds: picked.trackIds }, tracks);
+          // Saved once they're queued, onto the latest session: one saved meanwhile (a signal
+          // learned) keeps what it learned.
+          const held = magicSession.get();
+          if (held?.id === session.id) save(magicStandInHeld(held, picked.trackIds));
           appLog(
             "info",
             "MagicQueue",

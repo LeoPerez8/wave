@@ -95,13 +95,61 @@ export function* djVarietyCandidatesSteps<S extends RankedRadioSong>(
   pools: DjCandidatePools<S>,
   size = 0,
 ): Generator<void, DjCandidatePools<S>> {
+  return yield* varietySteps(session, graph, pools, size, new Set());
+}
+
+/** A mood's matched and unknown candidates, each as the pools a batch is picked from. */
+export interface DjVarietyMoodPools<S> {
+  readonly matched: DjCandidatePools<S>;
+  readonly unknown: DjCandidatePools<S>;
+}
+
+/**
+ * `djVarietyCandidates` over a mood's [matched] candidates and then its
+ * [unknown] ones (`djMoodFiltered`) in one pass: the unknown ones fill a
+ * batch behind the matched ones, so High credits none of the matched songs'
+ * artists again in them while another can play. Each is filled to [size].
+ */
+export const djVarietyMoodPools = <S extends RankedRadioSong>(
+  session: MagicSession,
+  graph: ArtistGraph | null,
+  matched: DjCandidatePools<S>,
+  unknown: DjCandidatePools<S>,
+  size = 0,
+): DjVarietyMoodPools<S> =>
+  finishSteps(djVarietyMoodPoolsSteps(session, graph, matched, unknown, size));
+
+/** `djVarietyMoodPools`, a step per candidate and pass, for a background slice (#1448). */
+export function* djVarietyMoodPoolsSteps<S extends RankedRadioSong>(
+  session: MagicSession,
+  graph: ArtistGraph | null,
+  matched: DjCandidatePools<S>,
+  unknown: DjCandidatePools<S>,
+  size = 0,
+): Generator<void, DjVarietyMoodPools<S>> {
+  const held = new Set<string>();
+  const matchedPools = yield* varietySteps(session, graph, matched, size, held);
+  const unknownPools =
+    unknown.seed.length + unknown.liked.length === 0
+      ? unknown
+      : yield* varietySteps(session, graph, unknown, size, held);
+  return { matched: matchedPools, unknown: unknownPools };
+}
+
+/** `djVarietyCandidatesSteps`, crediting the artists in [held] as already in the batch. */
+function* varietySteps<S extends RankedRadioSong>(
+  session: MagicSession,
+  graph: ArtistGraph | null,
+  pools: DjCandidatePools<S>,
+  size: number,
+  held: Set<string>,
+): Generator<void, DjCandidatePools<S>> {
   if (session.dj === undefined) return pools;
   const hopsOf = djArtistHops(session, graph);
   const eligible = yield* magicRadioEligibleSteps(session, [...pools.seed, ...pools.liked]);
   const extras = new Set(yield* magicLearnedExtrasSteps(pools.seed, pools.liked));
   const reach = REACH[session.dj.variety];
   const once = session.dj.variety === "high";
-  const held = new Set<string>();
   function* pool(
     songs: readonly S[],
     usable: (song: S) => boolean,
@@ -196,4 +244,38 @@ export const djFirstRadioSong = <S extends YtAlbumSong & { readonly video?: bool
     if (fit === "matched" && hops === reach) return song;
   }
   return (best.get("matched") ?? best.get("unknown"))?.song ?? null;
+};
+
+/**
+ * How long a DJ session with a mood waits for a radio song the cached
+ * features say matches it before it starts with one they can't tell.
+ */
+export const DJ_FIRST_UNKNOWN_WAIT_MS = 1500;
+
+/**
+ * Which song starts a DJ session with a mood while its radios load
+ * (`djFirstRadioSong` picks each radio's): the first [matched] one at once.
+ * With none yet, the first song of [unknown] mood starts once
+ * `DJ_FIRST_UNKNOWN_WAIT_MS` has passed ([waitedMs]), a radio has [answered]
+ * from the network, or every radio has ([settled]), so a cold features cache
+ * doesn't hold the music back. Null once every radio answered with no song to
+ * start; undefined while it should wait.
+ */
+export const djFirstSongPick = <S>({
+  matched,
+  unknown,
+  waitedMs,
+  answered,
+  settled,
+}: {
+  readonly matched: S | null;
+  readonly unknown: S | null;
+  readonly waitedMs: number;
+  readonly answered: boolean;
+  readonly settled: boolean;
+}): S | null | undefined => {
+  if (matched !== null) return matched;
+  if (unknown !== null && (settled || answered || waitedMs >= DJ_FIRST_UNKNOWN_WAIT_MS))
+    return unknown;
+  return settled ? null : undefined;
 };
