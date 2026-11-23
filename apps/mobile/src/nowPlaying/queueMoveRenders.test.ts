@@ -18,9 +18,13 @@ const react = JSON.stringify(import.meta.resolve("react"));
 const core = JSON.stringify(import.meta.resolve("@wave/core"));
 const reanimated = JSON.stringify(countingReanimated);
 
-/** What the stubs count and hold: each song row's renders by row key, and the queue shown. */
+/**
+ * What the stubs count and hold: each song row's renders by row key, the queue shown, and the
+ * props Up Next last gave Legend List.
+ */
 interface Scope {
   rows: string[];
+  list?: Record<string, unknown>;
   queue: { state: QueueState | null; listeners: Set<() => void> };
 }
 const SCOPE_KEY = "__waveQueueMoveRenders";
@@ -72,10 +76,14 @@ const [{ UpNextList }] = await loadWithStubs<[typeof import("./QueueView.tsx")]>
     "@legendapp/list/reanimated": stubModule(`
       import { createElement, Fragment } from ${react};
       // Every row drawn, as Legend List draws the ones on screen: each item through renderItem.
-      export const AnimatedLegendList = ({ data, keyExtractor, renderItem, ListFooterComponent }) =>
-        createElement("view", null,
+      const scope = ${shared};
+      export const AnimatedLegendList = (props) => {
+        scope.list = props;
+        const { data, keyExtractor, renderItem, ListFooterComponent } = props;
+        return createElement("view", null,
           data.map(item => createElement(Fragment, { key: keyExtractor(item) }, renderItem({ item }))),
           ListFooterComponent);
+      };
     `),
     "@/songs/SongRow": stubModule(`
       import { createElement } from ${react};
@@ -211,6 +219,24 @@ test("a position change re-renders only the Queue rows whose state changed (#144
     const rowView = row.findByType("view" as never);
     const [, style] = rowView.props.style as [unknown, { transform: { translateY: number }[] }];
     assert.equal(style.transform[0]!.translateY, 0, "the row's place followed the queue");
+  } finally {
+    await act(() => renderer?.unmount());
+  }
+});
+
+test("Up Next shows from its start: the list keeps no visible-content anchor (#1488)", async () => {
+  // Legend List's default anchor (Android's maintainVisibleContentPosition) kept the end of a
+  // long Up Next in place when the Queue first showed, so the list jumped to its last rows and
+  // drew every row twice.
+  show(queueAt(0));
+  let renderer: ReactTestRenderer | undefined;
+  await act(() => {
+    renderer = create(
+      createElement(UpNextList, { bottomInset: 0, ground: {} as never, paneTop: 0 }),
+    );
+  });
+  try {
+    assert.equal(scope().list?.maintainVisibleContentPosition, false);
   } finally {
     await act(() => renderer?.unmount());
   }

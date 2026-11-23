@@ -740,6 +740,10 @@ export function UpNextList({
           initialScrollOffset={start}
           stickyHeaderIndices={sticky}
           recycleItems
+          // No anchor: Android's anchor held a long Up Next's end in place as the Queue first
+          // showed, so the list jumped to its last rows and drew every row twice (#1488).
+          // Placement keeps the start of Up Next in sight instead (`upNextScroll`).
+          maintainVisibleContentPosition={false}
           alwaysRender={drag === null ? undefined : { keys: [drag.key] }}
           scrollEnabled={drag === null}
           scrollEventThrottle={16}
