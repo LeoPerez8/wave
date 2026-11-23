@@ -43,6 +43,12 @@ class YtDownloadService : Service() {
   private var startedAt = 0L
   /** Why it's stopping, once it asked to ([onIdle]); otherwise Android stopped it. */
   private var stopping: DownloadServiceStop? = null
+  /**
+   * Once it's stopping or gone, refreshes and idle checks the journal posted to the main thread
+   * before then do nothing: they would put back an ongoing notification no service holds, over
+   * the "Paused" one [idle] left.
+   */
+  private var ended = false
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onCreate() {
@@ -110,6 +116,8 @@ class YtDownloadService : Service() {
 
   /** No work left: it stops, leaving a "Paused" notification when only paused songs are left. */
   private fun idle() {
+    if (ended) return
+    ended = true
     stopping = downloads.jobs.idleStop()
     if (stopping == DownloadServiceStop.PAUSED) {
       stopForeground(STOP_FOREGROUND_DETACH)
@@ -120,12 +128,14 @@ class YtDownloadService : Service() {
 
   override fun onTimeout(startId: Int, fgsType: Int) {
     WaveLog.w(TAG, ServiceTimeout.line("the downloads service", SystemClock.elapsedRealtime() - startedAt))
+    ended = true
     downloads.stop(DownloadServiceStop.TIME_LIMIT, timedOut = true)
     stopForeground(STOP_FOREGROUND_REMOVE)
     stopSelf()
   }
 
   override fun onDestroy() {
+    ended = true
     stopLanguage?.invoke()
     stopLanguage = null
     downloads.stop(stopping ?: DownloadServiceStop.ANDROID)
@@ -135,6 +145,7 @@ class YtDownloadService : Service() {
   }
 
   private fun refresh() {
+    if (ended) return
     wakeLock?.acquire(LOCK_MS)
     val current = downloads.jobs.current()
     // Android drops notifications posted too often; only post what changed.
