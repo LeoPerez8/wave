@@ -14,7 +14,13 @@ import { beforeEach, describe, test } from "node:test";
 
 import { saveImportedPlays } from "./blackPlayer.ts";
 import { creditSplits, relinkCredits } from "./credits.ts";
-import { endPlay, homeSections, recordPlay, updatePlay } from "./playHistory.ts";
+import {
+  endPlay,
+  homeSections,
+  recentlyPlayedAlbumShelf,
+  recordPlay,
+  updatePlay,
+} from "./playHistory.ts";
 import {
   listeningSums,
   playTotalsDrift,
@@ -300,7 +306,7 @@ const mostPlayedFromHistory = (scope: "library" | "files") => {
     .map((song) => [song.id, song.countedPlays]);
 };
 
-/** Home's Recently Played from the whole history: albums of the songs in the library by their latest play. */
+/** The Recently played album shelf from the whole history: albums of the songs in the library by their latest play. */
 const recentlyPlayedFromHistory = () => {
   const albumOf = new Map(
     db
@@ -337,7 +343,7 @@ describe("Home's all-time reads", () => {
       mostPlayedFromHistory("files"),
     );
     assert.deepEqual(
-      home.recentlyPlayed.map((album) => album.id),
+      recentlyPlayedAlbumShelf(db).map((album) => album.id),
       recentlyPlayedFromHistory(),
     );
     assert.deepEqual(
@@ -347,7 +353,7 @@ describe("Home's all-time reads", () => {
     assert.deepEqual(summedListeningTotals(listeningSums(db)), listeningTotals(songListening(db)));
   });
 
-  test("read the totals, never the play history", () => {
+  test("read the totals, and of the play history only its latest page", () => {
     seedHistory();
 
     for (const read of [
@@ -357,19 +363,20 @@ describe("Home's all-time reads", () => {
       () => creditedPlayTotals(db, statsWindow("all", NOW)),
     ]) {
       for (const query of traceQueries(db, read).queries) {
-        assert.deepEqual(
-          query.plan.filter((step) => /\bSCAN play_events\b/.test(step)),
-          [],
-          query.sql,
-        );
+        const scans = query.plan.filter((step) => /\bSCAN play_events\b/.test(step));
+        // Recently played walks the plays newest first and stops at a page.
+        if (scans.length === 0) continue;
+        assert.deepEqual(scans, ["SCAN play_events USING INDEX play_events_started_at_idx"]);
+        assert.match(query.sql, / limit \?$/, query.sql);
+        assert.doesNotMatch(query.plan.join("; "), /TEMP B-TREE/, query.sql);
       }
     }
   });
 
-  test("walk the totals in order for Most Played and Recently Played, stopping early", () => {
+  test("walk the totals in order for Most Played and the album shelf, stopping early", () => {
     seedHistory();
 
-    const plans = traceQueries(db, () => homeSections(db))
+    const plans = traceQueries(db, () => [homeSections(db), recentlyPlayedAlbumShelf(db)])
       .queries.filter((query) => query.sql.includes("play_totals"))
       .map((query) => query.plan.join("; "));
     assert.equal(plans.length >= 2, true, plans.join("\n"));

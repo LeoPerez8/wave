@@ -108,7 +108,7 @@ import {
   selectListDownloadMembers,
   type DownloadListMembers,
 } from "@wave/client/db/listDownloadMembers";
-import type { ListDownloadsScope } from "@wave/core";
+import type { ListDownloadsScope, PlayContext } from "@wave/core";
 import {
   playedTotalsRead,
   playedTotalsSteps,
@@ -335,6 +335,7 @@ import {
   type HomeSections,
   type RecordedPlay,
 } from "@wave/client/db/playHistory";
+import { contextSongs, type RecentSong } from "@wave/client/db/recentlyPlayed";
 import { listeningSums, selectCountedPlays, songCountedPlays } from "@wave/client/db/playTotals";
 import { keptTotalsSteps } from "@wave/client/db/keptPlayTotals";
 import { loadPlayback, savePlayback, type SavedPlayback } from "@wave/client/db/playback";
@@ -1196,11 +1197,13 @@ export class LibraryStore extends Context.Service<
     readonly home: (scope?: TrackScope) => Effect.Effect<HomeSections, LibraryStoreError>;
     /** Home's Recently Added: only songs entering or leaving the library change it. */
     readonly homeAdded: Effect.Effect<Pick<HomeSections, "recentlyAdded">, LibraryStoreError>;
-    /** Home's Recently Played and Most Played, from the all-time play totals (`play_totals`). */
+    /** Home's Recently played (the latest plays' contexts) and Most Played (the all-time play totals). */
     readonly homePlays: Effect.Effect<HomePlays, LibraryStoreError>;
     /** Home's Favorites: stars change it. */
     readonly homeFavorites: Effect.Effect<Pick<HomeSections, "favorites">, LibraryStoreError>;
     /** The play recorded last, to pick back up when JS restarts while the player kept going. */
+    /** The songs played in the mix [mix], each once, in the order they played: what its Recently played card plays again. */
+    readonly contextSongs: (mix: PlayContext) => Effect.Effect<RecentSong[], LibraryStoreError>;
     readonly latestPlay: Effect.Effect<RecordedPlay | null, LibraryStoreError>;
     /** Counted plays with saved display metadata, newest first, 50 per page. */
     readonly listeningHistory: (
@@ -2324,7 +2327,6 @@ const make = Effect.gen(function* () {
       (db) => homeAdded(db),
       (result) => result.recentlyAdded.length,
     ),
-    // While the kept totals settle, Recently Played's streamed songs resolve in steps.
     homePlays: attemptStepped(
       "read Home's plays",
       PLAY_TOTALS_FALLBACK,
@@ -2338,6 +2340,7 @@ const make = Effect.gen(function* () {
       (result) => result.favorites.length,
     ),
 
+    contextSongs: (mix) => attempt("read a mix's songs", (db) => contextSongs(db, mix)),
     latestPlay: attempt("read the latest play", (db) => latestPlay(db)),
     listeningHistory: (before, query) =>
       attempt("read listening history", (db) => listeningHistory(db, before, query)),

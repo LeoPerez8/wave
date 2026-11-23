@@ -3,6 +3,7 @@ import { router } from "@/lib/timingRouter";
 import { useState } from "react";
 
 import { openingArtist, openedArtistCover } from "./openedArtist";
+import { keepYtPlaylistHead } from "./ytPlaylistHeads";
 
 /** What the opener knew about the album or playlist it opens, for that screen's first frame. */
 export interface YtListHead {
@@ -27,8 +28,10 @@ export const openYtAlbum = (browseId: string, head: YtListHead): void =>
   open("yt-album", browseId, head);
 
 /** Opens a YT Music playlist's songs ([playlistId], without the `VL` its page adds), on the Library stack. */
-export const openYtPlaylist = (playlistId: string, head: YtListHead): void =>
+export const openYtPlaylist = (playlistId: string, head: YtListHead): void => {
+  keepYtPlaylistHead(playlistId, head);
   open("yt-playlist", playlistId, head);
+};
 
 /**
  * The browse id of the YT Music album page at [pathname], or null when it

@@ -1606,8 +1606,37 @@ export const selectPlaylistPlays = (db: LibraryDatabase, now: number): PlaylistP
  * (`playlistSummaries`).
  */
 export const selectPlaylists = (db: LibraryDatabase): PlaylistRow[] => {
-  const { playlists } = schema;
   countListRead();
+  return (
+    playlistRows(db, livePlaylist, true)
+      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+      .sort((a, b) => compareStrings(a.sort, b.sort) || a.id - b.id)
+  );
+};
+
+/**
+ * The playlists [ids] as `selectPlaylists` lists them (Home's Recently
+ * played), by id; deleted or gone ones are left out.
+ */
+export const selectPlaylistsById = (
+  db: LibraryDatabase,
+  ids: readonly number[],
+): Map<number, PlaylistRow> =>
+  ids.length === 0
+    ? new Map()
+    : new Map(
+        playlistRows(db, and(livePlaylist, inArray(schema.playlists.id, [...ids]))!, false).map((row) => [
+          row.id,
+          row,
+        ]),
+      );
+
+/**
+ * The playlists [where] picks, with their artwork and totals, in no particular order. [every]
+ * says they are every playlist: the summaries of the others are dropped (`keepSummaries`).
+ */
+const playlistRows = (db: LibraryDatabase, where: SQL, every: boolean): PlaylistRow[] => {
+  const { playlists } = schema;
   const rows = db
     .select({
       id: playlists.id,
@@ -1617,24 +1646,19 @@ export const selectPlaylists = (db: LibraryDatabase): PlaylistRow[] => {
       ...imageColumns,
     })
     .from(playlists)
-    .where(livePlaylist)
+    .where(where)
     .all();
   const ids = rows.map((row) => row.id);
-  keepSummaries(db, new Set(ids));
+  if (every) keepSummaries(db, new Set(ids));
   // Library tracks and YT Music entries alike.
   const summaries = playlistSummaries(db, ids);
-  return (
-    rows
-      .map(({ imagePath, imageThumbPath, ...row }) => ({
-        ...row,
-        sort: sortKey(row.name),
-        lastEntryAddedAt: summaries.get(row.id)?.lastEntryAddedAt ?? null,
-        ...(summaries.get(row.id)?.totals ?? NO_SONGS),
-        ...playlistArt({ imagePath, imageThumbPath }, summaries.get(row.id)?.covers ?? NO_COVERS),
-      }))
-      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
-      .sort((a, b) => compareStrings(a.sort, b.sort) || a.id - b.id)
-  );
+  return rows.map(({ imagePath, imageThumbPath, ...row }) => ({
+    ...row,
+    sort: sortKey(row.name),
+    lastEntryAddedAt: summaries.get(row.id)?.lastEntryAddedAt ?? null,
+    ...(summaries.get(row.id)?.totals ?? NO_SONGS),
+    ...playlistArt({ imagePath, imageThumbPath }, summaries.get(row.id)?.covers ?? NO_COVERS),
+  }));
 };
 
 /** Playlist [id]'s own row, counted as a page read; undefined when it's gone (or deleted). */

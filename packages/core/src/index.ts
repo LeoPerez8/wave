@@ -2137,8 +2137,21 @@ export {
 export type { PerfEntry, PerfFlush, PerfMeta, PerfRecorder, PerfTiming } from "./perfLog.ts";
 export { createPagedRows, PAGED_ROWS_LIMITS } from "./pagedRows.ts";
 export type { PagedRows, PagedRowsLimits, PagedRowsStats } from "./pagedRows.ts";
-export { recentlyPlayedAlbums } from "./recentlyPlayed.ts";
-export type { LatestPlayedSong } from "./recentlyPlayed.ts";
+export {
+  mixReplayContext,
+  recentlyPlayedAlbums,
+  recentlyPlayedContext,
+  recentlyPlayedContexts,
+  recordedPlayContext,
+  SONG_PLAY_CONTEXT,
+} from "./recentlyPlayed.ts";
+export type {
+  LatestPlayedSong,
+  RecentlyPlayedContext,
+  RecentlyPlayedKind,
+  RecentPlay,
+  RecordedSession,
+} from "./recentlyPlayed.ts";
 export {
   APP_LOG_LIMITS,
   describeLogArgs,
