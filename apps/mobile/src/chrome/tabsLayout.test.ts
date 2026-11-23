@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createElement, useSyncExternalStore, type ComponentType } from "react";
+import { createContext, createElement, useSyncExternalStore, type ComponentType } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
 import { loadWithStubs, nativeStubs, stubModule } from "../perf/renderHarness.ts";
@@ -23,6 +23,19 @@ const harness = {
   shown: [] as (string | null)[],
   /** The paths the router read a route from (`getStateFromPath`). */
   routerReads: [] as string[],
+  /**
+   * The router's linking, which reads a path's route as expo-router's does: anew each time.
+   * Made here, so the tabs read it whether or not the layout provides its own.
+   */
+  LinkingContext: createContext({
+    options: {
+      config: { screens: {} },
+      getStateFromPath: (path: string) => {
+        harness.routerReads.push(path);
+        return { routes: [{ name: path, state: { routes: [{ name: "index" }] } }] };
+      },
+    },
+  }),
 };
 Object.assign(globalThis, { __tabsLayoutTest: harness });
 
@@ -48,17 +61,7 @@ const [{ default: TabsLayout }] = await loadWithStubs<[typeof import("../app/(ta
        };
        export const usePathname = () => useSyncExternalStore(subscribe, () => ${t}.pathname);`,
     ),
-    // The router's linking, which reads a path's route as expo-router's does: anew each time.
-    "expo-router/react-navigation": stubModule(
-      `import { createContext } from ${react};
-       const config = { screens: {} };
-       const getStateFromPath = (path) => {
-         ${t}.routerReads.push(path);
-         return { routes: [{ name: path, state: { routes: [{ name: "index" }] } }] };
-       };
-       export const LinkingContext = createContext({ options: { config, getStateFromPath } });
-       ${t}.LinkingContext = LinkingContext;`,
-    ),
+    "expo-router/react-navigation": stubModule(`export const LinkingContext = ${t}.LinkingContext;`),
     // As expo-router's headless tabs do, the navigator follows the route and, on every
     // navigation, reads each tab's route from its path with the route's segments.
     "expo-router/ui": stubModule(
