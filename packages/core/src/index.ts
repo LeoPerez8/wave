@@ -3412,7 +3412,16 @@ export {
 export type { DjDiscovery, DjPopularity, DjSettings, DjVariety } from "./djSettings.ts";
 export { djAdjustGroups, djAdjustSheetHeight, djAdjustSheetSwipeCloses } from "./djAdjust.ts";
 export type { DjAdjustGroup, DjAdjustOption, DjAdjustSheetSwipe } from "./djAdjust.ts";
-export { djFirstRadioSong, djVarietyCandidates, djVarietyCandidatesSteps } from "./djVariety.ts";
+export {
+  DJ_FIRST_UNKNOWN_WAIT_MS,
+  djFirstRadioSong,
+  djFirstSongPick,
+  djVarietyCandidates,
+  djVarietyCandidatesSteps,
+  djVarietyMoodPools,
+  djVarietyMoodPoolsSteps,
+} from "./djVariety.ts";
+export type { DjVarietyMoodPools } from "./djVariety.ts";
 export type { DjCandidatePools } from "./djVariety.ts";
 export {
   DJ_REMEMBERED_SETTING,
@@ -3445,6 +3454,7 @@ export {
   MAGIC_STAND_IN_SONGS,
   magicStandIn,
   magicStandInDue,
+  magicStandInHeld,
   magicStandInSteps,
 } from "./magicStandIn.ts";
 export type { MagicStandIn, MagicStandInOptions } from "./magicStandIn.ts";

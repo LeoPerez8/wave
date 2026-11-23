@@ -35,6 +35,8 @@ export interface DjMoodRankable {
   readonly genre?: string | null;
   /** A Library song's Track id, which [djMoodFiltered]'s Library features are kept against. */
   readonly trackId?: string;
+  /** A Library song's style key (`songStyle`), read when its stream genre gives none. */
+  readonly style?: string | null;
   readonly source?: "stream" | "library";
 }
 
@@ -64,9 +66,16 @@ const upbeatScore = ({ energy, valence }: DjAudioFeatures): number => {
   return 0.6 * (valence - 0.5) + 0.4 * (mediumOrHighEnergy - 0.5);
 };
 
+/** The style keys (`GenreStyle.key`) a mood rules off with no features. */
+const OFF_STYLE: { readonly [K in DjMood]: string | null } = {
+  energetic: "softacoustic",
+  relaxing: "heavy",
+  upbeat: null,
+};
+
 /**
  * [mood]'s verdict on a song, from its cached [features] or else its known
- * [genre]'s style (docs/spec.md, DJ):
+ * [genre]'s style, or else its own [style] key (`songStyle`) (docs/spec.md, DJ):
  *
  * - Energetic: energy at least `DJ_MOOD_HIGH_ENERGY`, valence above `DJ_MOOD_SAD_VALENCE`.
  * - Relaxing: energy at most `DJ_MOOD_LOW_ENERGY`, valence above `DJ_MOOD_SAD_VALENCE`.
@@ -79,6 +88,7 @@ export const djMoodFit = (
   mood: DjMood,
   features: DjAudioFeatures | null,
   genre: string | null,
+  style: string | null = null,
 ): DjMoodFit => {
   if (features !== null) {
     const fits =
@@ -89,11 +99,8 @@ export const djMoodFit = (
           : upbeatScore(features) > 0;
     return fits ? "matched" : "off";
   }
-  if (genre === null) return "unknown";
-  const style = genreStyle(genre)?.name.toLowerCase();
-  if (style === "heavy" && mood === "relaxing") return "off";
-  if (style === "soft / acoustic" && mood === "energetic") return "off";
-  return "unknown";
+  const known = (genre === null ? null : genreStyle(genre)?.key) ?? style;
+  return known !== null && known === OFF_STYLE[mood] ? "off" : "unknown";
 };
 
 /** A ranking split by a mood: the songs it matches and those it can't tell, each in ranked order. */
@@ -108,8 +115,9 @@ export interface DjMoodPools<S> {
  * taste orders the songs inside the mood. A batch takes the matched ones
  * and fills from the unknown ones only when they fall short. A stream song
  * goes by its cached [features], else its Library match's, else its
- * genre; a Library song with no stream match by its ISRC tag's
- * [libraryFeatures] only. With no mood, every song is matched.
+ * genre; a Library song with no stream match by its [libraryFeatures]
+ * (its own video's stream features, else its ISRC tag's). Either falls
+ * back on its own style when it has one. With no mood, every song is matched.
  */
 export const djMoodFiltered = <S extends DjMoodRankable>(
   songs: readonly S[],
@@ -139,13 +147,15 @@ export function* djMoodFilteredSteps<S extends DjMoodRankable>(
       candidate.source === "library" && candidate.trackId !== undefined
         ? (libraryFeatures.get(candidate.trackId) ?? null)
         : null;
+    const style = candidate.style ?? null;
     const fit =
       videoId === undefined
-        ? djMoodFit(mood, library, null)
+        ? djMoodFit(mood, library, null, style)
         : djMoodFit(
             mood,
             features.get(videoId) ?? library,
             genres.get(videoId) ?? candidate.genre ?? null,
+            style,
           );
     if (fit === "matched") matched.push(candidate);
     else if (fit === "unknown") unknown.push(candidate);
