@@ -180,6 +180,13 @@ export type { RestoredPlayback } from "./playbackRestore.ts";
 export { extrapolatePosition, scrubHitSlop, scrubPosition } from "./position.ts";
 export type { PositionReport, ScrubTouch, VerticalSlop } from "./position.ts";
 export {
+  HOLD_SKIP_REPEAT_MS,
+  HOLD_SKIP_STEP_MS,
+  holdSkipSeconds,
+  holdSkipStep,
+} from "./holdSkip.ts";
+export type { HoldSkipDirection, HoldSkipFrom, HoldSkipStep } from "./holdSkip.ts";
+export {
   CENTRE_FRAMING,
   adjustFraming,
   framingSquare,

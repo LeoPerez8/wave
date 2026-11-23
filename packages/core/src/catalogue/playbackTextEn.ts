@@ -290,4 +290,11 @@ export const playbackTextEn = {
   sleepDuration: (hours: number, minutes: number) =>
     hours === 0 ? `${minutes} min` : minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`,
   lyricsOnline: "Lyrics online",
+  /** Hold actions of Now Playing's transport, as TalkBack offers them (story 38d). */
+  restartTheSong: "Restart",
+  forwardFiveSeconds: "Forward 5 seconds",
+  backFiveSeconds: "Back 5 seconds",
+  /** The label over a held Next / Previous: the seconds moved so far. */
+  holdSkipForward: (seconds: number) => `+${seconds} s`,
+  holdSkipBack: (seconds: number) => `−${seconds} s`,
 };
