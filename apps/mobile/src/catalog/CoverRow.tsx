@@ -15,9 +15,18 @@ export const COVER_ROW_TILE = CELL * 19;
  * side margin: Home's shelves and an artist page's album
  * shelves. Its tiles sit a gutter apart, the first one on the margin.
  * `staged` mounts only the tiles on screen in its first frame and the rest in
- * the frames after (#1355), for rows of `COVER_ROW_TILE` tiles.
+ * the frames after (#1355), for rows of `COVER_ROW_TILE` tiles unless `tile`
+ * gives their width.
  */
-export function CoverRow({ children, staged = false }: { children: ReactNode; staged?: boolean }) {
+export function CoverRow({
+  children,
+  staged = false,
+  tile = COVER_ROW_TILE,
+}: {
+  children: ReactNode;
+  staged?: boolean;
+  tile?: number;
+}) {
   const scrollable = useListScrollable();
   const { width } = useWindowDimensions();
   return (
@@ -29,7 +38,7 @@ export function CoverRow({ children, staged = false }: { children: ReactNode; st
       contentContainerStyle={{ paddingHorizontal: grid.margin, gap: grid.gutter }}
     >
       {staged ? (
-        <StagedSections estimate={COVER_ROW_TILE} gap={grid.gutter} viewport={width}>
+        <StagedSections estimate={tile} gap={grid.gutter} viewport={width}>
           {children}
         </StagedSections>
       ) : (
