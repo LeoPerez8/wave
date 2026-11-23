@@ -423,6 +423,9 @@ export const settingsPtBr: typeof settingsEn = {
     "Deslize uma música para executar uma ação. A Seguir não aceita esse gesto.",
   songRowsDontSwipeEveryActionIs:
     "As linhas de músicas não deslizam. Todas as ações continuam no menu de toque longo.",
+  colourAtTheTopOfPages: "Cor no Topo das Páginas",
+  aSubtleTintFadesInAtTheTop:
+    "Um leve tom de cor aparece no topo de cada página: álbum, playlist e artista usam as cores da capa, e as outras páginas usam as da música que está tocando.",
   keepFindFieldVisible: "Manter Campo de Busca Visível",
   theFindFieldStaysUnderThePages:
     "O campo de busca fica sob o cabeçalho enquanto a lista rola, em vez de aparecer apenas ao puxar a lista para baixo.",

@@ -29,6 +29,7 @@ import {
   RankedSongs,
   statsSongsContext,
 } from "@/stats/StatsViews";
+import { PageTopGradient } from "@/pageGradient/PageGradient";
 
 /**
  * A Stats section's height for mounting them across frames: a title and a few
@@ -51,6 +52,7 @@ export default function StatsScreen() {
 
   return (
     <View className="flex-1 bg-background">
+      <PageTopGradient />
       <ScreenHeader title={strings.home.sections.stats} />
       <ScrollView
         scrollEnabled={scrollable}

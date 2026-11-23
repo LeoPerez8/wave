@@ -4,6 +4,7 @@ import {
   movedToFollowing,
   parseTrackId,
   playSoFar,
+  recordedPlayContext,
   resumePlay,
   trackPlays,
   type PlaybackSignal,
@@ -24,6 +25,7 @@ import { withSyncLibraryReads } from "@/library/syncLibraryReads";
 
 import { Player, playbackState, positionState } from "./Player";
 import { observePlayCheckpoints } from "@wave/client/playCheckpoints";
+import { magicSession } from "./magicSessionStore";
 import { keptPlayingKey, queueSource, queueState } from "./Queue";
 import { queuedYtSong, queueTracks } from "./queueTracks";
 
@@ -94,14 +96,19 @@ export const unavailableStreamedVideos = makeExternalStore<ReadonlySet<string>>(
 
 type StateSignal = Extract<PlaybackSignal, { type: "state" }>;
 
-/** The track behind a queue entry, with the context it came from (none for Play Next / Add to Queue). */
+/**
+ * The track behind a queue entry, with the context it came from (none for Play Next / Add to
+ * Queue), as Recently played tells it (Core's `recordedPlayContext`): a Search tap's session is
+ * its song's, a DJ's the DJ's.
+ */
 const trackFor = (key: string): PlayTrack | null => {
   const queue = queueState.get();
   const entry = queue.entries.find((candidate) => candidate.key === key);
   if (entry === undefined) return null;
   return {
     trackId: entry.trackId,
-    context: entry.contextIndex === null ? null : queue.context,
+    context:
+      entry.contextIndex === null ? null : recordedPlayContext(queue.context, magicSession.get()),
     source: queueSource.get(),
   };
 };
