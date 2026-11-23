@@ -288,4 +288,9 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   sleepDuration: (hours: number, minutes: number) =>
     hours === 0 ? `${minutes} min` : minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`,
   lyricsOnline: "Letras online",
+  restartTheSong: "Recomeçar",
+  forwardFiveSeconds: "Avançar 5 segundos",
+  backFiveSeconds: "Voltar 5 segundos",
+  holdSkipForward: (seconds: number) => `+${seconds} s`,
+  holdSkipBack: (seconds: number) => `−${seconds} s`,
 };
