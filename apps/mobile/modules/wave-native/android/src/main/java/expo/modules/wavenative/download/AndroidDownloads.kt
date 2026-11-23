@@ -269,6 +269,23 @@ class AndroidDownloads private constructor(private val context: Context) {
     changed(); settlePausedNotice(); requestService()
   }
 
+  /**
+   * A playlist's, album's or other group's Pause (#1475): its songs not downloaded yet stop at
+   * once, and the others go on. [key] is Core's `downloadGroupKey`.
+   */
+  fun pauseGroup(key: String) {
+    jobs.pauseGroup(key, transport)
+    WaveLog.i(TAG, "Downloads of one group paused by the owner")
+    changed()
+  }
+
+  /** The group's Resume: its songs go on, so the service starts again if it stopped. */
+  fun resumeGroup(key: String) {
+    jobs.resumeGroup(key)
+    WaveLog.i(TAG, "Downloads of one group resumed by the owner")
+    changed(); settlePausedNotice(); requestService()
+  }
+
   /** Cancel All: the songs [ids] (Settings › Downloads' count), or every song not downloaded yet (null: the notification). */
   fun cancelAll(ids: List<String>?) {
     jobs.cancelAll(ids, transport)

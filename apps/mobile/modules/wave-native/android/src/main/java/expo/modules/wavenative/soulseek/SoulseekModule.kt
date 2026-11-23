@@ -52,6 +52,8 @@ class SoulseekModule : Module() {
             origin = request["origin"] as Map<String, Any?>?,
             // The owner asked (Core's `requestRunsWhilePaused`): it downloads while downloads are paused.
             release = request["release"] == true,
+            // A list's Download (Core's `requestResumesGroup`): it resumes the list's paused group.
+            resumesGroup = request["resumesGroup"] == true,
           )
         }
         val ids = downloads.jobs.enqueueAll(asked)
@@ -104,6 +106,9 @@ class SoulseekModule : Module() {
     AsyncFunction("cancelAllDownloads") Coroutine { ids: List<String> -> withContext(Dispatchers.IO) { downloads.cancelAll(ids) } }
     // Whether the owner paused downloads, read without the journal's lock.
     Function("downloadsPaused") { downloads.jobs.ownerPaused() }
+    AsyncFunction("pauseDownloadGroup") Coroutine { key: String -> withContext(Dispatchers.IO) { downloads.pauseGroup(key) } }
+    AsyncFunction("resumeDownloadGroup") Coroutine { key: String -> withContext(Dispatchers.IO) { downloads.resumeGroup(key) } }
+    Function("pausedDownloadGroups") { downloads.jobs.pausedGroups().toList() }
     // Settings › Downloads' drag: the waiting jobs [ids] start in this order (Core's `moveQueuedJobs`).
     AsyncFunction("moveQueuedJobs") Coroutine { ids: List<String> -> withContext(Dispatchers.IO) { downloads.jobs.moveQueued(ids); downloads.changed() } }
 
