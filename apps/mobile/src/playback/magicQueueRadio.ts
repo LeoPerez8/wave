@@ -4,8 +4,9 @@ import {
   djFirstRadioSong,
   djRadioSongAllowed,
   djNewReleasesRanked,
-  djMoodRanked,
-  djMoodRankedSteps,
+  djMoodFiltered,
+  djMoodFilteredSteps,
+  djMoodFit,
   djNewReleasesRankedSteps,
   djVarietyCandidates,
   djVarietyCandidatesSteps,
@@ -25,6 +26,9 @@ import {
   rankRadioSongsSteps,
   type ArtistGraph,
   type CatalogSong,
+  type DjAudioFeatures,
+  type DjCandidatePools,
+  type DjMoodFit,
   type GenreProfileOf,
   type MagicSession,
   type MagicSong,
@@ -206,7 +210,9 @@ export const magicQueueYtCandidates = (
     // Read before the first ranking; each ranking takes the dislikes as they are by then.
     yield* Effect.promise(loadDislikes);
     // A DJ session's New releases raises the songs on its artists' recent releases; any other keeps the order.
-    // Both re-rank the whole ranking, the playable Library included, so they run in slices (#1448).
+    // Its mood then splits the ranking into the songs it matches and those it can't tell, and
+    // drops the off ones (`djMoodFiltered`). Both go over the whole ranking, the playable Library
+    // included, so they run in slices (#1448).
     const rank = (group: readonly SongRadioSeed[], original: boolean, faithfulFallback = false) =>
       Effect.gen(function* () {
         const ranked = yield* radioRanked(group, original, faithfulFallback);
@@ -215,7 +221,7 @@ export const magicQueueYtCandidates = (
           freeTurnEffect,
         );
         return yield* runSteps(
-          djMoodRankedSteps(released, mood, moodFeatures, moodGenres, libraryMoodFeatures),
+          djMoodFilteredSteps(released, mood, moodFeatures, moodGenres, libraryMoodFeatures),
           freeTurnEffect,
         );
       });
@@ -301,19 +307,22 @@ export const magicQueueYtCandidates = (
         );
       });
     // A DJ session's Artist variety limits who a batch may hold; any other keeps every song.
+    // A mood's unknown songs are kept apart, as the batch's fill once its matched ones run out.
     const allowed = (size: number) =>
       Effect.gen(function* () {
         const seed = yield* rank(seeds, true);
         const likedRanked = yield* rank(liked, false);
-        return yield* runSteps(
-          djVarietyCandidatesSteps(
-            sessionNow?.() ?? session,
-            graph,
-            { seed, liked: likedRanked },
-            size,
-          ),
-          freeTurnEffect,
-        );
+        const varied = (pools: DjCandidatePools<RankedRadioSong>) =>
+          runSteps(
+            djVarietyCandidatesSteps(sessionNow?.() ?? session, graph, pools, size),
+            freeTurnEffect,
+          );
+        const matched = yield* varied({ seed: seed.matched, liked: likedRanked.matched });
+        const unknown: DjCandidatePools<RankedRadioSong> =
+          seed.unknown.length + likedRanked.unknown.length === 0
+            ? { seed: [], liked: [] }
+            : yield* varied({ seed: seed.unknown, liked: likedRanked.unknown });
+        return { ...matched, unknown };
       });
     // Unfilled, so a radio short of allowed songs reads its continuations.
     const before = yield* allowed(0);
@@ -330,29 +339,36 @@ export const magicQueueYtCandidates = (
       low: (seed) => (originalIds.has(seed.id) ? plan.seedLow : plan.likedLow),
     });
     // The radios' answers are handled in slices too: the network wait itself isn't one.
-    const { seed: candidates, liked: likedCandidates } = yield* allowed(plan.size);
+    const { seed: candidates, liked: likedCandidates, unknown } = yield* allowed(plan.size);
     // Ranked again at Close only when the faithful batch comes up short (`completeMagicRadioBatch`).
-    // Done now, in slices, so Close never ranks in one block.
-    const fallback = session.faithful
+    // Done now, in slices, so Close never ranks in one block. A DJ session is never faithful: its
+    // mood's unknown songs fill a short batch instead.
+    const fallback: (() => DjCandidatePools<RankedRadioSong>) | undefined = session.faithful
       ? yield* Effect.map(
           Effect.all([rank(seeds, true, true), rank(liked, false, true)]),
           ([seed, likedRanked]) =>
-            () => ({ seed, liked: likedRanked }),
+            () => ({ seed: seed.matched, liked: likedRanked.matched }),
         )
-      : undefined;
-    found = [...candidates, ...likedCandidates];
+      : unknown.seed.length + unknown.liked.length > 0
+        ? () => unknown
+        : undefined;
+    found = [...candidates, ...likedCandidates, ...unknown.seed, ...unknown.liked];
     const songs = read.reduce((sum, { page }) => sum + (page?.songs.length ?? 0), 0);
     return {
       candidates,
       likedCandidates,
       fallback,
       ranked: songs,
-      eligible: candidates.length + likedCandidates.length,
+      eligible:
+        candidates.length + likedCandidates.length + unknown.seed.length + unknown.liked.length,
       refilled: read.every(({ page }) => page === null) ? null : songs,
     };
   });
 
-/** The batch-ranked order for directly selected, playable DJ Library songs, without radio reads. */
+/**
+ * The batch-ranked order for directly selected, playable DJ Library songs, without radio reads:
+ * the songs the session's mood matches, and apart the ones it can't tell (`djMoodFiltered`).
+ */
 export const magicQueueDjLibraryRanking = (
   session: MagicSession,
   candidates: readonly SongRow[],
@@ -421,26 +437,24 @@ export const magicQueueDjLibraryRanking = (
       ),
       freeTurnEffect,
     );
-    const adjusted = djMoodRanked(
+    const { matched, unknown } = djMoodFiltered(
       djNewReleasesRanked(session, ranked, releases, Date.now()),
       mood,
       moodFeatures,
       moodGenres,
       libraryMoodFeatures,
     );
-    const varied = djVarietyCandidates(
-      session,
-      graph,
-      { seed: adjusted, liked: [] },
-      adjusted.length,
-    );
-    return varied.seed as readonly RankedRadioSong[];
+    const varied = (songs: readonly RankedRadioSong[]): readonly RankedRadioSong[] =>
+      djVarietyCandidates(session, graph, { seed: songs, liked: [] }, songs.length).seed;
+    return { matched: varied(matched), unknown: varied(unknown) };
   });
 
 /**
  * The first song a DJ session's first batch could take (`djFirstRadioSong`:
  * dislikes, used and learned songs, family radios, Artist variety) from any
- * selected radio, while its peers keep loading.
+ * selected radio, while its peers keep loading. With a mood, it's a song the
+ * cached features say matches it; a song the mood can't tell starts only once
+ * every radio has answered without a match, and an off song never does.
  */
 export const magicQueueFirstRadioSong = (
   session: MagicSession,
@@ -459,21 +473,48 @@ export const magicQueueFirstRadioSong = (
   Effect.gen(function* () {
     const yt = yield* YtMusic;
     const context = yield* Effect.context<LibraryStore>();
+    const store = yield* LibraryStore;
     const readers = radioReaders(yt, context);
     yield* Effect.promise(loadDislikes);
     const first = yield* Deferred.make<YtAlbumSong | null>();
+    const mood = session.dj?.mood ?? null;
     let chosen = false;
-    const onPage = ({ seed, page }: SongRadioRead) => {
-      if (page === null || chosen) return Effect.void;
-      const song = djFirstRadioSong(session, seed.id, page.songs, {
-        graph,
-        profileOf,
-        disliked: dislikedSongsNow(),
+    /** The first pick the mood couldn't tell, started only if no radio brings a match. */
+    let unknownFirst: YtAlbumSong | null = null;
+    const onPage = ({ seed, page }: SongRadioRead): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        if (page === null || chosen) return;
+        const videoIds = page.songs.map((song) => song.videoId);
+        const known =
+          mood === null
+            ? new Map<string, DjAudioFeatures>()
+            : yield* store
+                .djMoodFeatures(videoIds)
+                .pipe(Effect.orElseSucceed(() => new Map<string, DjAudioFeatures>()));
+        const genreRows =
+          mood === null
+            ? []
+            : yield* store.songGenres(videoIds).pipe(Effect.orElseSucceed(() => []));
+        const genres = new Map(genreRows.map(({ id, genre }) => [String(id), genre] as const));
+        if (chosen) return;
+        const moodFit = (song: YtAlbumSong): DjMoodFit =>
+          mood === null
+            ? "matched"
+            : djMoodFit(mood, known.get(song.videoId) ?? null, genres.get(song.videoId) ?? null);
+        const song = djFirstRadioSong(session, seed.id, page.songs, {
+          graph,
+          profileOf,
+          disliked: dislikedSongsNow(),
+          moodFit,
+        });
+        if (song === null) return;
+        if (moodFit(song) !== "matched") {
+          unknownFirst ??= song;
+          return;
+        }
+        chosen = true;
+        yield* Deferred.succeed(first, song);
       });
-      if (song === null) return Effect.void;
-      chosen = true;
-      return Deferred.succeed(first, song).pipe(Effect.asVoid);
-    };
     yield* Effect.forkDetach(
       readers
         .read(session.id, seeds, {
@@ -484,7 +525,7 @@ export const magicQueueFirstRadioSong = (
         })
         .pipe(
           Effect.tap(() =>
-            chosen ? Effect.void : Deferred.succeed(first, null).pipe(Effect.asVoid),
+            chosen ? Effect.void : Deferred.succeed(first, unknownFirst).pipe(Effect.asVoid),
           ),
           Effect.ensuring(Effect.sync(onSettled)),
         ),

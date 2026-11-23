@@ -1,6 +1,6 @@
 /**
  * #1448: a Magic Queue batch's own ranking after the radios' (the batch's
- * completion, Artist variety, New releases and mood) runs in background
+ * completion, Artist variety, New releases and the mood filter) runs in background
  * slices, a few candidates per step, and picks the same batch as in one go.
  */
 import assert from "node:assert/strict";
@@ -13,8 +13,8 @@ import {
   completeMagicRadioBatch,
   completeMagicRadioBatchSteps,
   DEFAULT_DJ_SETTINGS,
-  djMoodRanked,
-  djMoodRankedSteps,
+  djMoodFiltered,
+  djMoodFilteredSteps,
   djNewReleasesRanked,
   djNewReleasesRankedSteps,
   djVarietyCandidates,
@@ -255,12 +255,8 @@ describe("the Magic Queue batch is the same as before slicing", () => {
     assert.equal(digest(ids(near.liked)), "6:2faab798");
   });
 
-  test("New releases and mood rank the same", () => {
+  test("New releases ranks the same", () => {
     assert.equal(digest(scored(djNewReleasesRanked(dj, seed, pages, NOW))), "3300:b909b70e");
-    assert.equal(
-      digest(scored(djMoodRanked(seed, "energetic", features, genres, libraryFeatures))),
-      "3300:7df45436",
-    );
   });
 
   test("the exclusions are the same", () => {
@@ -331,13 +327,13 @@ describe("the Magic Queue batch's ranking runs a few candidates per step", () =>
     assert.deepEqual(scored(releases.value), scored(djNewReleasesRanked(dj, seed, pages, NOW)));
     assert.ok(releases.most <= MOST_READS_PER_STEP, `${releases.most} reads in one step`);
     const mood = mostReadsPerStep(
-      djMoodRankedSteps(countedSeed, "energetic", features, genres, libraryFeatures),
+      djMoodFilteredSteps(countedSeed, "energetic", features, genres, libraryFeatures),
       counter,
     );
-    assert.deepEqual(
-      scored(mood.value),
-      scored(djMoodRanked(seed, "energetic", features, genres, libraryFeatures)),
-    );
+    const plain = djMoodFiltered(seed, "energetic", features, genres, libraryFeatures);
+    assert.deepEqual(ids(mood.value.matched), ids(plain.matched));
+    assert.deepEqual(ids(mood.value.unknown), ids(plain.unknown));
+    assert.ok(plain.matched.length > 0 && plain.unknown.length > 0);
     assert.ok(mood.most <= MOST_READS_PER_STEP, `${mood.most} reads in one step`);
   });
 

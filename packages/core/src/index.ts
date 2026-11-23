@@ -3424,8 +3424,16 @@ export {
   djToggleMood,
 } from "./djSettings.ts";
 export type { DjFilter, DjMood } from "./djSettings.ts";
-export { djMedianAudioFeatures, djMoodRanked, djMoodRankedSteps, djMoodScore } from "./djMood.ts";
-export type { DjAudioFeatures, DjMoodRankable } from "./djMood.ts";
+export {
+  DJ_MOOD_HIGH_ENERGY,
+  DJ_MOOD_LOW_ENERGY,
+  DJ_MOOD_SAD_VALENCE,
+  djMedianAudioFeatures,
+  djMoodFiltered,
+  djMoodFilteredSteps,
+  djMoodFit,
+} from "./djMood.ts";
+export type { DjAudioFeatures, DjMoodFit, DjMoodPools, DjMoodRankable } from "./djMood.ts";
 export { djAudioFeaturesByIsrc, isrcFromTag } from "./isrcTag.ts";
 export {
   DJ_NEW_RELEASE_BOOST,
