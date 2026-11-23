@@ -139,10 +139,10 @@ class PlaybackService : MediaLibraryService() {
     }
   }
 
-  private val runtimeLetGo = Runnable { runtimeHold.pauseOver() }
+  private val runtimeLetGo: Runnable = Runnable { runtimeHold.pauseOver() }
 
   /** Holds Wave's JS runtime while the player plays, so the Magic Queue fills with the screen off. */
-  private val runtimeHold = PlaybackRuntimeHold(
+  private val runtimeHold: PlaybackRuntimeHold = PlaybackRuntimeHold(
     object : RuntimeHoldHost {
       override fun hold() {
         WaveLog.i(JsRuntime.LOG_TAG, "Playback holds the JS runtime")
