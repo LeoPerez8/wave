@@ -11,6 +11,7 @@ import type { Client } from "@libsql/client";
 import {
   acceptedLanguages,
   accountName,
+  accountPhotoUrl,
   catalogueOf,
   geniusUpstreamUrl,
   resolveAppLanguage,
@@ -685,6 +686,24 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     return new Response(null, { status: 204 });
   });
 
+  /**
+   * Keeps the body's photo for the session's account, as a sign-in keeps the ID token's: an app
+   * that signed in before photos were kept sends it once. Only an address Core's
+   * `accountPhotoUrl` accepts is kept; anything else stores nothing.
+   */
+  const putAccountPhoto = withSession(async ({ request }, session) => {
+    const body = await readJson(request);
+    const photoUrl = accountPhotoUrl(
+      typeof body === "object" && body !== null && "photoUrl" in body ? body.photoUrl : undefined,
+    );
+    if (photoUrl === null) throw failure(400, "bad_request");
+    await db.execute({
+      sql: "UPDATE accounts SET photo_url = ? WHERE id = ?",
+      args: [photoUrl, session.accountId],
+    });
+    return new Response(null, { status: 204 });
+  });
+
   /** The query's `playlist`: the id of the playlist a collaboration route is about. */
   const playlistAsked = (url: URL): string => {
     const playlistId = url.searchParams.get("playlist");
@@ -1045,6 +1064,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     "GET /v1/pull": pullChanges,
     "DELETE /v1/account": removeAccount,
     "PUT /v1/account/name": putAccountName,
+    "PUT /v1/account/photo": putAccountPhoto,
     "POST /v1/collaboration": makeCollaborative,
     "DELETE /v1/collaboration": endCollaborative,
     "GET /v1/collaboration/members": listMembers,

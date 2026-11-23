@@ -525,6 +525,20 @@ in before names were kept sends its Google account name once.
 `400 { "error": "bad_request" }` when `name` isn't text or is empty, and the name there was
 stays. Deleting the account deletes the name with it.
 
+### `PUT /v1/account/photo`
+
+Keeps a photo for the session's account, as a sign-in keeps the ID token's: an app that signed
+in before photos were kept sends its Google account photo once.
+
+```json
+{ "photoUrl": "https://lh3.googleusercontent.com/a/ACg8oc…=s96-c" }
+```
+
+`204`, no body. `400 { "error": "bad_request" }` when `photoUrl` isn't an address Core's
+`accountPhotoUrl` accepts (an `https:` URL on a host ending in `.googleusercontent.com`), and
+the photo there was stays. A later sign-in replaces it with the token's, or with none. Deleting
+the account deletes the photo with it.
+
 ### `GET /v1/genius/search?q=<text>`, `GET /v1/genius/song?id=<id>`, `GET /v1/genius/referents?song=<id>&page=<n>`
 
 Genius's search, song and referents as the Lyrics view asks them, answered with Genius's JSON
