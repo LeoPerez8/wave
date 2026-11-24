@@ -3,7 +3,7 @@
  * (offline, every lookup fails at once), and walking every pending video would only spend the
  * JS thread on the screen in front. The next run, after a play or Wave coming back, tries again.
  */
-export const FAILURES_ENDING_A_RUN = 3;
+const FAILURES_ENDING_A_RUN = 3;
 
 /** Sequential, bounded history fill. The caller schedules free turns and owns consent/lifetime. */
 export interface StreamedGenreFillPorts {
