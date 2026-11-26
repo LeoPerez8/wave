@@ -2471,6 +2471,7 @@ export type {
 export {
   GENRE_AFFINITY_THRESHOLD,
   artistProfilesKnown,
+  artistProfileDue,
   parseArtistProfiles,
   storedArtistProfiles,
   withArtistProfiles,
@@ -2942,6 +2943,8 @@ export type { LostLinkTap, LostTapReason } from "./lostTap.ts";
 export { createArtistGraphBuild, type ArtistGraphCatalogEntry } from "./artistGraphBuild.ts";
 export { mixKnownSongsSteps } from "./mixKnownSongs.ts";
 export { genreMixDjCandidatesSteps, genreMixSeedsSteps } from "./genreMixes.ts";
+export { faithfulGenreMixesSteps } from "./faithfulGenreMixes.ts";
+export { lookUpDeezerArtistGenre } from "./deezerArtistGenre.ts";
 export { mapSteps, sortSteps, finishSteps, filterSteps } from "./buildSteps.ts";
 export { libraryMixProfilesSteps } from "./genreAffinity.ts";
 export { rankPlaysSteps } from "./stats.ts";

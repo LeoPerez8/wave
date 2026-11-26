@@ -1,4 +1,4 @@
-/** All a row's artist radios start together; each mix keeps its own ordered pages. */
+/** All Artist mixes' radios start together; each mix keeps its own ordered pages. */
 import { mixSeedArtists, type DiscoverMixSeed, type RadioRankingPage } from "@wave/core";
 import * as Effect from "effect/Effect";
 import type { SongRadioPage } from "../playback/songRadioSession.ts";
