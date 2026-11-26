@@ -1,10 +1,24 @@
-import { UNDERLINE_WAVE, underlineMotion } from "@wave/core";
-import { useReducedMotion } from "react-native-reanimated";
+import { networkSignalHoldsUp, UNDERLINE_WAVE, underlineMotion } from "@wave/core";
+import { useEffect } from "react";
+import {
+  interpolateColor,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import { NativeWaveUnderline } from "@/glass/waveGlass";
 import { usePlayWhenReady } from "@/playback/hooks";
 import { useNetworkSignal } from "@/playback/networkSignal";
-import { useThemeColor } from "@/theme/useThemeColor";
+import { useThemeColor, type ThemeColor } from "@/theme/useThemeColor";
+
+/**
+ * How long the playing song's title and its underline take to step back to the
+ * secondary colour while the network holds the song up, and to come back (#1498),
+ * as Now Playing's cover loses its colour.
+ */
+export const HELD_UP_EASE_MS = 1000;
 
 /**
  * Box tall enough for crest, trough and the stroke around them. The wave
@@ -18,7 +32,7 @@ const HEIGHT = UNDERLINE_WAVE.amplitude * 2 + UNDERLINE_WAVE.stroke;
  * box (which hugs the visible, possibly truncated, text): it spans that width.
  * It ripples while music plays and lies still when paused, under reduce
  * motion, and while the network holds the song up (Offline or Slow, #1498),
- * when it takes the secondary colour as the title does (`usePlayingTitleTone`).
+ * when it eases to the secondary colour as the title does (`usePlayingTitleTone`).
  *
  * The ripple is a native AnimatedVectorDrawable on the RenderThread, not a
  * UI-thread animation: a UI-thread frame would make every glass view re-record
@@ -37,6 +51,7 @@ export function WavyUnderline() {
       importantForAccessibility="no-hide-descendants"
       accessibilityElementsHidden
       color={colour}
+      colorEaseMs={reduceMotion ? 0 : HELD_UP_EASE_MS}
       animating={motion === "wriggle"}
       style={{ position: "absolute", left: 0, right: 0, bottom: -1, height: HEIGHT }}
     />
@@ -49,10 +64,28 @@ export function WavyUnderline() {
  */
 export const usePlayingTitleTone = (): "highlight" | "secondary" => {
   const { signal } = useNetworkSignal();
-  return signal === "offline" || signal === "slow" ? "secondary" : "highlight";
+  return networkSignalHoldsUp(signal) ? "secondary" : "highlight";
 };
 
-/** The playing song's title class in lists, held up or not (`usePlayingTitleTone`). */
-export function usePlayingTitleClass(): string {
-  return usePlayingTitleTone() === "highlight" ? "text-highlight" : "text-secondary";
+/**
+ * An animated text colour for the playing song's title: [tone] (ember in lists,
+ * the foreground in Now Playing), easing to the secondary colour over
+ * [HELD_UP_EASE_MS] while [heldUp], and back; at once under reduce motion.
+ */
+export function useHeldUpTitleStyle(tone: ThemeColor, heldUp: boolean) {
+  const [base, secondary] = useThemeColor([tone, "secondary"]);
+  const reduceMotion = useReducedMotion();
+  const held = useSharedValue(heldUp ? 1 : 0);
+  useEffect(() => {
+    const to = heldUp ? 1 : 0;
+    held.set(reduceMotion ? to : withTiming(to, { duration: HELD_UP_EASE_MS }));
+  }, [heldUp, reduceMotion, held]);
+  return useAnimatedStyle(() => ({
+    color: interpolateColor(held.get(), [0, 1], [base, secondary]),
+  }));
+}
+
+/** The playing song's title style in lists: ember, easing to secondary while held up. */
+export function usePlayingTitleStyle() {
+  return useHeldUpTitleStyle("highlight", usePlayingTitleTone() === "secondary");
 }

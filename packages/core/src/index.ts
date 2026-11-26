@@ -1437,6 +1437,7 @@ export {
   followNetworkSignal,
   networkSignal,
   networkSignalAnnouncement,
+  networkSignalHoldsUp,
   networkSignalLabel,
   networkSignalLine,
   networkSignalRecheckMs,

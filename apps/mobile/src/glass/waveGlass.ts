@@ -72,6 +72,8 @@ export const NativeCover: ComponentType<NativeCoverProps> = requireNativeView<Na
 
 export interface NativeWaveUnderlineProps extends ViewProps {
   readonly color: ColorValue;
+  /** How long a change of [color] eases over once shown; 0 (the default) changes it at once. */
+  readonly colorEaseMs?: number;
   /** Slides the wave along (on the RenderThread) while true; lies still otherwise. */
   readonly animating: boolean;
   /** The underline's small wave (the default), or the Recognize card's larger one. */

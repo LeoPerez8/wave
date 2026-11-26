@@ -7,6 +7,7 @@ import {
   followNetworkSignal,
   networkSignal,
   networkSignalAnnouncement,
+  networkSignalHoldsUp,
   networkSignalLabel,
   networkSignalLine,
   networkSignalRecheckMs,
@@ -83,6 +84,15 @@ describe("networkSignal", () => {
 
   test("a loading time missing its start counts from now", () => {
     assert.equal(networkSignal({ ...playing, loading: true }), "playing");
+  });
+});
+
+describe("networkSignalHoldsUp", () => {
+  test("Offline and Slow hold the song up; playing and Back don't", () => {
+    assert.equal(networkSignalHoldsUp("offline"), true);
+    assert.equal(networkSignalHoldsUp("slow"), true);
+    assert.equal(networkSignalHoldsUp("playing"), false);
+    assert.equal(networkSignalHoldsUp("back"), false);
   });
 });
 

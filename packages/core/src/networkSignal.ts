@@ -61,6 +61,13 @@ export const networkSignal = (input: NetworkSignalInput): NetworkSignal => {
   return "playing";
 };
 
+/**
+ * Whether [signal] holds the song up (Offline or Slow): the song is meant to play, so its cover
+ * keeps its size and loses its colour, the title steps back and Play Downloaded Songs shows.
+ */
+export const networkSignalHoldsUp = (signal: NetworkSignal): signal is "offline" | "slow" =>
+  signal === "offline" || signal === "slow";
+
 /** In how many ms [networkSignal] could answer differently with nothing else changing (the grace ending), or null. */
 export const networkSignalRecheckMs = (input: NetworkSignalInput): number | null => {
   if (input.waitingForConnection || !input.loading || input.cutByNetwork) return null;

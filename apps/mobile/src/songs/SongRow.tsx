@@ -8,6 +8,7 @@ import {
 import { swipeActionLabels, type RowMenuAction, type RowSwipeSide } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { memo, useCallback, useMemo, type ReactNode } from "react";
+import Animated from "react-native-reanimated";
 import {
   Text,
   View,
@@ -23,7 +24,7 @@ import { MemberCircle } from "@/catalog/MemberCircle";
 import { useLocalisation } from "@/localisation/localisation";
 import { RankNumber } from "@/catalog/RankNumber";
 import { SwipeableRow, swipeAccessibility, type SwipeSide } from "@/catalog/SwipeableRow";
-import { usePlayingTitleClass, WavyUnderline } from "@/catalog/WavyUnderline";
+import { usePlayingTitleStyle, WavyUnderline } from "@/catalog/WavyUnderline";
 import { Press } from "@/motion/Press";
 import { useRenderCount } from "@/perf/perf";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -242,11 +243,15 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
   );
 });
 
-/** The playing row's title: ember, or the secondary colour while the network holds it up. */
+/** The playing row's title: ember, easing to the secondary colour while the network holds it up. */
 function PlayingTitle({ title }: { title: string }) {
   return (
-    <Text numberOfLines={1} className={`font-sans text-body font-medium ${usePlayingTitleClass()}`}>
+    <Animated.Text
+      numberOfLines={1}
+      className="font-sans text-body font-medium"
+      style={usePlayingTitleStyle()}
+    >
       {title}
-    </Text>
+    </Animated.Text>
   );
 }
