@@ -37,7 +37,6 @@ export const createCachedArtistRadioReader = <E, R, RN>({
           Effect.gen(function* () {
             const page = yield* withRadioDeadline(live(artist), MIX_RADIO_DEADLINE_MS);
             if (page !== null) {
-              noteRead?.("live");
               cache.put(id, page);
               yield* Effect.forkDetach(note(artist.name, page));
             }
@@ -52,6 +51,8 @@ export const createCachedArtistRadioReader = <E, R, RN>({
         );
         pending.set(id, reading);
       }
-      return yield* reading.get;
+      const page = yield* reading.get;
+      if (page !== null) noteRead?.("live");
+      return page;
     });
 };
