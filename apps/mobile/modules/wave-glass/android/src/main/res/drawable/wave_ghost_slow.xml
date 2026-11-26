@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The mini player's ghost wave while the network holds the song up (slow, #1498):
+  a 60dp segment of wave, flat at its tail, that sweeps right along the pill's bottom
+  edge every 3600 ms, fading from 70% to nothing (WaveGhostView draws it).
+
+  Every number here comes from Core's MINI_GHOST_WAVE and GHOST_WAVE, and the path is
+  miniGhostWavePath(); src/playback/ghostWaveDrawable.test.ts fails if they drift. The
+  viewport spans the whole run (the segment starts just left of it and ends past the
+  widest pill), since a vector draws nothing outside it.
+
+  An AnimatedVectorDrawable, so it runs on the RenderThread: the UI thread draws no
+  frames for it, and the glass behind the pill isn't re-blurred (#93). The stroke is
+  white; the view tints it with the theme's accent.
+-->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+  <aapt:attr name="android:drawable">
+    <vector
+        android:width="480dp"
+        android:height="4.5dp"
+        android:viewportWidth="480"
+        android:viewportHeight="4.5">
+      <group android:translateY="0.75">
+        <group android:name="ghost" android:translateX="-60">
+          <path
+              android:name="line"
+              android:pathData="M0 1.5L1 1.48L2 1.45L3 1.44L4 1.47L5 1.54L6 1.63L7 1.67L8 1.63L9 1.5L10 1.34L11 1.23L12 1.24L13 1.39L14 1.62L15 1.82L16 1.89L17 1.77L18 1.5L19 1.19L20 1.01L21 1.05L22 1.31L23 1.7L24 2.02L25 2.12L26 1.92L27 1.5L28 1.05L29 0.79L30 0.85L31 1.23L32 1.77L33 2.21L34 2.34L35 2.06L36 1.5L37 0.91L38 0.56L39 0.66L40 1.16L41 1.85L42 2.41L43 2.56L44 2.21L45 1.5L46 0.76L47 0.34L48 0.46L49 1.08L50 1.93L51 2.6L52 2.78L53 2.35L54 1.5L55 0.62L56 0.12L57 0.27L58 1L59 2L60 2.8"
+              android:strokeColor="#FFFFFFFF"
+              android:strokeAlpha="0.7"
+              android:strokeWidth="1.5"
+              android:strokeLineCap="round"
+              android:strokeLineJoin="round" />
+        </group>
+      </group>
+    </vector>
+  </aapt:attr>
+  <target android:name="ghost">
+    <aapt:attr name="android:animation">
+      <objectAnimator
+          android:propertyName="translateX"
+          android:valueFrom="-60"
+          android:valueTo="480"
+          android:valueType="floatType"
+          android:duration="3600"
+          android:repeatCount="infinite"
+          android:repeatMode="restart"
+          android:interpolator="@android:anim/linear_interpolator" />
+    </aapt:attr>
+  </target>
+  <target android:name="line">
+    <aapt:attr name="android:animation">
+      <objectAnimator
+          android:propertyName="strokeAlpha"
+          android:valueFrom="0.7"
+          android:valueTo="0"
+          android:valueType="floatType"
+          android:duration="3600"
+          android:repeatCount="infinite"
+          android:repeatMode="restart"
+          android:interpolator="@android:anim/linear_interpolator" />
+    </aapt:attr>
+  </target>
+</animated-vector>

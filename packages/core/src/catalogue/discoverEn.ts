@@ -60,6 +60,8 @@ export const discoverEn = {
   popularity: "Popularity",
   faithfulnessNote:
     "Same genres excludes known unrelated genres. Close, Balanced and Neighbours lower them less at each step. Wander ignores genre. Unknown genres always stay.",
+  mobileFaithfulnessNote:
+    "Same genres leaves known unrelated genres out of Artist mixes and Magic Queue. Close, Balanced and Neighbours rank them lower. Wander ignores genre. Genre mixes always stay within their genre.",
   /** The new-music levels, 1 to 5, and the share of new songs each gives. */
   levels: {
     1: "Mostly familiar",

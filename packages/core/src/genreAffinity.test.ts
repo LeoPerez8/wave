@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   GENRE_AFFINITY_THRESHOLD,
   artistProfilesKnown,
+  artistProfileDue,
   parseArtistProfiles,
   storedArtistProfiles,
   withArtistProfiles,
@@ -134,4 +135,22 @@ describe("Artists' profiles from Deezer, kept on the phone", () => {
     assert.equal(parseArtistProfiles(null).size, 0);
     assert.equal(parseArtistProfiles("{oops").size, 0);
   });
+});
+
+test("Deezer artist profiles refresh at 180 days, and successful misses retry at 30 days", () => {
+  const day = 86_400_000;
+  const now = 1_700_000_000_000;
+  const cache = parseArtistProfiles(
+    storedArtistProfiles(
+      withArtistProfiles(new Map(), [
+        ["The Killers", genreProfile([{ genre: "Rock" }]), now],
+        ["Nobody Knows", null, now],
+      ]),
+    ),
+  );
+  assert.equal(artistProfileDue(cache, "killers", now + 179 * day), false);
+  assert.equal(artistProfileDue(cache, "killers", now + 180 * day), true);
+  assert.equal(artistProfileDue(cache, "Nobody Knows", now + 29 * day), false);
+  assert.equal(artistProfileDue(cache, "Nobody Knows", now + 30 * day), true);
+  assert.equal(artistProfileDue(cache, "New Name", now), true);
 });

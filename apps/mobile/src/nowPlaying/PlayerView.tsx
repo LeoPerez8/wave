@@ -1,5 +1,5 @@
 import { useRenderCost } from "@/lib/renderCost";
-import { nowPlayingRelatedChevronShown, playerNotice } from "@wave/core";
+import { nowPlayingRelatedChevronShown, playerNotice, type NetworkSignal } from "@wave/core";
 import { useLocalisation } from "@/localisation/localisation";
 import { beginTiming, activeTiming, noteTimingLinkFailure } from "@/lib/timing";
 import { IconChevronRight, IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
@@ -13,6 +13,7 @@ import Animated, {
   useReducedMotion,
   useSharedValue,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 
 import { CELL } from "@/catalog/grid";
@@ -29,6 +30,7 @@ import { Press } from "@/motion/Press";
 import { IconButton } from "@/components/IconButton";
 import { useRenderCount } from "@/perf/perf";
 import { useCurrentTrackId } from "@/playback/hooks";
+import { useNetworkSignal } from "@/playback/networkSignal";
 import { playbackState, type PlaybackState } from "@/playback/Player";
 import { playerTrouble } from "@/playback/playbackStores";
 import { queueState } from "@/playback/Queue";
@@ -62,6 +64,18 @@ const PAUSED_SCALE = 0.84;
 const SPRING = { damping: 18, stiffness: 180, mass: 1 } as const;
 
 /**
+ * How the artwork loses its colour while the network holds the song up (Ghost
+ * wave, #1498): saturation and brightness, Offline and Slow. It keeps its full
+ * size: the song isn't paused.
+ */
+const HELD_UP_LOOK = {
+  offline: { saturate: 0.25, brightness: 0.85 },
+  slow: { saturate: 0.6, brightness: 1 },
+} as const;
+/** How long the colour takes to go and come back. */
+const HELD_UP_EASE_MS = 1000;
+
+/**
  * The artwork's space as last measured, so the player view coming back (from
  * the Queue or Lyrics) draws the artwork at its size straight away.
  */
@@ -70,6 +84,8 @@ let lastBox = { width: 0, height: 0 };
 type ArtworkProps = {
   uri: string | null;
   playing: boolean;
+  /** The network signal: Offline and Slow keep the full size and take the colour away. */
+  signal: NetworkSignal;
   /**
    * A streamed song's own cover: its player item's key, which the full-size
    * image is keyed to so it never shows the previous song's picture, and its
@@ -84,12 +100,18 @@ type ArtworkProps = {
  * paused. A tap plays or pauses, a double-tap adds the song to Favorites
  * (`CoverPress`).
  */
-function NowPlayingArtwork({ uri, playing, streamed }: ArtworkProps) {
+function NowPlayingArtwork({ uri, playing, signal, streamed }: ArtworkProps) {
   const [box, setBox] = useState(lastBox);
   const { favorite, disabled, star } = useNowPlayingStar();
   const reduceMotion = useReducedMotion();
   const [fill, tertiary] = useThemeColor(["fill", "tertiary"]);
-  const scale = useSharedValue(playing ? 1 : PAUSED_SCALE);
+  const heldUp = signal === "offline" || signal === "slow";
+  // Held up by the network, the song isn't paused: the artwork stays at its full size.
+  const fullSize = playing || heldUp;
+  const scale = useSharedValue(fullSize ? 1 : PAUSED_SCALE);
+  const look = heldUp ? HELD_UP_LOOK[signal] : { saturate: 1, brightness: 1 };
+  const saturate = useSharedValue(look.saturate);
+  const brightness = useSharedValue(look.brightness);
   // Whether the artwork has been in sight since it last came back: a play or
   // pause while the player was hidden doesn't spring once it shows again.
   const inSight = useRef(false);
@@ -101,12 +123,27 @@ function NowPlayingArtwork({ uri, playing, streamed }: ArtworkProps) {
   );
 
   useEffect(() => {
-    const to = playing ? 1 : PAUSED_SCALE;
+    const to = fullSize ? 1 : PAUSED_SCALE;
     scale.set(reduceMotion || !inSight.current ? to : withSpring(to, SPRING));
     inSight.current = true;
-  }, [playing, reduceMotion, scale]);
+  }, [fullSize, reduceMotion, scale]);
 
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
+  useEffect(() => {
+    const ease = (to: number) =>
+      reduceMotion ? to : withTiming(to, { duration: HELD_UP_EASE_MS });
+    saturate.set(ease(look.saturate));
+    brightness.set(ease(look.brightness));
+  }, [look.saturate, look.brightness, reduceMotion, saturate, brightness]);
+
+  const style = useAnimatedStyle(() => {
+    const s = saturate.get();
+    const b = brightness.get();
+    return {
+      transform: [{ scale: scale.get() }],
+      // No filter at all while the colour is whole.
+      filter: s === 1 && b === 1 ? [] : [{ saturate: s }, { brightness: b }],
+    };
+  });
   const size = Math.max(0, Math.min(box.width, box.height));
 
   return (
@@ -350,6 +387,8 @@ export function PlayerView({ item, details, playing }: Props) {
   const album = details?.album ?? item.album ?? strings.playbackText.unknownAlbum;
   const failure = useSyncExternalStore(playbackState.subscribe, playbackState.get);
   const notice = playerNotice(playerTrouble(failure), strings);
+  const { signal } = useNetworkSignal();
+  const heldUp = signal === "offline" || signal === "slow";
   // Title, artist and album scroll together when too long (the notice in the album's place doesn't).
   const marquee = useMarqueeGroup([title, artist, notice === null ? album : null]);
   // Read ahead, so the screens open header-first; only while the sheet is
@@ -409,7 +448,12 @@ export function PlayerView({ item, details, playing }: Props) {
         };
   return (
     <View className="flex-1" style={{ gap: CELL * 4 }}>
-      <NowPlayingArtwork uri={item.artworkUri} playing={playing} streamed={streamedCover} />
+      <NowPlayingArtwork
+        uri={item.artworkUri}
+        playing={playing}
+        signal={signal}
+        streamed={streamedCover}
+      />
       <View className="flex-row items-center" style={{ gap: CELL }}>
         <View className="flex-1">
           <View className="flex-row items-center">
@@ -421,7 +465,8 @@ export function PlayerView({ item, details, playing }: Props) {
                 index={0}
                 standalone
                 role="header"
-                className="font-sans text-title3 font-medium text-foreground"
+                // Held up by the network, the title steps back to the secondary colour.
+                className={`font-sans text-title3 font-medium ${heldUp ? "text-secondary" : "text-foreground"}`}
               />
             </View>
             {relatedChevron && (
@@ -467,7 +512,7 @@ export function PlayerView({ item, details, playing }: Props) {
               className="font-sans text-body text-secondary"
             />
           ) : (
-            // "Waiting for connection" or why playback stopped, in place of the album.
+            // Why playback stopped, in place of the album.
             <View style={{ paddingVertical: CELL / 2 }}>
               <Text
                 numberOfLines={2}

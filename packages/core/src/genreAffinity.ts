@@ -92,64 +92,80 @@ export function* libraryGenreProfilesSteps(
   };
 }
 
-/** Whether a radio song's artist suits a mix: alike enough, not alike, or no genre known. */
+/** Deezer answers by artist name, in the order they were looked up. */
+export type ArtistProfiles = ReadonlyMap<
+  string,
+  { readonly profile: GenreProfile | null; readonly lookedUpAt: number | null }
+>;
 
-/**
- * Artists' genre profiles looked up on Deezer, kept on the phone so each is
- * looked up once: by name as artist photos compare it, null for an artist
- * Deezer has no genre for. In the order they were looked up.
- */
-export type ArtistProfiles = ReadonlyMap<string, GenreProfile | null>;
-
-/** How many artists' profiles are kept: the latest looked up. */
 const PROFILES_KEPT = 2000;
+const DAY_MS = 86_400_000;
+const KNOWN_PROFILE_AGE_MS = 180 * DAY_MS;
+const UNKNOWN_PROFILE_AGE_MS = 30 * DAY_MS;
 
-/** [profiles] with those just looked up ([found], by artist name), keeping the latest 2,000. */
+/** The latest 2,000 Deezer answers, with their lookup times. */
 export const withArtistProfiles = (
   profiles: ArtistProfiles,
-  found: readonly (readonly [artist: string, profile: GenreProfile | null])[],
+  found: readonly (readonly [artist: string, profile: GenreProfile | null, lookedUpAt?: number])[],
 ): ArtistProfiles => {
   const next = new Map(profiles);
-  for (const [artist, profile] of found) {
+  for (const [artist, profile, lookedUpAt] of found) {
     const key = artistPhotoName(artist);
     next.delete(key);
-    next.set(key, profile);
+    next.set(key, { profile, lookedUpAt: lookedUpAt ?? null });
   }
-  return new Map([...next].slice(-PROFILES_KEPT));
+  while (next.size > PROFILES_KEPT) next.delete(next.keys().next().value!);
+  return next;
 };
 
-/** An artist's profile as [profiles] know it (`GenreProfileOf`): undefined when never looked up. */
-export const artistProfilesKnown =
-  (profiles: ArtistProfiles): GenreProfileOf =>
-  (artist) =>
-    profiles.get(artistPhotoName(artist));
+/** Known answers can still be read while their refresh runs. */
+export const artistProfileDue = (
+  profiles: ArtistProfiles,
+  artist: string,
+  now: number,
+): boolean => {
+  const answer = profiles.get(artistPhotoName(artist));
+  if (answer == null || answer.lookedUpAt === null || now < answer.lookedUpAt) return true;
+  const age = answer.profile === null ? UNKNOWN_PROFILE_AGE_MS : KNOWN_PROFILE_AGE_MS;
+  return now - answer.lookedUpAt >= age;
+};
 
-/** What to save for [profiles]. */
+/** Read a stored profile, optionally limited to records predating genre mix lookups. */
+export const artistProfilesKnown =
+  (profiles: ArtistProfiles, { legacyOnly = false } = {}): GenreProfileOf =>
+  (artist) => {
+    const answer = profiles.get(artistPhotoName(artist));
+    return legacyOnly && answer?.lookedUpAt !== null ? undefined : answer?.profile;
+  };
+
 export const storedArtistProfiles = (profiles: ArtistProfiles): string =>
   JSON.stringify({
-    version: 1,
-    artists: [...profiles].map(([key, profile]) => [
+    version: 2,
+    artists: [...profiles].map(([key, { profile, lookedUpAt }]) => [
       key,
       profile === null ? null : Object.fromEntries(profile),
+      lookedUpAt,
     ]),
   });
 
-/** The profiles [stored] holds; none when nothing readable is saved. */
 export const parseArtistProfiles = (stored: string | null): ArtistProfiles => {
   const { version, artists } = readStoredRecord(stored);
-  if (version !== 1 || !Array.isArray(artists)) return new Map();
-  return new Map(
-    artists.flatMap((entry: unknown): (readonly [string, GenreProfile | null])[] => {
-      if (!Array.isArray(entry) || typeof entry[0] !== "string") return [];
-      const [key, shares] = entry as [string, unknown];
-      if (shares === null) return [[key, null]];
-      if (!isRecord(shares)) return [];
-      const profile = Object.entries(shares).filter(
+  if ((version !== 1 && version !== 2) || !Array.isArray(artists)) return new Map();
+  const profiles = new Map<string, { profile: GenreProfile | null; lookedUpAt: number | null }>();
+  for (const entry of artists as unknown[]) {
+    if (!Array.isArray(entry) || typeof entry[0] !== "string") continue;
+    const [key, shares, at] = entry as [string, unknown, unknown];
+    const lookedUpAt = typeof at === "number" && Number.isFinite(at) && at >= 0 ? at : null;
+    if (shares === null) {
+      profiles.set(key, { profile: null, lookedUpAt });
+    } else if (isRecord(shares)) {
+      const pairs = Object.entries(shares).filter(
         (pair): pair is [string, number] => typeof pair[1] === "number" && Number.isFinite(pair[1]),
       );
-      return profile.length === 0 ? [] : [[key, new Map(profile)]];
-    }),
-  );
+      if (pairs.length > 0) profiles.set(key, { profile: new Map(pairs), lookedUpAt });
+    }
+  }
+  return profiles;
 };
 
 /** Songs' genres added up, on their way to a profile. */

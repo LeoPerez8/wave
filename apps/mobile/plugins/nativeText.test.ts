@@ -35,9 +35,12 @@ test("the update notification's text comes in both languages", () => {
   assert.match(files["values-pt/wave_text.xml"]!, />Atualizações do app</);
 });
 
-test("the playback notification's waiting line comes in both languages", () => {
+test("the playback notification's network sub text comes in both languages", () => {
   const files = nativeTextResources();
-  assert.match(files["values/wave_text.xml"]!, />Waiting for connection</);
-  assert.match(files["values-pt/wave_text.xml"]!, />Aguardando conexão</);
-  assert.match(nativeCatalogueKotlin(), /"waitingForConnection" to "Aguardando conexão"/);
+  assert.match(files["values/wave_text.xml"]!, />No internet</);
+  assert.match(files["values-pt/wave_text.xml"]!, />Sem internet</);
+  assert.match(files["values/wave_text.xml"]!, />Slow connection</);
+  assert.match(files["values-pt/wave_text.xml"]!, />Conexão lenta</);
+  assert.match(nativeCatalogueKotlin(), /"noInternet" to "Sem internet"/);
+  assert.match(nativeCatalogueKotlin(), /"slowConnection" to "Conexão lenta"/);
 });

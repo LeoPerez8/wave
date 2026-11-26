@@ -212,6 +212,7 @@ export interface DiscoverMixFilter<S extends DiscoverRadioSong> {
    * fewest songs, in the radio's order.
    */
   readonly avoid?: ReadonlySet<string>;
+  readonly limit?: number;
 }
 
 /** The most songs a mix has. */
@@ -252,7 +253,7 @@ export function* discoverMixSongsSteps<S extends DiscoverRadioSong>(
     }
   for (const song of radio) {
     yield;
-    if (kept.length >= MIX_MOST) break;
+    if (kept.length >= (filter.limit ?? MIX_MOST)) break;
     const recording = mixRecordingOf(song);
     if (song.video || videos.has(song.videoId) || recordings.has(recording)) continue;
     if (filter.known(song)) continue;
@@ -500,8 +501,9 @@ const built = (
   builtAt: number,
   playSeeds: boolean,
   build?: DiscoverMixesBuild,
+  keepEmpty = false,
 ): DiscoverMixes | null =>
-  mixes.length === 0
+  mixes.length === 0 && !keepEmpty
     ? null
     : { builtAt, playSeeds, mixes, ...(build === undefined ? {} : { build }) };
 
@@ -515,13 +517,22 @@ export const discoverMixesBuilt = (
   mixes: readonly DiscoverMix[],
   builtAt: number,
   seeds: readonly DiscoverMixSeed[],
-  { avoid, variety }: { readonly avoid?: ReadonlySet<string>; readonly variety?: number } = {},
+  {
+    avoid,
+    variety,
+    keepEmpty,
+  }: {
+    readonly avoid?: ReadonlySet<string>;
+    readonly variety?: number;
+    readonly keepEmpty?: boolean;
+  } = {},
 ): DiscoverMixes | null =>
   built(
     mixes,
     builtAt,
     seeds.some((seed) => seed.from === "plays"),
     { seeds, avoid: [...(avoid ?? [])], ...(variety === undefined ? {} : { variety }) },
+    keepEmpty,
   );
 
 /**
@@ -607,7 +618,10 @@ const readFamiliarSong = (value: unknown): DiscoverMixFamiliarSong[] => {
  * saved, or they were saved in an older format (`MIXES_VERSION`). A song or
  * a mix that can't be read is left out.
  */
-export const parseDiscoverMixes = (stored: string | null): DiscoverMixes | null => {
+export const parseDiscoverMixes = (
+  stored: string | null,
+  { keepEmpty = false } = {},
+): DiscoverMixes | null => {
   const { version, builtAt, playSeeds, mixes, build } = readStoredRecord(stored);
   if (version !== MIXES_VERSION || !isNumber(builtAt) || !Array.isArray(mixes)) return null;
   return built(
@@ -615,6 +629,7 @@ export const parseDiscoverMixes = (stored: string | null): DiscoverMixes | null 
     builtAt,
     playSeeds === true,
     readBuild(build) ?? undefined,
+    keepEmpty && mixes.length === 0,
   );
 };
 

@@ -71,6 +71,15 @@ class WaveGlassModule : Module() {
       Prop("shape") { view: WaveUnderlineView, shape: String? -> view.shape = shape ?: "underline" }
     }
 
+    View(WaveGhostView::class) {
+      Name("WaveGhost")
+      Prop("color") { view: WaveGhostView, color: Color? ->
+        view.color = color?.toArgb() ?: Color.TRANSPARENT
+      }
+      Prop("period") { view: WaveGhostView, period: String? -> view.period = period ?: "offline" }
+      Prop("animating") { view: WaveGhostView, animating: Boolean -> view.animating = animating }
+    }
+
     View(WaveFadeEdgesView::class) {
       Name("WaveFadeEdges")
       Prop("fixedEdge") { view: WaveFadeEdgesView, edge: String? -> view.fixedEdge = edge ?: "none" }
