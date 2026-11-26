@@ -335,30 +335,70 @@ class AndroidDownloads private constructor(private val context: Context) {
     changed(); requestService()
   }
 
-  /** [WifiWaitJob]: an unmetered network is back, perhaps after Wave's process was gone. */
-  fun wifiBack() {
+  /**
+   * [WifiWaitJob]: an unmetered network is back, perhaps after Wave's process was gone. Whether
+   * the download service took the songs (or none are left to download); false when Android
+   * refused to start it from the background, and the job runs them itself ([startUnderJob]).
+   */
+  fun wifiBack(): Boolean {
     val state = AndroidConnectivity.cache(context).current
     if (state.hasNetwork) networkChanged(state.metered)
-    requestService()
+    return requestService()
   }
 
-  /** Called from the user's tap, the resumed Activity or an update's restart. Failure never starts unprotected work. */
-  fun requestService() {
-    if (!jobs.hasWork()) { awaitWifi(); return }
+  /**
+   * Called from the user's tap, the resumed Activity or an update's restart. Failure never starts
+   * unprotected work. Whether the service runs the songs now (or none are left to download).
+   */
+  fun requestService(): Boolean {
+    if (!jobs.hasWork()) { awaitWifi(); return true }
     WifiWait.cancel(context)
-    try { context.startForegroundService(Intent(context, YtDownloadService::class.java)) }
+    try { context.startForegroundService(Intent(context, YtDownloadService::class.java)); return true }
     catch (error: Exception) {
       // Never unprotected work: started jobs go back in line, and all wait for the next launch.
       if (synchronized(this) { worker == null }) {
         WaveLog.w(TAG, DownloadServiceLines.refused(restart = false, describe(error)))
         jobs.interrupt(transport); changed()
+        return false
       } else WaveLog.w(TAG, "Android refused to start the download service again; it goes on", error)
+      return true
     }
   }
 
+  /**
+   * Who runs the work now: the download service, or [WifiWaitJob] when Android wouldn't let the
+   * service start from the background. The service taking over from the job tells it
+   * ([WorkOwner.takenOver]), and the job lets go of the work without stopping it.
+   */
+  private class WorkOwner(val onIdle: () -> Unit, val refresh: () -> Unit, val takenOver: () -> Unit, val job: Boolean)
+  @Volatile private var owner: WorkOwner? = null
+
+  /**
+   * [WifiWaitJob] runs the songs itself, with Wave closed and Android refusing the download
+   * service from the background (#1502): the same work as the service's, with no notification,
+   * while the job may run. [onIdle] once there's nothing left to download now; [takenOver] once
+   * the service takes the work over (Wave opened meanwhile).
+   */
+  fun startUnderJob(onIdle: () -> Unit, takenOver: () -> Unit) {
+    WaveLog.i(TAG, "Android won't start the download service with Wave closed: a background job downloads the songs that waited for Wi-Fi")
+    start(onIdle, refresh = {}, restarted = true, takenOver = takenOver, job = true)
+  }
+
+  /** Android stopped [WifiWaitJob] while it ran the work: its songs go back in line for the next start. */
+  fun stopUnderJob() {
+    if (owner?.job != true) return
+    stop(DownloadServiceStop.ANDROID)
+  }
+
   /** Starts the work, unless it runs already; [restarted] when Android restarted the service after Wave was closed. */
-  @Synchronized fun start(onIdle: () -> Unit, refresh: () -> Unit, restarted: Boolean = false) {
-    if (worker != null) return
+  @Synchronized fun start(onIdle: () -> Unit, refresh: () -> Unit, restarted: Boolean = false, takenOver: () -> Unit = {}, job: Boolean = false) {
+    val previous = owner
+    owner = WorkOwner(onIdle, refresh, takenOver, job)
+    if (worker != null) {
+      // The service takes over the work [WifiWaitJob] runs: the job lets go, the work goes on.
+      if (previous !== null && previous.job && !job) previous.takenOver()
+      return
+    }
     val counts = jobs.counts()
     // Wave's memory is read off the main thread, where the service starts.
     offMain { WaveLog.i(TAG, DownloadServiceLines.started(restarted, counts, AndroidMemory.read())) }
@@ -371,7 +411,7 @@ class AndroidDownloads private constructor(private val context: Context) {
     // Download work runs at background priority (#455): the UI and playback keep theirs.
     deadlines = Executors.newSingleThreadScheduledExecutor(BackgroundThreads("Wave download deadlines", lower = ThreadPriority::lower)).also { executor ->
       // Also refreshes the notification and the rows while transfers go on.
-      executor.scheduleWithFixedDelay({ runCatching { jobs.expire(transport); changed(); main.post(refresh) } }, 1, 1, TimeUnit.SECONDS)
+      executor.scheduleWithFixedDelay({ runCatching { jobs.expire(transport); changed(); main.post { owner?.refresh?.invoke() } } }, 1, 1, TimeUnit.SECONDS)
     }
     // Each song's transfer, tagging or publication runs on a thread of its own, several songs at once.
     val pool = Executors.newCachedThreadPool(BackgroundThreads("Wave download step", lower = ThreadPriority::lower)).also { steps = it }
@@ -387,7 +427,7 @@ class AndroidDownloads private constructor(private val context: Context) {
           }
         }.onFailure(::workerFailed)
         changed()
-        main.post { refresh(); if (!jobs.hasWork()) onIdle() }
+        main.post { val current = owner; current?.refresh?.invoke(); if (!jobs.hasWork()) current?.onIdle?.invoke() }
       }, 0, 500, TimeUnit.MILLISECONDS)
     }
   }
@@ -434,6 +474,7 @@ class AndroidDownloads private constructor(private val context: Context) {
     if (timedOut) Executors.newSingleThreadExecutor(BackgroundThreads("Wave download stop", lower = ThreadPriority::lower)).also { executor ->
       executor.execute { try { jobs.interrupt(transport); changed() } finally { executor.shutdown() } }
     }
+    owner = null
     main.post { JsRuntime.release(OWNER) }
   }
 
@@ -468,11 +509,12 @@ class AndroidDownloads private constructor(private val context: Context) {
 
   init {
     val connectivity = AndroidConnectivity.cache(context)
-    val follow = { state: expo.modules.wavenative.net.ConnectivityState ->
+    // The network as Wave opens, before anything can start the service: the journal may have
+    // kept another one from before Wave was closed.
+    connectivity.current.takeIf { it.hasNetwork }?.let { jobs.setNetwork(it.metered, transport) }
+    connectivity.listen { state ->
       if (state.hasNetwork) networkFollower.execute { runCatching { networkChanged(state.metered) }.onFailure { WaveLog.w(TAG, "Couldn't follow the network for downloads", it) } }
     }
-    connectivity.listen(follow)
-    follow(connectivity.current)
   }
 
   companion object {

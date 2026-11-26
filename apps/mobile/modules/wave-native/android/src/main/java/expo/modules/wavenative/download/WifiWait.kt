@@ -14,8 +14,9 @@ import kotlin.concurrent.thread
  * download service stops (no notification for the wait) and a JobScheduler job waits for an
  * unmetered network ([WifiWaitJob]), so the songs start with the screen off and after Wave's
  * process is gone, and across a reboot. While Wave runs, [AndroidDownloads] also hears the network
- * change itself. If Android won't let the job start the service from the background, the songs
- * wait for Wave's next launch, as a refused sticky restart's do.
+ * change itself. Android doesn't let the job start the service with Wave in the background, so
+ * then the job runs the downloads itself while it may ([AndroidDownloads.startUnderJob]), with no
+ * notification, and JobScheduler runs it again after Android stops it.
  */
 object WifiWait {
   /** The job's id in JobScheduler (the Wi-Fi pre-download's is 514001, Normalize Volume's 514002). */
@@ -44,19 +45,45 @@ object WifiWait {
   }
 }
 
-/** Runs once an unmetered network is back ([WifiWait]): the songs waiting for Wi-Fi start. */
+/**
+ * Runs once an unmetered network is back ([WifiWait]): the songs waiting for Wi-Fi start, in the
+ * download service, or under this job when Android won't start the service from the background.
+ */
 class WifiWaitJob : JobService() {
+  private val finished = java.util.concurrent.atomic.AtomicBoolean()
+
   override fun onStartJob(params: JobParameters): Boolean {
+    finished.set(false)
+    val downloads = AndroidDownloads.get(applicationContext)
     thread(isDaemon = true, name = "Wave Wi-Fi wait") {
-      try {
-        AndroidDownloads.get(applicationContext).wifiBack()
+      val served = try {
+        downloads.wifiBack()
       } catch (e: Exception) {
         WaveLog.w("WaveDownloads", "The downloads waiting for Wi-Fi couldn't start", e)
+        true
       }
-      jobFinished(params, false)
+      if (served) finish(params)
+      else downloads.startUnderJob(
+        onIdle = {
+          // Nothing left to download now: done, or waiting for Wi-Fi again (a new job waits for it).
+          downloads.stop(downloads.jobs.idleStop())
+          finish(params)
+          downloads.awaitWifi()
+        },
+        takenOver = { finish(params) },
+      )
     }
     return true
   }
 
-  override fun onStopJob(params: JobParameters): Boolean = false
+  private fun finish(params: JobParameters) {
+    if (finished.compareAndSet(false, true)) jobFinished(params, false)
+  }
+
+  /** Android stopped the job (its time, or the network became metered): its songs go back in line, and it runs again. */
+  override fun onStopJob(params: JobParameters): Boolean {
+    finished.set(true)
+    AndroidDownloads.get(applicationContext).stopUnderJob()
+    return true
+  }
 }
