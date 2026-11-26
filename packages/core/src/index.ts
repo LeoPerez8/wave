@@ -1302,7 +1302,13 @@ export type {
   SpotifySession,
   SpotifySignInFailure,
 } from "./spotifyAccount.ts";
-export { YT_ACCOUNT_SIGNED_OUT, stepYtAccount, ytAccountView } from "./ytAccount.ts";
+export {
+  YT_ACCOUNT_SIGNED_OUT,
+  stepYtAccount,
+  ytAccountView,
+  ytSignInEmail,
+  ytSignInFollowsWave,
+} from "./ytAccount.ts";
 export { ytAccountNotes } from "./ytAccountText.ts";
 export type {
   YtAccount,
