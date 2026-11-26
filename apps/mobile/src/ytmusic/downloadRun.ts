@@ -5,6 +5,7 @@ import {
   downloadRunProgress,
   downloadTimeLeft,
   downloadsPaused,
+  downloadsWaitingForWifi,
   followDownloadRun,
   keptDownloadRun,
   restoredDownloadRun,
@@ -96,6 +97,8 @@ export interface DownloadRunState {
   readonly ownerPaused: boolean;
   /** Paused by the owner with nothing on its way: "Paused", whatever YouTube's pause says. */
   readonly held: boolean;
+  /** Songs wait for Wi-Fi (Download only on Wi-Fi on a metered network): not "Paused". */
+  readonly waitingForWifi: boolean;
 }
 
 /** How often the run panel reads the run again: at most about once a second. */
@@ -114,17 +117,25 @@ const downloadRunNow = (): DownloadRunState => {
     paused,
     ownerPaused,
     held: ownerPaused && paused,
+    waitingForWifi: downloadsWaitingForWifi(journal.get()) > 0,
   };
 };
 
 /** What the panel shows of [state], to skip a render when a second changed nothing. */
-const runStateKey = ({ progress, timeLeft, paused, ownerPaused }: DownloadRunState): string =>
+const runStateKey = ({
+  progress,
+  timeLeft,
+  paused,
+  ownerPaused,
+  waitingForWifi,
+}: DownloadRunState): string =>
   JSON.stringify([
     progress.overall,
     [...progress.groups],
     timeLeft === null ? null : Math.round(timeLeft / 60_000),
     paused,
     ownerPaused,
+    waitingForWifi,
   ]);
 
 /**
