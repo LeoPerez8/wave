@@ -59,6 +59,7 @@ export const withNetworkLog = <A, E, R>(
   what: string,
   effect: Effect.Effect<A, E, R>,
   outcome?: (value: A) => string | undefined,
+  onDone?: (durationMs: number, bytes: number) => void,
 ): Effect.Effect<A, E, Exclude<R, BackgroundWorkName>> =>
   Effect.suspend(() => {
     const startedAt = Date.now();
@@ -77,6 +78,7 @@ export const withNetworkLog = <A, E, R>(
           const ended = Exit.isSuccess(exit) ? outcome?.(exit.value) : endedBy(exit.cause);
           const use = { ...NO_NETWORK_USE, ytMusic: WaveYtMusic.takeNetworkUse(meter.yt) };
           const durationMs = Date.now() - startedAt;
+          onDone?.(durationMs, use.ytMusic.bytes);
           appLog(
             "info",
             TAG,

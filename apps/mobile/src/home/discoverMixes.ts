@@ -79,6 +79,7 @@ import { mixRadioPages, readMixArtistRadio } from "./mixArtistRadio";
 import { readMixRadios } from "./mixRadioReads";
 import { readMixBuildLibrary } from "./mixBuildLibrary";
 import { sharedRead } from "@/lib/sharedRead";
+import { appLog } from "@/log/appLog";
 import { knownLibraryFinder } from "@/ytmusic/libraryFinder";
 
 export type { MixSectionId } from "./discoverMixLevel";
@@ -98,11 +99,12 @@ const radioMixes = (
   inputs: MixBuildInputs,
   avoid: ReadonlySet<string> | undefined,
   live: boolean,
+  noteRead?: (source: "cache" | "live") => void,
 ) =>
   Effect.gen(function* () {
     const pages = yield* readMixRadios(seeds, (artist) =>
       live
-        ? readMixArtistRadio(artist)
+        ? readMixArtistRadio(artist, noteRead)
         : Effect.succeed(mixRadioPages.get(artistRadioCacheId(artist.name))),
     );
     yield* inputs.matchRadios(pages.flat().flatMap((page) => page.songs));
@@ -297,7 +299,16 @@ const buildArtistMixes = (inputs: MixBuildInputs, avoid?: MixRefreshAvoid) =>
  * hides), null when no seed made a usable mix. A refresh passes [avoid]
  * (`mixRefreshAvoid`): other families or other artists, other songs.
  */
-const buildGenreMixes = (inputs: MixBuildInputs, avoid?: MixRefreshAvoid) =>
+interface GenreBuildTiming {
+  readonly page: (source: "cache" | "live") => void;
+  readonly saved: () => void;
+}
+
+const buildGenreMixes = (
+  inputs: MixBuildInputs,
+  avoid?: MixRefreshAvoid,
+  timing?: GenreBuildTiming,
+) =>
   Effect.gen(function* () {
     const library = inputs.library;
     const seeds = yield* runSteps(
@@ -313,14 +324,18 @@ const buildGenreMixes = (inputs: MixBuildInputs, avoid?: MixRefreshAvoid) =>
     );
     if (seeds.length === 0) return "nothing-to-build-from" as const;
     SECTIONS["genre-mixes"].picked = seeds;
-    const ranked = yield* radioMixes(seeds, inputs, avoid?.songs, true);
+    const ranked = yield* radioMixes(seeds, inputs, avoid?.songs, true, timing?.page);
     const built = discoverMixesBuilt(
       ranked.mixes,
       Date.now(),
       seeds,
       avoid === undefined ? {} : { avoid: avoid.songs },
     );
-    if (built !== null) rankedAt.set(built, ranked.sliders);
+    if (built !== null) {
+      rankedAt.set(built, ranked.sliders);
+      saveBuilt("genre-mixes", built);
+      timing?.saved();
+    }
     return built;
   });
 
@@ -333,22 +348,47 @@ const builtOutcome = (built: DiscoverMixes | null | "nothing-to-build-from"): st
 
 /** Each row builds independently from the last completed inputs. */
 const loggedBuild = (ids: readonly MixSectionId[], pulled: boolean, avoid?: MixRefreshAvoid) =>
-  withNetworkLog(
-    `${ids.length === 1 ? discoverRowTitle(ids[0]!) : "Home mixes"} ${pulled ? "refresh" : "build"}`,
-    buildHomeMixes(
-      ids,
-      Effect.void,
-      (id) => Effect.flatMap(mixBuildInputs, (inputs) => SECTIONS[id].build(inputs, avoid)),
-      settledTurnEffect,
-    ),
-    (results) =>
-      results
-        .map(
-          ({ id, result }) =>
-            `${discoverRowTitle(id)}: ${Result.isSuccess(result) ? builtOutcome(result.success) : "failed"}`,
-        )
-        .join(", "),
-  );
+  Effect.suspend(() => {
+    const genre = ids.includes("genre-mixes");
+    const startedAt = Date.now();
+    let first: number | undefined;
+    const pages = { live: 0, cache: 0 };
+    const timing: GenreBuildTiming = {
+      page: (source) => {
+        pages[source]++;
+      },
+      saved: () => {
+        first ??= Date.now() - startedAt;
+      },
+    };
+    return withNetworkLog(
+      `${ids.length === 1 ? discoverRowTitle(ids[0]!) : "Home mixes"} ${pulled ? "refresh" : "build"}`,
+      buildHomeMixes(
+        ids,
+        Effect.void,
+        (id) =>
+          Effect.flatMap(mixBuildInputs, (inputs) =>
+            SECTIONS[id].build(inputs, avoid, id === "genre-mixes" ? timing : undefined),
+          ),
+        settledTurnEffect,
+      ),
+      (results) =>
+        results
+          .map(
+            ({ id, result }) =>
+              `${discoverRowTitle(id)}: ${Result.isSuccess(result) ? builtOutcome(result.success) : "failed"}`,
+          )
+          .join(", "),
+      genre
+        ? (durationMs, bytes) =>
+            appLog(
+              "info",
+              "WaveTiming",
+              `Genre mixes first=${first === undefined ? "none" : `${first}ms`} done=${durationMs}ms radioLive=${pages.live} radioCache=${pages.cache} deezerArtists=0 bytes=${bytes}`,
+            )
+        : undefined,
+    );
+  });
 
 /** When a build made no mixes: try again after a while, not on every visit. */
 const RETRY_MS = 10 * 60 * 1000;
@@ -372,7 +412,7 @@ interface MixSection {
    * a refresh avoids. The day's automatic build starts it afresh.
    */
   readonly shown: PersistedSetting<ShownMixes[]>;
-  readonly build: typeof buildArtistMixes;
+  readonly build: typeof buildGenreMixes;
   /**
    * How long a build that found nothing to build from waits for the next:
    * none for Artist mixes, so the visit after an import builds at once;
@@ -406,7 +446,7 @@ const flag = (key: string) =>
 
 const section = (
   key: string,
-  build: typeof buildArtistMixes,
+  build: typeof buildGenreMixes,
   nothingRetryMs: number,
 ): MixSection => ({
   saved: persistedSetting<DiscoverMixes | null>({
