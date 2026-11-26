@@ -11,6 +11,7 @@ import {
   isMagicQueue,
   magicLibraryMapperSteps,
   mapSteps,
+  networkSignalHoldsUp,
   parseTrackId,
   playDownloadedSongsShows,
   playDownloadedSongsSteps,
@@ -27,6 +28,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { recommendationSnapshot } from "@/home/recommendationSnapshot";
 import { namedWork } from "@/lib/stepped";
 import { dislikedSongsNow, onDislikesChanged } from "@/library/dislikes";
+import { libraryVersion } from "@/library/LibraryScan";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { appLog } from "@/log/appLog";
@@ -75,20 +77,18 @@ const bare = (song: SongRow): MagicSong => ({
 });
 
 const readLibrary = (): Promise<Library> =>
-  appRuntime.runPromise(
-    Effect.map(recommendationSnapshot.library, (library): Library => library).pipe(
-      namedWork("Play Downloaded Songs"),
-    ),
-  );
+  appRuntime.runPromise(recommendationSnapshot.library.pipe(namedWork("Play Downloaded Songs")));
 
 /**
  * Whether Play Downloaded Songs shows under Now Playing's controls: the song
  * is Offline or Slow ([signal]) and something on the phone can play (Core's
- * `playDownloadedSongsShows`). Until the Library is read it doesn't show.
+ * `playDownloadedSongsShows`). Until the Library is read it doesn't show; it's
+ * read again as the Library changes meanwhile (a download landing while Slow).
  */
 export const usePlayDownloadedSongs = (signal: NetworkSignal): boolean => {
-  const stalled = signal === "offline" || signal === "slow";
+  const stalled = networkSignalHoldsUp(signal);
   const state = useSyncExternalStore(queueState.subscribe, queueState.get);
+  const version = useSyncExternalStore(libraryVersion.subscribe, libraryVersion.get);
   const [library, setLibrary] = useState<Library | null>(
     () => recommendationSnapshot.peek().library,
   );
@@ -104,7 +104,7 @@ export const usePlayDownloadedSongs = (signal: NetworkSignal): boolean => {
     return () => {
       live = false;
     };
-  }, [stalled]);
+  }, [stalled, version]);
   const playable = useMemo(
     () => (stalled && library !== null ? playableSongs(library) : null),
     [stalled, library],
@@ -204,11 +204,26 @@ const play = Effect.gen(function* () {
   }
 });
 
-/** Play Downloaded Songs' tap: plays what Core picks, reporting a failure as the playback error. */
-export const playDownloadedSongs = (): Promise<void> =>
-  appRuntime.runPromise(play).catch((error: unknown) =>
-    playbackState.update((previous) => ({
-      ...previous,
-      error: error instanceof Error ? error.message : String(error),
-    })),
-  );
+/** A tap is being played: a second one while it is does nothing. */
+let tapping = false;
+
+/**
+ * Play Downloaded Songs' tap: plays what Core picks, reporting a failure as the
+ * playback error. A second tap while the first plays does nothing, nor does one
+ * once the song on the phone has started (Core's pick is null then).
+ */
+export const playDownloadedSongs = (): Promise<void> => {
+  if (tapping) return Promise.resolve();
+  tapping = true;
+  return appRuntime
+    .runPromise(play)
+    .catch((error: unknown) =>
+      playbackState.update((previous) => ({
+        ...previous,
+        error: error instanceof Error ? error.message : String(error),
+      })),
+    )
+    .finally(() => {
+      tapping = false;
+    });
+};
