@@ -231,7 +231,7 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
    * or null when the owner backs out; rejects with an `ERR_YT_*` code when
    * YouTube doesn't confirm the account.
    */
-  signIn(): Promise<YtSession | null>;
+  signIn(email: string | null): Promise<YtSession | null>;
   /** Forgets the session and clears the sign-in web view's cookies and storage. */
   signOut(): Promise<YtSession>;
 }

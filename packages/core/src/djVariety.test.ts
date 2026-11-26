@@ -17,9 +17,11 @@ import {
   magicArtistKey,
   magicSignal,
   parseMagicSession,
+  storedMagicSession,
   startDjQueue,
   startStreamedMagicQueue,
   ytTrackId,
+  type DjMood,
   type DjSettings,
   type RankedRadioSong,
 } from "./index.ts";
@@ -208,6 +210,37 @@ describe("Artist variety in a DJ session", () => {
     // Filled, the unknown pool repeats a matched song's artist only once nobody else is left.
     const filled = djVarietyMoodPools(started, graph, matched, unknown, 10);
     assert.deepEqual(names(filled.unknown.seed), ["Near B", "Far A", "Picked"]);
+  });
+
+  test("with several moods, a song filled in from farther out still takes its mood's turn", () => {
+    const started = session({ variety: "low", mood: ["energetic", "relaxing"] });
+    const names = (songs: readonly RankedRadioSong[]) => songs.map((song) => song.song!.artists[0]);
+    // The picked artist's songs are relaxing; Near A's, outside Low's reach, are energetic.
+    const relaxing = songsBy(2, "Picked");
+    const energetic = songsBy(6, "Near A");
+    const fits = new Map<RankedRadioSong, readonly DjMood[]>([
+      ...relaxing.map((song) => [song, ["relaxing"]] as const),
+      ...energetic.map((song) => [song, ["energetic"]] as const),
+    ]);
+    const matched = {
+      seed: [energetic[0]!, relaxing[0]!, energetic[1]!, relaxing[1]!, ...energetic.slice(2)],
+      liked: [],
+    };
+    const none = { seed: [], liked: [] };
+    assert.deepEqual(
+      names(djVarietyMoodPools(started, graph, matched, none, 6, fits).matched.seed),
+      ["Near A", "Picked", "Near A", "Picked", "Near A", "Near A"],
+    );
+    // One mood ranks as before: the reach first, then the fill.
+    const one = session({ variety: "low", mood: ["relaxing"] });
+    assert.deepEqual(names(djVarietyMoodPools(one, graph, matched, none, 6, fits).matched.seed), [
+      "Picked",
+      "Picked",
+      "Near A",
+      "Near A",
+      "Near A",
+      "Near A",
+    ]);
   });
 
   test("a batch isn't left empty when the graph knows nobody", () => {
@@ -486,6 +519,23 @@ describe("Music discovery in a DJ session", () => {
       djVarietyCandidates(read, graph, { seed: candidates, liked: [] }, 10),
       djVarietyCandidates(chosen, graph, { seed: candidates, liked: [] }, 10),
     );
+  });
+
+  test("several moods are saved with the session, and an older build's single mood reads as one", () => {
+    const chosen = session({ mood: ["relaxing", "energetic"] });
+    assert.deepEqual(parseMagicSession(JSON.parse(storedMagicSession(chosen)))!.dj!.mood, [
+      "relaxing",
+      "energetic",
+    ]);
+    // What an older build saved, and what it reads of a session saved now: its first mood.
+    const older = JSON.parse(storedMagicSession(session({ mood: ["upbeat"] })));
+    assert.equal(older.dj.mood, "upbeat");
+    assert.equal(JSON.parse(storedMagicSession(chosen)).dj.mood, "relaxing");
+    assert.deepEqual(parseMagicSession(older)!.dj!.mood, ["upbeat"]);
+    assert.deepEqual(parseMagicSession(JSON.parse(JSON.stringify(chosen)))!.dj!.mood, [
+      "relaxing",
+      "energetic",
+    ]);
   });
 });
 

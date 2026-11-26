@@ -54,6 +54,7 @@ export interface BrowserProcess {
 export interface YtBrowserSignInOptions {
   /** The browser's path (`findSignInBrowser`), null when none is installed. */
   readonly browser: string | null;
+  readonly email?: string | null;
   readonly spawn: (path: string, args: readonly string[]) => BrowserProcess;
   readonly files: {
     /** Makes the empty profile folder and answers its path. */
@@ -286,7 +287,9 @@ export const startYtBrowserSignIn = (options: YtBrowserSignInOptions): YtBrowser
         "--no-first-run",
         "--no-default-browser-check",
         "--new-window",
-        YT_SIGN_IN_URL,
+        options.email
+          ? `${YT_SIGN_IN_URL}&Email=${encodeURIComponent(options.email)}`
+          : YT_SIGN_IN_URL,
       ]);
       running = window;
       const ended = await window.exited;

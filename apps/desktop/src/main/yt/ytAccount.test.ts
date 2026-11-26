@@ -1,3 +1,4 @@
+import type { WaveSession } from "@wave/core";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SecretBox, SessionFiles } from "../account/sessionStore.ts";
@@ -63,14 +64,26 @@ const desktop = (options: { readonly box?: SecretBox; readonly disk?: Map<string
       },
     ] as unknown,
     closeWindow: (_outcome: YtBrowserOutcome) => {},
+    /** Tells YT Music's account of a Wave account session change, as `account.subscribe` does. */
+    wave: (_session: WaveSession) => {},
+    /** The Wave account's session as YT Music's account reads it. */
+    waveSession: { status: "signedOut" } as WaveSession,
+    /** The email each browser sign-in opened Google's page with. */
+    emails: [] as (string | null)[],
   };
   const save = (session: unknown) => sessions.host["ytSession.save"]!({ session });
   const account = createYtAccount({
     sessions,
     enabled: () => world.enabled,
     online: () => world.online,
-    startSignIn: () => {
+    waveSessions: (listener) => {
+      world.wave = listener;
+      return () => (world.wave = () => {});
+    },
+    waveSession: () => world.waveSession,
+    startSignIn: (email) => {
       world.browsers += 1;
+      world.emails.push(email);
       let end = (_outcome: YtBrowserOutcome) => {};
       const outcome = new Promise<YtBrowserOutcome>((resolve) => (end = resolve));
       world.closeWindow = end;
@@ -347,4 +360,88 @@ test("playlists that can't be read say why", async () => {
   const ended = await account.playlists("en");
   assert.equal(ended.status === "failed" && ended.action, "signIn");
   assert.equal(account.view().account?.kind, "signedOut", "the JVM said the session ended");
+});
+
+const WAVE: WaveSession = {
+  status: "signedIn",
+  account: { email: "ana@example.com", name: "Ana", photoUrl: null },
+};
+
+test("a Wave account sign-in opens YT Music's sign-in next, when it's on and signed out", async () => {
+  const { account, world, calls } = desktop({});
+  world.waveSession = WAVE;
+  world.wave(WAVE);
+  assert.equal(world.browsers, 1);
+  assert.deepEqual(
+    world.emails,
+    ["ana@example.com"],
+    "Google's page gets the Wave account's email",
+  );
+  assert.equal(
+    account.view().account?.kind === "signedOut" && account.view().account?.action,
+    "signingIn",
+  );
+  // Sign In pressed meanwhile waits for the same browser.
+  const pressed = account.signIn();
+  world.closeWindow(READ);
+  await pressed;
+  assert.equal(world.browsers, 1);
+  assert.deepEqual(
+    calls.map(({ method }) => method),
+    ["ytSignIn"],
+  );
+  assert.deepEqual(account.view().account, {
+    kind: "account",
+    account: ACCOUNT,
+    action: "signOut",
+  });
+});
+
+test("closing the window the Wave sign-in opened leaves YT Music signed out with nothing new", async () => {
+  const { account, world, calls } = desktop({});
+  world.wave(WAVE);
+  world.closeWindow({ kind: "closed" });
+  await settle();
+  assert.deepEqual(calls, []);
+  assert.deepEqual(account.view(), {
+    account: { kind: "signedOut", action: "signIn", note: "optional" },
+    keyringMissing: false,
+    noBrowser: false,
+  });
+});
+
+test("Cancel stops the YT Music sign-in a Wave sign-in opened", async () => {
+  const { account, world } = desktop({});
+  world.wave(WAVE);
+  account.cancelSignIn();
+  await settle();
+  assert.equal(world.cancelled, 1);
+  assert.deepEqual(account.view().account, {
+    kind: "signedOut",
+    action: "signIn",
+    note: "optional",
+  });
+});
+
+test("a Wave sign-out or ended session, YT Music off, or a YouTube account kept opens nothing", async () => {
+  const { account, world } = desktop({});
+  world.wave({ status: "signedOut" });
+  world.wave({ status: "ended", account: null });
+  world.enabled = false;
+  world.wave(WAVE);
+  assert.equal(world.browsers, 0);
+
+  world.enabled = true;
+  const signingIn = account.signIn();
+  world.closeWindow(READ);
+  await signingIn;
+  world.wave(WAVE);
+  assert.equal(world.browsers, 1);
+});
+
+test("once disposed, a Wave sign-in opens nothing", () => {
+  const { account, world } = desktop({});
+  account.dispose();
+  world.wave(WAVE);
+  assert.equal(world.browsers, 0);
 });

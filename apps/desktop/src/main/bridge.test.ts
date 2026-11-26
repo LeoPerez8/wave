@@ -650,6 +650,8 @@ const connect = (
             sessions: ytSessions,
             online: () => true,
             startSignIn: () => ({ outcome: Promise.resolve(browser.outcome), cancel: () => {} }),
+            waveSessions: account.service.subscribe,
+            waveSession: account.service.session,
           }),
           spotifyImportLayer({ fetch: () => Promise.reject(new Error("no network")) }).pipe(
             Layer.provideMerge(
@@ -3296,6 +3298,44 @@ test("Copy Link puts a song's share link on the clipboard, and pasted text that 
         message: "Link copiado",
       });
       assert.equal(await wave.playlists.newName(), "Nova Playlist");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+});
+
+test("signing in to the Wave account from the window runs YouTube's sign-in next, with YT Music on", async () => {
+  await withFile(async (file) => {
+    const app = await desktop();
+    const { runtime, exposed, browser, jvm, yt } = connect(file, undefined, {
+      service: app.open(),
+    });
+    const wave = exposed.get("wave") as WaveBridge;
+    const account = { name: "Ana", email: "ana@example.com", photoUrl: null };
+    try {
+      // YT Music off: the Wave account signs in alone.
+      await wave.settings.setYtMusic(false);
+      browser.outcome = {
+        kind: "signedIn",
+        cookie: "SAPISID=fake-value",
+        dataSyncId: null,
+        sessionIndex: "0",
+      };
+      jvm.answers = { ytSignIn: { status: "signedIn", account } };
+      await wave.account.signIn();
+      assert.equal((await wave.account.view()).account.kind, "account");
+      assert.ok(!yt.some((line) => line.startsWith("ytSignIn")));
+      await wave.account.signOut();
+
+      await wave.settings.setYtMusic(true);
+      await wave.account.signIn();
+      await until(async () => (await wave.ytAccount.view()).account?.kind === "account");
+      assert.deepEqual((await wave.ytAccount.view()).account, {
+        kind: "account",
+        account,
+        action: "signOut",
+      });
+      assert.equal(yt.filter((line) => line.startsWith("ytSignIn")).length, 1);
     } finally {
       await runtime.dispose();
     }

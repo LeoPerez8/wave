@@ -40,6 +40,13 @@
     <package android:name="com.whatsapp" />
   </queries>
 
+  <!-- AccountManager filters out authenticators from packages Wave cannot see. -->
+  <queries>
+    <intent>
+      <action android:name="android.accounts.AccountAuthenticator" />
+    </intent>
+  </queries>
+
   <!--
     Card 2 and Settings › Accounts › Song links name the app that still opens a service's song
     links (songLinkOpeners, Core's SONG_LINK_SAMPLES): the apps verified for these hosts, and the

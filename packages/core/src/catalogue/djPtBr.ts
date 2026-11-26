@@ -31,6 +31,7 @@ export const djPtBr: typeof djEn = {
     `${formatNumber("pt-BR", percent)}% das músicas são novas para você.`,
   filters: "Filtros",
   mood: "Humor",
+  moodsJoiner: " + ",
   moodNames: { energetic: "Agitada", relaxing: "Relaxante", upbeat: "Animada" },
   filterNames: {
     trending: "Em alta",
