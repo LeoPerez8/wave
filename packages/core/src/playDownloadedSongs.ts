@@ -20,8 +20,12 @@ export interface PlayDownloadedSongsOptions extends Omit<
   MagicStandInOptions,
   "picking" | "sleepTimer"
 > {
-  /** Whether the queue song [trackId] plays from the phone: a Library song with its file, or a downloaded YT Music song. */
-  readonly onPhone: (trackId: string) => boolean;
+  /**
+   * The Track id the queue song [trackId] plays from on the phone: its own
+   * for a Library song with its file, its Library copy's for a YT Music song
+   * downloaded since it was queued; null when it isn't on the phone.
+   */
+  readonly onPhone: (trackId: string) => string | null;
   /** The stalled song's artists, by name: the stand-in's seeds. */
   readonly stalledArtists: readonly string[];
   /** The Magic Queue session under way, whose moods apply; none for another queue. */
@@ -30,11 +34,11 @@ export interface PlayDownloadedSongsOptions extends Omit<
 
 /**
  * What Play Downloaded Songs plays: the queue entry to go on to (`next`, by
- * its key), or Library songs to play next with the old queue's rest after
- * them (`library`, by Track id).
+ * its key, as the Track id it plays from on the phone), or Library songs to
+ * play next with the old queue's rest after them (`library`, by Track id).
  */
 export type DownloadedSongsPick =
-  | { readonly kind: "next"; readonly key: string }
+  | { readonly kind: "next"; readonly key: string; readonly trackId: string }
   | { readonly kind: "library"; readonly trackIds: readonly string[] };
 
 /**
@@ -44,12 +48,19 @@ export type DownloadedSongsPick =
  */
 const nextOnPhone = (
   state: QueueState,
-  onPhone: (trackId: string) => boolean,
-): QueueEntry | null => {
-  const ahead = upNext(state).find((entry) => onPhone(entry.trackId));
-  if (ahead !== undefined || state.repeat !== "all") return ahead ?? null;
+  onPhone: (trackId: string) => string | null,
+): { readonly entry: QueueEntry; readonly trackId: string } | null => {
+  const first = (entries: readonly QueueEntry[]) => {
+    for (const entry of entries) {
+      const trackId = onPhone(entry.trackId);
+      if (trackId !== null) return { entry, trackId };
+    }
+    return null;
+  };
+  const ahead = first(upNext(state));
+  if (ahead !== null || state.repeat !== "all") return ahead;
   const lap = new Set(lapEntries(state));
-  return queueHistory(state).find((entry) => lap.has(entry) && onPhone(entry.trackId)) ?? null;
+  return first(queueHistory(state).filter((entry) => lap.has(entry)));
 };
 
 /**
@@ -85,7 +96,7 @@ export function* playDownloadedSongsSteps(
 ): Generator<void, DownloadedSongsPick | null> {
   if (state.index < 0) return null;
   const next = nextOnPhone(state, options.onPhone);
-  if (next !== null) return { kind: "next", key: next.key };
+  if (next !== null) return { kind: "next", key: next.entry.key, trackId: next.trackId };
   // The stalled song's artists lead, then their neighbours by their hops in
   // the artist graph, each hop ranked apart; moods, dislikes and the songs
   // already queued count as they do for any stand-in.

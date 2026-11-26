@@ -12,8 +12,10 @@ import { View } from "react-native";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
+import { TextButton } from "@/components/TextButton";
 import { skipToNext, skipToPrevious, togglePlayPause } from "@/playback/actions";
 import { useNetworkSignal } from "@/playback/networkSignal";
+import { playDownloadedSongs, usePlayDownloadedSongs } from "@/playback/playDownloadedSongs";
 import { playbackState } from "@/playback/Player";
 
 import { HoldSkipLabel, restartFromHold, useHoldSkip } from "./HoldSkip";
@@ -80,6 +82,8 @@ export function Transport({
   );
   const { signal, backOnline } = useNetworkSignal();
   const line = networkSignalLine(signal, backOnline, strings);
+  // Offline or Slow, with something on the phone to play: Play Downloaded Songs.
+  const downloaded = usePlayDownloadedSongs(signal);
   // The wait ended paused and the internet is back: the play button asks for a tap.
   const ask = signal === "back" && !playing;
   const back = useHoldSkip("back");
@@ -144,10 +148,20 @@ export function Transport({
         </View>
       </View>
       <TransportSlot>{right}</TransportSlot>
-      {line !== null && !editing && (
-        <View pointerEvents="none" style={SIGNAL_LINE}>
-          <CatalogLine>{line}</CatalogLine>
+      {downloaded && !editing ? (
+        <View pointerEvents="box-none" style={SIGNAL_LINE}>
+          <TextButton
+            label={strings.playbackText.playDownloadedSongs}
+            onPress={() => void playDownloadedSongs()}
+          />
         </View>
+      ) : (
+        line !== null &&
+        !editing && (
+          <View pointerEvents="none" style={SIGNAL_LINE}>
+            <CatalogLine>{line}</CatalogLine>
+          </View>
+        )
       )}
     </View>
   );

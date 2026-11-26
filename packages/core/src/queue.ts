@@ -52,7 +52,15 @@ export type QueueCommand =
   | { readonly type: "next" }
   | { readonly type: "previous"; readonly positionMs: number }
   | { readonly type: "trackEnded" }
-  | { readonly type: "jumpTo"; readonly key: string }
+  | {
+      readonly type: "jumpTo";
+      readonly key: string;
+      /**
+       * Plays the entry as this song instead, under a new key so the player
+       * loads it again: a streamed song's Library copy (Play Downloaded Songs).
+       */
+      readonly becomes?: string | undefined;
+    }
   /** The native player moved to this entry on its own: auto-advance, notification or Bluetooth. */
   | { readonly type: "playerMoved"; readonly key: string }
   | { readonly type: "setShuffle"; readonly on: boolean }
@@ -912,9 +920,17 @@ const select = (state: QueueState, key: string): QueueState => {
   return index < 0 || index === state.index ? state : { ...state, index };
 };
 
-/** Plays the entry for `key`, e.g. tapped in Up Next. */
-const jumpTo = (state: QueueState, key: string): QueueResult =>
-  indexOfKey(state, key) < 0 ? result(state) : result(select(state, key), "play");
+/** Plays the entry for `key`, e.g. tapped in Up Next; as [becomes] under a new key when given. */
+const jumpTo = (state: QueueState, key: string, becomes?: string): QueueResult => {
+  const at = indexOfKey(state, key);
+  if (at < 0) return result(state);
+  if (becomes === undefined || becomes === state.entries[at]!.trackId)
+    return result(select(state, key), "play");
+  const entries = state.entries.map((entry, i) =>
+    i === at ? { ...entry, key: String(state.nextKey), trackId: becomes } : entry,
+  );
+  return result({ ...state, entries, index: at, nextKey: state.nextKey + 1 }, "play");
+};
 
 /**
  * Follows the native player; moving forward is an ordinary advance. Past the
@@ -1076,7 +1092,7 @@ export const reduceQueue = (
     case "moreFromArtist":
       return moreFromArtist(state, playing(command.ranking, passOver));
     case "jumpTo":
-      return jumpTo(state, command.key);
+      return jumpTo(state, command.key, command.becomes);
     case "playerMoved":
       return playerMoved(state, command.key, random, shuffle);
     case "move":

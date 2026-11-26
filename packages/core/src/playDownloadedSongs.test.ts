@@ -41,8 +41,12 @@ const playing = (trackIds: readonly string[], at = 0): QueueState =>
     context: { kind: "album", id: "1" },
   });
 
-/** Songs whose id starts with "f" have a file on the phone; "s" ones are streamed. */
-const onPhone = (trackId: string): boolean => trackId.startsWith("f");
+/**
+ * Songs whose id starts with "f" have a file on the phone; "s" ones are
+ * streamed; "yt:d" was downloaded since it was queued, as Library song "7".
+ */
+const onPhone = (trackId: string): string | null =>
+  trackId.startsWith("f") ? trackId : trackId === "yt:d" ? "7" : null;
 
 const options = (more: Partial<PlayDownloadedSongsOptions> = {}): PlayDownloadedSongsOptions => ({
   onPhone,
@@ -71,6 +75,16 @@ describe("Play Downloaded Songs", () => {
       assert.deepEqual(playDownloadedSongs(state, [], options()), {
         kind: "next",
         key: keyOf(state, "f3"),
+        trackId: "f3",
+      });
+    });
+
+    test("plays a streamed song downloaded since it was queued from its Library copy", () => {
+      const state = playing(["s1", "s2", "yt:d", "f4"]);
+      assert.deepEqual(playDownloadedSongs(state, [], options()), {
+        kind: "next",
+        key: keyOf(state, "yt:d"),
+        trackId: "7",
       });
     });
 
@@ -89,10 +103,14 @@ describe("Play Downloaded Songs", () => {
         },
         random,
       ).state;
-      const first = upNext(state).find((entry) => onPhone(entry.trackId))!;
+      const first = upNext(state).find((entry) => onPhone(entry.trackId) !== null)!;
       // The shuffle put another on-phone song ahead of the context's first one.
       assert.notEqual(first.trackId, "f1");
-      assert.deepEqual(playDownloadedSongs(state, [], options()), { kind: "next", key: first.key });
+      assert.deepEqual(playDownloadedSongs(state, [], options()), {
+        kind: "next",
+        key: first.key,
+        trackId: first.trackId,
+      });
     });
 
     test("wraps to History's songs with Repeat All, and not without it", () => {
@@ -100,7 +118,7 @@ describe("Play Downloaded Songs", () => {
       const library = [song("f9", "Stalled")];
       assert.deepEqual(
         playDownloadedSongs(run(state, { type: "setRepeat", mode: "all" }), library, options()),
-        { kind: "next", key: keyOf(state, "f1") },
+        { kind: "next", key: keyOf(state, "f1"), trackId: "f1" },
       );
       assert.equal(playDownloadedSongs(state, library, options())?.kind, "library");
     });
