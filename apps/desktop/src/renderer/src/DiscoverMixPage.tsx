@@ -1,7 +1,7 @@
 import { listDuration } from "@wave/core";
 import type { MouseEvent } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
-import { playMix, useMixes } from "./Discover.tsx";
+import { mixTitle, playMix, useMixes } from "./Discover.tsx";
 import { Icon } from "./Icon.tsx";
 import { labels, text } from "./text.ts";
 import { Artwork } from "./VirtualTable.tsx";
@@ -48,7 +48,7 @@ export function DiscoverMixPage({
         <YtQuiet status={mixes.status} />
       </div>
     );
-  const title = text.discover.mixTitle(mix.name);
+  const title = mixTitle(mix);
   const songs = mix.songs.items;
   const first = songs[0];
   const length = listDuration(
