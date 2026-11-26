@@ -34,6 +34,8 @@ import { chrome, useTabBarTop } from "@/chrome/chrome";
 import { OnFloatingChrome } from "@/chrome/onFloatingChrome";
 import { IconButton } from "@/components/IconButton";
 import { Glass } from "@/glass/Glass";
+import { NativeWaveGhost } from "@/glass/waveGlass";
+import { useThemeColor } from "@/theme/useThemeColor";
 import { useBounceSpring } from "@/motion/bounce";
 import { Press } from "@/motion/Press";
 import { menuTouchOwnership, observeMenuTouchOwnership } from "@/motion/heldTouch";
@@ -46,6 +48,7 @@ import {
 
 import { skipToNext, skipToPrevious, togglePlayPause } from "./actions";
 import { playbackState } from "./Player";
+import { useNetworkSignal } from "./networkSignal";
 import { playerTrouble } from "./playbackStores";
 import { openPlayingActions } from "./ActionsMenu";
 import { useRenderCount } from "@/perf/perf";
@@ -63,10 +66,18 @@ const ART_RADIUS = concentricRadius({
   size: ART,
 });
 
+/** The ghost wave's box along the pill's bottom edge, inside it (Core's MINI_GHOST_WAVE: 2 × 1.5 + 1.5). */
+const GHOST_HEIGHT = 4.5;
+/** How far the ghost wave sits above the pill's bottom edge. */
+const GHOST_INSET = CELL / 2;
+
 /** Horizontal travel before the drag takes over from a tap, in dp. */
 const DRAG_SLOP = CELL * 1.5;
 
 const EASE_OUT = Easing.out(Easing.exp);
+
+/** The thumbnail while the network holds the song up (Ghost wave, #1498). */
+const HELD_UP_THUMB = { filter: [{ saturate: 0.25 }] };
 
 const skip = (direction: SkipDirection): Promise<void> =>
   direction === "next" ? skipToNext() : skipToPrevious();
@@ -110,10 +121,14 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
   useRenderCost("MiniPlayer");
   const item = usePlaybackField("item");
   const playing = usePlaybackField("playWhenReady");
-  // "Waiting for connection" or why playback stopped; null while the song plays as usual.
+  // Why playback stopped; null while the song plays as usual, and for the network's
+  // holdups, which the network signal shows instead (the artist line stays).
   const notice = useSyncExternalStore(playbackState.subscribe, () =>
     playerNotice(playerTrouble(playbackState.get()), strings),
   );
+  const { signal } = useNetworkSignal();
+  const heldUp = signal === "offline" || signal === "slow";
+  const accent = useThemeColor("accent");
   const bottom = useTabBarTop();
   const reduceMotion = useReducedMotion();
   // A swipe let go short springs back as far past rest as the Bounce amount says.
@@ -268,7 +283,10 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
                   className="flex-1 flex-row items-center self-stretch"
                   style={{ gap: CELL * 1.5, paddingLeft: ART_INSET }}
                 >
-                  <Artwork uri={item.artworkUri ?? undefined} size={ART} radius={ART_RADIUS} />
+                  {/* Held up by the network, the thumbnail loses its colour, at its full size. */}
+                  <View style={heldUp ? HELD_UP_THUMB : undefined}>
+                    <Artwork uri={item.artworkUri ?? undefined} size={ART} radius={ART_RADIUS} />
+                  </View>
                   <View className="flex-1">
                     <Text
                       numberOfLines={1}
@@ -299,6 +317,24 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
                 </View>
               </Animated.View>
             </GestureDetector>
+            {heldUp && (
+              // Inside the pill and on the RenderThread: nothing animates behind the glass (#93).
+              <NativeWaveGhost
+                pointerEvents="none"
+                importantForAccessibility="no-hide-descendants"
+                accessibilityElementsHidden
+                color={accent}
+                period={signal}
+                animating={!reduceMotion}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  bottom: GHOST_INSET,
+                  height: GHOST_HEIGHT,
+                }}
+              />
+            )}
           </View>
         </View>
       </GestureDetector>
