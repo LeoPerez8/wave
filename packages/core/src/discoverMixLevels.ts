@@ -16,13 +16,11 @@ import type {
   DiscoverMixLibrarySong,
   DiscoverMixSeed,
   DiscoverRadioSong,
-  DiscoverSeedArtist,
   DiscoverSeedSong,
-  DiscoverSongPlays,
 } from "./discoverMixes.ts";
 import { mixLibrarySong, mixRecordingOf, mixSeedArtists } from "./discoverMixes.ts";
 import { isExplicit, type ExplicitFlag } from "./explicit.ts";
-import { ofGenreFamily } from "./genreMixes.ts";
+import { genreMixLibraryFilterSteps, type GenreMixLibrary } from "./genreMixes.ts";
 import { identityKey } from "./library.ts";
 import type { MixKnownSongs } from "./mixKnownSongs.ts";
 import type { MixedSong, YtAlbumSong } from "./ytDiscover.ts";
@@ -210,12 +208,7 @@ export interface DiscoverMixPoolSources<L extends DiscoverLibrarySong> {
   readonly radio: readonly (DiscoverRadioSong & { readonly albumId: string | null })[];
   /** The songs the owner knows (`mixKnownSongs`), over [library]'s songs. */
   readonly known: MixKnownSongs<L>;
-  readonly library: {
-    readonly artists: readonly DiscoverSeedArtist[];
-    readonly songs: readonly DiscoverLibrarySong[];
-    /** The Library songs' all-time counted plays (songs not listed have none). */
-    readonly plays?: readonly DiscoverSongPlays[];
-  };
+  readonly library: GenreMixLibrary;
   /** What the shares of the mixes before this one have. */
   readonly taken: DiscoverMixTaken;
   /** How many new songs the mix has: its length. */
@@ -271,7 +264,7 @@ export function* discoverMixFamiliarPoolSteps<L extends DiscoverLibrarySong>(
     else if (known.known(song)) addStream(song);
   }
   const restSongs: DiscoverLibrarySong[] = [];
-  const accepts = yield* mixSongFilterSteps(seed, library.artists);
+  const accepts = yield* mixSongFilterSteps(seed, library);
   for (const song of library.songs) {
     if (accepts(song)) restSongs.push(song);
     yield;
@@ -292,15 +285,15 @@ export function* discoverMixFamiliarPoolSteps<L extends DiscoverLibrarySong>(
   }
   return pool;
 }
-/** Whether a Library song is of [seed]'s mix: of its genre family (`ofGenreFamily`), else by one of its seed's artists. */
+/** Whether a Library song is of [seed]'s mix: of its genre family, else by one of its seed's artists. */
 function* mixSongFilterSteps(
   seed: DiscoverMixSeed,
-  artists: readonly DiscoverSeedArtist[],
+  library: GenreMixLibrary,
 ): Generator<void, (song: DiscoverLibrarySong) => boolean> {
-  if (seed.genre !== undefined) return ofGenreFamily(seed.genre);
+  if (seed.genre !== undefined) return yield* genreMixLibraryFilterSteps(seed.genre, library);
   const name = identityKey(seed.name);
   const ids = new Set<number>();
-  for (const artist of artists) {
+  for (const artist of library.artists) {
     if (identityKey(artist.name) === name) ids.add(artist.id);
     yield;
   }

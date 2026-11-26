@@ -24,6 +24,7 @@ import {
   type DjState,
   type DjTile,
   type DjTileKey,
+  genreFamilyName,
   identityKey,
 } from "@wave/core";
 import {
@@ -531,10 +532,11 @@ const GenreTile = memo(function GenreTile({
   onToggle: (key: DjTileKey) => void;
 }) {
   const { strings } = useLocalisation();
+  const name = genreFamilyName(tile.name, strings);
   return (
     <SelectableTile
       size={size}
-      label={strings.dj.genreTile(tile.name)}
+      label={strings.dj.genreTile(name)}
       selected={selected}
       selectable={selectable}
       onPress={() => onToggle(tile.key)}
@@ -553,7 +555,7 @@ const GenreTile = memo(function GenreTile({
               padding: CELL * 2,
             }}
           >
-            <CardTitle centred>{tile.name}</CardTitle>
+            <CardTitle centred>{name}</CardTitle>
           </View>
         )}
       />
