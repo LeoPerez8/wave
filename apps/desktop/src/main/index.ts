@@ -524,6 +524,7 @@ else {
               sessions: ytSessions,
               online: () => net.isOnline(),
               startSignIn: ytSignIn.start,
+              waveSessions: account.subscribe,
               waveSession: account.session,
             }),
             spotifyImportLayer({ fetch: (input, init) => globalThis.fetch(input, init) }).pipe(

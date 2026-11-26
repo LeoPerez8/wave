@@ -18,6 +18,8 @@ export const ytAccountLayer = (options: {
   readonly sessions: YtSessions;
   readonly online: () => boolean;
   readonly startSignIn: (email: string | null) => YtBrowserSignIn;
+  /** The Wave account's session changes: a sign-in to it runs YouTube's next. */
+  readonly waveSessions: (listener: (session: WaveSession) => void) => () => void;
   readonly waveSession: () => WaveSession;
 }) =>
   Layer.effect(
