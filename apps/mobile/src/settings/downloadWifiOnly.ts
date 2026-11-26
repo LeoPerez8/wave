@@ -1,4 +1,8 @@
-import { DOWNLOAD_WIFI_ONLY_SETTING, readDownloadWifiOnly, writeDownloadWifiOnly } from "@wave/core";
+import {
+  DOWNLOAD_WIFI_ONLY_SETTING,
+  readDownloadWifiOnly,
+  writeDownloadWifiOnly,
+} from "@wave/core";
 
 import { persistedSetting } from "@/lib/persistedSetting";
 import { WaveSoulseek } from "@/native/waveSoulseek";

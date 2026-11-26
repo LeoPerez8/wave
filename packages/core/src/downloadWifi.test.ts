@@ -42,11 +42,17 @@ describe("Download only on Wi-Fi", () => {
   });
 
   test("on an unmetered network it runs", () => {
-    assert.equal(downloadWaitsForWifi({ wifiOnly: true, metered: false }, { source: "youtube" }), false);
+    assert.equal(
+      downloadWaitsForWifi({ wifiOnly: true, metered: false }, { source: "youtube" }),
+      false,
+    );
   });
 
   test("with the switch off it runs on any network", () => {
-    assert.equal(downloadWaitsForWifi({ wifiOnly: false, metered: true }, { source: "soulseek" }), false);
+    assert.equal(
+      downloadWaitsForWifi({ wifiOnly: false, metered: true }, { source: "soulseek" }),
+      false,
+    );
   });
 
   test("a tap to play on a metered network runs it, unless it's best quality (Soulseek)", () => {
