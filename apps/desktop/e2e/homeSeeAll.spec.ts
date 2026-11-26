@@ -102,6 +102,24 @@ test("Home's shelves open their full lists, Back keeps the scroll, and Most play
     await page.keyboard.press("Alt+ArrowLeft");
     await expect(mostPlayed).toBeVisible();
 
+    // A See all clicked in the same frame as the scroll, before its scroll event: Back still
+    // returns to where the page was.
+    const scrolledTo = await page.evaluate(() => {
+      const content = document.querySelector<HTMLElement>(".content")!;
+      content.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
+      content.scrollTop = content.scrollHeight;
+      const top = content.scrollTop;
+      const buttons = document.querySelectorAll<HTMLElement>(
+        '[data-section="recently-added"] button',
+      );
+      [...buttons].find((button) => button.textContent === "See all")!.click();
+      return top;
+    });
+    await expect(heading).toHaveText("Recently added");
+    await page.keyboard.press("Alt+ArrowLeft");
+    await expect(mostPlayed).toBeVisible();
+    await expect.poll(() => scrollTop(page)).toBe(scrolledTo);
+
     for (const [section, title, grid] of [
       ["recently-played", "Recently played", "Recently played"],
       ["most-played-artists", "Top artists", "Top artists"],

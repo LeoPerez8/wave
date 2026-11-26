@@ -62,7 +62,7 @@ export function WavyUnderline() {
  * The playing song's title colour in lists: ember (highlight), or the
  * secondary colour while the network holds the song up (Offline or Slow).
  */
-export const usePlayingTitleTone = (): "highlight" | "secondary" => {
+const usePlayingTitleTone = (): "highlight" | "secondary" => {
   const { signal } = useNetworkSignal();
   return networkSignalHoldsUp(signal) ? "secondary" : "highlight";
 };

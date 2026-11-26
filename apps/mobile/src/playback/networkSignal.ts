@@ -8,7 +8,7 @@ import { makeNetworkSignalStore, type ShownNetworkSignal } from "./networkSignal
 import { playbackState } from "./Player";
 
 /** The playing song's network signal (Core's `networkSignal`), for the mini player and Now Playing. */
-export const networkSignalState = makeNetworkSignalStore({
+const networkSignalState = makeNetworkSignalStore({
   playback: playbackState,
   connectivity: {
     get: connectivityNow,
