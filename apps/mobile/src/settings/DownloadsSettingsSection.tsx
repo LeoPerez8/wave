@@ -11,6 +11,7 @@ import { WaveSoulseek, soulseekErrorCode, type SoulseekSession } from "@/native/
 import { cancelQualityReplacements } from "@/ytmusic/YtDownloads";
 
 import { setBestQuality } from "./bestQuality";
+import { setDownloadWifiOnly, useDownloadWifiOnly } from "./downloadWifiOnly";
 import { offerQualityReplacement, useQualityOffer } from "./qualityOffers";
 import { SettingsPageRow } from "./SettingsPage";
 
@@ -40,7 +41,8 @@ const offer = (direction: QualityDirection): void => {
  * Music is on. The account never reaches JS beyond the session's status. Turning it on offers to
  * replace the Library's low-quality songs, turning it off to free space by replacing its MP3
  * 320s with YouTube Music's copies; while songs are left a row offers the current direction
- * again. Either way the other direction's waiting replacements are cancelled.
+ * again. Either way the other direction's waiting replacements are cancelled. Then Download only
+ * on Wi-Fi.
  */
 export function DownloadsSettingsSection() {
   const { strings } = useLocalisation();
@@ -128,6 +130,30 @@ export function DownloadsSettingsSection() {
           {message}
         </Text>
       )}
+      <WifiOnlySwitch />
+    </View>
+  );
+}
+
+/**
+ * Download only on Wi-Fi (#1502), on by default and synced: on a metered network the downloads
+ * wait for Wi-Fi, and the journal starts them once an unmetered network is back.
+ */
+function WifiOnlySwitch() {
+  const { strings } = useLocalisation();
+  const on = useDownloadWifiOnly();
+  return (
+    <View className="mt-4">
+      <Hairline />
+      <SettingsSwitch
+        label={strings.settings.downloadOnlyOnWifi}
+        value={on}
+        onValueChange={setDownloadWifiOnly}
+      />
+      <Hairline />
+      <Text className="mt-2 font-sans text-footnote text-secondary">
+        {strings.settings.downloadOnlyOnWifiFootnote}
+      </Text>
     </View>
   );
 }

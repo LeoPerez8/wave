@@ -13,6 +13,7 @@ import "@/settings/bestQuality";
 import "@/settings/bounceAmount";
 import "@/settings/continueQueue";
 import "@/settings/dontPlayExplicit";
+import "@/settings/downloadWifiOnly";
 import "@/settings/followedArtists";
 import "@/settings/genius";
 import "@/settings/glass";

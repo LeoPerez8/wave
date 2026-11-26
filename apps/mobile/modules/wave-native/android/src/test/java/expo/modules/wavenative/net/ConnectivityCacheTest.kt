@@ -25,6 +25,14 @@ class ConnectivityCacheTest {
   }
 
   @Test
+  fun `a network without NOT_METERED is metered, whatever carries it`() {
+    assertFalse(ConnectivityState.of(validatedWifi).metered)
+    assertTrue("mobile data", ConnectivityState.of(validatedMobile.copy(notMetered = false)).metered)
+    assertTrue("a hotspot, or a Wi-Fi marked metered", ConnectivityState.of(validatedWifi.copy(notMetered = false)).metered)
+    assertFalse("no network isn't metered", ConnectivityState.of(null).metered)
+  }
+
+  @Test
   fun `the cache answers its last state and tells its listener only of changes`() {
     val heard = mutableListOf<ConnectivityState>()
     val cache = ConnectivityCache(ConnectivityState.of(validatedWifi))

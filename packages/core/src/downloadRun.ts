@@ -302,12 +302,18 @@ export const downloadRunPanelLine = (
     paused,
     throttled,
     held = false,
+    waitingForWifi = false,
   }: {
     readonly timeLeft: number | null;
     readonly paused: boolean;
     readonly throttled: boolean;
     /** The owner paused downloads (`DownloadPause`): Paused, whatever YouTube's pause says. */
     readonly held?: boolean;
+    /**
+     * Songs wait for Wi-Fi (`downloadsWaitingForWifi`): nothing moving isn't Paused, since the
+     * list's "Waiting for Wi-Fi" line says why.
+     */
+    readonly waitingForWifi?: boolean;
   },
   language: AppLanguage = "en",
 ): string =>
@@ -315,7 +321,7 @@ export const downloadRunPanelLine = (
     downloadRunLines(counts, language).detail,
     held
       ? catalogueOf(language).downloadNotice.paused
-      : throttled
+      : throttled || waitingForWifi
         ? null
         : paused
           ? catalogueOf(language).downloadNotice.paused

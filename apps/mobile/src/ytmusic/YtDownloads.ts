@@ -1,4 +1,7 @@
+import { applyDownloadWifiOnly } from "@/settings/downloadWifiOnly";
+
 import { recordingSearch } from "./recordingSearch";
+import { followWifiWaitPlayed } from "./wifiWaitPlayed";
 /**
  * The Download menu and rows of YT Music songs, backed by the native journal: Core picks the
  * source (`downloadSource`), Soulseek's automatic recording selection or YouTube Music's M4A,
@@ -1405,6 +1408,8 @@ let attached = false;
 export const startDownloads = (resume = false): void => {
   if (!attached) {
     attached = true;
+    applyDownloadWifiOnly();
+    followWifiWaitPlayed();
     followDownloadRuns();
     WaveSoulseek.addListener("onJobsChanged", refreshQuietly);
     libraryVersion.subscribe(refreshQuietly);

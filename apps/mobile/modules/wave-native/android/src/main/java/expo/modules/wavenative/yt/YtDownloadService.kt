@@ -32,7 +32,11 @@ import kotlin.concurrent.thread
  * as JS follows it ([AndroidDownloads.runNotice]), and offers Cancel, Pause or
  * Resume, and Cancel All; it stops once the journal has no work left. Stopping
  * with only paused songs left, it leaves a "Paused" notification that resumes
- * or cancels them.
+ * or cancels them. With only songs waiting for Wi-Fi left (Download only on
+ * Wi-Fi on a metered network, #1502), it stops with no notification and a
+ * JobScheduler job starts it again on an unmetered network ([downloads]'s
+ * `awaitWifi`); while it runs, the journal pauses the songs in flight when the
+ * network becomes metered and starts them when it's unmetered again.
  */
 class YtDownloadService : Service() {
   private val downloads get() = AndroidDownloads.get(this)
@@ -114,11 +118,15 @@ class YtDownloadService : Service() {
     downloads.start(onIdle = ::idle, refresh = { refresh() }, restarted = restarted)
   }
 
-  /** No work left: it stops, leaving a "Paused" notification when only paused songs are left. */
+  /**
+   * No work left: it stops, leaving a "Paused" notification when only paused songs are left, and
+   * waiting for an unmetered network, silently, when songs wait for Wi-Fi.
+   */
   private fun idle() {
     if (ended) return
     ended = true
     stopping = downloads.jobs.idleStop()
+    downloads.awaitWifi()
     if (stopping == DownloadServiceStop.PAUSED) {
       stopForeground(STOP_FOREGROUND_DETACH)
       getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, pausedNotification())

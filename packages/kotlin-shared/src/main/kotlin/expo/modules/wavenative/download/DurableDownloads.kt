@@ -52,6 +52,11 @@ interface DurablePublication {
  * The journal is written in small, coalesced writes (#452): the changes of a second share one
  * write ([WRITE_MS]), which appends only what changed to a log beside a snapshot ([JournalStore]),
  * so a big queue's tags and lyrics aren't rewritten on every change. See "Persistence" below.
+ *
+ * Download only on Wi-Fi (#1502; Core's `downloadWaitsForWifi`, which [wifiHeld] mirrors): while
+ * it's on ([setWifiOnly]) and the network is metered ([setNetwork]), the songs not downloaded yet
+ * wait in line, uncharged, and readers see each marked `waitingForWifi`. Both are kept in the
+ * journal, so the wait survives closing Wave and a restart.
  */
 class DurableDownloads(
   private val journal: File,
@@ -96,6 +101,10 @@ class DurableDownloads(
   @Volatile private var pausedGroupsView: Set<String> = emptySet()
   /** The jobs asked for again while the owner paused ([Request.release]), which download anyway. */
   @Volatile private var releasedView: Set<String> = emptySet()
+  /** Download only on Wi-Fi ([setWifiOnly]): on unless the owner turned it off. Read without the lock. */
+  @Volatile private var wifiOnlyView = true
+  /** The network is metered ([setNetwork]), as last told. Read without the lock. */
+  @Volatile private var meteredView = false
   private val published get() = view.jobs
   /** What jobs' budgets are charged on ([budgetNow]). */
   private val budget: BudgetClock
@@ -116,7 +125,8 @@ class DurableDownloads(
       for ((id, job) in saved.map("jobs")) {
         @Suppress("UNCHECKED_CAST")
         val record = job as Map<String, Any?>
-        jobs[id] = record.toMutableMap()
+        // What readers were shown ([readerCopy]), never the job's own state.
+        jobs[id] = record.toMutableMap().apply { remove(WAITING_FOR_WIFI) }
       }
       policy = saved.map("libraryPolicy").toMutableMap()
       policy.map(YOUTUBE_PAUSE).takeIf { it.isNotEmpty() }?.let { pauseView = YoutubePause(it.number("until"), it.number("level")) }
@@ -150,6 +160,7 @@ class DurableDownloads(
       // takes each up again (its next step, or JS's decision), and aren't counted downloading.
       for (job in jobs.values) if (job["phase"] in ACQUIRING) job["resumed"] = true
       loadOwnerPause()
+      loadWifi()
       sweepParts()
       // A full disk mustn't stop Wave or the download service from opening the journal: the
       // jobs stay in memory (and readable), and the next change that can be written saves them.
@@ -274,6 +285,8 @@ class DurableDownloads(
         existing.remove("token"); existing.remove("reason"); existing.remove("importFailure"); existing.remove("cause")
         // Retry starts again from the source decided now, Soulseek first while it has an account.
         existing.remove("fallback"); existing.remove("fellBackFrom"); existing.remove("fellBackCause"); existing.remove("video")
+        // Played while it waited for Wi-Fi: that was the song's last run.
+        existing.remove(PLAY_NOW)
         // Asked for again: it waits behind what's already queued.
         val key = existing["id"] as String
         jobs.remove(key); jobs[key] = existing
@@ -314,7 +327,7 @@ class DurableDownloads(
   @Synchronized fun claim(id: String): Map<String, Any?>? {
     val job = jobs[id] ?: return null
     if (job["phase"] !in DECISIONS || job["token"] != null || job["acknowledged"] == true || job["importFailure"] != null || job.number("retryAt") > clock()) return null
-    if (ownerHeld(job)) return null
+    if (ownerHeld(job) || wifiHeld(job)) return null
     // Songs join the Library one at a time: the next is offered once the one before is imported.
     if (job["phase"] == "awaitingPublication" && jobs.values.any { it !== job && saving(it) }) return null
     if (outOfTime(job)) { fail(job, "timedOut", "Out of time before the ${DECISIONS[job["phase"]]} decision"); persist(); return null }
@@ -416,9 +429,11 @@ class DurableDownloads(
     if (policy["roots"] != roots || policy["excluded"] != excluded) {
       val pause = policy[YOUTUBE_PAUSE]
       val ownerPause = policy[OWNER_PAUSE]
+      val wifi = policy[WIFI]
       policy = mutableMapOf("roots" to roots.toList(), "excluded" to excluded.toList(), "revision" to policy.number("revision") + 1)
       if (pause != null) policy[YOUTUBE_PAUSE] = pause
       if (ownerPause != null) policy[OWNER_PAUSE] = ownerPause
+      if (wifi != null) policy[WIFI] = wifi
       persist()
     }
     return policy.number("revision")
@@ -480,8 +495,8 @@ class DurableDownloads(
     persist()
   }
 
-  /** Songs on their way that may move: paused ones ([ownerHeld]) don't keep the service. */
-  fun hasWork(): Boolean = published.any { pending(it) && !ownerHeld(it) }
+  /** Songs on their way that may move: paused ones ([ownerHeld]) and those waiting for Wi-Fi ([wifiHeld]) don't keep the service. */
+  fun hasWork(): Boolean = published.any { pending(it) && !ownerHeld(it) && !wifiHeld(it) }
 
   /**
    * Settings › Downloads' and the notification's Pause (Core's `pauseAllDownloads`, which this
@@ -597,9 +612,77 @@ class DurableDownloads(
     for (job in jobs.values) if (job["phase"] in CHARGED && ownerHeld(job)) requeue(job, null)
   }
 
+  /**
+   * The network became metered or unmetered (Android's `NET_CAPABILITY_NOT_METERED`). Going
+   * metered with Download only on Wi-Fi on, the songs not downloaded yet stop at once and go back
+   * in line in their places, uncharged, as [pauseAll] puts them (a cut transfer starts over); going
+   * unmetered, they go on. Written at once, so the wait survives a restart.
+   */
+  @Synchronized fun setNetwork(metered: Boolean, transport: DurableTransfer) {
+    if (metered == meteredView) return
+    meteredView = metered
+    wifiChanged(transport)
+  }
+
+  /** Download only on Wi-Fi turned on or off (the synced preference): off, the waiting songs start on any network. */
+  @Synchronized fun setWifiOnly(on: Boolean, transport: DurableTransfer) {
+    if (on == wifiOnlyView) return
+    wifiOnlyView = on
+    wifiChanged(transport)
+  }
+
+  /** Whether Download only on Wi-Fi is on. Read without the journal's lock. */
+  fun wifiOnly(): Boolean = wifiOnlyView
+
+  /** Whether the network is metered, as last told ([setNetwork]). Read without the journal's lock. */
+  fun metered(): Boolean = meteredView
+
+  /**
+   * The owner played song [videoId] (a job's id, or a song on it) while it may wait for Wi-Fi:
+   * playing streams the same audio, so it downloads now over whatever network there is, unless
+   * it's a best-quality (Soulseek) copy, which keeps waiting ([wifiHeld]). False with no such job.
+   */
+  @Synchronized fun playNow(videoId: String): Boolean {
+    val job = jobs[videoId] ?: jobs.values.firstOrNull { it.map("song")["videoId"] == videoId || it.maps("aliases").any { alias -> alias["videoId"] == videoId } }
+      ?: return false
+    if (!pending(job) || job[PLAY_NOW] == true) return true
+    val before = view.revision
+    job[PLAY_NOW] = true
+    persistNow(); announce(before)
+    return true
+  }
+
+  /** The songs waiting for Wi-Fi ([wifiHeld]): what Settings › Downloads' line counts. */
+  fun wifiWaitingCount(): Int = published.count { pending(it) && wifiHeld(it) }
+
+  /**
+   * Waits for Wi-Fi (Core's `downloadWaitsForWifi`): not downloaded yet, with the switch on on a
+   * metered network, unless the owner played it and it comes from YouTube. Reads [job] alone and
+   * the views, so it holds on the published copy.
+   */
+  private fun wifiHeld(job: Map<String, Any?>) =
+    wifiOnlyView && meteredView && notDownloaded(job) && !(job[PLAY_NOW] == true && job["source"] == YOUTUBE)
+
+  /** The switch or the network changed: songs now held go back in line, and readers see the change. */
+  private fun wifiChanged(transport: DurableTransfer?) {
+    val before = view.revision
+    policy[WIFI] = mapOf("only" to wifiOnlyView, "metered" to meteredView)
+    for (job in jobs.values) if (job["phase"] in CHARGED && job["importFailure"] == null && wifiHeld(job)) requeue(job, transport)
+    persistNow(); announce(before)
+  }
+
+  /** The switch and the network as the journal kept them; songs a restart left at the front wait again. */
+  private fun loadWifi() {
+    val wifi = policy[WIFI] as? Map<*, *> ?: return
+    wifiOnlyView = wifi["only"] as? Boolean ?: true
+    meteredView = wifi["metered"] as? Boolean ?: false
+    for (job in jobs.values) if (job["phase"] in CHARGED && wifiHeld(job)) requeue(job, null)
+  }
+
   /** Why the download service stops once there's no work ([hasWork]): the last song cancelled, or none left. */
   fun idleStop(): DownloadServiceStop = when {
     heldCount() > 0 -> DownloadServiceStop.PAUSED
+    wifiWaitingCount() > 0 -> DownloadServiceStop.WAITING_FOR_WIFI
     lastEnd == "cancelled" -> DownloadServiceStop.CANCELLED
     else -> DownloadServiceStop.QUEUE_EMPTY
   }
@@ -637,7 +720,7 @@ class DurableDownloads(
     var changed = false
     for (job in jobs.values) {
       if (busy >= slots || startedCount >= slots * 2) break
-      if (job["phase"] != "queued" || (youtubePaused && job["source"] == YOUTUBE) || ownerHeld(job)) continue
+      if (job["phase"] != "queued" || (youtubePaused && job["source"] == YOUTUBE) || ownerHeld(job) || wifiHeld(job)) continue
       startBudget(job); startSoulseekTurn(job); transition(job, "preparing")
       busy++; startedCount++; changed = true
     }
@@ -886,7 +969,7 @@ class DurableDownloads(
     admit()
     for (job in jobs.values) {
       val id = job["id"] as String
-      if (id in running || job.number("retryAt") > clock() || youtubeHeld(job) || ownerHeld(job)) continue
+      if (id in running || job.number("retryAt") > clock() || youtubeHeld(job) || ownerHeld(job) || wifiHeld(job)) continue
       if (job["phase"] == "prepared") {
         if (job.number("attempts") >= MAX_ATTEMPTS || job.number("candidateIndex") >= job.maps("candidates").size) { fail(job, exhausted(job), exhaustion(job)); persist(); continue }
         if (soulseekTurnOver(job)) { fail(job, "timedOut", SOULSEEK_OUT_OF_TIME); persist(); continue }
@@ -1275,12 +1358,20 @@ class DurableDownloads(
     val previous = before.entries.associateBy { it.job["id"] }
     var revision = before.revision
     val entries = jobs.values.map { job ->
-      val copy = clean(job) as Map<String, Any?>
+      val copy = readerCopy(job)
       previous[job["id"]]?.takeIf { it.job == copy } ?: PublishedJob(copy, ++revision)
     }
     val reordered = entries.size != before.entries.size || entries.indices.any { entries[it].job["id"] != before.entries[it].job["id"] }
     if (reordered && revision == before.revision) revision++
     view = JournalView(entries, revision, if (reordered) revision else before.orderRevision)
+  }
+
+  /** [job] as readers see it: marked `waitingForWifi` while it waits for Wi-Fi ([wifiHeld]). */
+  @Suppress("UNCHECKED_CAST")
+  private fun readerCopy(job: Map<String, Any?>): Map<String, Any?> {
+    val copy = clean(job) as MutableMap<String, Any?>
+    if (wifiHeld(job)) copy[WAITING_FOR_WIFI] = true else copy.remove(WAITING_FOR_WIFI)
+    return copy
   }
 
   // The job's budget: [JOB_MS] from leaving the queue until its file is downloaded, charged on
@@ -1355,7 +1446,7 @@ class DurableDownloads(
     val before = view
     val index = before.entries.indexOfFirst { it.job["id"] == job["id"] }
     if (index < 0) { publish(); return }
-    val copy = clean(job) as Map<String, Any?>
+    val copy = readerCopy(job)
     if (before.entries[index].job == copy) return
     val revision = before.revision + 1
     val entries = before.entries.toMutableList().also { it[index] = PublishedJob(copy, revision) }
@@ -1475,6 +1566,12 @@ class DurableDownloads(
     private const val YOUTUBE_PAUSE = "youtubePause"
     /** Where the journal keeps the owner's pause ([pauseAll]) and the jobs released from it; present while paused. */
     private const val OWNER_PAUSE = "ownerPause"
+    /** Where the journal keeps Download only on Wi-Fi and whether the network is metered ([setNetwork]). */
+    private const val WIFI = "wifi"
+    /** What readers see on a job waiting for Wi-Fi ([readerCopy]). */
+    private const val WAITING_FOR_WIFI = "waitingForWifi"
+    /** The owner played the song while it waited for Wi-Fi ([playNow]). */
+    private const val PLAY_NOW = "playNow"
     /** Not downloaded yet ([notDownloaded]). */
     private val NOT_DOWNLOADED = setOf("queued", "preparing", "prepared", "transferring")
     const val YOUTUBE = "youtube"
