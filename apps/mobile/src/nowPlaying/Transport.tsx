@@ -1,4 +1,5 @@
 import { useLocalisation } from "@/localisation/localisation";
+import { networkSignalLine } from "@wave/core";
 import {
   IconPlayerPauseFilled,
   IconPlayerPlayFilled,
@@ -8,15 +9,31 @@ import {
 import { useSyncExternalStore, type ReactNode } from "react";
 import { View } from "react-native";
 
+import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
 import { skipToNext, skipToPrevious, togglePlayPause } from "@/playback/actions";
+import { useNetworkSignal } from "@/playback/networkSignal";
 import { playbackState } from "@/playback/Player";
 
 import { HoldSkipLabel, restartFromHold, useHoldSkip } from "./HoldSkip";
 
 /** How much of the player shows through while its slots are edited. */
 export const EDITING_OPACITY = 0.45;
+
+/** The play button's size. */
+const PLAY = CELL * 9;
+/** How strong the teal disc behind the play button is once the internet is back after the wait. */
+const ASK_FILL = 0.22;
+
+/** The network signal's line under the controls, over the gap below them, so nothing moves. */
+const SIGNAL_LINE = {
+  position: "absolute",
+  left: 0,
+  right: 0,
+  top: "100%",
+  alignItems: "center",
+} as const;
 
 /** A transport slot's place: the size of a slot's button, kept while the slot is empty. */
 const SLOT = CELL * 6;
@@ -61,6 +78,10 @@ export function Transport({
     playbackState.subscribe,
     () => playbackState.get().playWhenReady,
   );
+  const { signal, backOnline } = useNetworkSignal();
+  const line = networkSignalLine(signal, backOnline, strings);
+  // The wait ended paused and the internet is back: the play button asks for a tap.
+  const ask = signal === "back" && !playing;
   const back = useHoldSkip("back");
   const forward = useHoldSkip("forward");
   return (
@@ -91,7 +112,9 @@ export function Transport({
           />
         </View>
         <IconButton
-          tone="primary"
+          tone={ask ? "accent" : "primary"}
+          fillOpacity={ask ? ASK_FILL : undefined}
+          style={{ borderRadius: PLAY / 2 }}
           haptic="impact"
           icon={playing ? IconPlayerPauseFilled : IconPlayerPlayFilled}
           label={playing ? strings.playbackText.pause : strings.playbackText.play}
@@ -100,7 +123,7 @@ export function Transport({
           accessibilityActions={[{ name: "restart", label: strings.playbackText.restartTheSong }]}
           onAccessibilityAction={restartFromHold}
           iconSize={CELL * 6}
-          size={CELL * 9}
+          size={PLAY}
         />
         <View>
           <HoldSkipLabel direction="forward" state={forward.label} />
@@ -121,6 +144,11 @@ export function Transport({
         </View>
       </View>
       <TransportSlot>{right}</TransportSlot>
+      {line !== null && !editing && (
+        <View pointerEvents="none" style={SIGNAL_LINE}>
+          <CatalogLine>{line}</CatalogLine>
+        </View>
+      )}
     </View>
   );
 }

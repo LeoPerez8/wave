@@ -23,7 +23,7 @@ import { MemberCircle } from "@/catalog/MemberCircle";
 import { useLocalisation } from "@/localisation/localisation";
 import { RankNumber } from "@/catalog/RankNumber";
 import { SwipeableRow, swipeAccessibility, type SwipeSide } from "@/catalog/SwipeableRow";
-import { WavyUnderline } from "@/catalog/WavyUnderline";
+import { usePlayingTitleClass, WavyUnderline } from "@/catalog/WavyUnderline";
 import { Press } from "@/motion/Press";
 import { useRenderCount } from "@/perf/perf";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -166,12 +166,16 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
         <View className="flex-1">
           <View className="flex-row items-center" style={{ gap: CELL / 2 }}>
             <View style={{ flexShrink: 1 }}>
-              <Text
-                numberOfLines={1}
-                className={`font-sans text-body font-medium ${props.playing ? "text-highlight" : props.fileNotFound || props.fadedCover ? "text-secondary" : "text-foreground"}`}
-              >
-                {props.title}
-              </Text>
+              {props.playing ? (
+                <PlayingTitle title={props.title} />
+              ) : (
+                <Text
+                  numberOfLines={1}
+                  className={`font-sans text-body font-medium ${props.fileNotFound || props.fadedCover ? "text-secondary" : "text-foreground"}`}
+                >
+                  {props.title}
+                </Text>
+              )}
               {props.playing && <WavyUnderline />}
             </View>
             {props.explicit && <ExplicitBadge />}
@@ -237,3 +241,12 @@ export const SongRow = memo(function SongRow(props: SongRowPresentation & SongRo
     </SwipeableRow>
   );
 });
+
+/** The playing row's title: ember, or the secondary colour while the network holds it up. */
+function PlayingTitle({ title }: { title: string }) {
+  return (
+    <Text numberOfLines={1} className={`font-sans text-body font-medium ${usePlayingTitleClass()}`}>
+      {title}
+    </Text>
+  );
+}

@@ -1,4 +1,4 @@
-import type { PlayerTrouble, PositionReport } from "@wave/core";
+import type { NetworkSignalInput, PlayerTrouble, PositionReport } from "@wave/core";
 import type { NativePlayerState, PlayerErrorEvent, PlayerPosition } from "../native/wavePlayer.ts";
 import { makeExternalStore } from "@wave/client/externalStore";
 
@@ -8,6 +8,8 @@ export interface PlaybackState extends Omit<NativePlayerState, "index" | keyof P
   readonly error: string | null;
   /** The error's code, which Core's `playerErrorNotice` explains in the app's language. */
   readonly errorCode: string | null;
+  /** When the song began loading to play (buffering with play-when-ready), or null while it isn't. */
+  readonly loadingSince: number | null;
 }
 
 /** What Core's `playerNotice` reads of the playing song: its wait, retry and failure. */
@@ -16,6 +18,24 @@ export const playerTrouble = (state: PlaybackState): PlayerTrouble => ({
   retrying: state.status === "buffering" && state.playWhenReady,
   failed: state.error !== null,
   errorCode: state.errorCode,
+});
+
+/**
+ * What Core's `networkSignal` reads of the playing song, with the phone's
+ * connection and the time: the wait, the loading and since when, and whether
+ * it stands paused on the network's failure (its offline error).
+ */
+export const networkSignalInput = (
+  state: PlaybackState,
+  online: boolean,
+  nowMs: number,
+): NetworkSignalInput => ({
+  waitingForConnection: state.waitingForConnection,
+  loading: state.loadingSince !== null,
+  loadingSinceMs: state.loadingSince,
+  cutByNetwork: state.errorCode === "ytOffline",
+  online,
+  nowMs,
 });
 
 /** The item key keeps car lyrics paired with the report that selected it. */
@@ -36,7 +56,10 @@ const sameItemShown = (a: ReportedItem, b: ReportedItem): boolean =>
     a.album === b.album &&
     a.artworkUri === b.artworkUri);
 
-export const makePlaybackStores = (setReportingRequested: (requested: boolean) => void) => {
+export const makePlaybackStores = (
+  setReportingRequested: (requested: boolean) => void,
+  now: () => number = Date.now,
+) => {
   const playbackState = makeExternalStore<PlaybackState>({
     status: "idle",
     isPlaying: false,
@@ -45,6 +68,7 @@ export const makePlaybackStores = (setReportingRequested: (requested: boolean) =
     item: null,
     error: null,
     errorCode: null,
+    loadingSince: null,
   });
   const positions = makeExternalStore<PositionState>({
     positionMs: 0,
@@ -97,8 +121,11 @@ export const makePlaybackStores = (setReportingRequested: (requested: boolean) =
         reported = true;
         const errorCode = errorLeftBehind ? null : state.errorCode;
         const errorStands = sameItem && !state.isPlaying;
+        const loading = state.status === "buffering" && state.playWhenReady;
         return {
           ...playback,
+          // Another song starts its own loading time.
+          loadingSince: loading ? ((sameItem ? previous.loadingSince : null) ?? now()) : null,
           item: sameItemShown(previous.item, playback.item) ? previous.item : playback.item,
           error: errorStands ? previous.error : null,
           errorCode: errorStands ? (errorCode ?? previous.errorCode) : errorCode,

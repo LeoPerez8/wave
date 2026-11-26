@@ -1425,6 +1425,24 @@ export {
   restorableTrack,
 } from "./ytQueue.ts";
 export type { PlayerTrouble } from "./ytQueue.ts";
+export {
+  NETWORK_SLOW_GRACE_MS,
+  followNetworkSignal,
+  networkSignal,
+  networkSignalAnnouncement,
+  networkSignalLabel,
+  networkSignalLine,
+  networkSignalRecheckMs,
+} from "./networkSignal.ts";
+export type { NetworkSignal, NetworkSignalInput, NetworkSignalTrail } from "./networkSignal.ts";
+export {
+  GHOST_WAVE,
+  MINI_GHOST_WAVE,
+  ghostWaveFrame,
+  ghostWavePeriodMs,
+  miniGhostWavePath,
+} from "./ghostWave.ts";
+export type { GhostWaveFrame } from "./ghostWave.ts";
 export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
 export { settleBestQuality } from "./bestQuality.ts";
 export type { BestQualityState, BestQualityStep } from "./bestQuality.ts";

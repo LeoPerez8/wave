@@ -82,6 +82,18 @@ export interface NativeWaveUnderlineProps extends ViewProps {
 export const NativeWaveUnderline: ComponentType<NativeWaveUnderlineProps> =
   requireNativeView<NativeWaveUnderlineProps>("WaveGlass", "WaveUnderline");
 
+export interface NativeWaveGhostProps extends ViewProps {
+  readonly color: ColorValue;
+  /** Which period it sweeps on: every 2.4 s Offline, every 3.6 s Slow. */
+  readonly period: "offline" | "slow";
+  /** Sweeps (on the RenderThread) while true; drawn still a third of the way along otherwise. */
+  readonly animating: boolean;
+}
+
+/** The mini player's ghost wave along the pill's bottom edge (see WaveGhostView.kt). */
+export const NativeWaveGhost: ComponentType<NativeWaveGhostProps> =
+  requireNativeView<NativeWaveGhostProps>("WaveGlass", "WaveGhost");
+
 export interface NativeFadeEdgesProps extends ViewProps {
   /** The edge that fades all the time; the other fades only while the content is away from rest. */
   readonly fixedEdge: "left" | "right" | "none";

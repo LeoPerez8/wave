@@ -64,42 +64,55 @@ fun MediaMetadata.withLyrics(text: LyricsText?): MediaMetadata {
     .build()
 }
 
-/** [this] with [line] in place of the artist, where the notification and the lock screen show it. */
-fun MediaMetadata.withStatusLine(line: String): MediaMetadata =
-  buildUpon().setArtist(line).setSubtitle(line).build()
-
 /**
- * What the session shows for a song: [statusLine] over its own title while it
- * has one (a song waiting for the network isn't singing), else its [lyrics].
+ * What the session shows for a song: its own title and artist while it waits for
+ * the network (it isn't singing; the notification says why in its sub text), else
+ * its [lyrics].
  */
-fun MediaMetadata.sessionMetadata(lyrics: LyricsText?, statusLine: String?): MediaMetadata =
-  if (statusLine != null) withStatusLine(statusLine) else withLyrics(lyrics)
+fun MediaMetadata.sessionMetadata(lyrics: LyricsText?, waiting: Boolean): MediaMetadata =
+  if (waiting) this else withLyrics(lyrics)
 
 /**
  * The player the media session shows: [player] as it is, except that the
  * current item's title and artist show the lyrics [textFor] gives for it (its
- * entry key), when it gives some ([withLyrics]), and its artist shows
- * [statusLine] while there is one ("Waiting for connection"). Only the
- * session's metadata changes: the items, and so Auto's queue, what Wave's own
- * controller and the resume snapshot read, keep their title and artist. Call
- * [refresh] when [textFor] or [statusLine] would answer differently.
+ * entry key), when it gives some ([withLyrics]). Only the session's metadata
+ * changes: the items, and so Auto's queue, what Wave's own controller and the
+ * resume snapshot read, keep their title and artist.
+ *
+ * While the playback service waits for the network ([waiting], Resume on
+ * reconnect), the song shows as loading rather than failed and paused (Ghost
+ * wave, #1498): buffering, meant to play, with no error. Android's media
+ * controls draw their loading ring on the play button then, and every
+ * controller (Wave's own included) shows the song as not paused, which it
+ * isn't. A pause from any of them ends the wait as before
+ * (`StreamReconnectLink.onOwnerCommand`), and the player's own state shows again.
+ * Call [refresh] when [textFor] or [waiting] would answer differently.
  */
 @OptIn(UnstableApi::class)
 class LyricsTextPlayer(
   player: Player,
   private val textFor: (itemId: String?) -> LyricsText?,
-  private val statusLine: () -> String? = { null },
+  private val waiting: () -> Boolean = { false },
 ) : ForwardingSimpleBasePlayer(player) {
   override fun getState(): State {
     val state = super.getState()
     if (state.timeline.isEmpty) return state
-    val text = textFor(player.currentMediaItem?.mediaId)
-    val line = statusLine()
-    if (text == null && line == null) return state
-    val metadata = state.currentMetadata.sessionMetadata(text, line)
-    return state.buildUpon().setPlaylist(state.timeline, state.currentTracks, metadata).build()
+    val waits = waiting()
+    val text = if (waits) null else textFor(player.currentMediaItem?.mediaId)
+    if (text == null && !waits) return state
+    val shown = state.buildUpon()
+    if (text != null) {
+      shown.setPlaylist(state.timeline, state.currentTracks, state.currentMetadata.sessionMetadata(text, false))
+    }
+    if (waits) {
+      shown
+        .setPlaybackState(Player.STATE_BUFFERING)
+        .setPlayWhenReady(true, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+        .setPlayerError(null)
+    }
+    return shown.build()
   }
 
-  /** Shows what [textFor] and [statusLine] give now. */
+  /** Shows what [textFor] and [waiting] give now. */
   fun refresh() = invalidateState()
 }
