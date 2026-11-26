@@ -131,8 +131,6 @@ export interface YtDownloadJournalJob<S extends YtSong = YtSong> {
    * journal mirrors): it waits, not downloading, until an unmetered network is back.
    */
   readonly waitingForWifi?: boolean;
-  /** The owner played the song while it waited for Wi-Fi: it downloads now, unless it's Soulseek's. */
-  readonly playNow?: boolean;
 }
 
 const downloading = (phase: YtDownloadPhase): YtDownloadStatus => ({

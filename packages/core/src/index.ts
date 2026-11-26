@@ -3602,7 +3602,6 @@ export {
   downloadsWaitingForWifi,
   readDownloadWifiOnly,
   wifiWaitLine,
-  wifiWaitPlayed,
   writeDownloadWifiOnly,
 } from "./downloadWifi.ts";
-export type { DownloadNetwork, WifiWaitJob } from "./downloadWifi.ts";
+export type { DownloadNetwork } from "./downloadWifi.ts";

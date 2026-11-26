@@ -6,9 +6,6 @@
  */
 
 import { en, type Catalogue } from "./catalogueEn.ts";
-import type { DownloadSource } from "./downloadSource.ts";
-import { missingSongJobId } from "./missingSongDownload.ts";
-import { parseTrackId } from "./ytMusic.ts";
 import { ytDownloadUnfinished, type YtDownloadJournalJob } from "./ytDownloads.ts";
 
 /** Where the switch is kept; it syncs with the Wave account. */
@@ -27,24 +24,13 @@ export interface DownloadNetwork {
   readonly metered: boolean;
 }
 
-/** What of a job the rule reads. */
-export interface WifiWaitJob {
-  /** Where its audio comes from; a job from before there was a choice is Soulseek's. */
-  readonly source?: DownloadSource;
-  /**
-   * The owner played the song while it waited: playing streams the same audio, so it downloads now
-   * over whatever network there is.
-   */
-  readonly playNow?: boolean;
-}
-
 /**
  * Whether a job not downloaded yet waits for Wi-Fi: the switch is on and the network metered,
- * unless the owner played the song. A best-quality (Soulseek) copy waits all the same: the song
- * plays streamed and the bigger file waits.
+ * whatever its source (a best-quality Soulseek copy too). Playing a waiting song only streams it: its download keeps waiting for an
+ * unmetered network, on any play (a tap, auto-advance, Android Auto).
  */
-export const downloadWaitsForWifi = (network: DownloadNetwork, job: WifiWaitJob): boolean =>
-  network.wifiOnly && network.metered && !(job.playNow === true && job.source === "youtube");
+export const downloadWaitsForWifi = (network: DownloadNetwork): boolean =>
+  network.wifiOnly && network.metered;
 
 /** How many songs on their way wait for Wi-Fi, as the journal marked them. */
 export const downloadsWaitingForWifi = (jobs: readonly YtDownloadJournalJob[]): number =>
@@ -57,26 +43,4 @@ export const wifiWaitLine = (
 ): string | null => {
   const count = downloadsWaitingForWifi(jobs);
   return count === 0 ? null : catalogue.downloadStatus.waitingForWifiCount(count);
-};
-
-/**
- * The download waiting for Wi-Fi that the song [trackId] just started playing belongs to (a
- * streamed song's, by its video or one on the job, or a missing song's), which the journal then
- * lets download now (`playNow`); null when none waits.
- */
-export const wifiWaitPlayed = (
-  jobs: readonly YtDownloadJournalJob[],
-  trackId: string | null,
-): string | null => {
-  const ref = trackId === null ? null : parseTrackId(trackId);
-  if (ref === null) return null;
-  const waiting = jobs.filter((job) => job.waitingForWifi === true && ytDownloadUnfinished(job));
-  if (ref.kind === "library") {
-    const id = missingSongJobId(ref.id);
-    return waiting.some((job) => job.id === id) ? id : null;
-  }
-  const played = waiting.find((job) =>
-    [job.song, ...(job.aliases ?? [])].some((song) => song.videoId === ref.videoId),
-  );
-  return played?.id ?? null;
 };

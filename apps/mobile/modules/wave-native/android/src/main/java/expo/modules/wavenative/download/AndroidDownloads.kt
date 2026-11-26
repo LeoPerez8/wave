@@ -315,16 +315,6 @@ class AndroidDownloads private constructor(private val context: Context) {
     changed(); requestService()
   }
 
-  /**
-   * The owner played song [videoId] while it may wait for Wi-Fi: it downloads now (a best-quality
-   * copy keeps waiting). Whether a download has it.
-   */
-  fun playNow(videoId: String): Boolean {
-    val known = jobs.playNow(videoId)
-    if (known) { changed(); requestService() }
-    return known
-  }
-
   /** The network changed: metered, the songs not downloaded yet wait; unmetered, they go on. */
   private fun networkChanged(metered: Boolean) {
     if (metered == jobs.metered()) return
