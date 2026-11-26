@@ -335,7 +335,7 @@ export function DjAdjustSheet({
         <PillGroup name={strings.dj.filters}>{DJ_FILTERS.map(pill)}</PillGroup>
         <PillGroup name={strings.dj.mood}>
           {DJ_MOOD_FILTERS.map((mood) => {
-            const on = settings.mood === mood;
+            const on = settings.mood.includes(mood);
             return (
               <TextButton
                 key={mood}

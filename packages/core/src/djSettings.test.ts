@@ -13,6 +13,7 @@ import {
   djToggleFilter,
   djToggleMood,
   parseDjSettings,
+  storedDjSettings,
   type DjSettings,
 } from "./index.ts";
 
@@ -37,9 +38,9 @@ describe("DJ's ranking choices", () => {
       discovery: "familiar",
       popularity: "trending",
       newReleases: true,
-      mood: "energetic",
+      mood: ["energetic"],
     } as const;
-    assert.deepEqual(parseDjSettings(JSON.parse(JSON.stringify(chosen))), chosen);
+    assert.deepEqual(parseDjSettings(JSON.parse(storedDjSettings(chosen))), chosen);
     assert.deepEqual(parseDjSettings(null), DEFAULT_DJ_SETTINGS);
     assert.deepEqual(parseDjSettings({ variety: "toString", discovery: 3, newReleases: "yes" }), {
       ...DEFAULT_DJ_SETTINGS,
@@ -111,16 +112,53 @@ describe("Adjust's filters", () => {
 });
 
 describe("Adjust's mood filters", () => {
-  test("offers three mutually exclusive moods, all off by default, and remembers the choice", () => {
+  test("offers three moods, all off by default", () => {
     assert.deepEqual(DJ_MOOD_FILTERS, ["energetic", "relaxing", "upbeat"]);
-    assert.equal(DEFAULT_DJ_SETTINGS.mood, null);
-    const energetic = djToggleMood(DEFAULT_DJ_SETTINGS, "energetic");
-    assert.equal(energetic.mood, "energetic");
-    assert.equal(djToggleMood(energetic, "energetic").mood, null);
-    assert.equal(djToggleMood(energetic, "relaxing").mood, "relaxing");
-    assert.equal(parseDjSettings(JSON.parse(JSON.stringify(energetic))).mood, "energetic");
-    assert.equal(parseDjSettings({ mood: "melancholic" }).mood, null);
-    assert.equal(parseDjSettings({}).mood, null);
+    assert.deepEqual(DEFAULT_DJ_SETTINGS.mood, []);
+  });
+
+  test("each mood turns on and off by itself, opposites included, in the order they're picked", () => {
+    const relaxing = djToggleMood(DEFAULT_DJ_SETTINGS, "relaxing");
+    assert.deepEqual(relaxing.mood, ["relaxing"]);
+    const both = djToggleMood(relaxing, "energetic");
+    assert.deepEqual(both.mood, ["relaxing", "energetic"]);
+    assert.deepEqual(djToggleMood(both, "upbeat").mood, ["relaxing", "energetic", "upbeat"]);
+    assert.deepEqual(djToggleMood(both, "relaxing").mood, ["energetic"]);
+    assert.deepEqual(djToggleMood(relaxing, "relaxing").mood, []);
+  });
+
+  test("several moods are saved and read back in the order they were picked", () => {
+    const both = { ...DEFAULT_DJ_SETTINGS, mood: ["upbeat", "energetic"] } as const;
+    assert.deepEqual(parseDjSettings(JSON.parse(storedDjSettings(both))).mood, [
+      "upbeat",
+      "energetic",
+    ]);
+  });
+
+  test("a single mood saved by an older build reads as a set of one", () => {
+    assert.deepEqual(parseDjSettings({ mood: "energetic" }).mood, ["energetic"]);
+    assert.deepEqual(parseDjSettings({ mood: null }).mood, []);
+    assert.deepEqual(parseDjSettings({ mood: "melancholic" }).mood, []);
+    assert.deepEqual(parseDjSettings({}).mood, []);
+  });
+
+  test("an older build reads what's saved now as one of its moods, or as none", () => {
+    // An older build reads `mood` as one mood's name, and anything else as no mood.
+    const olderMood = (saved: string): unknown => (JSON.parse(saved) as { mood: unknown }).mood;
+    const one = { ...DEFAULT_DJ_SETTINGS, mood: ["relaxing"] } as const;
+    const two = { ...DEFAULT_DJ_SETTINGS, mood: ["upbeat", "relaxing"] } as const;
+    assert.equal(olderMood(storedDjSettings(one)), "relaxing");
+    assert.equal(olderMood(storedDjSettings(two)), "upbeat");
+    assert.equal(olderMood(storedDjSettings(DEFAULT_DJ_SETTINGS)), null);
+  });
+
+  test("saved moods that aren't moods, or repeat, are left out", () => {
+    assert.deepEqual(
+      parseDjSettings({ mood: "relaxing", moods: ["relaxing", "sad", "relaxing", 3, "upbeat"] })
+        .mood,
+      ["relaxing", "upbeat"],
+    );
+    assert.deepEqual(parseDjSettings({ mood: "upbeat", moods: "relaxing" }).mood, ["upbeat"]);
   });
 });
 
@@ -135,11 +173,15 @@ describe("DJ's summary of its choices", () => {
       discovery: "discover",
       popularity: "lesserKnown",
       newReleases: true,
-      mood: "relaxing",
+      mood: ["relaxing"],
     };
     assert.equal(
       djSettingsSummary(chosen),
       "High variety · Discover · Lesser-known songs · New releases · Relaxing",
+    );
+    assert.equal(
+      djSettingsSummary({ ...DEFAULT_DJ_SETTINGS, mood: ["energetic", "relaxing"] }),
+      "Medium variety · Blend · Energetic + Relaxing",
     );
     assert.equal(
       djSettingsSummary({ ...DEFAULT_DJ_SETTINGS, variety: "low", popularity: "trending" }),
@@ -152,10 +194,14 @@ describe("DJ's summary of its choices", () => {
     assert.equal(djSettingsSummary(DEFAULT_DJ_SETTINGS, pt), "Variedade média · Misturar");
     assert.equal(
       djSettingsSummary(
-        { ...DEFAULT_DJ_SETTINGS, variety: "low", discovery: "familiar", mood: "energetic" },
+        { ...DEFAULT_DJ_SETTINGS, variety: "low", discovery: "familiar", mood: ["energetic"] },
         pt,
       ),
       "Variedade baixa · Conhecidas · Agitada",
+    );
+    assert.equal(
+      djSettingsSummary({ ...DEFAULT_DJ_SETTINGS, mood: ["energetic", "relaxing"] }, pt),
+      "Variedade média · Misturar · Agitada + Relaxante",
     );
   });
 });

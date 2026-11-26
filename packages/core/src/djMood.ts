@@ -103,25 +103,168 @@ export const djMoodFit = (
   return known !== null && known === OFF_STYLE[mood] ? "off" : "unknown";
 };
 
-/** A ranking split by a mood: the songs it matches and those it can't tell, each in ranked order. */
-export interface DjMoodPools<S> {
-  readonly matched: readonly S[];
-  readonly unknown: readonly S[];
+/** The moods a filter is asked for: none (null or an empty list), one, or several in the order picked. */
+export type DjMoods = readonly DjMood[] | DjMood | null;
+
+const moodList = (moods: DjMoods): readonly DjMood[] =>
+  moods === null ? [] : typeof moods === "string" ? [moods] : moods;
+
+/**
+ * What several [moods] know of a song together: the ones it fits, and
+ * `djMoodFit`'s verdict for all of them. It's matched when it fits any,
+ * off when every one rules it off, and unknown otherwise.
+ */
+export const djMoodsFit = (
+  moods: DjMoods,
+  features: DjAudioFeatures | null,
+  genre: string | null,
+  style: string | null = null,
+): { readonly fits: readonly DjMood[]; readonly fit: DjMoodFit } => {
+  const verdicts = moodList(moods).map(
+    (mood) => [mood, djMoodFit(mood, features, genre, style)] as const,
+  );
+  const fits = verdicts.flatMap(([mood, fit]) => (fit === "matched" ? [mood] : []));
+  return {
+    fits,
+    fit:
+      fits.length > 0 ? "matched" : verdicts.every(([, fit]) => fit === "off") ? "off" : "unknown",
+  };
+};
+
+/**
+ * Which songs may start a session of [moods]: the ones known to fit the
+ * first mood picked are matched; a song every mood rules off is off; any
+ * other, a known fit of a later mood included, is unknown. With no mood,
+ * every song is matched; with one, this is that mood's `djMoodFit`.
+ */
+export const djFirstMoodFit = (
+  moods: DjMoods,
+  features: DjAudioFeatures | null,
+  genre: string | null,
+  style: string | null = null,
+): DjMoodFit => {
+  const [first] = moodList(moods);
+  if (first === undefined) return "matched";
+  if (djMoodFit(first, features, genre, style) === "matched") return "matched";
+  return djMoodsFit(moods, features, genre, style).fit === "off" ? "off" : "unknown";
+};
+
+/** One [group]'s songs taking turns among [moods] (`djMoodTurnsSteps`). */
+function* takeTurns<S>(
+  group: readonly S[],
+  moods: readonly DjMood[],
+  fitsOf: (song: S) => readonly DjMood[] | undefined,
+): Generator<void, S[]> {
+  const queues: S[][] = moods.map(() => []);
+  for (const song of group) {
+    const fits = fitsOf(song) ?? [];
+    for (const [at, mood] of moods.entries()) if (fits.includes(mood)) queues[at]!.push(song);
+    yield;
+  }
+  const next = moods.map(() => 0);
+  const taken = new Set<S>();
+  const turned: S[] = [];
+  let turns = moods.map((_, at) => at);
+  while (turns.length > 0) {
+    const kept: number[] = [];
+    for (const at of turns) {
+      const queue = queues[at]!;
+      while (next[at]! < queue.length && taken.has(queue[next[at]!]!)) {
+        next[at]!++;
+        yield;
+      }
+      // A mood with no song left drops out of the turn.
+      if (next[at]! >= queue.length) continue;
+      const song = queue[next[at]!++]!;
+      taken.add(song);
+      turned.push(song);
+      kept.push(at);
+      yield;
+    }
+    turns = kept;
+  }
+  return turned;
 }
 
 /**
- * [songs] as [mood] filters them (`djMoodFit`): off songs leave, whoever
- * sings them, and the matched and unknown ones keep their ranked order, so
- * taste orders the songs inside the mood. A batch takes the matched ones
- * and fills from the unknown ones only when they fall short. A stream song
- * goes by its cached [features], else its Library match's, else its
- * genre; a Library song with no stream match by its [libraryFeatures]
- * (its own video's stream features, else its ISRC tag's). Either falls
- * back on its own style when it has one. With no mood, every song is matched.
+ * [songs] with the ones that fit [moods] (`fitsOf`) taking turns among
+ * them, in the order the moods were picked: a song of the first mood, then
+ * one of the second, and so on, each the next in [songs]' order that its
+ * mood hasn't had yet. A mood with no song left drops out of the turn, and
+ * a song that fits two of them plays once, in whichever turn takes it
+ * first. Songs take turns within their [groupOf] group only, each group
+ * keeping the places it held, so a batch that takes a share of each
+ * (streams and Library songs, `radioRankingBatch`) gets every mood in each.
+ * A song that fits none keeps its place. With fewer than two moods,
+ * [songs] stay as they are.
+ */
+export function* djMoodTurnsSteps<S>(
+  songs: readonly S[],
+  moods: readonly DjMood[],
+  fitsOf: (song: S) => readonly DjMood[] | undefined,
+  groupOf: (song: S) => unknown,
+): Generator<void, S[]> {
+  if (moods.length < 2) return [...songs];
+  const groups = new Map<unknown, S[]>();
+  /** Each place's group, or `KEPT` for a song that keeps its place. */
+  const places: unknown[] = [];
+  for (const song of songs) {
+    yield;
+    if ((fitsOf(song)?.length ?? 0) === 0) {
+      places.push(KEPT);
+      continue;
+    }
+    const key = groupOf(song);
+    places.push(key);
+    const group = groups.get(key);
+    if (group === undefined) groups.set(key, [song]);
+    else group.push(song);
+  }
+  const turned = new Map<unknown, { readonly songs: S[]; at: number }>();
+  for (const [key, group] of groups)
+    turned.set(key, { songs: yield* takeTurns(group, moods, fitsOf), at: 0 });
+  const result: S[] = [];
+  for (const [at, key] of places.entries()) {
+    yield;
+    if (key === KEPT) result.push(songs[at]!);
+    else {
+      const group = turned.get(key)!;
+      result.push(group.songs[group.at++]!);
+    }
+  }
+  return result;
+}
+
+const KEPT = Symbol("kept");
+
+/**
+ * A ranking split by its moods: the songs they match, taking turns among
+ * the moods (`djMoodTurnsSteps`), and those they can't tell, in ranked order.
+ */
+export interface DjMoodPools<S> {
+  readonly matched: readonly S[];
+  readonly unknown: readonly S[];
+  /** The moods each matched song fits, which `djVarietyMoodPools` keeps the turns by. */
+  readonly fits: ReadonlyMap<S, readonly DjMood[]>;
+}
+
+/**
+ * [songs] as [mood] filters them (`djMoodsFit`): songs every chosen mood
+ * rules off leave, whoever sings them, and the unknown ones keep their
+ * ranked order. The matched ones keep it too with one mood, so taste orders
+ * the songs inside the mood; with several, they take turns among the moods
+ * in the order they were picked, streams and Library songs each apart
+ * (`djMoodTurnsSteps`), and each mood's songs keep their taste order. A
+ * batch takes the matched ones and fills from the unknown ones only when
+ * they fall short. A stream song goes by its cached [features], else its
+ * Library match's, else its genre; a Library song with no stream match by
+ * its [libraryFeatures] (its own video's stream features, else its ISRC
+ * tag's). Either falls back on its own style when it has one. With no mood,
+ * every song is matched.
  */
 export const djMoodFiltered = <S extends DjMoodRankable>(
   songs: readonly S[],
-  mood: DjMood | null,
+  mood: DjMoods,
   features: ReadonlyMap<string, DjAudioFeatures>,
   genres: ReadonlyMap<string, string | null>,
   /** Features found by Library files' ISRC tags, by Track id. */
@@ -132,14 +275,16 @@ export const djMoodFiltered = <S extends DjMoodRankable>(
 /** `djMoodFiltered`, a step per song, for a background slice (#1448). */
 export function* djMoodFilteredSteps<S extends DjMoodRankable>(
   songs: readonly S[],
-  mood: DjMood | null,
+  mood: DjMoods,
   features: ReadonlyMap<string, DjAudioFeatures>,
   genres: ReadonlyMap<string, string | null>,
   libraryFeatures: ReadonlyMap<string, DjAudioFeatures> = new Map(),
 ): Generator<void, DjMoodPools<S>> {
-  if (mood === null) return { matched: [...songs], unknown: [] };
+  const moods = moodList(mood);
+  if (moods.length === 0) return { matched: [...songs], unknown: [], fits: new Map() };
   const matched: S[] = [];
   const unknown: S[] = [];
+  const fits = new Map<S, readonly DjMood[]>();
   for (const candidate of songs) {
     yield;
     const videoId = candidate.song?.videoId;
@@ -148,17 +293,25 @@ export function* djMoodFilteredSteps<S extends DjMoodRankable>(
         ? (libraryFeatures.get(candidate.trackId) ?? null)
         : null;
     const style = candidate.style ?? null;
-    const fit =
+    const verdict =
       videoId === undefined
-        ? djMoodFit(mood, library, null, style)
-        : djMoodFit(
-            mood,
+        ? djMoodsFit(moods, library, null, style)
+        : djMoodsFit(
+            moods,
             features.get(videoId) ?? library,
             genres.get(videoId) ?? candidate.genre ?? null,
             style,
           );
-    if (fit === "matched") matched.push(candidate);
-    else if (fit === "unknown") unknown.push(candidate);
+    if (verdict.fit === "matched") {
+      matched.push(candidate);
+      fits.set(candidate, verdict.fits);
+    } else if (verdict.fit === "unknown") unknown.push(candidate);
   }
-  return { matched, unknown };
+  const turned = yield* djMoodTurnsSteps(
+    matched,
+    moods,
+    (song) => fits.get(song),
+    (song) => song.source,
+  );
+  return { matched: turned, unknown, fits };
 }

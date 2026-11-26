@@ -6,7 +6,7 @@ import {
   djNewReleasesRanked,
   djMoodFiltered,
   djMoodFilteredSteps,
-  djMoodFit,
+  djFirstMoodFit,
   djNewReleasesRankedSteps,
   djFirstSongPick,
   djVarietyMoodPools,
@@ -157,18 +157,18 @@ export const magicQueueYtCandidates = (
     // A DJ session's New releases ranks with its artists' saved pages; none is asked for.
     const store = yield* LibraryStore;
     savedPage = (name) => Effect.runPromise(store.ytArtist(identityKey(name)));
-    const mood = (sessionNow?.() ?? session).dj?.mood ?? null;
+    const mood = (sessionNow?.() ?? session).dj?.mood ?? [];
     const catalogVideos = catalog.map(({ song }) => song.videoId);
     const moodFeatures =
-      mood === null
+      mood.length === 0
         ? new Map()
         : yield* store.djMoodFeatures(catalogVideos).pipe(Effect.orElseSucceed(() => new Map()));
     const libraryMoodFeatures =
-      mood === null
+      mood.length === 0
         ? new Map()
         : yield* store.djLibraryMoodFeatures().pipe(Effect.orElseSucceed(() => new Map()));
     const genreRows =
-      mood === null
+      mood.length === 0
         ? []
         : yield* store.songGenres(catalogVideos).pipe(Effect.orElseSucceed(() => []));
     const moodGenres = new Map(genreRows.map(({ id, genre }) => [String(id), genre] as const));
@@ -322,6 +322,7 @@ export const magicQueueYtCandidates = (
             { seed: seed.matched, liked: likedRanked.matched },
             { seed: seed.unknown, liked: likedRanked.unknown },
             size,
+            new Map([...seed.fits, ...likedRanked.fits]),
           ),
           freeTurnEffect,
         );
@@ -392,18 +393,18 @@ export const magicQueueDjLibraryRanking = (
 ) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
-    const mood = session.dj?.mood ?? null;
+    const mood = session.dj?.mood ?? [];
     const catalogVideos = catalog.map(({ song }) => song.videoId);
     const moodFeatures =
-      mood === null
+      mood.length === 0
         ? new Map()
         : yield* store.djMoodFeatures(catalogVideos).pipe(Effect.orElseSucceed(() => new Map()));
     const libraryMoodFeatures =
-      mood === null
+      mood.length === 0
         ? new Map()
         : yield* store.djLibraryMoodFeatures().pipe(Effect.orElseSucceed(() => new Map()));
     const genreRows =
-      mood === null
+      mood.length === 0
         ? []
         : yield* store.songGenres(catalogVideos).pipe(Effect.orElseSucceed(() => []));
     const moodGenres = new Map(genreRows.map(({ id, genre }) => [String(id), genre] as const));
@@ -440,7 +441,7 @@ export const magicQueueDjLibraryRanking = (
       ),
       freeTurnEffect,
     );
-    const { matched, unknown } = djMoodFiltered(
+    const { matched, unknown, fits } = djMoodFiltered(
       djNewReleasesRanked(session, ranked, releases, Date.now()),
       mood,
       moodFeatures,
@@ -454,6 +455,7 @@ export const magicQueueDjLibraryRanking = (
       { seed: matched, liked: [] },
       { seed: unknown, liked: [] },
       matched.length + unknown.length,
+      fits,
     );
     return { matched: varied.matched.seed, unknown: varied.unknown.seed };
   });
@@ -487,7 +489,7 @@ export const magicQueueFirstRadioSong = (
     const readers = radioReaders(yt, context);
     yield* Effect.promise(loadDislikes);
     const first = yield* Deferred.make<YtAlbumSong | null>();
-    const mood = session.dj?.mood ?? null;
+    const mood = session.dj?.mood ?? [];
     const startedAt = Date.now();
     let chosen = false;
     /** The first pick the mood couldn't tell, started if no match comes in time. */
@@ -527,21 +529,25 @@ export const magicQueueFirstRadioSong = (
         }
         const videoIds = page.songs.map((song) => song.videoId);
         const known =
-          mood === null
+          mood.length === 0
             ? new Map<string, DjAudioFeatures>()
             : yield* store
                 .djMoodFeatures(videoIds)
                 .pipe(Effect.orElseSucceed(() => new Map<string, DjAudioFeatures>()));
         const genreRows =
-          mood === null
+          mood.length === 0
             ? []
             : yield* store.songGenres(videoIds).pipe(Effect.orElseSucceed(() => []));
         const genres = new Map(genreRows.map(({ id, genre }) => [String(id), genre] as const));
         if (chosen) return;
         const moodFit = (song: YtAlbumSong): DjMoodFit =>
-          mood === null
+          mood.length === 0
             ? "matched"
-            : djMoodFit(mood, known.get(song.videoId) ?? null, genres.get(song.videoId) ?? null);
+            : djFirstMoodFit(
+                mood,
+                known.get(song.videoId) ?? null,
+                genres.get(song.videoId) ?? null,
+              );
         const song = djFirstRadioSong(session, seed.id, page.songs, {
           graph,
           profileOf,
@@ -553,7 +559,7 @@ export const magicQueueFirstRadioSong = (
         if (song !== null) unknownFirst ??= song;
         yield* decide(null);
       });
-    if (mood !== null)
+    if (mood.length > 0)
       yield* Effect.forkDetach(
         Effect.sleep(DJ_FIRST_UNKNOWN_WAIT_MS).pipe(
           Effect.andThen(decide(null, DJ_FIRST_UNKNOWN_WAIT_MS)),
