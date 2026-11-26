@@ -10,6 +10,10 @@ internal object GoogleAccountPicker {
   const val REQUEST_CODE = 1
   private const val GOOGLE = "com.google"
 
+  /**
+   * False when the phone has no Google authenticator. With one but no Google account, Android's
+   * picker opens its Add account screen instead; Wave can't see the accounts to skip it.
+   */
   @Suppress("DEPRECATION")
   fun open(activity: Activity): Boolean {
     if (AccountManager.get(activity).authenticatorTypes.none { it.type == GOOGLE }) return false
