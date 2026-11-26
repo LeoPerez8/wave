@@ -7,7 +7,10 @@ type Plan = ReturnType<typeof faithfulGenreMixesSteps>;
 // The plan owns eligibility and radio order. The app performs each requested read.
 export const runGenreMixBuild = <E, R, RL>(
   plan: Plan,
-  local: (mixes: readonly DiscoverMix[]) => Effect.Effect<void, never, RL>,
+  publish: (
+    mixes: readonly DiscoverMix[],
+    phase: "local" | "top-up",
+  ) => Effect.Effect<void, never, RL>,
   read: (artist: {
     readonly name: string;
     readonly browseId?: string;
@@ -30,8 +33,8 @@ export const runGenreMixBuild = <E, R, RL>(
       );
       if (next.done) return next.value;
       const step = next.value!;
-      if (step.kind === "local") yield* local(step.mixes);
-      else page = yield* read(step.artist);
+      if (step.kind === "radio") page = yield* read(step.artist);
+      else yield* publish(step.mixes, step.kind);
     }
   }).pipe(
     Effect.ensuring(

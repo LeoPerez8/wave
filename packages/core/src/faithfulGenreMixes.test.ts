@@ -133,13 +133,15 @@ test("a short family widens one radio at a time and keeps only matching new and 
       rock.artists?.[index]?.name,
     );
   }
-  const result = next(page(matching[9]!));
-  assert.ok(result.done);
+  const completed = next(page(matching[9]!));
+  assert.ok(!completed.done && completed.value?.kind === "top-up");
+  const [mix] = completed.value.mixes;
   assert.deepEqual(
-    result.value[0]?.songs.map(({ videoId }) => videoId),
+    mix?.songs.map(({ videoId }) => videoId),
     matching.map(({ videoId }) => videoId),
   );
-  assert.deepEqual(result.value[0]?.familiar, [{ source: "stream", song: knownRock }]);
+  assert.deepEqual(mix?.familiar, [{ source: "stream", song: knownRock }]);
+  assert.deepEqual(next(), { done: true, value: [mix] });
 });
 
 test("an exhausted family with fewer than ten new songs makes no mix", () => {

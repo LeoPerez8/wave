@@ -24,7 +24,7 @@ const GENRE_MIX_MOST = 25;
 type Candidate = YtAlbumSong & { readonly video: boolean };
 type RadioArtist = Pick<DiscoverMixSeed, "name" | "browseId">;
 type GenreMixStep =
-  | { readonly kind: "local"; readonly mixes: readonly DiscoverMix[] }
+  | { readonly kind: "local" | "top-up"; readonly mixes: readonly DiscoverMix[] }
   | { readonly kind: "radio"; readonly artist: RadioArtist };
 
 interface GenreMixSources<L extends DiscoverLibrarySong>
@@ -56,7 +56,7 @@ const artistFamily = (song: YtAlbumSong, profileOf: GenreProfileOf | undefined) 
 /**
  * Publishes usable catalog mixes before yielding any radio request. Send the
  * requested artist's first page back into the generator, or undefined on a
- * miss. Local mixes keep their songs while a short family tops up.
+ * miss. Each completed family is published while the rest keep building.
  */
 export function* faithfulGenreMixesSteps<L extends DiscoverLibrarySong>(
   seeds: readonly DiscoverMixSeed[],
@@ -203,6 +203,7 @@ export function* faithfulGenreMixesSteps<L extends DiscoverLibrarySong>(
       const expanded =
         seed.artists === undefined ? seed : { ...seed, artists: seed.artists.slice(0, i + 1) };
       yield* save(expanded, key, fresh, [...candidates, ...radio]);
+      yield { kind: "top-up", mixes: inOrder() };
       break;
     }
   }

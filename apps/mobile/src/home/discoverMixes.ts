@@ -401,27 +401,28 @@ const buildGenreMixes = (avoid: MixRefreshAvoid | undefined, timing: GenreBuildT
       saveBuilt("genre-mixes", mixes);
       if (mixes.mixes.length > 0) timing.saved();
     };
-    let initial: DiscoverMixes | undefined;
-    const mixes = yield* runGenreMixBuild(
+    let saved: DiscoverMixes | undefined;
+    yield* runGenreMixBuild(
       faithfulGenreMixesSteps(seeds, inputs, sliders, avoid?.songs),
-      (mixes) =>
+      (mixes, phase) =>
         Effect.gen(function* () {
           if (mixes.length > 0) {
-            initial = snapshot(mixes);
-            publish(initial);
+            saved = snapshot(mixes);
+            publish(saved);
           }
-          yield* Effect.forkDetach(
-            queueMixArtistGenres(inputs.catalogSongs, inputs.libraryProfileOf, timing),
-          );
+          if (phase === "local")
+            yield* Effect.forkDetach(
+              queueMixArtistGenres(inputs.catalogSongs, inputs.libraryProfileOf, timing),
+            );
         }),
       (artist) => inputs.readRadio(artist, timing),
       recommendationTurnEffect,
     );
-    if (initial !== undefined && mixes.length === initial.mixes.length) return initial;
+    if (saved !== undefined) return saved;
     // A completed empty attempt records the day without leaving yesterday's mixes on Home.
-    const final = snapshot(mixes);
-    publish(final);
-    return final;
+    const empty = snapshot([]);
+    publish(empty);
+    return empty;
   });
 
 /** What a build made, for its line in the app log. */
