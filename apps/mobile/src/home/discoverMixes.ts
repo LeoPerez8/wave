@@ -379,8 +379,15 @@ const genreMixInputs = Effect.gen(function* () {
   };
 });
 
-/** Save the complete local families, then let short families widen by one artist at a time. */
-const buildGenreMixes = (avoid: MixRefreshAvoid | undefined, timing: GenreBuildTiming) =>
+/**
+ * Save the complete local families, then let short families widen by one artist at a time.
+ * A refresh ([pulled]) that makes no mix saves nothing, so Home keeps the mixes it shows.
+ */
+const buildGenreMixes = (
+  avoid: MixRefreshAvoid | undefined,
+  timing: GenreBuildTiming,
+  pulled: boolean,
+) =>
   Effect.gen(function* () {
     const inputs = yield* genreMixInputs;
     const seeds = yield* runSteps(
@@ -390,11 +397,12 @@ const buildGenreMixes = (avoid: MixRefreshAvoid | undefined, timing: GenreBuildT
     if (seeds.length === 0) return "nothing-to-build-from" as const;
     const sliders = discoverSlidersNow();
     const builtAt = Date.now();
-    const snapshot = (mixes: readonly DiscoverMix[]) =>
+    const built = (mixes: readonly DiscoverMix[], keepEmpty: boolean) =>
       discoverMixesBuilt(mixes, builtAt, seeds, {
-        keepEmpty: true,
+        keepEmpty,
         ...(avoid === undefined ? {} : { avoid: avoid.songs }),
-      })!;
+      });
+    const snapshot = (mixes: readonly DiscoverMix[]) => built(mixes, true)!;
     const publish = (mixes: DiscoverMixes): void => {
       rankedAt.set(mixes, sliders);
       SECTIONS["genre-mixes"].nothingToBuildFrom.set(false);
@@ -419,8 +427,10 @@ const buildGenreMixes = (avoid: MixRefreshAvoid | undefined, timing: GenreBuildT
       recommendationTurnEffect,
     );
     if (saved !== undefined) return saved;
-    // A completed empty attempt records the day without leaving yesterday's mixes on Home.
-    const empty = snapshot([]);
+    // A completed empty attempt records the day without leaving yesterday's mixes on Home;
+    // a refresh's keeps them (`refreshMixes` says it couldn't make new ones).
+    const empty = built([], !pulled);
+    if (empty === null) return null;
     publish(empty);
     return empty;
   });
@@ -442,6 +452,20 @@ const loggedBuild = (ids: readonly MixSectionId[], pulled: boolean, avoid?: MixR
     let deezerArtists = 0;
     let deezerBytes = 0;
     let done = false;
+    // The build's own bytes, kept for the line that counts its Deezer lookups once they're done.
+    let buildBytes = 0;
+    let lookupsLogged = false;
+    // The Deezer lookups the build queued run on after it (`queueMixArtistGenres`): a second
+    // line counts them all once they finish, so before and after compare the real data use.
+    const logLookups = (): void => {
+      if (lookupsLogged) return;
+      lookupsLogged = true;
+      appLog(
+        "info",
+        "WaveTiming",
+        `Genre mixes Deezer lookups done after=${Date.now() - startedAt}ms deezerArtists=${deezerArtists} deezerBytes=${deezerBytes} bytes=${buildBytes + deezerBytes}`,
+      );
+    };
     const timing: GenreBuildTiming = {
       page: (source) => {
         pages[source]++;
@@ -450,10 +474,13 @@ const loggedBuild = (ids: readonly MixSectionId[], pulled: boolean, avoid?: MixR
         first ??= Date.now() - startedAt;
       },
       lookup: () => {
-        if (!done) deezerArtists++;
+        deezerArtists++;
       },
       received: (bytes) => {
-        if (!done) deezerBytes += bytes;
+        deezerBytes += bytes;
+      },
+      settled: () => {
+        if (done) logLookups();
       },
     };
     return withNetworkLog(
@@ -463,7 +490,7 @@ const loggedBuild = (ids: readonly MixSectionId[], pulled: boolean, avoid?: MixR
         Effect.void,
         (id) =>
           id === "genre-mixes"
-            ? buildGenreMixes(avoid, timing)
+            ? buildGenreMixes(avoid, timing, pulled)
             : Effect.flatMap(mixBuildInputs, (inputs) => buildArtistMixes(inputs, avoid)),
         settledTurnEffect,
       ),
@@ -477,6 +504,7 @@ const loggedBuild = (ids: readonly MixSectionId[], pulled: boolean, avoid?: MixR
       genre
         ? (durationMs, bytes) => {
             done = true;
+            buildBytes = bytes;
             appLog(
               "info",
               "WaveTiming",
