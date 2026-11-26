@@ -160,30 +160,18 @@ class AutoLyricsTest {
   }
 
   @Test
-  fun `a song waiting for the network says so in place of its artist`() {
-    val shown = real.withStatusLine("Waiting for connection")
-
-    assertEquals("Title", shown.title.toString())
-    assertEquals("Display title", shown.displayTitle.toString())
-    assertEquals("Waiting for connection", shown.artist.toString())
-    assertEquals("Waiting for connection", shown.subtitle.toString())
-    assertEquals("Album", shown.albumTitle.toString())
-  }
-
-  @Test
-  fun `the waiting line shows over the lyrics, whose song has stopped`() {
+  fun `a song waiting for the network keeps its title and artist, over the lyrics too`() {
     val state = showing()
     state.showText("entry-1", sung)
 
-    val shown = real.sessionMetadata(state.textFor("entry-1"), "Aguardando conexão")
+    val shown = real.sessionMetadata(state.textFor("entry-1"), waiting = true)
 
-    assertEquals("Title", shown.title.toString())
-    assertEquals("Aguardando conexão", shown.artist.toString())
+    assertEquals(real, shown)
   }
 
   @Test
   fun `with no wait the session shows the lyrics or the song as it is`() {
-    assertEquals("Mais real ainda", real.sessionMetadata(sung, null).title.toString())
-    assertEquals(real, real.sessionMetadata(null, null))
+    assertEquals("Mais real ainda", real.sessionMetadata(sung, false).title.toString())
+    assertEquals(real, real.sessionMetadata(null, false))
   }
 }
