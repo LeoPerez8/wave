@@ -612,10 +612,11 @@ function* libraryFamiliesSteps(library: GenreMixLibrary): Generator<void, Ranked
   return yield* mapSteps(families.values(), (family) => family);
 }
 
-/** Top three artists; refreshes prefer unseen artists, then the least recently shown. */
+/** Artists in play order; refreshes prefer unseen artists, then the least recently shown. */
 function* seedArtistsSteps(
   family: RankedFamily,
   avoid: MixRefreshAvoid | undefined,
+  limit = SEED_ARTISTS,
 ): Generator<void, DiscoverSeedArtist[]> {
   const ranked = yield* sortSteps(
     yield* seedableArtistsSteps(family),
@@ -626,7 +627,7 @@ function* seedArtistsSteps(
     avoid === undefined ? null : ({ artist }) => avoid.artists.get(identityKey(artist.name)),
   );
   return [...fresh, ...shown]
-    .slice(0, SEED_ARTISTS)
+    .slice(0, limit)
     .map(({ artist }) => ({ id: artist.id, name: artist.name }));
 }
 
@@ -711,6 +712,7 @@ export function* genreMixDjCandidatesSteps(
 export function* genreMixSeedsSteps(
   library: GenreMixLibrary,
   avoid?: MixRefreshAvoid,
+  artistLimit = SEED_ARTISTS,
 ): Generator<void, DiscoverMixSeed[]> {
   const seeds: DiscoverMixSeed[] = [];
   const eligible: RankedFamily[] = [];
@@ -741,7 +743,7 @@ export function* genreMixSeedsSteps(
   }
   for (const family of ranked) {
     if (!chosen.has(family)) continue;
-    const artists = yield* seedArtistsSteps(family, avoid);
+    const artists = yield* seedArtistsSteps(family, avoid, artistLimit);
     const { key, name } = family.family;
     seeds.push({
       kind: "genre",

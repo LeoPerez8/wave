@@ -60,7 +60,11 @@ import type {
   TrackDetails,
 } from "@wave/client";
 import { saveReleaseDate, saveTypedReleaseDate } from "@wave/client/db/releaseDates";
-import { pendingStreamedGenres, keepStreamedGenre } from "@wave/client/db/streamedGenres";
+import {
+  pendingStreamedGenres,
+  keepStreamedGenre,
+  streamedSongGenres,
+} from "@wave/client/db/streamedGenres";
 import {
   pendingDjMoodSongs,
   keepDjMoodFeatures,
@@ -1597,6 +1601,9 @@ export class LibraryStore extends Context.Service<
     readonly mixPlaylisted: Effect.Effect<ReturnType<typeof mixPlaylisted>, LibraryStoreError>;
     /** The whole candidate catalog, and its radios, each as one page. */
     readonly mixCatalog: Effect.Effect<ReturnType<typeof mixCatalog>, LibraryStoreError>;
+    readonly streamedSongGenres: (
+      videoIds: readonly string[],
+    ) => Effect.Effect<ReturnType<typeof streamedSongGenres>, LibraryStoreError>;
     readonly graphRadios: Effect.Effect<ReturnType<typeof graphRadios>, LibraryStoreError>;
     readonly graphSimilarPage: (
       after: string | null,
@@ -2628,6 +2635,8 @@ const make = Effect.gen(function* () {
     mixStreamed: attempt("read Home's mix streamed songs", (db) => mixStreamed(db)),
     mixPlaylisted: attempt("read Home's mix playlist entries", (db) => mixPlaylisted(db)),
     mixCatalog: attempt("read Home's mix catalog", (db) => mixCatalog(db)),
+    streamedSongGenres: (videoIds) =>
+      attempt("read streamed song genres", (db) => streamedSongGenres(db, videoIds)),
     graphRadios: attempt("read Home's mix catalog radios", (db) => graphRadios(db)),
     graphRadioPage: (after) =>
       attempt("read a graph radio page", (db) => graphRadioPage(db, after)),

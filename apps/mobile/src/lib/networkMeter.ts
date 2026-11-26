@@ -5,7 +5,8 @@ import { registerTimingBackground, timingBackgroundChanged } from "./timing";
  * line when it ends (Core's `networkUseLine`) with how long it took and, per
  * host, its requests and bytes. YouTube Music's reads count natively, as on
  * the wire (the reads take the run's meter, `ytNetworkMeter`). Concurrent
- * runs each count their own requests. Recommendations make no Deezer calls.
+ * runs each count their own YT Music requests. Genre mixes count their own
+ * background Deezer work separately for their timing line.
  */
 import { NO_NETWORK_USE, networkUseLine } from "@wave/core";
 import * as Cause from "effect/Cause";
@@ -59,6 +60,7 @@ export const withNetworkLog = <A, E, R>(
   what: string,
   effect: Effect.Effect<A, E, R>,
   outcome?: (value: A) => string | undefined,
+  onDone?: (durationMs: number, bytes: number) => void,
 ): Effect.Effect<A, E, Exclude<R, BackgroundWorkName>> =>
   Effect.suspend(() => {
     const startedAt = Date.now();
@@ -77,6 +79,7 @@ export const withNetworkLog = <A, E, R>(
           const ended = Exit.isSuccess(exit) ? outcome?.(exit.value) : endedBy(exit.cause);
           const use = { ...NO_NETWORK_USE, ytMusic: WaveYtMusic.takeNetworkUse(meter.yt) };
           const durationMs = Date.now() - startedAt;
+          onDone?.(durationMs, use.ytMusic.bytes);
           appLog(
             "info",
             TAG,

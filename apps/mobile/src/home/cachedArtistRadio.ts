@@ -20,11 +20,17 @@ export const createCachedArtistRadioReader = <E, R, RN>({
   readonly note: (name: string, page: SongRadioPage) => Effect.Effect<void, never, RN>;
 }) => {
   const pending = new Map<string, SharedRead<SongRadioPage | null, R | RN>>();
-  return (artist: Artist): Effect.Effect<SongRadioPage | null, unknown, R | RN> =>
+  return (
+    artist: Artist,
+    noteRead?: (source: "cache" | "live") => void,
+  ): Effect.Effect<SongRadioPage | null, unknown, R | RN> =>
     Effect.gen(function* () {
       const id = artistRadioCacheId(artist.name);
       const cached = cache.getFresh(id);
-      if (cached !== null) return cached;
+      if (cached !== null) {
+        noteRead?.("cache");
+        return cached;
+      }
       let reading = pending.get(id);
       if (reading === undefined) {
         reading = sharedRead(
@@ -45,6 +51,8 @@ export const createCachedArtistRadioReader = <E, R, RN>({
         );
         pending.set(id, reading);
       }
-      return yield* reading.get;
+      const page = yield* reading.get;
+      if (page !== null) noteRead?.("live");
+      return page;
     });
 };

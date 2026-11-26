@@ -213,6 +213,8 @@ export interface DiscoverMixPoolSources<L extends DiscoverLibrarySong> {
   readonly taken: DiscoverMixTaken;
   /** How many new songs the mix has: its length. */
   readonly length: number;
+  /** Genre mixes fill from tagged Library songs first and check every non-D song. */
+  readonly streamMatches?: (song: YtAlbumSong) => boolean;
 }
 
 /**
@@ -232,7 +234,7 @@ export const discoverMixFamiliarPool = <L extends DiscoverLibrarySong>(
 ): DiscoverMixFamiliarSong[] => finishSteps(discoverMixFamiliarPoolSteps(seed, sources));
 export function* discoverMixFamiliarPoolSteps<L extends DiscoverLibrarySong>(
   seed: DiscoverMixSeed,
-  { radio, known, library, taken, length }: DiscoverMixPoolSources<L>,
+  { radio, known, library, taken, length, streamMatches }: DiscoverMixPoolSources<L>,
 ): Generator<void, DiscoverMixFamiliarSong[]> {
   const most = length - Math.round(length / LEVELS);
   const plays = yield* indexSteps(
@@ -256,12 +258,14 @@ export function* discoverMixFamiliarPoolSteps<L extends DiscoverLibrarySong>(
     recordings.add(recording);
     pool.push({ source: "stream", song });
   };
-  for (const { video, ...song } of radio) {
-    yield;
-    if (video) continue;
-    const track = known.inLibrary(song);
-    if (track !== null) addTrack(track);
-    else if (known.known(song)) addStream(song);
+  if (streamMatches === undefined) {
+    for (const { video, ...song } of radio) {
+      yield;
+      if (video) continue;
+      const track = known.inLibrary(song);
+      if (track !== null) addTrack(track);
+      else if (known.known(song)) addStream(song);
+    }
   }
   const restSongs: DiscoverLibrarySong[] = [];
   const accepts = yield* mixSongFilterSteps(seed, library);
@@ -277,11 +281,26 @@ export function* discoverMixFamiliarPoolSteps<L extends DiscoverLibrarySong>(
     addTrack(song);
     yield;
   }
+  if (streamMatches !== undefined) {
+    for (const { video, ...song } of radio) {
+      if (pool.length >= most) break;
+      if (!video && known.known(song) && known.inLibrary(song) === null && streamMatches(song))
+        addStream(song);
+      yield;
+    }
+  }
   const seedArtists = new Set(mixSeedArtists(seed).map((artist) => identityKey(artist.name)));
   for (const { song } of known.nonD) {
     yield;
-    const artists = song.artists.flatMap((artist) => splitCredit(artist)).map(identityKey);
-    if (artists.some((artist) => seedArtists.has(artist))) addStream(song);
+    if (pool.length >= most) break;
+    const matches =
+      streamMatches === undefined
+        ? song.artists
+            .flatMap((artist) => splitCredit(artist))
+            .map(identityKey)
+            .some((artist) => seedArtists.has(artist))
+        : streamMatches(song);
+    if (matches) addStream(song);
   }
   return pool;
 }

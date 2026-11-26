@@ -11,6 +11,8 @@ enum class DownloadServiceStop(val line: String) {
   CANCELLED("the last song was cancelled"),
   /** Only songs the owner paused are left (#1474). */
   PAUSED("downloads are paused"),
+  /** Only songs waiting for Wi-Fi are left (#1502): they start once the network is unmetered. */
+  WAITING_FOR_WIFI("the songs left wait for Wi-Fi"),
   /** Android ended it on the time limit it gives data-sync services. */
   TIME_LIMIT("Android's time limit"),
   /** Android destroyed it with work left. */

@@ -2471,6 +2471,7 @@ export type {
 export {
   GENRE_AFFINITY_THRESHOLD,
   artistProfilesKnown,
+  artistProfileDue,
   parseArtistProfiles,
   storedArtistProfiles,
   withArtistProfiles,
@@ -2942,6 +2943,8 @@ export type { LostLinkTap, LostTapReason } from "./lostTap.ts";
 export { createArtistGraphBuild, type ArtistGraphCatalogEntry } from "./artistGraphBuild.ts";
 export { mixKnownSongsSteps } from "./mixKnownSongs.ts";
 export { genreMixDjCandidatesSteps, genreMixSeedsSteps } from "./genreMixes.ts";
+export { faithfulGenreMixesSteps } from "./faithfulGenreMixes.ts";
+export { lookUpDeezerArtistGenre } from "./deezerArtistGenre.ts";
 export { mapSteps, sortSteps, finishSteps, filterSteps } from "./buildSteps.ts";
 export { libraryMixProfilesSteps } from "./genreAffinity.ts";
 export { rankPlaysSteps } from "./stats.ts";
@@ -3593,3 +3596,13 @@ export {
   resumeDownloadGroup,
 } from "./downloadPause.ts";
 export type { DownloadGroupControls, DownloadPause, DownloadRequest } from "./downloadPause.ts";
+export {
+  DOWNLOAD_WIFI_ONLY_SETTING,
+  downloadWaitsForWifi,
+  downloadsWaitingForWifi,
+  readDownloadWifiOnly,
+  wifiWaitLine,
+  wifiWaitPlayed,
+  writeDownloadWifiOnly,
+} from "./downloadWifi.ts";
+export type { DownloadNetwork, WifiWaitJob } from "./downloadWifi.ts";

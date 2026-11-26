@@ -21,6 +21,9 @@ class Connectivity(context: Context) {
 
   /** The default network is the phone's mobile data, not Wi-Fi or a cable. */
   fun onMobileData(): Boolean = cache.current.onMobileData
+
+  /** The default network is metered: mobile data, a hotspot or a Wi-Fi marked metered. */
+  fun metered(): Boolean = cache.current.metered
 }
 
 /** The process's one [ConnectivityCache], kept by a default-network callback from its first use. */
@@ -61,5 +64,6 @@ object AndroidConnectivity {
     cellular = hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR),
     wifi = hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
     ethernet = hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET),
+    notMetered = hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED),
   )
 }

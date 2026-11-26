@@ -181,6 +181,16 @@ declare class WaveSoulseekModule extends NativeModule<{
    * so they start in it (Core's `moveQueuedJobs`); kept across a restart.
    */
   moveQueuedJobs(ids: readonly string[]): Promise<void>;
+  /**
+   * Download only on Wi-Fi (#1502), the synced switch: the journal keeps it, so the download
+   * service follows it with Wave closed. Off, the songs waiting for Wi-Fi start on any network.
+   */
+  setDownloadWifiOnly(on: boolean): Promise<void>;
+  /**
+   * The owner played [videoId] (a job's id, or a song on it) while its download may wait for
+   * Wi-Fi: it downloads now, unless it's a best-quality copy. Whether a download has it.
+   */
+  playNowDownload(videoId: string): Promise<boolean>;
   session(): Promise<SoulseekSession>;
   /** Download in best quality: connects the phone's Soulseek account, making one when it has none. */
   turnOn(): Promise<SoulseekSession>;

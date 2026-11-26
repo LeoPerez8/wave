@@ -254,6 +254,16 @@ describe("Settings › Downloads: the run panel's lines", () => {
     assert.equal(panelLine(null, true, true), "12 failed · 1,254 left");
   });
 
+  test("songs waiting for Wi-Fi aren't Paused: the line above the list says why they wait", () => {
+    const counts = { done: 1234, failed: 12, left: 1254, total: 2500 };
+    const options = { timeLeft: null, paused: true, throttled: false, waitingForWifi: true };
+    assert.equal(downloadRunPanelLine(counts, options), "12 failed · 1,254 left");
+    assert.equal(
+      downloadRunPanelLine(counts, { ...options, held: true }),
+      "12 failed · 1,254 left · Paused",
+    );
+  });
+
   test("the owner's Pause says Paused and hides the time left, even while YouTube's pause shows", () => {
     const counts = { done: 1234, failed: 12, left: 1254, total: 2500 };
     const line = (throttled: boolean) =>

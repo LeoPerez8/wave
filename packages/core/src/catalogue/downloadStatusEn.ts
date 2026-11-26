@@ -36,6 +36,11 @@ export const downloadStatusEn = {
   downloadingCount: (n: number) => `${formatNumber("en", n)} downloading`,
   savingCount: (n: number) => `${formatNumber("en", n)} saving`,
   waitingCount: (n: number) => `${formatNumber("en", n)} waiting`,
+  /** Download only on Wi-Fi holds the song on a metered network. */
+  waitingForWifi: "Waiting for Wi-Fi",
+  /** Settings › Downloads' line at the top of its list (`wifiWaitLine`). */
+  waitingForWifiCount: (n: number) =>
+    `Waiting for Wi-Fi · ${formatNumber("en", n)} ${plural("en", n, { one: "song", other: "songs" })}`,
   failedSongs: (n: number) =>
     `${formatNumber("en", n)} ${plural("en", n, { one: "song", other: "songs" })} failed`,
 };
