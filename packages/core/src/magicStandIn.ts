@@ -8,7 +8,8 @@
 import type { ArtistGraph } from "./artistGraph.ts";
 import { finishSteps, sortSteps } from "./buildSteps.ts";
 import { isDisliked, NO_DISLIKES, type DislikedSongs } from "./dislikes.ts";
-import { djMoodFit, type DjAudioFeatures, type DjMoodFit } from "./djMood.ts";
+import { djMoodsFit, djMoodTurnsSteps, type DjAudioFeatures } from "./djMood.ts";
+import type { DjMood } from "./djSettings.ts";
 import { djArtistTile } from "./dj.ts";
 import { djArtistHops, REACH } from "./djVariety.ts";
 import {
@@ -64,6 +65,8 @@ interface Candidate {
   readonly weight: number;
   /** Its place in the Library's order. */
   readonly at: number;
+  /** The session's moods it's known to fit. */
+  readonly fits: readonly DjMood[];
 }
 
 /**
@@ -152,7 +155,7 @@ export function* magicStandInSteps(
 ): Generator<void, MagicStandIn | null> {
   if (!magicStandInDue(session, state, options)) return null;
   const { moodFeatures = new Map(), disliked = NO_DISLIKES, graph = null, taste = null } = options;
-  const mood = session.dj?.mood ?? null;
+  const moods = session.dj?.mood ?? [];
   // Artist variety: a song inside the selection comes first; outside it, a
   // song counts by its closest artist's hops from the selected ones, every
   // hop within reach alike (`djVarietyCandidates`). A session that isn't a
@@ -168,17 +171,18 @@ export function* magicStandInSteps(
   // Songs known to fit the mood come first; songs of unknown mood fill in
   // behind them, so a Library without features still keeps the session
   // playing. Once every unused one has played, the used ones replay the same
-  // way, the longest ago first. A song known to be off the mood plays only as
+  // way, the longest ago first. A song every mood rules off plays only as
   // the last resort: the music stops only when the Library has no song to
-  // play. A disliked song never plays.
+  // play. A disliked song never plays. With several moods, the songs known
+  // to fit them take turns among them, the first mood picked first.
   const candidates: Candidate[] = [];
   for (const [at, song] of library.entries()) {
     yield;
     if (isDisliked(disliked, { id: song.trackId })) continue;
-    const fit: DjMoodFit =
-      mood === null
-        ? "matched"
-        : djMoodFit(mood, moodFeatures.get(song.trackId) ?? null, null, song.style);
+    const { fit, fits } =
+      moods.length === 0
+        ? { fit: "matched", fits: [] }
+        : djMoodsFit(moods, moodFeatures.get(song.trackId) ?? null, null, song.style);
     const queuedAt = last.get(song.trackId) ?? -1;
     const tier = fit === "off" ? 4 : (fit === "matched" ? 0 : 1) + (queuedAt >= 0 ? 2 : 0);
     candidates.push({
@@ -189,11 +193,12 @@ export function* magicStandInSteps(
       last: queuedAt,
       weight: taste === null ? 1 : tasteWeight(taste, song),
       at,
+      fits,
     });
   }
   // Within a tier: the unused songs before the replays, the longest ago
   // first; then the selection, the nearest artists, and the owner's taste.
-  const ranked = yield* sortSteps(
+  const sorted = yield* sortSteps(
     candidates,
     (a, b) =>
       a.tier - b.tier ||
@@ -202,6 +207,12 @@ export function* magicStandInSteps(
       a.distance - b.distance ||
       b.weight - a.weight ||
       a.at - b.at,
+  );
+  const ranked = yield* djMoodTurnsSteps(
+    sorted,
+    moods,
+    (candidate) => candidate.fits,
+    (candidate) => candidate.tier,
   );
   // High credits no artist twice, unless nothing else is left.
   const picked = new Set<Candidate>();

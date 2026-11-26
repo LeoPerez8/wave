@@ -1070,6 +1070,7 @@ export {
   magicQueueKeepsPlayingSong,
   magicSignal,
   parseMagicSession,
+  storedMagicSession,
   startMagicQueue,
   startStreamedMagicQueue,
   searchSongTap,
@@ -3449,6 +3450,7 @@ export {
   djMixSliders,
   djNewMusicShare,
   parseDjSettings,
+  storedDjSettings,
 } from "./djSettings.ts";
 export type { DjDiscovery, DjPopularity, DjSettings, DjVariety } from "./djSettings.ts";
 export { djAdjustGroups, djAdjustSheetHeight, djAdjustSheetSwipeCloses } from "./djAdjust.ts";
@@ -3487,10 +3489,11 @@ export {
   DJ_MOOD_SAD_VALENCE,
   djMedianAudioFeatures,
   djMoodFiltered,
+  djFirstMoodFit,
   djMoodFilteredSteps,
   djMoodFit,
 } from "./djMood.ts";
-export type { DjAudioFeatures, DjMoodFit, DjMoodPools, DjMoodRankable } from "./djMood.ts";
+export type { DjAudioFeatures, DjMoodFit, DjMoodPools, DjMoodRankable, DjMoods } from "./djMood.ts";
 export {
   MAGIC_STAND_IN_SONGS,
   magicStandIn,

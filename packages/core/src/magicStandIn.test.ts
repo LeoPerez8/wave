@@ -79,7 +79,7 @@ const SAD_LOUD: DjAudioFeatures = { energy: 0.8, valence: 0.2, acousticness: 0.1
 
 describe("Library stand-in while a Magic Queue batch is late", () => {
   test("with the last song playing and no batch, plays Library songs that pass the mood", () => {
-    const session = queued(djSession({ mood: "energetic" }), ["1", "2"]);
+    const session = queued(djSession({ mood: ["energetic"] }), ["1", "2"]);
     const state = lastPlaying(session, ["1", "2"]);
     const library = [
       song("1", "Picked"),
@@ -156,7 +156,7 @@ describe("Library stand-in while a Magic Queue batch is late", () => {
   });
 
   test("fills with songs of unknown mood only behind the known matches, and an off one only as a last resort", () => {
-    const session = queued(djSession({ mood: "energetic" }), ["1"]);
+    const session = queued(djSession({ mood: ["energetic"] }), ["1"]);
     const state = lastPlaying(session, ["1"]);
     const songs = [song("u1", "Picked"), song("off", "Picked"), song("m1", "Picked")];
     const features = new Map([
@@ -169,8 +169,39 @@ describe("Library stand-in while a Magic Queue batch is late", () => {
     );
   });
 
+  test("with several moods, the stand-ins take turns among them, the first mood picked first", () => {
+    const session = queued(djSession({ mood: ["relaxing", "energetic"] }), ["1"]);
+    const state = lastPlaying(session, ["1"]);
+    const CALM: DjAudioFeatures = { energy: 0.2, valence: 0.6, acousticness: 0.8, mode: 1 };
+    const songs = [
+      song("e1", "Picked"),
+      song("e2", "Picked"),
+      song("off", "Picked"),
+      song("r1", "Picked"),
+    ];
+    const features = new Map([
+      ["e1", ENERGETIC],
+      ["e2", ENERGETIC],
+      ["off", { ...CALM, valence: 0.1 }],
+      ["r1", CALM],
+    ]);
+    assert.deepEqual(
+      magicStandIn(session, state, songs, { picking: true, moodFeatures: features })?.trackIds,
+      ["r1", "e1"],
+    );
+    // An unused song still comes before a replayed one, whatever its mood.
+    const played = queued(session, ["1", "r1", "e1"]);
+    assert.deepEqual(
+      magicStandIn(played, lastPlaying(played, ["1", "r1", "e1"]), songs, {
+        picking: true,
+        moodFeatures: features,
+      })?.trackIds,
+      ["e2", "r1"],
+    );
+  });
+
   test("keeps playing songs of unknown mood when nothing in the Library is known to fit", () => {
-    const session = queued(djSession({ mood: "relaxing" }), ["1"]);
+    const session = queued(djSession({ mood: ["relaxing"] }), ["1"]);
     const state = lastPlaying(session, ["1"]);
     const songs = [song("off", "Picked"), song("u1", "Picked"), song("u2", "Picked")];
     assert.deepEqual(
@@ -375,7 +406,7 @@ describe("Library stand-in: the music doesn't stop while the Library has songs",
   const CALM: DjAudioFeatures = { energy: 0.2, valence: 0.6, acousticness: 0.8, mode: 1 };
 
   test("replays songs the session used that fit the mood, oldest first, before an off one", () => {
-    const session = queued(djSession({ mood: "energetic" }), ["a", "off", "b", "c"]);
+    const session = queued(djSession({ mood: ["energetic"] }), ["a", "off", "b", "c"]);
     const state = lastPlaying(session, ["b", "c"]);
     const songs = ["c", "off", "b", "a"].map((id) => song(id, "Picked"));
     const moodFeatures = new Map([
@@ -391,7 +422,7 @@ describe("Library stand-in: the music doesn't stop while the Library has songs",
   });
 
   test("replays the songs known to fit before the ones of unknown mood", () => {
-    const session = queued(djSession({ mood: "energetic" }), ["u", "m", "now"]);
+    const session = queued(djSession({ mood: ["energetic"] }), ["u", "m", "now"]);
     const state = lastPlaying(session, ["now"]);
     const songs = ["u", "m", "now"].map((id) => song(id, "Picked"));
     const moodFeatures = new Map([
@@ -406,7 +437,7 @@ describe("Library stand-in: the music doesn't stop while the Library has songs",
 
   test("plays an off-mood song as a last resort rather than stop", () => {
     // Offline, Energetic, on a Library of calm songs only.
-    const session = queued(djSession({ mood: "energetic" }), ["1"]);
+    const session = queued(djSession({ mood: ["energetic"] }), ["1"]);
     const state = lastPlaying(session, ["1"]);
     const songs = ["1", "calm1", "calm2"].map((id) => song(id, "Picked"));
     const moodFeatures = new Map(["1", "calm1", "calm2"].map((id) => [id, CALM]));
@@ -417,7 +448,7 @@ describe("Library stand-in: the music doesn't stop while the Library has songs",
   });
 
   test("stops only when the Library has no song to play", () => {
-    const session = queued(djSession({ mood: "energetic" }), ["1"]);
+    const session = queued(djSession({ mood: ["energetic"] }), ["1"]);
     const state = lastPlaying(session, ["1"]);
     assert.equal(magicStandIn(session, state, [], { picking: true }), null);
     assert.equal(
@@ -457,7 +488,7 @@ describe("Library stand-in: the music doesn't stop while the Library has songs",
 
 describe("Library stand-in: the same mood verdict as a batch", () => {
   test("a song's style rules it off when no features are cached", () => {
-    const session = queued(djSession({ mood: "relaxing" }), ["1"]);
+    const session = queued(djSession({ mood: ["relaxing"] }), ["1"]);
     const songs = [tagged("metal", "Picked", null, "Heavy Metal"), song("u1", "Picked")];
     // Heavy is off for Relaxing: the song playing replays before it.
     assert.deepEqual(
