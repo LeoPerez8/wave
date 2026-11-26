@@ -3556,3 +3556,13 @@ export {
   resumeDownloadGroup,
 } from "./downloadPause.ts";
 export type { DownloadGroupControls, DownloadPause, DownloadRequest } from "./downloadPause.ts";
+export {
+  DOWNLOAD_WIFI_ONLY_SETTING,
+  downloadWaitsForWifi,
+  downloadsWaitingForWifi,
+  readDownloadWifiOnly,
+  wifiWaitLine,
+  wifiWaitPlayed,
+  writeDownloadWifiOnly,
+} from "./downloadWifi.ts";
+export type { DownloadNetwork, WifiWaitJob } from "./downloadWifi.ts";

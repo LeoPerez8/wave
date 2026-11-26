@@ -220,6 +220,9 @@ export const settingsEn = {
   couldntReadTheSettingReopenSettingsTo: "Couldn't read the setting. Reopen Settings to retry.",
   couldntTurnItOffTryAgain: "Couldn't turn it off. Try again.",
   downloadInBestQuality: "Download in best quality",
+  downloadOnlyOnWifi: "Download only on Wi-Fi",
+  downloadOnlyOnWifiFootnote:
+    "On mobile data, a hotspot or a metered Wi-Fi, downloads wait and start on Wi-Fi. A song you play downloads now, except a best-quality copy.",
   bestQualityIsMP3320KbpsFrom:
     "Best quality is MP3 320 kbps from other people's shared music. It's slower than YouTube Music, and a song it can't find comes from YouTube Music instead. Off, downloads come from YouTube Music while YT Music is on.",
   theQuickBrownFoxJumpsOverThe: "The quick brown fox jumps over the lazy dog",

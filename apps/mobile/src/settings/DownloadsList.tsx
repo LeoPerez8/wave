@@ -8,6 +8,7 @@ import {
   queuedDownloadsSummary,
   reorderShift,
   sameQueuedDownload,
+  wifiWaitLine,
   type DownloadGroup,
   type DownloadHeaderRow,
   type DownloadListRow,
@@ -23,6 +24,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ComponentRef,
   type ReactElement,
   type ReactNode,
@@ -54,6 +56,7 @@ import {
 } from "@/settings/FailedDownloadsSection";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { DownloadGroupControls } from "@/ytmusic/DownloadGroupControls";
+import { journal } from "@/ytmusic/downloadJournal";
 import { useDownloadRun } from "@/ytmusic/downloadRun";
 import { useDownloadingList, useQueuedDownloadLine } from "@/ytmusic/downloadingRows";
 import { cancelQueuedDownload, useFailedDownloads } from "@/ytmusic/YtDownloads";
@@ -90,6 +93,19 @@ const useMoveAction = (index: number, move: (from: number, to: number) => void) 
 function HandleSlot({ handle }: { handle: Handle }) {
   if (handle === "room") return <View style={{ width: REORDER_HANDLE_ROOM }} />;
   return <ReorderHandle gesture={handle === "drawn" ? undefined : handle} />;
+}
+
+/** "Waiting for Wi-Fi · 12 songs" at the top of the list while Download only on Wi-Fi holds songs (#1502). */
+function WifiWaitLine() {
+  const { strings } = useLocalisation();
+  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
+  const line = wifiWaitLine(jobs, strings);
+  if (line === null) return null;
+  return (
+    <Text accessibilityLiveRegion="polite" className="mb-1 font-sans text-subhead text-secondary">
+      {line}
+    </Text>
+  );
 }
 
 /** Two group headers show the same name, line and Pause or Resume. */
@@ -526,6 +542,7 @@ export function DownloadsList({ header }: { header: ReactElement }) {
       {summary !== null && (
         <View>
           <CatalogLine className="mb-1">{strings.settings.downloading}</CatalogLine>
+          <WifiWaitLine />
           <DownloadRunPanel run={run} summary={summary} pauseNotice={pauseNotice} />
           <Hairline />
         </View>

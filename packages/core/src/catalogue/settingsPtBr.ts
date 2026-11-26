@@ -208,6 +208,9 @@ export const settingsPtBr: typeof settingsEn = {
     "Não foi possível ler a configuração. Abra Ajustes novamente para tentar.",
   couldntTurnItOffTryAgain: "Não foi possível desativar. Tente novamente.",
   downloadInBestQuality: "Baixar na melhor qualidade",
+  downloadOnlyOnWifi: "Baixar só no Wi-Fi",
+  downloadOnlyOnWifiFootnote:
+    "Nos dados móveis, num roteador do celular ou num Wi-Fi limitado, os downloads aguardam e começam no Wi-Fi. Uma música que você toca baixa na hora, exceto uma cópia na melhor qualidade.",
   bestQualityIsMP3320KbpsFrom:
     "A melhor qualidade é MP3 a 320 kbps, obtido de músicas compartilhadas por outras pessoas. É mais lento que o YouTube Music. Se uma música não for encontrada, ela vem do YouTube Music. Desativado, os downloads vêm do YouTube Music enquanto o YT Music estiver ativado.",
   theQuickBrownFoxJumpsOverThe: "Um pequeno jabuti xereta viu dez cegonhas felizes",

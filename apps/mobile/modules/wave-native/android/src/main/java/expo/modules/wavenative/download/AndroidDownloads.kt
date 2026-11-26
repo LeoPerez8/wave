@@ -12,6 +12,7 @@ import expo.modules.wavenative.log.JsHeap
 import expo.modules.wavenative.log.LogUnits
 import expo.modules.wavenative.log.NativeLog
 import expo.modules.wavenative.log.WaveLog
+import expo.modules.wavenative.net.AndroidConnectivity
 import expo.modules.wavenative.player.JsRuntime
 import expo.modules.wavenative.scan.LibraryScanner
 import expo.modules.wavenative.scan.artworkToMap
@@ -303,9 +304,48 @@ class AndroidDownloads private constructor(private val context: Context) {
     if (jobs.heldCount() == 0 && synchronized(this) { worker == null }) YtDownloadService.dismissPaused(context)
   }
 
+  /**
+   * Download only on Wi-Fi turned on or off (the synced preference, #1502): off, the songs waiting
+   * for Wi-Fi start on any network.
+   */
+  fun setWifiOnly(on: Boolean) {
+    if (on == jobs.wifiOnly()) return
+    jobs.setWifiOnly(on, transport)
+    WaveLog.i(TAG, if (on) "Downloads wait for Wi-Fi on a metered network" else "Downloads run on any network")
+    changed(); requestService()
+  }
+
+  /**
+   * The owner played song [videoId] while it may wait for Wi-Fi: it downloads now (a best-quality
+   * copy keeps waiting). Whether a download has it.
+   */
+  fun playNow(videoId: String): Boolean {
+    val known = jobs.playNow(videoId)
+    if (known) { changed(); requestService() }
+    return known
+  }
+
+  /** The network changed: metered, the songs not downloaded yet wait; unmetered, they go on. */
+  private fun networkChanged(metered: Boolean) {
+    if (metered == jobs.metered()) return
+    jobs.setNetwork(metered, transport)
+    val waiting = jobs.wifiWaitingCount()
+    if (metered && waiting > 0) WaveLog.i(TAG, "The network is metered: $waiting ${if (waiting == 1) "song waits" else "songs wait"} for Wi-Fi")
+    else if (!metered) WaveLog.i(TAG, "The network is unmetered: downloads waiting for Wi-Fi go on")
+    changed(); requestService()
+  }
+
+  /** [WifiWaitJob]: an unmetered network is back, perhaps after Wave's process was gone. */
+  fun wifiBack() {
+    val state = AndroidConnectivity.cache(context).current
+    if (state.hasNetwork) networkChanged(state.metered)
+    requestService()
+  }
+
   /** Called from the user's tap, the resumed Activity or an update's restart. Failure never starts unprotected work. */
   fun requestService() {
-    if (!jobs.hasWork()) return
+    if (!jobs.hasWork()) { awaitWifi(); return }
+    WifiWait.cancel(context)
     try { context.startForegroundService(Intent(context, YtDownloadService::class.java)) }
     catch (error: Exception) {
       // Never unprotected work: started jobs go back in line, and all wait for the next launch.
@@ -350,6 +390,14 @@ class AndroidDownloads private constructor(private val context: Context) {
         main.post { refresh(); if (!jobs.hasWork()) onIdle() }
       }, 0, 500, TimeUnit.MILLISECONDS)
     }
+  }
+
+  /**
+   * With nothing to download and songs waiting for Wi-Fi, a job waits for an unmetered network
+   * ([WifiWait]), so they start with Wave closed; with none waiting, it goes.
+   */
+  fun awaitWifi() {
+    if (jobs.wifiWaitingCount() > 0) WifiWait.schedule(context) else WifiWait.cancel(context)
   }
 
   /** An unexpected failure (a full disk can't even write the journal) ends the started jobs, never the queue. */
@@ -409,6 +457,22 @@ class AndroidDownloads private constructor(private val context: Context) {
         output.toByteArray().also { check(it.isNotEmpty() && it.size <= ArtworkStore.MAX_IMAGE_BYTES) }
       }
     } finally { connection.disconnect() }
+  }
+
+  /**
+   * Follows the network for Download only on Wi-Fi, from the start, off the main thread (the
+   * journal's lock may be held by a save). Offline says nothing about metering: the last network's
+   * stands until another comes.
+   */
+  private val networkFollower = Executors.newSingleThreadExecutor(BackgroundThreads("Wave download network", daemon = true, lower = ThreadPriority::lower))
+
+  init {
+    val connectivity = AndroidConnectivity.cache(context)
+    val follow = { state: expo.modules.wavenative.net.ConnectivityState ->
+      if (state.hasNetwork) networkFollower.execute { runCatching { networkChanged(state.metered) }.onFailure { WaveLog.w(TAG, "Couldn't follow the network for downloads", it) } }
+    }
+    connectivity.listen(follow)
+    follow(connectivity.current)
   }
 
   companion object {

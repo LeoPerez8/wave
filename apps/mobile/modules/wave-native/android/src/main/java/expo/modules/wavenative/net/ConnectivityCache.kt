@@ -9,6 +9,8 @@ data class NetworkFacts(
   val cellular: Boolean,
   val wifi: Boolean,
   val ethernet: Boolean,
+  /** Android's `NET_CAPABILITY_NOT_METERED`: the network isn't billed by the byte. */
+  val notMetered: Boolean = true,
 )
 
 /**
@@ -17,8 +19,10 @@ data class NetworkFacts(
  * request failing while it hasn't (no network, a captive portal, a network still coming up after
  * a handover) failed because the phone is offline, not because the server did. [onMobileData]:
  * the default network is mobile data, not Wi-Fi or a cable (a big download is the owner's plan).
+ * [metered]: the default network lacks `NET_CAPABILITY_NOT_METERED`, as mobile data, a phone's
+ * hotspot or a Wi-Fi marked metered do; Download only on Wi-Fi waits on it (#1502).
  */
-data class ConnectivityState(val hasNetwork: Boolean, val online: Boolean, val onMobileData: Boolean) {
+data class ConnectivityState(val hasNetwork: Boolean, val online: Boolean, val onMobileData: Boolean, val metered: Boolean = false) {
   companion object {
     val OFFLINE = ConnectivityState(hasNetwork = false, online = false, onMobileData = false)
 
@@ -31,6 +35,7 @@ data class ConnectivityState(val hasNetwork: Boolean, val online: Boolean, val o
           hasNetwork = facts.internet,
           online = facts.internet && facts.validated,
           onMobileData = facts.cellular && !facts.wifi && !facts.ethernet,
+          metered = facts.internet && !facts.notMetered,
         )
       }
   }
