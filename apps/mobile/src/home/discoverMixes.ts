@@ -43,6 +43,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { Storage } from "expo-sqlite/kv-store";
 
 import { type BackgroundWorkName, namedWork, runSteps } from "@/lib/stepped";
 import { settledTurnEffect as settledTurn } from "@/lib/backgroundWork";
@@ -86,6 +87,7 @@ import { sharedRead } from "@/lib/sharedRead";
 import { appLog } from "@/log/appLog";
 import { online } from "@/native/waveNative";
 import { runGenreMixBuild } from "./genreMixBuild";
+import { forgetRenamedGenreMixes } from "./renamedGenreMixes";
 import { queueMixArtistGenres, type ArtistLookupMeter } from "./mixArtistGenreLookup";
 import { knownLibraryFinder } from "@/ytmusic/libraryFinder";
 
@@ -379,6 +381,9 @@ const genreMixInputs = Effect.gen(function* () {
   };
 });
 
+/** Whether this launch deleted the genre mixes kept under their old key (`forgetRenamedGenreMixes`). */
+let renamedForgotten = false;
+
 /**
  * Save the complete local families, then let short families widen by one artist at a time.
  * A refresh ([pulled]) that makes no mix saves nothing, so Home keeps the mixes it shows.
@@ -389,6 +394,10 @@ const buildGenreMixes = (
   pulled: boolean,
 ) =>
   Effect.gen(function* () {
+    if (!renamedForgotten) {
+      renamedForgotten = true;
+      forgetRenamedGenreMixes(Storage);
+    }
     const inputs = yield* genreMixInputs;
     const seeds = yield* runSteps(
       genreMixSeedsSteps(inputs.library, avoid, Infinity),
