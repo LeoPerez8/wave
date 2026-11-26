@@ -15,6 +15,7 @@ import {
   type AccountSignInState,
   type AccountView,
 } from "./accountSignIn.ts";
+import type { WaveSession } from "./waveAccount.ts";
 
 /** The signed-in account, as YouTube Music names it. */
 export interface YtAccount {
@@ -60,3 +61,13 @@ export type YtAccountView = AccountView<YtAccount, YtSignInFailure>;
  */
 export const ytAccountView = (state: YtAccountState, enabled: boolean): YtAccountView | null =>
   enabled || state.session.status === "signedIn" ? accountView(state) : null;
+
+/**
+ * Whether a Wave account sign-in that just succeeded ([wave]) opens YT Music's sign-in next:
+ * only with YT Music on and no YouTube account kept. An expired one keeps its Sign In Again.
+ */
+export const ytSignInFollowsWave = (
+  wave: WaveSession,
+  ytMusicOn: boolean,
+  yt: YtSession,
+): boolean => wave.status === "signedIn" && ytMusicOn && yt.status === "signedOut";

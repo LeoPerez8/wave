@@ -9,7 +9,9 @@ import {
   ytAccountView,
   ytLibraryFailure,
   ytLibraryPicker,
+  ytSignInFollowsWave,
   type AppLanguage,
+  type WaveSession,
   type YtAccountEvent,
   type YtAccountState,
   type YtLibraryFailure,
@@ -32,6 +34,11 @@ export interface YtAccountDeps {
   readonly online: () => boolean;
   /** Opens the browser on Google's sign-in (`startYtBrowserSignIn`). */
   readonly startSignIn: () => YtBrowserSignIn;
+  /**
+   * Hears the Wave account's session changes (`WaveAccountService.subscribe`): a signed-in one
+   * means its sign-in just succeeded, which opens YouTube's sign-in next.
+   */
+  readonly waveSessions: (listener: (session: WaveSession) => void) => () => void;
 }
 
 export interface YtAccountShape {
@@ -153,6 +160,14 @@ export const createYtAccount = (deps: YtAccountDeps): YtAccountShape => {
     }
   };
 
+  const startSignIn = () => signingIn?.done ?? signIn();
+  // The sign-in chain (docs/spec-desktop.md, Sign-in): a Wave account sign-in that succeeded
+  // runs YouTube's next, as Settings' Sign In does. However it ends, the Wave account is kept.
+  const stopWave = deps.waveSessions((session) => {
+    if (ytSignInFollowsWave(session, deps.enabled(), current().session))
+      startSignIn().catch(() => {});
+  });
+
   return {
     view: () => {
       check();
@@ -163,7 +178,7 @@ export const createYtAccount = (deps: YtAccountDeps): YtAccountShape => {
       };
     },
     // A second Sign In while the browser is open waits for the first.
-    signIn: () => signingIn?.done ?? signIn(),
+    signIn: startSignIn,
     cancelSignIn: () => signingIn?.browser.cancel(),
     signOut: async () => {
       try {
@@ -211,6 +226,7 @@ export const createYtAccount = (deps: YtAccountDeps): YtAccountShape => {
     },
     dispose: () => {
       unsubscribe();
+      stopWave();
       signingIn?.browser.cancel();
     },
   };

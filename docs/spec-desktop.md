@@ -324,6 +324,14 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
   to the two steps above, so the fast path never narrows what already works. Other platforms seal
   the store so another app cannot open it (Windows ties the key to the browser binary), and there
   Sign In always opens the window.
+- Sign-in chain (#1506): a Wave account sign-in that succeeds, from the invitation or Settings ›
+  Accounts, runs YouTube's sign-in next when YT Music is on and no YouTube account is kept, as
+  YT Music's Sign In does: on Linux the default browser's session first, then the two steps, the
+  page getting the Wave account's email. An expired YouTube account keeps its Sign In Again
+  instead (Core's `ytSignInFollowsWave` decides). A failed or cancelled Wave sign-in starts
+  nothing. Settings › Accounts shows YT Music signing in, with Cancel; closing the window leaves
+  it signed out with no note. The two accounts stay independent. The email goes only into the
+  page's address, never into the log.
 - A window closed without signing in leaves the account as it was. The page's channel id can be
   slow to appear; Wave waits for it and signs in without it when it never comes, as the phone
   does.
