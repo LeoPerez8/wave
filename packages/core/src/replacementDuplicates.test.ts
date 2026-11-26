@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   duplicateCheckDue,
   duplicateCheckOpened,
+  downloadDuplicates,
   duplicateCheckStep,
   replacementDuplicateFix,
   replacementDuplicateLines,
@@ -74,6 +75,73 @@ describe("the songs an interrupted replacement left twice", () => {
   test("a Library not keyed yet goes by title, artists and length", () => {
     const unkeyed = { recordingKey: null };
     assert.equal(replacementDuplicates([file(1, MP3, unkeyed), file(2, M4A, unkeyed)]).length, 1);
+  });
+});
+
+describe("songs downloaded again though the Library had them", () => {
+  const OWN = "/Music/Arctic Monkeys - 505.flac";
+  const DOWNLOAD = "/Music/Wave/Arctic Monkeys - 505.m4a";
+  const downloaded = { downloaded: true };
+
+  test("a newer download of a song the owner's file has is paired with that file", () => {
+    const own = file(1, OWN);
+    const download = file(2, DOWNLOAD, { ...downloaded, ...loved });
+    assert.deepEqual(downloadDuplicates([own, download]), [{ old: download, new: own }]);
+  });
+
+  test("the owner's file is kept: its Track stays and takes the download's history", () => {
+    const pair = { old: file(2, DOWNLOAD, { ...downloaded, ...loved }), new: file(1, OWN) };
+    const fix = replacementDuplicateFix(pair, { old: 253_000, new: 253_000 }, "download");
+    assert.equal(fix.kind, "fix");
+    if (fix.kind !== "fix") return;
+    assert.equal(fix.keep.id, 1);
+    assert.equal(fix.path, OWN);
+    assert.equal(fix.deleted, DOWNLOAD);
+    assert.deepEqual(fix.merge, { star: true, movePlays: true, repoint: [10], remove: [] });
+  });
+
+  test("an owner's file that isn't complete audio leaves the song on the download", () => {
+    const pair = { old: file(2, DOWNLOAD, downloaded), new: file(1, OWN) };
+    const fix = replacementDuplicateFix(pair, { old: 253_000, new: 90_000 }, "download");
+    assert.equal(fix.kind === "fix" && fix.path, DOWNLOAD);
+    assert.equal(fix.kind === "fix" && fix.deleted, OWN);
+  });
+
+  test("an owner's complete file is kept even when the download plays another length", () => {
+    const pair = { old: file(2, DOWNLOAD, downloaded), new: file(1, OWN) };
+    const fix = replacementDuplicateFix(pair, { old: 240_000, new: 253_000 }, "download");
+    assert.equal(fix.kind === "fix" && fix.path, OWN);
+  });
+
+  test("tags keyed apart still pair by title, artists and length within 3 s", () => {
+    const own = file(1, OWN, { recordingKey: "x" });
+    const download = file(2, DOWNLOAD, { ...downloaded, recordingKey: "y", durationMs: 255_000 });
+    assert.equal(downloadDuplicates([own, download]).length, 1);
+  });
+
+  test("two of the owner's copies, or two downloads, are left alone", () => {
+    const download = file(3, DOWNLOAD, downloaded);
+    assert.deepEqual(downloadDuplicates([file(1, OWN), file(2, "/Music/505.mp3"), download]), []);
+    assert.deepEqual(
+      downloadDuplicates([file(1, OWN), download, file(4, "/Music/Wave/505 (1).m4a", downloaded)]),
+      [],
+    );
+  });
+
+  test("a download older than the owner's file, or a different recording, is no pair", () => {
+    assert.deepEqual(downloadDuplicates([file(2, OWN), file(1, DOWNLOAD, downloaded)]), []);
+    const live = file(2, DOWNLOAD, { ...downloaded, recordingKey: "live", durationMs: 300_000 });
+    assert.deepEqual(downloadDuplicates([file(1, OWN), live]), []);
+  });
+
+  test("Tracks a replacement left twice are fixed that way, not paired again", () => {
+    const pair = { old: file(3, MP3), new: file(1, M4A) };
+    assert.deepEqual(downloadDuplicates([file(1, M4A), file(3, MP3, downloaded)], [pair]), []);
+  });
+
+  test("a replacement pair is only ever an MP3 and an M4A", () => {
+    const flac = "/Music/Arctic Monkeys/AM/Arctic Monkeys - 505.flac";
+    assert.deepEqual(replacementDuplicates([file(1, flac), file(2, M4A)]), []);
   });
 });
 
@@ -194,6 +262,12 @@ describe("what the check writes to the log", () => {
         `"R U Mine?" left twice: the Library changed while it was checked (/Music/b.mp3, /Music/b.m4a)`,
       ],
     );
+  });
+
+  test("songs downloaded again get their own heading", () => {
+    assert.deepEqual(replacementDuplicateLines("update", [], "download"), [
+      "Songs downloaded again though the Library had them, checked after the update: 0 pairs found, 0 fixed, 0 left alone",
+    ]);
   });
 
   test("after an interrupted run, with nothing found, one line", () => {

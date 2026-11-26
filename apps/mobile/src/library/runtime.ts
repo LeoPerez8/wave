@@ -105,6 +105,9 @@ export type AppServices =
 let currentScan: Promise<void> | null = null;
 let lastScanStartedAt = 0;
 
+/** The scan running now, or null: an import waits for it before reading the Library (`libraryOnceScanned`). */
+export const runningScan = (): Promise<void> | null => currentScan;
+
 const startScan = (scan: Effect.Effect<unknown, never, AppServices>): Promise<void> => {
   if (currentScan !== null) return currentScan;
   lastScanStartedAt = Date.now();

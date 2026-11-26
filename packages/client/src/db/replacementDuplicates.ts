@@ -5,7 +5,7 @@
  * free of Expo for the store tests.
  */
 import type { DuplicateCheckFile, DuplicateMerge } from "@wave/core";
-import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
 import { readCredits, type CreditSplits } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
@@ -38,8 +38,9 @@ const readIds = (ids: string | null): number[] =>
   ids === null ? [] : sortedIds(ids.split(",").map(Number));
 
 /**
- * The Library's MP3 and M4A files (the only kinds a replacement makes), with
- * their recordings and their Track's star, plays and playlists: what the check pairs.
+ * The Library's files, with their recordings, whether Wave downloaded them
+ * and their Track's star, plays and playlists: what the check pairs (Core
+ * pairs only MP3 and M4A files as a replacement's, the only kinds it makes).
  */
 export const selectDuplicateCheckFiles = (db: LibraryDatabase): DuplicateCheckFile[] => {
   const t = schema.tracks;
@@ -52,20 +53,16 @@ export const selectDuplicateCheckFiles = (db: LibraryDatabase): DuplicateCheckFi
       artist: t.artistCredit,
       artists: t.artistCredits,
       durationMs: t.durationMs,
+      videoId: t.videoId,
       favorite: starred,
       plays: playCount,
       playlists: playlistIds,
     })
     .from(t)
-    .where(
-      and(
-        isNotNull(t.path),
-        or(sql`lower(${t.path}) LIKE '%.mp3'`, sql`lower(${t.path}) LIKE '%.m4a'`),
-      ),
-    )
+    .where(isNotNull(t.path))
     .orderBy(t.id)
     .all()
-    .flatMap(({ path, artist, artists, favorite, playlists, ...song }) =>
+    .flatMap(({ path, artist, artists, favorite, playlists, videoId, ...song }) =>
       path === null
         ? []
         : [
@@ -75,6 +72,7 @@ export const selectDuplicateCheckFiles = (db: LibraryDatabase): DuplicateCheckFi
               artists: readCredits(artist, artists),
               favorite: Boolean(favorite),
               playlists: readIds(playlists),
+              downloaded: videoId !== null,
             },
           ],
     );
