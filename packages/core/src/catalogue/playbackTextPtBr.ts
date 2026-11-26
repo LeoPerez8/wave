@@ -273,6 +273,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   relatedFrom: (title: string) => `Relacionadas · de ${title}`,
   upNextFrom: (title: string) => `A seguir · de ${title}`,
   newQueuePlaying: "Nova fila em reprodução",
+  playDownloadedSongs: "Tocar Músicas Baixadas",
   undo: "Desfazer",
   actions: "Ações",
   follow: "Seguir",

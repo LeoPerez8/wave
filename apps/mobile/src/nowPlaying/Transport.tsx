@@ -12,8 +12,10 @@ import { View } from "react-native";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
+import { TextButton } from "@/components/TextButton";
 import { skipToNext, skipToPrevious, togglePlayPause } from "@/playback/actions";
 import { useNetworkSignal } from "@/playback/networkSignal";
+import { playDownloadedSongs, usePlayDownloadedSongs } from "@/playback/playDownloadedSongs";
 import { playbackState } from "@/playback/Player";
 
 import { HoldSkipLabel, restartFromHold, useHoldSkip } from "./HoldSkip";
@@ -26,14 +28,29 @@ const PLAY = CELL * 9;
 /** How strong the teal disc behind the play button is once the internet is back after the wait. */
 const ASK_FILL = 0.22;
 
-/** The network signal's line under the controls, over the gap below them, so nothing moves. */
+/**
+ * The band under the controls, over the gap above the footer slots, that
+ * holds the network signal's line or Play Downloaded Songs. The transport
+ * reaches over it (padded, with the same margin taken back) so nothing
+ * moves and a button there still gets its touches: Android hands a view no
+ * touch outside its parent's bounds.
+ */
+const SIGNAL_BAND = CELL * 3;
+const BAND_REACH = { paddingBottom: SIGNAL_BAND, marginBottom: -SIGNAL_BAND } as const;
+
+/** The network signal's line, at the top of the band. */
 const SIGNAL_LINE = {
   position: "absolute",
   left: 0,
   right: 0,
-  top: "100%",
+  bottom: 0,
+  height: SIGNAL_BAND,
   alignItems: "center",
 } as const;
+
+/** Play Downloaded Songs, the band's height, its touch target grown to 48dp by its slop. */
+const DOWNLOADED_BUTTON = { minHeight: SIGNAL_BAND, height: SIGNAL_BAND } as const;
+const DOWNLOADED_SLOP = { top: CELL * 3, bottom: 0 } as const;
 
 /** A transport slot's place: the size of a slot's button, kept while the slot is empty. */
 const SLOT = CELL * 6;
@@ -80,74 +97,91 @@ export function Transport({
   );
   const { signal, backOnline } = useNetworkSignal();
   const line = networkSignalLine(signal, backOnline, strings);
+  // Offline or Slow, with something on the phone to play: Play Downloaded Songs.
+  const downloaded = usePlayDownloadedSongs(signal);
   // The wait ended paused and the internet is back: the play button asks for a tap.
   const ask = signal === "back" && !playing;
   const back = useHoldSkip("back");
   const forward = useHoldSkip("forward");
   return (
-    <View className="flex-row items-center justify-between">
-      <TransportSlot>{left}</TransportSlot>
-      <View
-        className="flex-row items-center justify-center"
-        style={{ gap: CELL * 3, opacity: editing ? EDITING_OPACITY : 1 }}
-        pointerEvents={editing ? "none" : "auto"}
-        importantForAccessibility={editing ? "no-hide-descendants" : "auto"}
-        accessibilityElementsHidden={editing}
-      >
-        <View>
-          <HoldSkipLabel direction="back" state={back.label} />
+    <View style={BAND_REACH}>
+      <View className="flex-row items-center justify-between">
+        <TransportSlot>{left}</TransportSlot>
+        <View
+          className="flex-row items-center justify-center"
+          style={{ gap: CELL * 3, opacity: editing ? EDITING_OPACITY : 1 }}
+          pointerEvents={editing ? "none" : "auto"}
+          importantForAccessibility={editing ? "no-hide-descendants" : "auto"}
+          accessibilityElementsHidden={editing}
+        >
+          <View>
+            <HoldSkipLabel direction="back" state={back.label} />
+            <IconButton
+              tone="primary"
+              haptic="impact"
+              icon={IconPlayerTrackPrevFilled}
+              label={strings.playbackText.previousTrack}
+              onPress={skipToPrevious}
+              {...back.press}
+              accessibilityActions={[
+                { name: "holdSkip", label: strings.playbackText.backFiveSeconds },
+              ]}
+              onAccessibilityAction={() => back.once()}
+              iconSize={CELL * 4}
+              size={CELL * 7}
+            />
+          </View>
           <IconButton
-            tone="primary"
+            tone={ask ? "accent" : "primary"}
+            fillOpacity={ask ? ASK_FILL : undefined}
+            style={{ borderRadius: PLAY / 2 }}
             haptic="impact"
-            icon={IconPlayerTrackPrevFilled}
-            label={strings.playbackText.previousTrack}
-            onPress={skipToPrevious}
-            {...back.press}
-            accessibilityActions={[
-              { name: "holdSkip", label: strings.playbackText.backFiveSeconds },
-            ]}
-            onAccessibilityAction={() => back.once()}
-            iconSize={CELL * 4}
-            size={CELL * 7}
+            icon={playing ? IconPlayerPauseFilled : IconPlayerPlayFilled}
+            label={playing ? strings.playbackText.pause : strings.playbackText.play}
+            onPress={togglePlayPause}
+            onLongPress={restartFromHold}
+            accessibilityActions={[{ name: "restart", label: strings.playbackText.restartTheSong }]}
+            onAccessibilityAction={restartFromHold}
+            iconSize={CELL * 6}
+            size={PLAY}
           />
+          <View>
+            <HoldSkipLabel direction="forward" state={forward.label} />
+            <IconButton
+              tone="primary"
+              haptic="impact"
+              icon={IconPlayerTrackNextFilled}
+              label={strings.playbackText.nextTrack}
+              onPress={skipToNext}
+              {...forward.press}
+              accessibilityActions={[
+                { name: "holdSkip", label: strings.playbackText.forwardFiveSeconds },
+              ]}
+              onAccessibilityAction={() => forward.once()}
+              iconSize={CELL * 4}
+              size={CELL * 7}
+            />
+          </View>
         </View>
-        <IconButton
-          tone={ask ? "accent" : "primary"}
-          fillOpacity={ask ? ASK_FILL : undefined}
-          style={{ borderRadius: PLAY / 2 }}
-          haptic="impact"
-          icon={playing ? IconPlayerPauseFilled : IconPlayerPlayFilled}
-          label={playing ? strings.playbackText.pause : strings.playbackText.play}
-          onPress={togglePlayPause}
-          onLongPress={restartFromHold}
-          accessibilityActions={[{ name: "restart", label: strings.playbackText.restartTheSong }]}
-          onAccessibilityAction={restartFromHold}
-          iconSize={CELL * 6}
-          size={PLAY}
-        />
-        <View>
-          <HoldSkipLabel direction="forward" state={forward.label} />
-          <IconButton
-            tone="primary"
-            haptic="impact"
-            icon={IconPlayerTrackNextFilled}
-            label={strings.playbackText.nextTrack}
-            onPress={skipToNext}
-            {...forward.press}
-            accessibilityActions={[
-              { name: "holdSkip", label: strings.playbackText.forwardFiveSeconds },
-            ]}
-            onAccessibilityAction={() => forward.once()}
-            iconSize={CELL * 4}
-            size={CELL * 7}
-          />
-        </View>
+        <TransportSlot>{right}</TransportSlot>
       </View>
-      <TransportSlot>{right}</TransportSlot>
-      {line !== null && !editing && (
-        <View pointerEvents="none" style={SIGNAL_LINE}>
-          <CatalogLine>{line}</CatalogLine>
+      {downloaded && !editing ? (
+        <View pointerEvents="box-none" style={SIGNAL_LINE}>
+          <TextButton
+            label={strings.playbackText.playDownloadedSongs}
+            onPress={() => void playDownloadedSongs()}
+            style={DOWNLOADED_BUTTON}
+            hitSlop={DOWNLOADED_SLOP}
+            labelProps={{ className: "font-sans text-subheadline font-semibold" }}
+          />
         </View>
+      ) : (
+        line !== null &&
+        !editing && (
+          <View pointerEvents="none" style={SIGNAL_LINE}>
+            <CatalogLine>{line}</CatalogLine>
+          </View>
+        )
       )}
     </View>
   );

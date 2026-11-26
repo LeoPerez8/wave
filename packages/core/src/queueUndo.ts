@@ -32,7 +32,8 @@ export interface PlayerAt {
  * The Undo [command] offers over [before], the queue the player holds, with
  * the player at [player]: a play replacing a queue with a song current goes
  * back to it, where the player is in that song (from its start, when the
- * player went on to another one). Anything else offers none (null), as do
+ * player went on to another one), and so do songs played now as a new queue
+ * (`playNow`'s `newQueue`). Anything else offers none (null), as do
  * a play of nothing, which leaves nothing playing, and one whose every song
  * [passOver] passes over, which leaves the queue as it was
  * (`playReplacesQueue`).
@@ -44,10 +45,14 @@ export const queueUndo = (
   after: QueueResult,
   passOver?: PassOver,
 ): QueueUndo | null => {
+  const onIt = before.entries[before.index]?.key === player.key;
+  if (command.type === "playNow" && command.newQueue === true)
+    return after.state === before || before.index < 0
+      ? null
+      : { state: before, positionMs: onIt ? player.positionMs : 0 };
   const replaces = playReplacesQueue(command, passOver);
   if (!replaces || command.type !== "play" || command.trackIds.length === 0 || before.index < 0)
     return null;
-  const onIt = before.entries[before.index]?.key === player.key;
   const original = before.entries[before.index];
   const current = after.state.entries[after.state.index];
   const keepPlayback =

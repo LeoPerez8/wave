@@ -275,6 +275,8 @@ export const playbackTextEn = {
   /** Up Next's heading over a queue a section of Home played (New from Artists You Follow). */
   upNextFrom: (title: string) => `Up next · from ${title}`,
   newQueuePlaying: "New queue playing",
+  /** The button under Now Playing's controls while a song waits for the network (Play Downloaded Songs). */
+  playDownloadedSongs: "Play Downloaded Songs",
   undo: "Undo",
   actions: "Actions",
   follow: "Follow",

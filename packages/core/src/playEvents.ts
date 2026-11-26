@@ -236,9 +236,13 @@ const cutShort = (play: OpenPlay): PlayEndReason =>
 const leftBehind = (play: OpenPlay): PlayEndReason =>
   play.cutByNetwork ? "interrupted" : "skipped";
 
-/** Whether [signal] is the player stopped by the network on the entry it reports. */
+/**
+ * Whether [signal] is the player stopped by the network on the entry it
+ * reports: stopped offline, or waiting for the connection (reported as
+ * buffering while the wait lasts).
+ */
 const networkCut = (signal: Extract<PlaybackSignal, { type: "state" }>): boolean =>
-  signal.status === "idle" && signal.networkInterrupted === true && !signal.playing;
+  signal.status !== "ended" && signal.networkInterrupted === true && !signal.playing;
 
 /**
  * The play going on now as it should be on record at `at`, in case it never

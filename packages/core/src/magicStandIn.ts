@@ -11,7 +11,7 @@ import { isDisliked, NO_DISLIKES, type DislikedSongs } from "./dislikes.ts";
 import { djMoodsFit, djMoodTurnsSteps, type DjAudioFeatures } from "./djMood.ts";
 import type { DjMood } from "./djSettings.ts";
 import { djArtistTile } from "./dj.ts";
-import { djArtistHops, REACH } from "./djVariety.ts";
+import { artistHopsFrom, REACH } from "./djVariety.ts";
 import {
   magicArtistKey,
   wantsMagicBatch,
@@ -154,19 +154,60 @@ export function* magicStandInSteps(
   options: MagicStandInOptions,
 ): Generator<void, MagicStandIn | null> {
   if (!magicStandInDue(session, state, options)) return null;
-  const { moodFeatures = new Map(), disliked = NO_DISLIKES, graph = null, taste = null } = options;
-  const moods = session.dj?.mood ?? [];
   // Artist variety: a song inside the selection comes first; outside it, a
   // song counts by its closest artist's hops from the selected ones, every
   // hop within reach alike (`djVarietyCandidates`). A session that isn't a
   // DJ one reaches only its seed artists, so they lead.
-  const reach = session.dj === undefined ? 0 : REACH[session.dj.variety];
-  const hopsOf = djArtistHops(session, graph);
-  const inSelection = selected(session);
+  const trackIds = yield* libraryStandInSteps(
+    {
+      artists: session.radioArtists,
+      inSelection: selected(session),
+      reach: session.dj === undefined ? 0 : REACH[session.dj.variety],
+      session,
+      state,
+      count: MAGIC_STAND_IN_SONGS,
+    },
+    library,
+    options,
+  );
+  if (trackIds.length === 0) return null;
+  return { session: magicStandInHeld(session, trackIds), trackIds };
+}
+
+/** Who Library stand-ins grow from, for `libraryStandInSteps`. */
+export interface LibraryStandInSeed {
+  /** The artists (by name) whose songs lead, then their neighbours' by hops in the artist graph. */
+  readonly artists: readonly string[];
+  /** Whether a song is inside the selection, which comes before the artists' hops. */
+  readonly inSelection: (song: MagicSong) => boolean;
+  /** How many hops count alike (Artist variety's `REACH`). */
+  readonly reach: number;
+  /** The Magic Queue session under way, whose moods, variety and queued songs count; null without. */
+  readonly session: MagicSession | null;
+  /** The queue: its songs count as queued already. */
+  readonly state: QueueState;
+  /** How many songs to pick, at most. */
+  readonly count: number;
+}
+
+/**
+ * Up to [seed]'s count of [library]'s songs (its playable ones), ranked as
+ * a Library stand-in ranks them: the session's moods, dislikes, the
+ * artists' hops, the songs not queued yet first. Empty when none can play.
+ */
+export function* libraryStandInSteps(
+  seed: LibraryStandInSeed,
+  library: readonly MagicSong[],
+  options: Omit<MagicStandInOptions, "picking" | "sleepTimer">,
+): Generator<void, readonly string[]> {
+  const { session, state, reach, inSelection } = seed;
+  const { moodFeatures = new Map(), disliked = NO_DISLIKES, graph = null, taste = null } = options;
+  const moods = session?.dj?.mood ?? [];
+  const hopsOf = artistHopsFrom(seed.artists, graph);
   // When the session last queued each song: it played or queued it, or the
   // song is in Up Next or was played from it (added by hand too).
   const last = new Map<string, number>();
-  const queuedIds = [...session.used, ...state.entries.map((entry) => entry.trackId)];
+  const queuedIds = [...(session?.used ?? []), ...state.entries.map((entry) => entry.trackId)];
   for (const [at, id] of queuedIds.entries()) last.set(id, at);
   // Songs known to fit the mood come first; songs of unknown mood fill in
   // behind them, so a Library without features still keeps the session
@@ -217,16 +258,14 @@ export function* magicStandInSteps(
   // High credits no artist twice, unless nothing else is left.
   const picked = new Set<Candidate>();
   const held = new Set<string>();
-  for (const unique of session.dj?.variety === "high" ? [true, false] : [false])
+  for (const unique of session?.dj?.variety === "high" ? [true, false] : [false])
     for (const candidate of ranked) {
-      if (picked.size >= MAGIC_STAND_IN_SONGS) break;
+      if (picked.size >= seed.count) break;
       yield;
       if (picked.has(candidate)) continue;
       if (unique && candidate.song.artists.some((artist) => held.has(artist))) continue;
       picked.add(candidate);
       for (const artist of candidate.song.artists) held.add(artist);
     }
-  const trackIds = ranked.filter((each) => picked.has(each)).map((each) => each.song.trackId);
-  if (trackIds.length === 0) return null;
-  return { session: magicStandInHeld(session, trackIds), trackIds };
+  return ranked.filter((each) => picked.has(each)).map((each) => each.song.trackId);
 }
