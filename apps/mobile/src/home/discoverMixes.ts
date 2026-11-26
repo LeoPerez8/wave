@@ -118,7 +118,7 @@ const radioMixes = (
         seeds.map((seed, i) => ({ seed, pages: pages[i] ?? [] })),
         {
           known: inputs.library.known,
-          library: inputs.library,
+          library: { ...inputs.library, graph: inputs.graph },
           taste: inputs.taste,
           profileOf,
           popularityOf: (videoId) => popularity.get(videoId) ?? 0,

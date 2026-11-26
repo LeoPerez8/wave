@@ -54,7 +54,7 @@ describe("Adjust's option groups", () => {
     const settings: DjSettings = {
       ...DEFAULT_DJ_SETTINGS,
       popularity: "trending",
-      mood: "relaxing",
+      mood: ["relaxing"],
     };
     const [variety, discovery] = djAdjustGroups(settings);
     assert.deepEqual(variety!.options[0]!.settings, { ...settings, variety: "low" });

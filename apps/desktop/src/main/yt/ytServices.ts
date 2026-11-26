@@ -14,6 +14,7 @@ import { selectVideoIds, trackQuery } from "@wave/client/db/tracks";
 import {
   catalogueOf,
   discoverMixCaption,
+  discoverMixName,
   libraryArtistFinder,
   libraryFinder,
   libraryAlbumFinder,
@@ -366,7 +367,14 @@ export const ytFeaturesLayer = (options: {
           // A mix rebuilt under the same id has other new songs: none the queue played.
           if (mix !== undefined && mix.songs.some((song) => played.has(mixTrackId(song))))
             return {
-              seed: { kind: "list", id: mix.id, title: mix.name },
+              seed: {
+                kind: "list",
+                id: mix.id,
+                title: discoverMixName(
+                  mix.seed,
+                  catalogueOf(options.language?.() ?? "en", "desktop"),
+                ),
+              },
               songs: songsOf(
                 mix.songs.flatMap((song) => (song.source === "library" ? [song.track.id] : [])),
               ),

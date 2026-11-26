@@ -1070,6 +1070,7 @@ export {
   magicQueueKeepsPlayingSong,
   magicSignal,
   parseMagicSession,
+  storedMagicSession,
   startMagicQueue,
   startStreamedMagicQueue,
   searchSongTap,
@@ -1301,7 +1302,13 @@ export type {
   SpotifySession,
   SpotifySignInFailure,
 } from "./spotifyAccount.ts";
-export { YT_ACCOUNT_SIGNED_OUT, stepYtAccount, ytAccountView } from "./ytAccount.ts";
+export {
+  YT_ACCOUNT_SIGNED_OUT,
+  stepYtAccount,
+  ytAccountView,
+  ytSignInEmail,
+  ytSignInFollowsWave,
+} from "./ytAccount.ts";
 export { ytAccountNotes } from "./ytAccountText.ts";
 export type {
   YtAccount,
@@ -2429,6 +2436,8 @@ export {
   GENRE_MIX_COUNT,
   commonStyle,
   genreFamily,
+  genreFamilyName,
+  songFamilies,
   genreMixDjCandidates,
   genreMixSeeds,
   genreStyle,
@@ -2436,6 +2445,7 @@ export {
 } from "./genreMixes.ts";
 export type {
   GenreFamily,
+  GenreFamilyContext,
   GenreMixDjCandidate,
   GenreMixLibrary,
   GenreStyle,
@@ -3446,6 +3456,7 @@ export {
   djMixSliders,
   djNewMusicShare,
   parseDjSettings,
+  storedDjSettings,
 } from "./djSettings.ts";
 export type { DjDiscovery, DjPopularity, DjSettings, DjVariety } from "./djSettings.ts";
 export { djAdjustGroups, djAdjustSheetHeight, djAdjustSheetSwipeCloses } from "./djAdjust.ts";
@@ -3484,10 +3495,11 @@ export {
   DJ_MOOD_SAD_VALENCE,
   djMedianAudioFeatures,
   djMoodFiltered,
+  djFirstMoodFit,
   djMoodFilteredSteps,
   djMoodFit,
 } from "./djMood.ts";
-export type { DjAudioFeatures, DjMoodFit, DjMoodPools, DjMoodRankable } from "./djMood.ts";
+export type { DjAudioFeatures, DjMoodFit, DjMoodPools, DjMoodRankable, DjMoods } from "./djMood.ts";
 export {
   MAGIC_STAND_IN_SONGS,
   magicStandIn,

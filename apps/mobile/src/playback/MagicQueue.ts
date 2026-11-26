@@ -43,6 +43,7 @@ import {
   startDjQueue as startDjSession,
   startMagicQueue as startSession,
   startStreamedMagicQueue as startStreamedSession,
+  storedMagicSession,
   wantsMagicBatch,
   type DjSettings,
   type DjTile,
@@ -120,7 +121,7 @@ let startingLibrary: {
 const save = (session: MagicSession): void => {
   magicSession.set(session);
   try {
-    Storage.setItemSync(MAGIC_SESSION_KEY, JSON.stringify(session));
+    Storage.setItemSync(MAGIC_SESSION_KEY, storedMagicSession(session));
   } catch {
     // Saving is best effort: the session goes on in memory.
   }
@@ -1155,9 +1156,8 @@ export const layer = Layer.effectDiscard(
           yield* freeTurnEffect;
           const latest = recommendationSnapshot.peek();
           const library = latest.library ?? startingLibrary;
-          const mood = session.dj?.mood ?? null;
           const moodFeatures =
-            mood === null
+            (session.dj?.mood ?? []).length === 0
               ? new Map()
               : yield* store.djLibraryMoodFeatures().pipe(Effect.orElseSucceed(() => new Map()));
           // The whole Library, so in slices (#1448).

@@ -46,6 +46,8 @@ export const djEn = {
   /** The group of chips under Adjust's option groups. */
   filters: "Filters",
   mood: "Mood",
+  /** What joins the moods that are on in the bottom bar's summary: "Energetic + Relaxing". */
+  moodsJoiner: " + ",
   moodNames: { energetic: "Energetic", relaxing: "Relaxing", upbeat: "Upbeat" },
   /** Adjust's filters: Trending and Lesser-known songs lean the queue to hits or deep cuts, New releases to recent records. */
   filterNames: {

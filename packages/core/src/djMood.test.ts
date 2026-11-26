@@ -9,6 +9,7 @@ import {
   DJ_MOOD_SAD_VALENCE,
   DJ_FIRST_UNKNOWN_WAIT_MS,
   djFirstRadioSong,
+  djFirstMoodFit,
   djFirstSongPick,
   djMedianAudioFeatures,
   djMoodFiltered,
@@ -229,6 +230,152 @@ describe("a mood filters a ranking", () => {
   });
 });
 
+describe("several moods take turns in a ranking", () => {
+  const stream = (id: string, score: number) => ({ id, score, song: { videoId: id } });
+  const ids = (songs: readonly { readonly id: string }[]) => songs.map(({ id }) => id);
+
+  test("two moods alternate, opposites included, each in its taste order", () => {
+    const { matched, unknown } = djMoodFiltered(
+      [stream("e1", 50), stream("e2", 40), stream("e3", 30), stream("r1", 20), stream("r2", 10)],
+      ["energetic", "relaxing"],
+      new Map([
+        ["e1", LOUD_HAPPY],
+        ["e2", LOUD_HAPPY],
+        ["e3", LOUD_HAPPY],
+        ["r1", CALM_HAPPY],
+        ["r2", CALM_HAPPY],
+      ]),
+      new Map(),
+    );
+    assert.deepEqual(ids(matched), ["e1", "r1", "e2", "r2", "e3"]);
+    assert.deepEqual(unknown, []);
+  });
+
+  test("the first mood picked takes the first turn", () => {
+    const { matched } = djMoodFiltered(
+      [stream("e1", 50), stream("e2", 40), stream("r1", 20)],
+      ["relaxing", "energetic"],
+      new Map([
+        ["e1", LOUD_HAPPY],
+        ["e2", LOUD_HAPPY],
+        ["r1", CALM_HAPPY],
+      ]),
+      new Map(),
+    );
+    assert.deepEqual(ids(matched), ["r1", "e1", "e2"]);
+  });
+
+  test("a mood with no songs left drops out of the turn", () => {
+    const known = new Map([
+      ["e1", LOUD_HAPPY],
+      ["e2", LOUD_HAPPY],
+      ["e3", LOUD_HAPPY],
+      ["sad", CALM_SAD],
+    ]);
+    const songs = [stream("e1", 50), stream("e2", 40), stream("sad", 30), stream("e3", 20)];
+    assert.deepEqual(
+      ids(djMoodFiltered(songs, ["relaxing", "energetic"], known, new Map()).matched),
+      ["e1", "e2", "e3"],
+    );
+  });
+
+  test("a song that fits two of the moods counts once, in whichever turn picks it", () => {
+    // Loud and happy is both Energetic and Upbeat; medium energy and happy is only Upbeat.
+    const { matched } = djMoodFiltered(
+      [stream("both1", 50), stream("both2", 40), stream("upbeat", 30)],
+      ["energetic", "upbeat"],
+      new Map([
+        ["both1", LOUD_HAPPY],
+        ["both2", LOUD_HAPPY],
+        ["upbeat", features(0.55, 0.9)],
+      ]),
+      new Map(),
+    );
+    assert.deepEqual(ids(matched), ["both1", "both2", "upbeat"]);
+  });
+
+  test("songs of unknown mood fill in behind, and only a song off every mood leaves", () => {
+    const { matched, unknown } = djMoodFiltered(
+      [
+        stream("plain", 60),
+        { ...stream("heavy", 50), genre: "Heavy Metal" },
+        stream("sad", 40),
+        stream("calm", 30),
+      ],
+      ["relaxing", "energetic"],
+      new Map([
+        ["sad", CALM_SAD],
+        ["calm", CALM_HAPPY],
+      ]),
+      new Map(),
+    );
+    assert.deepEqual(ids(matched), ["calm"]);
+    // Heavy rules Relaxing off, but Energetic can't tell: it fills in, as with Energetic alone.
+    assert.deepEqual(ids(unknown), ["plain", "heavy"]);
+  });
+
+  test("streamed and Library songs each take turns, as a batch takes each by its share", () => {
+    const library = (id: string, score: number) => ({
+      id,
+      score,
+      song: { videoId: id },
+      source: "library" as const,
+    });
+    const streamed = (id: string, score: number) => ({
+      ...stream(id, score),
+      source: "stream" as const,
+    });
+    const { matched } = djMoodFiltered(
+      [
+        streamed("se1", 60),
+        streamed("se2", 50),
+        streamed("se3", 40),
+        library("le1", 35),
+        library("lr1", 30),
+        streamed("sr1", 20),
+      ],
+      ["energetic", "relaxing"],
+      new Map([
+        ["se1", LOUD_HAPPY],
+        ["se2", LOUD_HAPPY],
+        ["se3", LOUD_HAPPY],
+        ["le1", LOUD_HAPPY],
+        ["lr1", CALM_HAPPY],
+        ["sr1", CALM_HAPPY],
+      ]),
+      new Map(),
+    );
+    assert.deepEqual(ids(matched.filter((song) => song.source === "stream")), [
+      "se1",
+      "sr1",
+      "se2",
+      "se3",
+    ]);
+    assert.deepEqual(ids(matched.filter((song) => song.source === "library")), ["le1", "lr1"]);
+  });
+
+  test("one mood in a list filters exactly as that mood alone", () => {
+    const songs = [stream("sad", 50), stream("u", 40), stream("e1", 30), stream("calm", 20)];
+    const known = new Map([
+      ["sad", LOUD_SAD],
+      ["e1", LOUD_HAPPY],
+      ["calm", CALM_HAPPY],
+    ]);
+    const alone = djMoodFiltered(songs, "energetic", known, new Map());
+    const listed = djMoodFiltered(songs, ["energetic"], known, new Map());
+    assert.deepEqual(listed.matched, alone.matched);
+    assert.deepEqual(listed.unknown, alone.unknown);
+    assert.deepEqual(ids(alone.matched), ["e1"]);
+  });
+
+  test("no mood leaves the ranking as it is", () => {
+    const songs = [stream("sad", 50), stream("u", 40)];
+    const { matched, unknown } = djMoodFiltered(songs, [], new Map([["sad", LOUD_SAD]]), new Map());
+    assert.deepEqual(matched, songs);
+    assert.deepEqual(unknown, []);
+  });
+});
+
 describe("a DJ session's later batch follows its mood", () => {
   const ranked = (id: string, score: number): RankedRadioSong => ({
     trackId: ytTrackId(id),
@@ -257,7 +404,7 @@ describe("a DJ session's later batch follows its mood", () => {
   const session: MagicSession = {
     ...started,
     batches: 2,
-    dj: { ...DEFAULT_DJ_SETTINGS, mood: "energetic" },
+    dj: { ...DEFAULT_DJ_SETTINGS, mood: ["energetic"] },
   };
   /** The batch the app completes from a mood's pools: matched ones first, unknown ones as its fill. */
   const batch = (
@@ -298,6 +445,26 @@ describe("a DJ session's later batch follows its mood", () => {
     assert.ok(!ids.includes("yt:u"));
     assert.deepEqual(ids.slice(0, 3), ["yt:m0", "yt:m1", "yt:m2"]);
   });
+
+  test("with two moods, the batch holds both in roughly equal shares", () => {
+    const both: MagicSession = {
+      ...session,
+      dj: { ...DEFAULT_DJ_SETTINGS, mood: ["energetic", "relaxing"] },
+    };
+    const songs = [
+      ...Array.from({ length: 10 }, (_, i) => ranked(`e${i}`, 100 - i)),
+      ...Array.from({ length: 10 }, (_, i) => ranked(`r${i}`, 50 - i)),
+    ];
+    const known = new Map([
+      ...Array.from({ length: 10 }, (_, i) => [`e${i}`, LOUD_HAPPY] as const),
+      ...Array.from({ length: 10 }, (_, i) => [`r${i}`, CALM_HAPPY] as const),
+    ]);
+    const { matched } = djMoodFiltered(songs, both.dj!.mood, known, new Map());
+    const ids = completeMagicRadioBatch(both, matched, []).trackIds;
+    assert.equal(ids.length, 10);
+    assert.equal(ids.filter((id) => id.startsWith("yt:e")).length, 5);
+    assert.equal(ids.filter((id) => id.startsWith("yt:r")).length, 5);
+  });
 });
 
 describe("a mood session's first song", () => {
@@ -309,7 +476,7 @@ describe("a mood session's first song", () => {
     )!.session,
     seed: { kind: "dj", id: "dj", title: "DJ" },
     radioArtists: ["Artist"],
-    dj: { ...DEFAULT_DJ_SETTINGS, mood: "energetic" },
+    dj: { ...DEFAULT_DJ_SETTINGS, mood: ["energetic"] },
   };
   const song = (videoId: string): YtAlbumSong => ({
     videoId,
@@ -347,6 +514,32 @@ describe("a mood session's first song", () => {
       djFirstRadioSong(session, "artist:a", [song("sad")], { profileOf, moodFit }),
       null,
     );
+  });
+
+  test("with several moods, is a known match of the first mood picked", () => {
+    const moods = ["relaxing", "energetic"] as const;
+    const several = { ...session, dj: { ...DEFAULT_DJ_SETTINGS, mood: moods } };
+    const fits = new Map([
+      ["loud", LOUD_HAPPY],
+      ["calm", CALM_HAPPY],
+      ["sad", CALM_SAD],
+    ]);
+    const firstFit = (each: YtAlbumSong) =>
+      djFirstMoodFit(moods, fits.get(each.videoId) ?? null, null);
+    const first = (videoIds: readonly string[]) =>
+      djFirstRadioSong(several, "artist:a", videoIds.map(song), { profileOf, moodFit: firstFit })
+        ?.videoId ?? null;
+    assert.equal(first(["loud", "calm"]), "calm");
+    // A song known to fit only a later mood starts as one of unknown mood would; an off one never does.
+    assert.equal(firstFit(song("loud")), "unknown");
+    assert.equal(first(["sad", "loud"]), "loud");
+    assert.equal(first(["sad"]), null);
+  });
+
+  test("with one mood, its first song is that mood's own fit", () => {
+    for (const each of [LOUD_HAPPY, LOUD_SAD, CALM_HAPPY, null])
+      assert.equal(djFirstMoodFit(["energetic"], each, null), djMoodFit("energetic", each, null));
+    assert.equal(djFirstMoodFit([], LOUD_SAD, null), "matched");
   });
 
   describe("with a cold mood cache, starts with a song of unknown mood", () => {

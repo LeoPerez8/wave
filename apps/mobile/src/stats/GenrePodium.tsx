@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Text, View, useWindowDimensions } from "react-native";
 import { useThemeColor } from "@/theme/useThemeColor";
-import { statsGenrePodium, type RecapGenre } from "@wave/core";
+import { genreFamilyName, statsGenrePodium, type RecapGenre } from "@wave/core";
 
 import { CELL } from "@/catalog/grid";
 import { useLocalisation } from "@/localisation/localisation";
@@ -23,7 +23,11 @@ export function GenrePodium({ genres }: { genres: readonly RecapGenre[] }) {
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
     .sort((a, b) => a.rank - b.rank)
     .map((bar) =>
-      strings.stats.genreBarLabel(bar.rank, bar.family.name, strings.stats.genrePercent(bar.share)),
+      strings.stats.genreBarLabel(
+        bar.rank,
+        genreFamilyName(bar.family.name, strings),
+        strings.stats.genrePercent(bar.share),
+      ),
     )
     .join("; ");
 
@@ -87,7 +91,7 @@ export function GenrePodium({ genres }: { genres: readonly RecapGenre[] }) {
                   android_hyphenationFrequency="normal"
                   className="text-center font-sans text-footnote font-semibold text-foreground"
                 >
-                  {bar.family.name}
+                  {genreFamilyName(bar.family.name, strings)}
                 </Text>
                 <Text
                   className="font-sans text-caption text-secondary"

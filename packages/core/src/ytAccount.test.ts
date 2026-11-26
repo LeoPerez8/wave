@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { YT_ACCOUNT_SIGNED_OUT, stepYtAccount, ytAccountView } from "./index.ts";
-import type { YtAccount, YtAccountState, YtSession } from "./index.ts";
+import {
+  YT_ACCOUNT_SIGNED_OUT,
+  stepYtAccount,
+  ytAccountView,
+  ytSignInEmail,
+  ytSignInFollowsWave,
+} from "./index.ts";
+import type { WaveSession, YtAccount, YtAccountState, YtSession } from "./index.ts";
 
 const leo: YtAccount = {
   name: "Leo Perez",
@@ -134,4 +140,51 @@ describe("stepYtAccount", () => {
       note: "expired",
     });
   });
+});
+
+describe("ytSignInFollowsWave", () => {
+  const wave: WaveSession = {
+    status: "signedIn",
+    account: { email: "ana@example.com", name: null, photoUrl: null },
+  };
+
+  test("a Wave account sign-in opens YT Music's when it's on and signed out", () => {
+    assert.equal(ytSignInFollowsWave(wave, true, { status: "signedOut" }), true);
+  });
+
+  test("YT Music off, or a YouTube account already kept, opens nothing", () => {
+    assert.equal(ytSignInFollowsWave(wave, false, { status: "signedOut" }), false);
+    assert.equal(ytSignInFollowsWave(wave, true, { status: "signedIn", account: leo }), false);
+    assert.equal(ytSignInFollowsWave(wave, true, { status: "expired", account: leo }), false);
+  });
+
+  test("a Wave session that isn't signed in opens nothing", () => {
+    assert.equal(
+      ytSignInFollowsWave({ status: "signedOut" }, true, { status: "signedOut" }),
+      false,
+    );
+    assert.equal(
+      ytSignInFollowsWave({ status: "ended", account: wave.account }, true, {
+        status: "signedOut",
+      }),
+      false,
+    );
+  });
+});
+
+test("YT Music sign-in prefers the expired account, then Wave, then asks for an email", () => {
+  const wave: WaveSession = {
+    status: "signedIn",
+    account: { email: "wave@example.com", name: null, photoUrl: null },
+  };
+  assert.equal(ytSignInEmail({ status: "expired", account: leo }, wave), "leo@example.com");
+  assert.equal(
+    ytSignInEmail({ status: "expired", account: { ...leo, email: null } }, wave),
+    "wave@example.com",
+  );
+  assert.equal(ytSignInEmail({ status: "signedOut" }, wave), "wave@example.com");
+  assert.equal(
+    ytSignInEmail({ status: "signedOut" }, { status: "ended", account: wave.account }),
+    null,
+  );
 });
