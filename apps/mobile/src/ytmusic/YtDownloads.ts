@@ -1,3 +1,5 @@
+import { applyDownloadWifiOnly } from "@/settings/downloadWifiOnly";
+
 import { recordingSearch } from "./recordingSearch";
 /**
  * The Download menu and rows of YT Music songs, backed by the native journal: Core picks the
@@ -1405,6 +1407,7 @@ let attached = false;
 export const startDownloads = (resume = false): void => {
   if (!attached) {
     attached = true;
+    applyDownloadWifiOnly();
     followDownloadRuns();
     WaveSoulseek.addListener("onJobsChanged", refreshQuietly);
     libraryVersion.subscribe(refreshQuietly);

@@ -141,48 +141,21 @@ describe("playerNotice", () => {
     assert.equal(playerNotice(playing), null);
   });
 
-  test("a song waiting for the network says so in place of the offline notice", () => {
-    const waiting = {
-      waitingForConnection: true,
-      retrying: false,
-      failed: true,
-      errorCode: "ytOffline",
-    };
-    assert.equal(playerNotice(waiting), "Waiting for connection");
-    assert.equal(playerNotice(waiting, catalogueOf("pt-BR")), "Aguardando conexão");
-  });
-
-  test("Wave reopened during the wait shows the line though it never saw the error", () => {
+  test("the network's failures leave the artist alone: the network signal shows them", () => {
+    for (const waitingForConnection of [true, false]) {
+      for (const failed of [true, false]) {
+        assert.equal(
+          playerNotice({ waitingForConnection, retrying: false, failed, errorCode: "ytOffline" }),
+          null,
+        );
+      }
+    }
     assert.equal(
-      playerNotice({
-        waitingForConnection: true,
-        retrying: false,
-        failed: false,
-        errorCode: "ytOffline",
-      }),
-      "Waiting for connection",
-    );
-  });
-
-  test("once the wait ends without resuming, the offline notice is back", () => {
-    const offline = "You're offline. YT Music songs need the network.";
-    assert.equal(
-      playerNotice({
-        waitingForConnection: false,
-        retrying: false,
-        failed: true,
-        errorCode: "ytOffline",
-      }),
-      offline,
-    );
-    assert.equal(
-      playerNotice({
-        waitingForConnection: false,
-        retrying: false,
-        failed: false,
-        errorCode: "ytOffline",
-      }),
-      offline,
+      playerNotice(
+        { waitingForConnection: true, retrying: false, failed: false, errorCode: null },
+        catalogueOf("pt-BR"),
+      ),
+      null,
     );
   });
 

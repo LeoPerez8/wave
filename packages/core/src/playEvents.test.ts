@@ -129,6 +129,26 @@ describe("trackPlays", () => {
     assert.equal(end.play.listenedMs, 10_000);
     assert.equal(end.byNext, false);
   });
+  test("leaving a song that waits for the network while reported as buffering interrupts it (Play Downloaded Songs)", () => {
+    const { state } = run([
+      playing(1_000, "a", "yt:video"),
+      { ...paused(11_000, "a", "yt:video"), status: "buffering", networkInterrupted: true },
+    ]);
+    const { steps } = trackPlays(state, moved(15_000, "b", "seek"));
+    const end = steps[0] as Extract<PlayStep, { type: "ended" }>;
+    assert.equal(end.type, "ended");
+    assert.equal(end.play.endReason, "interrupted");
+    assert.equal(end.play.listenedMs, 10_000);
+  });
+  test("leaving a song still loading without a network cut is a skip", () => {
+    const { state } = run([
+      playing(1_000, "a", "yt:video"),
+      { ...paused(11_000, "a", "yt:video"), status: "buffering" },
+    ]);
+    const { steps } = trackPlays(state, moved(15_000, "b", "seek"));
+    const end = steps[0] as Extract<PlayStep, { type: "ended" }>;
+    assert.equal(end.play.endReason, "skipped");
+  });
   test("the player moving on from a song the network cut, its transition missing, interrupts it too", () => {
     const { ended } = run([
       playing(1_000, "a", "yt:video"),

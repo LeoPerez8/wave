@@ -72,6 +72,8 @@ export const NativeCover: ComponentType<NativeCoverProps> = requireNativeView<Na
 
 export interface NativeWaveUnderlineProps extends ViewProps {
   readonly color: ColorValue;
+  /** How long a change of [color] eases over once shown; 0 (the default) changes it at once. */
+  readonly colorEaseMs?: number;
   /** Slides the wave along (on the RenderThread) while true; lies still otherwise. */
   readonly animating: boolean;
   /** The underline's small wave (the default), or the Recognize card's larger one. */
@@ -81,6 +83,18 @@ export interface NativeWaveUnderlineProps extends ViewProps {
 /** The playing song's wavy underline, animated on the RenderThread (see WaveUnderlineView.kt). */
 export const NativeWaveUnderline: ComponentType<NativeWaveUnderlineProps> =
   requireNativeView<NativeWaveUnderlineProps>("WaveGlass", "WaveUnderline");
+
+export interface NativeWaveGhostProps extends ViewProps {
+  readonly color: ColorValue;
+  /** Which period it sweeps on: every 2.4 s Offline, every 3.6 s Slow. */
+  readonly period: "offline" | "slow";
+  /** Sweeps (on the RenderThread) while true; drawn still a third of the way along otherwise. */
+  readonly animating: boolean;
+}
+
+/** The mini player's ghost wave along the pill's bottom edge (see WaveGhostView.kt). */
+export const NativeWaveGhost: ComponentType<NativeWaveGhostProps> =
+  requireNativeView<NativeWaveGhostProps>("WaveGlass", "WaveGhost");
 
 export interface NativeFadeEdgesProps extends ViewProps {
   /** The edge that fades all the time; the other fades only while the content is away from rest. */

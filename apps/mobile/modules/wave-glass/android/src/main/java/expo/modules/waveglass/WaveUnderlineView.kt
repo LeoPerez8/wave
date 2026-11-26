@@ -1,5 +1,6 @@
 package expo.modules.waveglass
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -22,11 +23,38 @@ import expo.modules.kotlin.views.ExpoView
 class WaveUnderlineView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
   private var tile = tileFor(UNDERLINE)
 
+  /** The tint the tile shows now: [color], or on its way there while a change eases ([colorEaseMs]). */
+  private var shownColor = Color.WHITE
+  private var colorEase: ValueAnimator? = null
+
+  /**
+   * How long a change of [color] eases over once the view is on screen (the playing title's
+   * underline stepping back to the secondary colour while the network holds the song up, #1498);
+   * 0 changes it at once.
+   */
+  var colorEaseMs = 0L
+
   var color = Color.WHITE
     set(value) {
+      if (field == value) return
       field = value
-      tile.setTint(value)
+      colorEase?.cancel()
+      colorEase = null
+      if (colorEaseMs <= 0 || !isAttachedToWindow) {
+        showColor(value)
+        return
+      }
+      colorEase = ValueAnimator.ofArgb(shownColor, value).apply {
+        duration = colorEaseMs
+        addUpdateListener { showColor(it.animatedValue as Int) }
+        start()
+      }
     }
+
+  private fun showColor(value: Int) {
+    shownColor = value
+    tile.setTint(value)
+  }
 
   /** `underline` (the default) or `listening`. */
   var shape = UNDERLINE
@@ -35,7 +63,7 @@ class WaveUnderlineView(context: Context, appContext: AppContext) : ExpoView(con
       field = value
       tile.stop()
       tile.callback = null
-      tile = tileFor(value).apply { setTint(color) }
+      tile = tileFor(value).apply { setTint(shownColor) }
       syncAnimation()
       invalidate()
     }
@@ -68,6 +96,9 @@ class WaveUnderlineView(context: Context, appContext: AppContext) : ExpoView(con
   }
 
   override fun onDetachedFromWindow() {
+    colorEase?.cancel()
+    colorEase = null
+    showColor(color)
     tile.stop()
     super.onDetachedFromWindow()
   }

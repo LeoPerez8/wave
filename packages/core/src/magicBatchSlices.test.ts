@@ -104,7 +104,7 @@ const session: MagicSession = {
 const dj: MagicSession = {
   ...session,
   radioArtists: ["Artist 1", "Artist 2"],
-  dj: { ...DEFAULT_DJ_SETTINGS, variety: "high", mood: "energetic", newReleases: true },
+  dj: { ...DEFAULT_DJ_SETTINGS, variety: "high", mood: ["energetic"], newReleases: true },
 };
 
 const graph = artistGraph({
@@ -335,6 +335,19 @@ describe("the Magic Queue batch's ranking runs a few candidates per step", () =>
     assert.deepEqual(ids(mood.value.unknown), ids(plain.unknown));
     assert.ok(plain.matched.length > 0 && plain.unknown.length > 0);
     assert.ok(mood.most <= MOST_READS_PER_STEP, `${mood.most} reads in one step`);
+    const moods = mostReadsPerStep(
+      djMoodFilteredSteps(countedSeed, ["relaxing", "upbeat"], features, genres, libraryFeatures),
+      counter,
+    );
+    const plainMoods = djMoodFiltered(
+      seed,
+      ["relaxing", "upbeat"],
+      features,
+      genres,
+      libraryFeatures,
+    );
+    assert.deepEqual(ids(moods.value.matched), ids(plainMoods.matched));
+    assert.ok(moods.most <= MOST_READS_PER_STEP, `${moods.most} reads in one step`);
   });
 
   test("the exclusions, over a radio's songs", () => {

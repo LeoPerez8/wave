@@ -1,4 +1,5 @@
 import {
+  genreFamilyName,
   recapId,
   recapTitle,
   STATS_RANKINGS,
@@ -85,7 +86,11 @@ function GenrePodium({ genres }: { readonly genres: readonly RecapGenre[] }) {
   const percent = (value: number) => `${(value / width) * 100}%`;
   const summary = genres
     .map(({ family, share }, index) =>
-      text.stats.genreBarLabel(index + 1, family.name, text.stats.genrePercent(share)),
+      text.stats.genreBarLabel(
+        index + 1,
+        genreFamilyName(family.name, text),
+        text.stats.genrePercent(share),
+      ),
     )
     .join("; ");
   return (
@@ -123,7 +128,7 @@ function GenrePodium({ genres }: { readonly genres: readonly RecapGenre[] }) {
         <div className="stats-genre-labels">
           {bars.map((bar) => (
             <div key={bar.family.key} style={{ width: percent(bar.visibleWidth) }}>
-              <strong>{bar.family.name}</strong>
+              <strong>{genreFamilyName(bar.family.name, text)}</strong>
               <span className="secondary">{text.stats.genrePercent(bar.share)}</span>
             </div>
           ))}

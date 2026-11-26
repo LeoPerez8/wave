@@ -3,7 +3,12 @@ import { artistPhotoName } from "./artistPhoto.ts";
 import type { DislikedSongs } from "./dislikes.ts";
 import { DISCOVER_MIX_LEVELS, type DiscoverMixLevel } from "./discoverMixLevels.ts";
 import type { DiscoverRadioSong } from "./discoverMixes.ts";
-import { djMixSliders, parseDjSettings, type DjSettings } from "./djSettings.ts";
+import {
+  djMixSliders,
+  parseDjSettings,
+  storedDjSettingsRecord,
+  type DjSettings,
+} from "./djSettings.ts";
 import { type GenreProfile, type GenreProfileOf, type GenreTagged } from "./genreAffinity.ts";
 import { commonStyle, songFamilies, songStyle } from "./genreMixes.ts";
 import type { MixSliders } from "./mixSliders.ts";
@@ -1031,6 +1036,16 @@ const isRadioSeed = (value: unknown): value is Record<string, unknown> =>
   (value["durationMs"] === null || typeof value["durationMs"] === "number") &&
   (value["videoId"] === undefined || typeof value["videoId"] === "string") &&
   (value["kind"] === undefined || value["kind"] === "song" || value["kind"] === "artist");
+
+/**
+ * [session] as it's saved, the JSON `parseMagicSession` reads: its DJ
+ * choices as `storedDjSettings` keeps them, so an older build reads the
+ * first of several moods.
+ */
+export const storedMagicSession = (session: MagicSession): string =>
+  JSON.stringify(
+    session.dj === undefined ? session : { ...session, dj: storedDjSettingsRecord(session.dj) },
+  );
 
 /**
  * Reads a saved session (`JSON.parse` of one), or null when it isn't a valid

@@ -17,6 +17,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.window.OnBackInvokedDispatcher
 import android.widget.FrameLayout
+import expo.modules.wavenative.account.GoogleAccountChoice
+import expo.modules.wavenative.account.ProviderSignInUrls
 import kotlinx.coroutines.CompletableDeferred
 
 /**
@@ -32,6 +34,7 @@ class SpotifySignInActivity : Activity() {
   private val main = Handler(Looper.getMainLooper())
   private var delivered = false
   private var tries = 0
+  private val accountChoice = GoogleAccountChoice(this, ::openSignInPage)
 
   @SuppressLint("SetJavaScriptEnabled")
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,8 +59,25 @@ class SpotifySignInActivity : Activity() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
       onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) { back() }
     }
+    accountChoice.start(savedInstanceState)
+  }
+
+  override fun onSaveInstanceState(outState: Bundle) {
+    super.onSaveInstanceState(outState)
+    accountChoice.save(outState)
+  }
+
+  @Deprecated("AccountManager returns its choice through an activity result")
+  override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    super.onActivityResult(requestCode, resultCode, data)
+    accountChoice.result(requestCode, resultCode, data)
+  }
+
+  private fun openSignInPage(email: String?) {
     // A fresh page, so an earlier (expired) session doesn't sign straight back in.
-    clearWebData { webView.loadUrl(SIGN_IN_URL) }
+    clearWebData {
+      if (!isFinishing && !isDestroyed) webView.loadUrl(ProviderSignInUrls.spotify(email))
+    }
   }
 
   @Deprecated("Android 12: Back before OnBackInvokedDispatcher")
@@ -124,7 +144,6 @@ class SpotifySignInActivity : Activity() {
   companion object {
     private const val WEB_HOST = "open.spotify.com"
     private const val WEB_URL = "https://$WEB_HOST"
-    private const val SIGN_IN_URL = "https://accounts.spotify.com/login?continue=https%3A%2F%2Fopen.spotify.com%2F"
     private const val MAX_TRIES = 20
     private const val RETRY_MS = 500L
 

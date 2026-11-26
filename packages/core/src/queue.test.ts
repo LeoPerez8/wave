@@ -346,6 +346,16 @@ describe("jumpTo", () => {
     const playing = start("a b c");
     assert.equal(reduceQueue(playing, { type: "jumpTo", key: "nope" }).state, playing);
   });
+
+  test("plays the entry as another song when asked (a streamed song's Library copy), under a new key", () => {
+    const playing = start("a b c d");
+    const key = keyOf(playing, "c");
+    const { state, playback } = reduceQueue(playing, { type: "jumpTo", key, becomes: "7" });
+    assert.equal(show(state), "a b [7] d");
+    assert.notEqual(state.entries[state.index]!.key, key);
+    assert.equal(state.nextKey, playing.nextKey + 1);
+    assert.equal(playback, "play");
+  });
 });
 
 describe("Up Next editing", () => {

@@ -1070,6 +1070,7 @@ export {
   magicQueueKeepsPlayingSong,
   magicSignal,
   parseMagicSession,
+  storedMagicSession,
   startMagicQueue,
   startStreamedMagicQueue,
   searchSongTap,
@@ -1301,7 +1302,13 @@ export type {
   SpotifySession,
   SpotifySignInFailure,
 } from "./spotifyAccount.ts";
-export { YT_ACCOUNT_SIGNED_OUT, stepYtAccount, ytAccountView } from "./ytAccount.ts";
+export {
+  YT_ACCOUNT_SIGNED_OUT,
+  stepYtAccount,
+  ytAccountView,
+  ytSignInEmail,
+  ytSignInFollowsWave,
+} from "./ytAccount.ts";
 export { ytAccountNotes } from "./ytAccountText.ts";
 export type {
   YtAccount,
@@ -1425,6 +1432,25 @@ export {
   restorableTrack,
 } from "./ytQueue.ts";
 export type { PlayerTrouble } from "./ytQueue.ts";
+export {
+  NETWORK_SLOW_GRACE_MS,
+  followNetworkSignal,
+  networkSignal,
+  networkSignalAnnouncement,
+  networkSignalHoldsUp,
+  networkSignalLabel,
+  networkSignalLine,
+  networkSignalRecheckMs,
+} from "./networkSignal.ts";
+export type { NetworkSignal, NetworkSignalInput, NetworkSignalTrail } from "./networkSignal.ts";
+export {
+  GHOST_WAVE,
+  MINI_GHOST_WAVE,
+  ghostWaveFrame,
+  ghostWavePeriodMs,
+  miniGhostWavePath,
+} from "./ghostWave.ts";
+export type { GhostWaveFrame } from "./ghostWave.ts";
 export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
 export { settleBestQuality } from "./bestQuality.ts";
 export type { BestQualityState, BestQualityStep } from "./bestQuality.ts";
@@ -2429,6 +2455,8 @@ export {
   GENRE_MIX_COUNT,
   commonStyle,
   genreFamily,
+  genreFamilyName,
+  songFamilies,
   genreMixDjCandidates,
   genreMixSeeds,
   genreStyle,
@@ -2436,6 +2464,7 @@ export {
 } from "./genreMixes.ts";
 export type {
   GenreFamily,
+  GenreFamilyContext,
   GenreMixDjCandidate,
   GenreMixLibrary,
   GenreStyle,
@@ -2443,6 +2472,7 @@ export type {
 export {
   GENRE_AFFINITY_THRESHOLD,
   artistProfilesKnown,
+  artistProfileDue,
   parseArtistProfiles,
   storedArtistProfiles,
   withArtistProfiles,
@@ -2914,6 +2944,8 @@ export type { LostLinkTap, LostTapReason } from "./lostTap.ts";
 export { createArtistGraphBuild, type ArtistGraphCatalogEntry } from "./artistGraphBuild.ts";
 export { mixKnownSongsSteps } from "./mixKnownSongs.ts";
 export { genreMixDjCandidatesSteps, genreMixSeedsSteps } from "./genreMixes.ts";
+export { faithfulGenreMixesSteps } from "./faithfulGenreMixes.ts";
+export { lookUpDeezerArtistGenre } from "./deezerArtistGenre.ts";
 export { mapSteps, sortSteps, finishSteps, filterSteps } from "./buildSteps.ts";
 export { libraryMixProfilesSteps } from "./genreAffinity.ts";
 export { rankPlaysSteps } from "./stats.ts";
@@ -3446,6 +3478,7 @@ export {
   djMixSliders,
   djNewMusicShare,
   parseDjSettings,
+  storedDjSettings,
 } from "./djSettings.ts";
 export type { DjDiscovery, DjPopularity, DjSettings, DjVariety } from "./djSettings.ts";
 export { djAdjustGroups, djAdjustSheetHeight, djAdjustSheetSwipeCloses } from "./djAdjust.ts";
@@ -3484,10 +3517,11 @@ export {
   DJ_MOOD_SAD_VALENCE,
   djMedianAudioFeatures,
   djMoodFiltered,
+  djFirstMoodFit,
   djMoodFilteredSteps,
   djMoodFit,
 } from "./djMood.ts";
-export type { DjAudioFeatures, DjMoodFit, DjMoodPools, DjMoodRankable } from "./djMood.ts";
+export type { DjAudioFeatures, DjMoodFit, DjMoodPools, DjMoodRankable, DjMoods } from "./djMood.ts";
 export {
   MAGIC_STAND_IN_SONGS,
   magicStandIn,
@@ -3496,6 +3530,13 @@ export {
   magicStandInSteps,
 } from "./magicStandIn.ts";
 export type { MagicStandIn, MagicStandInOptions } from "./magicStandIn.ts";
+export {
+  DOWNLOADED_STAND_IN_SONGS,
+  playDownloadedSongs,
+  playDownloadedSongsShows,
+  playDownloadedSongsSteps,
+} from "./playDownloadedSongs.ts";
+export type { DownloadedSongsPick, PlayDownloadedSongsOptions } from "./playDownloadedSongs.ts";
 export { djAudioFeaturesByIsrc, isrcFromTag } from "./isrcTag.ts";
 export {
   DJ_NEW_RELEASE_BOOST,
@@ -3556,3 +3597,12 @@ export {
   resumeDownloadGroup,
 } from "./downloadPause.ts";
 export type { DownloadGroupControls, DownloadPause, DownloadRequest } from "./downloadPause.ts";
+export {
+  DOWNLOAD_WIFI_ONLY_SETTING,
+  downloadWaitsForWifi,
+  downloadsWaitingForWifi,
+  readDownloadWifiOnly,
+  wifiWaitLine,
+  writeDownloadWifiOnly,
+} from "./downloadWifi.ts";
+export type { DownloadNetwork } from "./downloadWifi.ts";

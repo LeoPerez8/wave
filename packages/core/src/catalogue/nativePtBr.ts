@@ -37,5 +37,6 @@ export const nativePtBr: typeof nativeEn = {
   appUpdates: "Atualizações do app",
   waveUpdated: "Wave atualizado",
   tapToOpen: "Toque para abrir",
-  waitingForConnection: "Aguardando conexão",
+  noInternet: "Sem internet",
+  slowConnection: "Conexão lenta",
 };

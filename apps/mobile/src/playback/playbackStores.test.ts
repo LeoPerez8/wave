@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { NativePlayerState } from "../native/wavePlayer.ts";
-import { makePlaybackStores, playerTrouble } from "./playbackStores.ts";
+import { makePlaybackStores, networkSignalInput, playerTrouble } from "./playbackStores.ts";
 
 const playing: NativePlayerState = {
   status: "ready",
   isPlaying: true,
   playWhenReady: true,
   waitingForConnection: false,
+  waitRanOut: false,
   errorCode: null,
   index: 0,
   item: { id: "a", title: "A", artist: null, album: null, artworkUri: null },
@@ -208,4 +209,55 @@ test("a report of the same song keeps its item, so what shows it doesn't render 
   assert.equal(stores.playbackState.get().item, first);
   stores.reportState({ ...playing, item: { ...playing.item!, title: "A (live)" } });
   assert.equal(stores.playbackState.get().item?.title, "A (live)");
+});
+
+test("the network signal reads when the song began loading, kept until it plays or stops loading", () => {
+  let now = 1_000;
+  const stores = makePlaybackStores(
+    () => {},
+    () => now,
+  );
+  const loading = { ...playing, status: "buffering", isPlaying: false } as const;
+  stores.reportState(playing);
+  assert.equal(stores.playbackState.get().loadingSince, null);
+  stores.reportState(loading);
+  assert.equal(stores.playbackState.get().loadingSince, 1_000);
+  now = 2_000;
+  stores.reportState({ ...loading, positionMs: 1_200 });
+  assert.equal(stores.playbackState.get().loadingSince, 1_000);
+  stores.reportState(playing);
+  assert.equal(stores.playbackState.get().loadingSince, null);
+  // Paused while loading isn't loading.
+  stores.reportState({ ...loading, playWhenReady: false });
+  assert.equal(stores.playbackState.get().loadingSince, null);
+});
+
+test("the network signal's input: the wait, the loading, the song the network cut, the connection", () => {
+  let now = 5_000;
+  const stores = makePlaybackStores(
+    () => {},
+    () => now,
+  );
+  const paused = { ...playing, status: "idle", isPlaying: false, playWhenReady: false } as const;
+  stores.reportState({ ...paused, errorCode: "ytOffline", waitRanOut: true });
+  now = 6_000;
+  assert.deepEqual(networkSignalInput(stores.playbackState.get(), false, now), {
+    waitingForConnection: false,
+    loading: false,
+    loadingSinceMs: null,
+    cutByNetwork: true,
+    waitRanOut: true,
+    online: false,
+    nowMs: 6_000,
+  });
+  stores.reportState({ ...playing, status: "buffering", isPlaying: false });
+  assert.deepEqual(networkSignalInput(stores.playbackState.get(), true, now), {
+    waitingForConnection: false,
+    loading: true,
+    loadingSinceMs: 6_000,
+    cutByNetwork: true,
+    waitRanOut: false,
+    online: true,
+    nowMs: 6_000,
+  });
 });

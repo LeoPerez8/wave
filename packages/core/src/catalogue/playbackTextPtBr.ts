@@ -215,7 +215,12 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   waveCouldntNameThisSongTryListeningAgain:
     "O Wave não reconheceu esta música. Tente ouvir novamente.",
   couldntRecognizeTheSong: "Não foi possível reconhecer a música",
-  waitingForConnection: "Aguardando conexão",
+  noInternet: "Sem internet",
+  slowConnection: "Conexão lenta",
+  backOnline: "De volta",
+  internetsBackTapPlay: "A internet voltou · toque no play",
+  noInternetTheSongContinuesWhenItsBack: "Sem internet. A música continua quando ela voltar.",
+  internetsBackTapPlayToContinue: "A internet voltou. Toque no play para continuar.",
   youreOfflineYTMusicSongsNeedTheNetwork:
     "Você está offline. As músicas do YT Music precisam de conexão.",
   yTMusicIsOffInSettings: "O YT Music está desativado nos Ajustes.",
@@ -268,6 +273,7 @@ export const playbackTextPtBr: typeof playbackTextEn = {
   relatedFrom: (title: string) => `Relacionadas · de ${title}`,
   upNextFrom: (title: string) => `A seguir · de ${title}`,
   newQueuePlaying: "Nova fila em reprodução",
+  playDownloadedSongs: "Tocar Músicas Baixadas",
   undo: "Desfazer",
   actions: "Ações",
   follow: "Seguir",

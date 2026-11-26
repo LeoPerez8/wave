@@ -30,6 +30,9 @@ export const downloadStatusPtBr: typeof downloadStatusEn = {
   downloadingCount: (n) => `${formatNumber("pt-BR", n)} baixando`,
   savingCount: (n) => `${formatNumber("pt-BR", n)} salvando`,
   waitingCount: (n) => `${formatNumber("pt-BR", n)} aguardando`,
+  waitingForWifi: "Aguardando Wi-Fi",
+  waitingForWifiCount: (n) =>
+    `Aguardando Wi-Fi · ${formatNumber("pt-BR", n)} ${plural("pt-BR", n, { one: "música", other: "músicas" })}`,
   failedSongs: (n) =>
     `${formatNumber("pt-BR", n)} ${plural("pt-BR", n, { one: "música falhou", other: "músicas falharam" })}`,
 };

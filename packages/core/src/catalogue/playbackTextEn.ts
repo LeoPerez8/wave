@@ -216,7 +216,13 @@ export const playbackTextEn = {
   noMatch: "No match",
   waveCouldntNameThisSongTryListeningAgain: "Wave couldn't name this song. Try listening again.",
   couldntRecognizeTheSong: "Couldn't recognize the song",
-  waitingForConnection: "Waiting for connection",
+  /** The network signal (#1498): the time left under Now Playing's scrubber gives way to it. */
+  noInternet: "No internet",
+  slowConnection: "Slow connection",
+  backOnline: "Back online",
+  internetsBackTapPlay: "Internet's back · tap play",
+  noInternetTheSongContinuesWhenItsBack: "No internet. The song continues when it's back.",
+  internetsBackTapPlayToContinue: "Internet's back. Tap play to continue.",
   youreOfflineYTMusicSongsNeedTheNetwork: "You're offline. YT Music songs need the network.",
   yTMusicIsOffInSettings: "YT Music is off in Settings.",
   yTMusicWontStreamThisSong: "YT Music won't stream this song.",
@@ -269,6 +275,8 @@ export const playbackTextEn = {
   /** Up Next's heading over a queue a section of Home played (New from Artists You Follow). */
   upNextFrom: (title: string) => `Up next · from ${title}`,
   newQueuePlaying: "New queue playing",
+  /** The button under Now Playing's controls while a song waits for the network (Play Downloaded Songs). */
+  playDownloadedSongs: "Play Downloaded Songs",
   undo: "Undo",
   actions: "Actions",
   follow: "Follow",

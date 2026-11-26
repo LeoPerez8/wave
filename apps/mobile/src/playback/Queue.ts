@@ -596,7 +596,8 @@ export const layer = Layer.effect(
         // goes back there too) and withdraws an earlier Undo; a command
         // taking a walk's place keeps its Undo.
         let takeBack = pending?.takeBack ?? null;
-        if (command.type === "play") {
+        // Play Downloaded Songs' Library songs are a new queue too (`playNow`'s `newQueue`).
+        if (command.type === "play" || (command.type === "playNow" && command.newQueue === true)) {
           withdrawUndo();
           const player = { key: native.currentKey, positionMs: currentPositionMs() };
           const undo = queueUndo(

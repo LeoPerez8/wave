@@ -80,15 +80,17 @@ export interface PlayerTrouble {
 }
 
 /**
- * The line the mini player and Now Playing show about the playing song, or
- * null when it plays as usual: "Waiting for connection" for as long as the
- * wait lasts, then what `playerErrorNotice` says of the failure. A code alone
- * counts as a failure, since Wave opened after the error only gets its code.
- * A song loading again says nothing: its last failure is no longer the news.
+ * The line the mini player and Now Playing show about the playing song in
+ * place of the artist (album, in Now Playing), or null when it plays as
+ * usual: what `playerErrorNotice` says of the failure. A code alone counts as
+ * a failure, since Wave opened after the error only gets its code. A song
+ * loading again says nothing: its last failure is no longer the news. The
+ * network's failures say nothing here either: the wait and the offline pause
+ * show as the network signal (`networkSignal`), and the artist stays.
  */
 export const playerNotice = (trouble: PlayerTrouble, catalogue: Catalogue = en): string | null => {
-  if (trouble.waitingForConnection) return catalogue.playbackText.waitingForConnection;
-  if (trouble.retrying) return null;
+  if (trouble.waitingForConnection || trouble.retrying) return null;
+  if (trouble.errorCode === "ytOffline") return null;
   return trouble.failed || trouble.errorCode !== null
     ? playerErrorNotice(trouble.errorCode, catalogue)
     : null;

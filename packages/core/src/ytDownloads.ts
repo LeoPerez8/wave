@@ -39,7 +39,8 @@ export type YtDownloadFailure =
 export type YtDownloadPhase = "connecting" | "searching" | "queued" | "transferring" | "validating";
 
 export type YtDownloadStatus =
-  | { readonly kind: "queued" }
+  /** [waitingForWifi]: Download only on Wi-Fi holds it on a metered network. */
+  | { readonly kind: "queued"; readonly waitingForWifi?: true }
   /** [total] is the file's size in bytes, once known. */
   | {
       readonly kind: "downloading";
@@ -125,6 +126,11 @@ export interface YtDownloadJournalJob<S extends YtSong = YtSong> {
   readonly finalPath?: string;
   /** The file a quality replacement's new one takes the very path of, when it does. */
   readonly replaces?: string;
+  /**
+   * Download only on Wi-Fi holds it on a metered network (Core's `downloadWaitsForWifi`, which the
+   * journal mirrors): it waits, not downloading, until an unmetered network is back.
+   */
+  readonly waitingForWifi?: boolean;
 }
 
 const downloading = (phase: YtDownloadPhase): YtDownloadStatus => ({
@@ -150,6 +156,9 @@ export const ytDownloadUnfinished = (job: YtDownloadJournalJob): boolean =>
 
 const journalStatus = (job: YtDownloadJournalJob): YtDownloadStatus => {
   if (job.importFailure !== undefined) return { kind: "failed", reason: job.importFailure };
+  if (job.waitingForWifi === true && ytDownloadUnfinished(job)) {
+    return { kind: "queued", waitingForWifi: true };
+  }
   if (job.resumed === true && job.phase !== "failed" && job.phase !== "cancelled") {
     return { kind: "queued" };
   }
@@ -292,7 +301,9 @@ export const ytDownloadLine = (
     case undefined:
       return null;
     case "queued":
-      return catalogue.downloadStatus.queued;
+      return status.waitingForWifi === true
+        ? catalogue.downloadStatus.waitingForWifi
+        : catalogue.downloadStatus.queued;
     case "downloading": {
       if (status.phase === "connecting") return catalogue.downloadStatus.connecting;
       if (status.phase === "searching") return catalogue.downloadStatus.searching;

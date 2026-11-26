@@ -88,7 +88,7 @@ function RunControls({ ownerPaused }: { ownerPaused: boolean }) {
  * Resume and Cancel All end it; paused by the owner, it says "Paused" with no time left (`held`).
  */
 export function DownloadRunPanel({
-  run: { progress, timeLeft, paused, ownerPaused, held },
+  run: { progress, timeLeft, paused, ownerPaused, held, waitingForWifi },
   summary,
   pauseNotice,
 }: {
@@ -113,7 +113,7 @@ export function DownloadRunPanel({
   const { count, fraction } = downloadRunLines(overall, language);
   const line = downloadRunPanelLine(
     overall,
-    { timeLeft, paused, throttled: pauseNotice !== null, held },
+    { timeLeft, paused, throttled: pauseNotice !== null, held, waitingForWifi },
     language,
   );
   return (

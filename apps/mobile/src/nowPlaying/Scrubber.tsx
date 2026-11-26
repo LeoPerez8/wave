@@ -1,7 +1,11 @@
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import {
+  GHOST_WAVE,
   UNDERLINE_WAVE,
   currentEntry,
+  ghostWaveFrame,
+  ghostWavePeriodMs,
+  networkSignalLabel,
   elapsedWavePath,
   extrapolatePosition,
   formatDuration,
@@ -12,6 +16,7 @@ import {
 import * as Haptics from "expo-haptics";
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useReducer,
@@ -27,10 +32,15 @@ import {
   useTapGesture,
 } from "react-native-gesture-handler";
 import Animated, {
+  cancelAnimation,
   createAnimatedComponent,
+  Easing,
   useAnimatedProps,
   useDerivedValue,
+  useReducedMotion,
   useSharedValue,
+  withRepeat,
+  withTiming,
   type SharedValue,
 } from "react-native-reanimated";
 import Svg, { Circle, G, Path, type CircleProps, type PathProps } from "react-native-svg";
@@ -40,6 +50,7 @@ import { withUniwind } from "uniwind";
 import { CELL } from "@/catalog/grid";
 import { perfCount, useRenderCount } from "@/perf/perf";
 import { seekTo } from "@/playback/actions";
+import { useNetworkSignal } from "@/playback/networkSignal";
 import { positionState } from "@/playback/Player";
 import { queueState } from "@/playback/Queue";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -72,6 +83,9 @@ const CENTRE = HEIGHT / 2;
  * at the end is drawn whole.
  */
 const OVERHANG = DOT_RADIUS_SCRUBBING + DOT_SLACK;
+
+/** No ghost wave running. */
+const NO_GHOST = -1;
 
 /** No finger on the bar, or no release waiting for JavaScript. */
 const NONE = -1;
@@ -112,6 +126,29 @@ export function Scrubber() {
   const [width, setWidth] = useState(0);
   const duration = durationMs ?? 0;
   const enabled = duration > 0;
+  // The network signal (Ghost wave, #1498): the reason takes the time left's place, and a
+  // ghost of the wave leaves the playhead and fades before it arrives.
+  const { signal } = useNetworkSignal();
+  const reasonText = networkSignalLabel(signal, strings);
+  const reason = useSharedValue(reasonText ?? "");
+  useLayoutEffect(() => reason.set(reasonText ?? ""), [reason, reasonText]);
+  const periodMs = ghostWavePeriodMs(signal);
+  const reduceMotion = useReducedMotion();
+  const ghostPhase = useSharedValue(NO_GHOST);
+  useEffect(() => {
+    if (periodMs === null) {
+      cancelAnimation(ghostPhase);
+      ghostPhase.set(NO_GHOST);
+      return;
+    }
+    if (reduceMotion) {
+      ghostPhase.set(GHOST_WAVE.stillPhase);
+      return;
+    }
+    ghostPhase.set(0);
+    ghostPhase.set(withRepeat(withTiming(1, { duration: periodMs, easing: Easing.linear }), -1));
+    return () => cancelAnimation(ghostPhase);
+  }, [periodMs, reduceMotion, ghostPhase]);
 
   // The shared playhead and the finger both stay on the UI thread.
   const bar = useSharedValue({ width, durationMs: duration });
@@ -236,6 +273,18 @@ export function Scrubber() {
       strokeWidth: scrubbing.get() ? BAR_SCRUBBING : BAR,
     };
   });
+  const ghostProps = useAnimatedProps<PathProps>(() => {
+    const phase = ghostPhase.get();
+    if (phase === NO_GHOST || scrubbing.get()) return { d: "", strokeOpacity: 0 };
+    const frame = ghostWaveFrame({
+      from: join.get(),
+      to: bar.get().width,
+      phase,
+      wavelength: WAVELENGTH,
+      amplitude: AMPLITUDE,
+    });
+    return { d: frame.d, strokeOpacity: frame.opacity };
+  });
   const dotProps = useAnimatedProps<CircleProps>(() => ({
     cx: join.get(),
     // No length, no playhead to mark.
@@ -249,14 +298,15 @@ export function Scrubber() {
   });
   const remainingProps = useAnimatedProps(() => {
     const length = bar.get().durationMs;
-    const text = length > 0 ? formatRemaining(shown.get(), length) : "–:––";
+    const why = reason.get();
+    const text = why !== "" ? why : length > 0 ? formatRemaining(shown.get(), length) : "–:––";
     return { text, defaultValue: text, accessibilityLabel: text } as TextInputProps;
   });
-  const accessibilityProps = useAnimatedProps(() => ({
-    accessibilityValue: {
-      text: `${formatDuration(shown.get())} ${ofTime} ${formatDuration(bar.get().durationMs)}`,
-    },
-  }));
+  const accessibilityProps = useAnimatedProps(() => {
+    const why = reason.get();
+    const time = `${formatDuration(shown.get())} ${ofTime} ${formatDuration(bar.get().durationMs)}`;
+    return { accessibilityValue: { text: why === "" ? time : `${time}, ${why}` } };
+  });
 
   const [accent, tertiary] = useThemeColor(["accent", "tertiary"]);
 
@@ -288,6 +338,15 @@ export function Scrubber() {
             >
               <G transform={`translate(${OVERHANG} 0)`}>
                 <AnimatedPath animatedProps={lineProps} stroke={tertiary} fill="none" />
+                <AnimatedPath
+                  animatedProps={ghostProps}
+                  transform={`translate(0 ${CENTRE})`}
+                  stroke={accent}
+                  strokeWidth={BAR}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
                 <AnimatedPath
                   animatedProps={waveProps}
                   transform={`translate(0 ${CENTRE - AMPLITUDE})`}

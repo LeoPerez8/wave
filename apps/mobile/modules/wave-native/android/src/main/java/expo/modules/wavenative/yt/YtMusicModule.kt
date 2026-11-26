@@ -254,10 +254,10 @@ class YtMusicModule : Module() {
      * or null when the owner backs out. A session YouTube doesn't confirm
      * rejects with an `ERR_YT_*` code.
      */
-    AsyncFunction("signIn") Coroutine { ->
+    AsyncFunction("signIn") Coroutine { email: String? ->
       if (!client.enabled) throw CodedException(YtFailure.DISABLED.code, "YT Music is off", null)
       val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()
-      val credentials = YtSignInActivity.signIn(activity) ?: return@Coroutine null
+      val credentials = YtSignInActivity.signIn(activity, email) ?: return@Coroutine null
       coded { client.signIn(credentials).toMap() }
     }
 

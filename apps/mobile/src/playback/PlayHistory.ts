@@ -33,6 +33,12 @@ import { queuedYtSong, queueTracks } from "./queueTracks";
 export const playHistoryVersion = makeExternalStore(0);
 
 /**
+ * The entry (its key) Play Downloaded Songs is leaving while the network
+ * holds it up, Offline or Slow: its play ends as interrupted, not skipped.
+ */
+export const leavingStalledEntry = makeExternalStore<string | null>(null);
+
+/**
  * The play history changed (a play started or ended, plays were imported or
  * synced): bumps `playHistoryVersion` and tells shared queries over plays
  * (Home). Plays only add to the history, so they're a burst: screens in
@@ -218,7 +224,10 @@ export const layer = Layer.effectDiscard(
         status: state.status,
         // Keep the listen across preparation too, when waiting has ended but the controller
         // hasn't reported buffering yet. A manual retry of this song also continues it.
-        networkInterrupted: state.waitingForConnection || state.errorCode === "ytOffline",
+        networkInterrupted:
+          state.waitingForConnection ||
+          state.errorCode === "ytOffline" ||
+          (key !== null && leavingStalledEntry.get() === key),
         playing: state.isPlaying,
         durationMs: position.durationMs,
         track: noTrackNeeded ? null : trackFor(key),
@@ -261,6 +270,7 @@ export const layer = Layer.effectDiscard(
     yield* Effect.acquireRelease(
       Effect.sync(() => {
         const unsubscribe = playbackState.subscribe(onPlaybackState);
+        const unsubscribeStalled = leavingStalledEntry.subscribe(onPlaybackState);
         const appState = AppState.addEventListener("change", (next) => {
           if (next !== "active") saveProgress();
         });
@@ -271,6 +281,7 @@ export const layer = Layer.effectDiscard(
           stopCheckpoints();
           appState.remove();
           unsubscribe();
+          unsubscribeStalled();
         };
       }),
       (unsubscribe) =>

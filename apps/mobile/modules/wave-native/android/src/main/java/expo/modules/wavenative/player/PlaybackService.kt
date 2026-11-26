@@ -125,6 +125,7 @@ class PlaybackService : MediaLibraryService() {
   /** Tells the sleep timer when a track finishes and when playback starts. */
   private val sleepTimerListener = object : Player.Listener {
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+      noteLoading()
       if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) {
         sleepTimer.onPausedAtEndOfItem()
       }
@@ -281,7 +282,7 @@ class PlaybackService : MediaLibraryService() {
       }
     }
     watchOutput(reconnectWait != null)
-    StreamReconnectLink.setWaiting(reconnectWait != null, resuming = reconnectAttempt != null)
+    StreamReconnectLink.setWaiting(reconnectWait != null, resuming = reconnectAttempt != null, ranOut = result.gaveUp)
     stopIfLeftBehind(result.gaveUp)
   }
 
@@ -329,6 +330,7 @@ class PlaybackService : MediaLibraryService() {
       AutoModes.state.playing(mediaItem?.mediaId)
       val player = exoPlayer ?: return
       if ((reconnectWait ?: reconnectAttempt)?.key != mediaItem?.mediaId) cancelReconnect()
+      noteLoading(newItem = true)
       player.setWakeMode(if (streams(mediaItem)) C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL)
       if (pausedOnStreamFailure && reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
         pausedOnStreamFailure = false
@@ -343,6 +345,8 @@ class PlaybackService : MediaLibraryService() {
         cancelReconnect()
       }
     }
+
+    override fun onPlaybackStateChanged(playbackState: Int) = noteLoading()
 
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
       // While the retry loads, the player holds audio focus again: losing it, or the output,
@@ -419,11 +423,55 @@ class PlaybackService : MediaLibraryService() {
   private var shown: LyricsTextPlayer? = null
 
   private fun showOnSession(player: ExoPlayer): LyricsTextPlayer =
-    LyricsTextPlayer(player, AutoLyrics.state::textFor, ::waitingLine).also { shown = it }
+    LyricsTextPlayer(player, AutoLyrics.state::textFor) { StreamReconnectLink.waitingForConnection }
+      .also { shown = it }
 
-  /** "Waiting for connection" for the notification and the lock screen, while the wait lasts. */
-  private fun waitingLine(): String? =
-    if (StreamReconnectLink.waitingForConnection) NativeText.get("waitingForConnection") else null
+  /** When the session's player began buffering to play, or null while it isn't ([NetworkSignalPolicy]). */
+  private var loadingSinceMs: Long? = null
+  /** The network signal the notification last showed. */
+  private var shownSignal = NetworkSignal.PLAYING
+  private val signalRecheck = Runnable { refreshNetworkSignal() }
+
+  /** Core's networkSignal for the playing song, as the notification shows it (Ghost wave, #1498). */
+  private fun networkSignal(): NetworkSignal {
+    val player = exoPlayer ?: return NetworkSignal.PLAYING
+    return NetworkSignalPolicy.signal(
+      StreamReconnectLink.waitingForConnection,
+      loadingSinceMs,
+      YtStreamFailure.codeOf(player.playerError?.cause?.message) == "ytOffline",
+      StreamReconnectLink.waitRanOut,
+      AndroidConnectivity.cache(this).current.online,
+      SystemClock.elapsedRealtime(),
+    )
+  }
+
+  /** Notes whether the session's player is loading to play; another song starts its own time. */
+  private fun noteLoading(newItem: Boolean = false) {
+    val player = exoPlayer ?: return
+    val loading = player.playbackState == Player.STATE_BUFFERING && player.playWhenReady
+    loadingSinceMs = if (!loading) null else (if (newItem) null else loadingSinceMs) ?: SystemClock.elapsedRealtime()
+    refreshNetworkSignal()
+  }
+
+  /** Brings the notification's sub text up to date, and looks again when the grace before Slow ends. */
+  private fun refreshNetworkSignal() {
+    main.removeCallbacks(signalRecheck)
+    val signal = networkSignal()
+    if (signal != shownSignal) {
+      shownSignal = signal
+      // Before the session is built there is no notification to update.
+      if (session != null) triggerNotificationUpdate()
+    }
+    val player = exoPlayer ?: return
+    NetworkSignalPolicy.recheckInMs(
+      StreamReconnectLink.waitingForConnection, loadingSinceMs,
+      YtStreamFailure.codeOf(player.playerError?.cause?.message) == "ytOffline",
+      SystemClock.elapsedRealtime(),
+    )?.let { main.postDelayed(signalRecheck, it) }
+  }
+
+  /** "No internet" or "Slow connection" under the notification's app name, while it applies. */
+  private fun networkSubText(): String? = NetworkSignalPolicy.subTextKey(networkSignal())?.let(NativeText::get)
 
   /**
    * A crossfade's handoff: the second player, already playing the next song,
@@ -676,9 +724,15 @@ class PlaybackService : MediaLibraryService() {
       cancelReconnect()
     }
     StreamReconnectLink.onCheck = ::checkReconnectDeadline
-    stopWaitingLine = StreamReconnectLink.listen { _ -> shown?.refresh() }
+    stopWaitingLine = StreamReconnectLink.listen { _ ->
+      shown?.refresh()
+      refreshNetworkSignal()
+    }
     stopConnectivity = AndroidConnectivity.cache(this).listen {
-      main.post { reconnectIfOnline() }
+      main.post {
+        reconnectIfOnline()
+        refreshNetworkSignal()
+      }
     }
     CrossfadeLink.init(this)
     crossfade.overlapMs = CrossfadeLink.overlapMs
@@ -687,7 +741,7 @@ class PlaybackService : MediaLibraryService() {
       scheduleCrossfade()
     }
     NotificationAccent.init(this)
-    setMediaNotificationProvider(WaveNotificationProvider(this))
+    setMediaNotificationProvider(WaveNotificationProvider(this, ::networkSubText))
     stopAccent = NotificationAccent.state.listen { triggerNotificationUpdate() }
     AutoLyrics.state.init(PreferencesLyricsToggleStore(this))
     session = MediaLibrarySession.Builder(this, showOnSession(player), SessionCallback())
@@ -810,6 +864,7 @@ class PlaybackService : MediaLibraryService() {
     StreamReconnectLink.onCheck = null
     stopWaitingLine?.invoke()
     stopWaitingLine = null
+    main.removeCallbacks(signalRecheck)
     cancelReconnect()
     ActiveWaveAudio.count = { 0 }
     stopLanguage?.invoke()

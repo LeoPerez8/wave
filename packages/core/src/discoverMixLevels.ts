@@ -16,13 +16,11 @@ import type {
   DiscoverMixLibrarySong,
   DiscoverMixSeed,
   DiscoverRadioSong,
-  DiscoverSeedArtist,
   DiscoverSeedSong,
-  DiscoverSongPlays,
 } from "./discoverMixes.ts";
 import { mixLibrarySong, mixRecordingOf, mixSeedArtists } from "./discoverMixes.ts";
 import { isExplicit, type ExplicitFlag } from "./explicit.ts";
-import { ofGenreFamily } from "./genreMixes.ts";
+import { genreMixLibraryFilterSteps, type GenreMixLibrary } from "./genreMixes.ts";
 import { identityKey } from "./library.ts";
 import type { MixKnownSongs } from "./mixKnownSongs.ts";
 import type { MixedSong, YtAlbumSong } from "./ytDiscover.ts";
@@ -210,16 +208,13 @@ export interface DiscoverMixPoolSources<L extends DiscoverLibrarySong> {
   readonly radio: readonly (DiscoverRadioSong & { readonly albumId: string | null })[];
   /** The songs the owner knows (`mixKnownSongs`), over [library]'s songs. */
   readonly known: MixKnownSongs<L>;
-  readonly library: {
-    readonly artists: readonly DiscoverSeedArtist[];
-    readonly songs: readonly DiscoverLibrarySong[];
-    /** The Library songs' all-time counted plays (songs not listed have none). */
-    readonly plays?: readonly DiscoverSongPlays[];
-  };
+  readonly library: GenreMixLibrary;
   /** What the shares of the mixes before this one have. */
   readonly taken: DiscoverMixTaken;
   /** How many new songs the mix has: its length. */
   readonly length: number;
+  /** Genre mixes fill from tagged Library songs first and check every non-D song. */
+  readonly streamMatches?: (song: YtAlbumSong) => boolean;
 }
 
 /**
@@ -239,7 +234,7 @@ export const discoverMixFamiliarPool = <L extends DiscoverLibrarySong>(
 ): DiscoverMixFamiliarSong[] => finishSteps(discoverMixFamiliarPoolSteps(seed, sources));
 export function* discoverMixFamiliarPoolSteps<L extends DiscoverLibrarySong>(
   seed: DiscoverMixSeed,
-  { radio, known, library, taken, length }: DiscoverMixPoolSources<L>,
+  { radio, known, library, taken, length, streamMatches }: DiscoverMixPoolSources<L>,
 ): Generator<void, DiscoverMixFamiliarSong[]> {
   const most = length - Math.round(length / LEVELS);
   const plays = yield* indexSteps(
@@ -263,15 +258,17 @@ export function* discoverMixFamiliarPoolSteps<L extends DiscoverLibrarySong>(
     recordings.add(recording);
     pool.push({ source: "stream", song });
   };
-  for (const { video, ...song } of radio) {
-    yield;
-    if (video) continue;
-    const track = known.inLibrary(song);
-    if (track !== null) addTrack(track);
-    else if (known.known(song)) addStream(song);
+  if (streamMatches === undefined) {
+    for (const { video, ...song } of radio) {
+      yield;
+      if (video) continue;
+      const track = known.inLibrary(song);
+      if (track !== null) addTrack(track);
+      else if (known.known(song)) addStream(song);
+    }
   }
   const restSongs: DiscoverLibrarySong[] = [];
-  const accepts = yield* mixSongFilterSteps(seed, library.artists);
+  const accepts = yield* mixSongFilterSteps(seed, library);
   for (const song of library.songs) {
     if (accepts(song)) restSongs.push(song);
     yield;
@@ -284,23 +281,38 @@ export function* discoverMixFamiliarPoolSteps<L extends DiscoverLibrarySong>(
     addTrack(song);
     yield;
   }
+  if (streamMatches !== undefined) {
+    for (const { video, ...song } of radio) {
+      if (pool.length >= most) break;
+      if (!video && known.known(song) && known.inLibrary(song) === null && streamMatches(song))
+        addStream(song);
+      yield;
+    }
+  }
   const seedArtists = new Set(mixSeedArtists(seed).map((artist) => identityKey(artist.name)));
   for (const { song } of known.nonD) {
     yield;
-    const artists = song.artists.flatMap((artist) => splitCredit(artist)).map(identityKey);
-    if (artists.some((artist) => seedArtists.has(artist))) addStream(song);
+    if (pool.length >= most) break;
+    const matches =
+      streamMatches === undefined
+        ? song.artists
+            .flatMap((artist) => splitCredit(artist))
+            .map(identityKey)
+            .some((artist) => seedArtists.has(artist))
+        : streamMatches(song);
+    if (matches) addStream(song);
   }
   return pool;
 }
-/** Whether a Library song is of [seed]'s mix: of its genre family (`ofGenreFamily`), else by one of its seed's artists. */
+/** Whether a Library song is of [seed]'s mix: of its genre family, else by one of its seed's artists. */
 function* mixSongFilterSteps(
   seed: DiscoverMixSeed,
-  artists: readonly DiscoverSeedArtist[],
+  library: GenreMixLibrary,
 ): Generator<void, (song: DiscoverLibrarySong) => boolean> {
-  if (seed.genre !== undefined) return ofGenreFamily(seed.genre);
+  if (seed.genre !== undefined) return yield* genreMixLibraryFilterSteps(seed.genre, library);
   const name = identityKey(seed.name);
   const ids = new Set<number>();
-  for (const artist of artists) {
+  for (const artist of library.artists) {
     if (identityKey(artist.name) === name) ids.add(artist.id);
     yield;
   }
