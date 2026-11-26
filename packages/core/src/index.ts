@@ -3502,6 +3502,13 @@ export {
   magicStandInSteps,
 } from "./magicStandIn.ts";
 export type { MagicStandIn, MagicStandInOptions } from "./magicStandIn.ts";
+export {
+  DOWNLOADED_STAND_IN_SONGS,
+  playDownloadedSongs,
+  playDownloadedSongsShows,
+  playDownloadedSongsSteps,
+} from "./playDownloadedSongs.ts";
+export type { DownloadedSongsPick, PlayDownloadedSongsOptions } from "./playDownloadedSongs.ts";
 export { djAudioFeaturesByIsrc, isrcFromTag } from "./isrcTag.ts";
 export {
   DJ_NEW_RELEASE_BOOST,

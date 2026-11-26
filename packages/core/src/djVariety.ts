@@ -39,11 +39,21 @@ const OUTSIDE = 3;
 export const djArtistHops = (
   session: MagicSession,
   graph: ArtistGraph | null,
+): ((artists: readonly string[]) => number) => artistHopsFrom(session.radioArtists, graph);
+
+/**
+ * How far the closest of [artists] (Magic Queue keys) is from the [seeds]
+ * (artist names) in [graph]: 0 for a seed, `OUTSIDE` for one the graph
+ * doesn't reach within two hops.
+ */
+export const artistHopsFrom = (
+  seeds: readonly string[],
+  graph: ArtistGraph | null,
 ): ((artists: readonly string[]) => number) => {
   const hops = new Map<string, number>();
-  for (const name of session.radioArtists) hops.set(magicArtistKey(name), 0);
+  for (const name of seeds) hops.set(magicArtistKey(name), 0);
   if (graph !== null)
-    for (const neighbour of artistNeighbourhood(graph, session.radioArtists)) {
+    for (const neighbour of artistNeighbourhood(graph, seeds)) {
       const key = magicArtistKey(neighbour.name);
       if (!hops.has(key)) hops.set(key, neighbour.hops);
     }

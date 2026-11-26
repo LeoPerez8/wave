@@ -37,6 +37,18 @@ describe("queueUndo", () => {
     });
   });
 
+  test("Play Downloaded Songs' Library songs played next offer going back to the queue as it was", () => {
+    const command: QueueCommand = { type: "playNow", trackIds: ["x", "y"], newQueue: true };
+    const after = reduceQueue(playing, command);
+    const undo = queueUndo(playing, command, onB, after);
+    assert.deepEqual(undo, { state: playing, positionMs: 73_000 });
+    assert.deepEqual(undoneQueue(undo!, after.state).entries, playing.entries);
+    assert.equal(undoneQueue(undo!, after.state).index, playing.index);
+    // A related song played now is no new queue.
+    const related: QueueCommand = { type: "playNow", trackIds: ["x"] };
+    assert.equal(queueUndo(playing, related, onB, reduceQueue(playing, related)), null);
+  });
+
   test("goes back to the start of the song when the player is on another one", () => {
     // The player went on to "q" while a search held the queue on "b".
     assert.deepEqual(

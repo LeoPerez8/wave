@@ -78,7 +78,15 @@ export type QueueCommand =
    * tapped): the song that was playing goes to History, and Up Next and the
    * songs lined up stay as they were. Any others go right after it.
    */
-  | { readonly type: "playNow"; readonly trackIds: readonly string[] }
+  | {
+      readonly type: "playNow";
+      readonly trackIds: readonly string[];
+      /**
+       * A new queue to the owner (Play Downloaded Songs' Library songs): it
+       * offers Undo as a play does (`queueUndo`).
+       */
+      readonly newQueue?: boolean | undefined;
+    }
   /**
    * More of the playing context: a Magic Queue's batch. The songs join the
    * end of the queue as context entries, after everything lined up, so they
