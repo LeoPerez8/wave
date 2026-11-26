@@ -4,8 +4,8 @@
  */
 import { artistNeighbourhood, type ArtistGraph } from "./artistGraph.ts";
 import { djRadioSongAllowed } from "./dj.ts";
-import type { DjMoodFit } from "./djMood.ts";
-import type { DjVariety } from "./djSettings.ts";
+import { djMoodTurnsSteps, type DjMoodFit } from "./djMood.ts";
+import type { DjMood, DjVariety } from "./djSettings.ts";
 import { isDisliked, NO_DISLIKES, type DislikedSongs } from "./dislikes.ts";
 import type { GenreProfileOf } from "./genreAffinity.ts";
 import { magicArtistKey, type MagicSession } from "./magicQueue.ts";
@@ -109,6 +109,10 @@ export interface DjVarietyMoodPools<S> {
  * [unknown] ones (`djMoodFiltered`) in one pass: the unknown ones fill a
  * batch behind the matched ones, so High credits none of the matched songs'
  * artists again in them while another can play. Each is filled to [size].
+ * With several moods, the matched songs then take turns among them again
+ * by the moods each one [fits] (`djMoodFiltered`'s), since the fill moves
+ * the songs from farther out behind the others: a mood whose songs come
+ * from farther out still gets its turns.
  */
 export const djVarietyMoodPools = <S extends RankedRadioSong>(
   session: MagicSession,
@@ -116,8 +120,9 @@ export const djVarietyMoodPools = <S extends RankedRadioSong>(
   matched: DjCandidatePools<S>,
   unknown: DjCandidatePools<S>,
   size = 0,
+  fits: ReadonlyMap<S, readonly DjMood[]> = new Map(),
 ): DjVarietyMoodPools<S> =>
-  finishSteps(djVarietyMoodPoolsSteps(session, graph, matched, unknown, size));
+  finishSteps(djVarietyMoodPoolsSteps(session, graph, matched, unknown, size, fits));
 
 /** `djVarietyMoodPools`, a step per candidate and pass, for a background slice (#1448). */
 export function* djVarietyMoodPoolsSteps<S extends RankedRadioSong>(
@@ -126,13 +131,26 @@ export function* djVarietyMoodPoolsSteps<S extends RankedRadioSong>(
   matched: DjCandidatePools<S>,
   unknown: DjCandidatePools<S>,
   size = 0,
+  fits: ReadonlyMap<S, readonly DjMood[]> = new Map(),
 ): Generator<void, DjVarietyMoodPools<S>> {
   const held = new Set<string>();
-  const matchedPools = yield* varietySteps(session, graph, matched, size, held);
+  const varied = yield* varietySteps(session, graph, matched, size, held);
   const unknownPools =
     unknown.seed.length + unknown.liked.length === 0
       ? unknown
       : yield* varietySteps(session, graph, unknown, size, held);
+  const moods = session.dj?.mood ?? [];
+  const turns = (songs: readonly S[]) =>
+    djMoodTurnsSteps(
+      songs,
+      moods,
+      (song) => fits.get(song),
+      (song) => song.source,
+    );
+  const matchedPools =
+    moods.length < 2
+      ? varied
+      : { seed: yield* turns(varied.seed), liked: yield* turns(varied.liked) };
   return { matched: matchedPools, unknown: unknownPools };
 }
 

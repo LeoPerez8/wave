@@ -54,7 +54,7 @@ export const discoverPtBr: typeof discoverEn = {
   faithfulnessNote:
     "Mesmos gêneros exclui os gêneros conhecidos sem relação. Próximos, Equilibrado e Vizinhos os reduzem menos a cada passo. Explorar ignora o gênero. Gêneros desconhecidos sempre ficam.",
   mobileFaithfulnessNote:
-    "Mesmos gêneros exclui gêneros diferentes dos Mixes de artistas e da Fila mágica. Próximo, Equilibrado e Vizinhos dão menos prioridade a eles. Explorar ignora o gênero. Mixes de gêneros sempre ficam dentro do próprio gênero.",
+    "Mesmos gêneros exclui gêneros diferentes dos Mixes de artistas e da Fila mágica. Próximos, Equilibrado e Vizinhos dão menos prioridade a eles. Explorar ignora o gênero. Mixes de gêneros sempre ficam dentro do próprio gênero.",
   levels: {
     1: "Quase só conhecidas",
     2: "Mais conhecidas",

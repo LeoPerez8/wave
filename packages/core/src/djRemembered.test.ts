@@ -34,7 +34,7 @@ const chosen: DjSettings = {
   discovery: "familiar",
   popularity: "trending",
   newReleases: true,
-  mood: "energetic",
+  mood: ["energetic", "relaxing"],
 };
 
 describe("what DJ remembers on the phone", () => {
@@ -54,6 +54,11 @@ describe("what DJ remembers on the phone", () => {
       tiles: [tile("Burial"), tile("Four Tet")],
       settings: chosen,
     });
+  });
+
+  test("an older build reads the first of several remembered moods", () => {
+    const stored = storedDjRemembered({ tiles: [tile("Burial")], settings: chosen });
+    assert.equal(JSON.parse(stored!).settings.mood, "energetic");
   });
 
   test("nothing stored means no selection and the default Adjust choices", () => {

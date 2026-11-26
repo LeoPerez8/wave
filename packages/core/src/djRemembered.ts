@@ -18,7 +18,12 @@ import {
 } from "./dj.ts";
 import { finishSteps } from "./buildSteps.ts";
 import type { GenreMixDjCandidate, GenreMixLibrary } from "./genreMixes.ts";
-import { DEFAULT_DJ_SETTINGS, parseDjSettings, type DjSettings } from "./djSettings.ts";
+import {
+  DEFAULT_DJ_SETTINGS,
+  parseDjSettings,
+  storedDjSettingsRecord,
+  type DjSettings,
+} from "./djSettings.ts";
 import { isRecord, readStoredRecord } from "./storedJson.ts";
 import type { TasteProfile } from "./tasteProfile.ts";
 
@@ -52,13 +57,18 @@ const sameSettings = (a: DjSettings, b: DjSettings): boolean =>
   a.discovery === b.discovery &&
   a.popularity === b.popularity &&
   a.newReleases === b.newReleases &&
-  a.mood === b.mood;
+  a.mood.length === b.mood.length &&
+  a.mood.every((mood, at) => mood === b.mood[at]);
 
 /** What to keep for [remembered]: null (nothing) with no selection and the default choices. */
 export const storedDjRemembered = ({ tiles, settings }: DjRemembered): string | null =>
   tiles.length === 0 && sameSettings(settings, DEFAULT_DJ_SETTINGS)
     ? null
-    : JSON.stringify({ version: 1, tiles: tiles.map(storedTile), settings });
+    : JSON.stringify({
+        version: 1,
+        tiles: tiles.map(storedTile),
+        settings: storedDjSettingsRecord(settings),
+      });
 
 /** How each kind of tile is read back from what `storedTile` kept; null for one that can't be drawn. */
 const TILE_READERS: { readonly [K in DjTile["kind"]]: (kept: StoredTile) => DjTile | null } = {
