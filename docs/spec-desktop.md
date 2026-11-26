@@ -307,7 +307,9 @@ ADR: `docs/adr/0004-kotlin-on-a-bundled-jvm.md`.
      uses the user's default browser when that is Chromium-family (on Linux, from `xdg-settings`),
      so the sign-in page opens where they already trust it, and otherwise the first installed of
      Chrome, Edge, Brave or Chromium, in that order. Settings tells the user to close that window
-     when they're done, and offers Cancel.
+     when they're done, and offers Cancel. Google's page gets the expired YT Music account's
+     email if available, or the signed-in Wave account's email. If neither is available, the
+     email field stays empty.
   2. Once that browser has exited, Wave starts it again on the same profile, headless and with a
      debugging port, and the main process reads the session cookies and YouTube's page
      configuration from it. Then it closes the browser and deletes the profile folder, however

@@ -9,7 +9,9 @@ import {
   ytAccountView,
   ytLibraryFailure,
   ytLibraryPicker,
+  ytSignInEmail,
   type AppLanguage,
+  type WaveSession,
   type YtAccountEvent,
   type YtAccountState,
   type YtLibraryFailure,
@@ -31,7 +33,8 @@ export interface YtAccountDeps {
   readonly enabled: () => boolean;
   readonly online: () => boolean;
   /** Opens the browser on Google's sign-in (`startYtBrowserSignIn`). */
-  readonly startSignIn: () => YtBrowserSignIn;
+  readonly startSignIn: (email: string | null) => YtBrowserSignIn;
+  readonly waveSession: () => WaveSession;
 }
 
 export interface YtAccountShape {
@@ -115,7 +118,7 @@ export const createYtAccount = (deps: YtAccountDeps): YtAccountShape => {
     }
     let browser: YtBrowserSignIn;
     try {
-      browser = deps.startSignIn();
+      browser = deps.startSignIn(ytSignInEmail(current().session, deps.waveSession()));
     } catch {
       dispatch({ type: "signInFailed", reason: "failed" });
       return;

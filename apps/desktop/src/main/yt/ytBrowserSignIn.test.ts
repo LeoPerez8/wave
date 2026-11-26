@@ -44,6 +44,7 @@ const browser = (page: {
   /** False: the headless run never says where its DevTools port is. */
   readonly port?: boolean;
   readonly userAgent?: string;
+  readonly email?: string;
 }) => {
   const spawned: Spawned[] = [];
   const disk = new Map<string, string>();
@@ -77,6 +78,7 @@ const browser = (page: {
   };
   const run = startYtBrowserSignIn({
     browser: BROWSER,
+    email: page.email ?? null,
     spawn: (path, args) => {
       let exit = () => {};
       const exited = new Promise<"exited">((resolve) => (exit = () => resolve("exited")));
@@ -365,4 +367,15 @@ test("the cookie header holds what music.youtube.com gets, each name once", () =
     ]),
     "SID=a; PREF=c",
   );
+});
+
+test("the browser opens Google's sign-in with the suggested email", async () => {
+  const chrome = browser({ cookies: SIGNED_OUT, email: "ana.souza+wave@example.com" });
+  await chrome.settle();
+  assert.equal(
+    chrome.spawned[0]?.args.at(-1),
+    "https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fmusic.youtube.com&Email=ana.souza%2Bwave%40example.com",
+  );
+  chrome.run.cancel();
+  await chrome.run.outcome;
 });

@@ -1,3 +1,4 @@
+import type { WaveSession } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -16,7 +17,8 @@ export const ytAccountLayer = (options: {
   /** The session main keeps for the JVM, the same one its host methods serve. */
   readonly sessions: YtSessions;
   readonly online: () => boolean;
-  readonly startSignIn: () => YtBrowserSignIn;
+  readonly startSignIn: (email: string | null) => YtBrowserSignIn;
+  readonly waveSession: () => WaveSession;
 }) =>
   Layer.effect(
     YtAccount,

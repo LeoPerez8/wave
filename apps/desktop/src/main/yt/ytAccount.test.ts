@@ -69,6 +69,7 @@ const desktop = (options: { readonly box?: SecretBox; readonly disk?: Map<string
     sessions,
     enabled: () => world.enabled,
     online: () => world.online,
+    waveSession: () => ({ status: "signedOut" }),
     startSignIn: () => {
       world.browsers += 1;
       let end = (_outcome: YtBrowserOutcome) => {};

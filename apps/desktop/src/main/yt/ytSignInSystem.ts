@@ -150,7 +150,7 @@ export interface YtSignInSystemOptions {
 
 export interface YtSignInSystem {
   /** Opens the browser on Google's sign-in. */
-  readonly start: () => YtBrowserSignIn;
+  readonly start: (email: string | null) => YtBrowserSignIn;
   /** Deletes the profile folders a run that crashed left behind. */
   readonly sweep: () => Promise<void>;
 }
@@ -166,7 +166,7 @@ export const ytSignInSystem = (options: YtSignInSystemOptions): YtSignInSystem =
     }
   };
   return {
-    start: () => {
+    start: (email) => {
       const command = linuxDefaultBrowser(platform);
       const startWindow = (): YtBrowserSignIn => {
         const browser = findSignInBrowser({
@@ -185,6 +185,7 @@ export const ytSignInSystem = (options: YtSignInSystemOptions): YtSignInSystem =
         });
         return startYtBrowserSignIn({
           browser,
+          email,
           spawn: startBrowser,
           files: {
             makeProfile: () => {

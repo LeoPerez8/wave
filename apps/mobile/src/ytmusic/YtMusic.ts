@@ -1,4 +1,5 @@
 import {
+  ytSignInEmail,
   type YtAccountHome,
   type YtArtistAlbum,
   type YtCommunityPlaylist,
@@ -18,6 +19,7 @@ import * as Layer from "effect/Layer";
 import { ytNetworkMeter } from "@/lib/networkMeter";
 import type { IndexedArtwork } from "@wave/client";
 import { toIndexedArtwork } from "@/library/LibraryScan";
+import { WaveAccount } from "@/native/waveAccount";
 import type { NativeYtAlbum } from "@/native/waveYtDownloads";
 import {
   WaveYtMusic,
@@ -248,6 +250,12 @@ export const layer = Layer.succeed(YtMusic, {
     ),
   session: Effect.promise(() => WaveYtMusic.session()),
   checkSession: Effect.promise(() => WaveYtMusic.checkSession()),
-  signIn: Effect.tryPromise({ try: () => WaveYtMusic.signIn(), catch: fromNative }),
+  signIn: Effect.tryPromise({
+    try: async () => {
+      const [yt, wave] = await Promise.all([WaveYtMusic.session(), WaveAccount.session()]);
+      return WaveYtMusic.signIn(ytSignInEmail(yt, wave));
+    },
+    catch: fromNative,
+  }),
   signOut: Effect.promise(() => WaveYtMusic.signOut()),
 });

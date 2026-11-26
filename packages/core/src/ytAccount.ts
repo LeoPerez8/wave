@@ -15,6 +15,7 @@ import {
   type AccountSignInState,
   type AccountView,
 } from "./accountSignIn.ts";
+import type { WaveSession } from "./waveAccount.ts";
 
 /** The signed-in account, as YouTube Music names it. */
 export interface YtAccount {
@@ -29,6 +30,14 @@ export interface YtAccount {
  * While YouTube doesn't accept it (expired), requests go out signed out.
  */
 export type YtSession = AccountSession<YtAccount>;
+
+/** A known email for Google's page, or null to let the platform ask for one. */
+export const ytSignInEmail = (yt: YtSession, wave: WaveSession): string | null => {
+  const expiredEmail = yt.status === "expired" ? yt.account?.email : null;
+  return (
+    expiredEmail?.trim() || (wave.status === "signedIn" ? wave.account.email.trim() : "") || null
+  );
+};
 
 /** Why a sign-in didn't work: no network, or YouTube didn't accept or answer it. */
 export type YtSignInFailure = "offline" | "failed";
