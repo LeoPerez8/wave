@@ -1,4 +1,5 @@
 import { en, type Catalogue } from "./catalogueEn.ts";
+import { genreFamilyName } from "./genreMixes.ts";
 import { fileUri } from "./fileUri.ts";
 import { finishSteps } from "./buildSteps.ts";
 /**
@@ -421,7 +422,7 @@ export const discoverMixCaption = (
     if (!artists.has(key)) artists.set(key, lead);
   }
   return {
-    title: strings.discover.mixTitle(discoverMixName(mix.seed)),
+    title: strings.discover.mixTitle(discoverMixName(mix.seed, strings)),
     artists: [...artists.values()].join(", "),
     line: strings.discover.songs(mix.songs.length),
     artworkUrl: mixCover(mix),
@@ -479,8 +480,11 @@ export interface DiscoverMixesBuild {
 }
 
 /** The name a mix's title gives it: its seed artist's, or its genre family's (`genreTitle`). */
-export const discoverMixName = (seed: Pick<DiscoverMixSeed, "name" | "genre">): string =>
-  seed.genre === undefined ? seed.name : genreTitle(seed.genre);
+export const discoverMixName = (
+  seed: Pick<DiscoverMixSeed, "name" | "genre">,
+  strings: Catalogue = en,
+): string =>
+  seed.genre === undefined ? seed.name : genreTitle(genreFamilyName(seed.genre, strings));
 
 /** A genre as a mix's title names it: one typed all in lowercase gets capital initials. */
 const genreTitle = (genre: string): string =>

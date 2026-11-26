@@ -19,6 +19,7 @@ export const discoverPtBr: typeof discoverEn = {
   buildingMixes: "Criando seus mixes",
   findingSongs: "Procurando músicas",
   mixTitle: (name: string) => `Mix de ${name}`,
+  brazilianFunk: "Funk Brasileiro",
   songs: (count: number) =>
     plural("pt-BR", count, {
       zero: "Nenhuma música",

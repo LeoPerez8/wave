@@ -9,7 +9,7 @@ import type { DiscoverRowId, MixRowId } from "@wave/core";
 import { useState } from "react";
 
 import type { DiscoverMixesView } from "../../shared/ytPages.ts";
-import { MagicQueueRow, playMix, useMagicQueuePicks, useMixes } from "./Discover.tsx";
+import { MagicQueueRow, mixTitle, playMix, useMagicQueuePicks, useMixes } from "./Discover.tsx";
 import { DiscoverSettingsButton } from "./DiscoverSettings.tsx";
 import { text } from "./text.ts";
 import { useOnline } from "./useOnline.ts";
@@ -52,7 +52,7 @@ function MixRow({
       title={text.discover.rows[row]}
       nested
       items={mixes.map((mix) => {
-        const title = text.discover.mixTitle(mix.name);
+        const title = mixTitle(mix);
         const line = text.discover.songs(mix.songs.total);
         const first = mix.songs.items[0];
         return {
