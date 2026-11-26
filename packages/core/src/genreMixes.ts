@@ -20,6 +20,7 @@ import { genreMixId } from "./discoverMixes.ts";
 import {
   libraryGenreProfilesSteps,
   libraryMixProfilesSteps,
+  type GenreProfile,
   type GenreProfileOf,
 } from "./genreAffinity.ts";
 import { artistNeighbourhoodSteps, type ArtistGraph } from "./artistGraph.ts";
@@ -236,6 +237,20 @@ function genreTagParts(tag: string): string[] {
 }
 
 const BRAZILIAN_FUNK = BY_TAG.get("brazilianfunk")!;
+const HIP_HOP = BY_TAG.get("hiphop")!;
+
+/**
+ * Deezer's album genre `Rap/Funk Brasileiro` (472), which it gives Brazilian funk and rap
+ * albums alike: it names no family of its own, and reads as its artist's (`rapFunkFamily`).
+ */
+const RAP_FUNK = "rapfunkbrasileiro";
+
+/** Which of Brazilian funk and rap [profile] leans to (the larger share); null on a tie or neither. */
+export const rapFunkLean = (profile: GenreProfile | null | undefined): GenreFamily | null => {
+  const funk = profile?.get(BRAZILIAN_FUNK.key) ?? 0;
+  const rap = profile?.get(HIP_HOP.key) ?? 0;
+  return funk > rap ? BRAZILIAN_FUNK : rap > funk ? HIP_HOP : null;
+};
 
 /** A canonical family name as the listener sees it. */
 export const genreFamilyName = (name: string, strings: Catalogue): string =>
@@ -267,6 +282,43 @@ const isBrazilianFunkArtist = (
     if ((profile.get(BRAZILIAN_FUNK.key) ?? 0) > 0) brazilianFunk++;
   }
   return brazilianFunk * 2 > known;
+};
+
+/**
+ * What `Rap/Funk Brasileiro` is for [artist]: the family of Brazilian funk and rap their own
+ * tags lean to (`rapFunkLean`), else the one a strict majority of their known direct neighbours
+ * lean to; null (unknown) otherwise.
+ */
+const rapFunkArtistFamily = (
+  artist: string,
+  { graph, profileOf }: Pick<GenreFamilyContext, "graph" | "profileOf">,
+): GenreFamily | null => {
+  const own = rapFunkLean(profileOf(artist));
+  if (own !== null || graph == null) return own;
+  const key = catalogSeedKey(artist);
+  if (key === null) return null;
+  let known = 0;
+  let funk = 0;
+  let rap = 0;
+  for (const neighbour of graph.edges.get(key)?.keys() ?? []) {
+    if (neighbour === key) continue;
+    const profile = profileOf(graph.names.get(neighbour) ?? neighbour);
+    if (!profile?.size) continue;
+    known++;
+    const lean = rapFunkLean(profile);
+    if (lean === BRAZILIAN_FUNK) funk++;
+    else if (lean === HIP_HOP) rap++;
+  }
+  return funk * 2 > known ? BRAZILIAN_FUNK : rap * 2 > known ? HIP_HOP : null;
+};
+
+/** `rapFunkArtistFamily` for a song's [artists]: the one family they agree on, else null. */
+const rapFunkFamily = <A>(
+  artists: readonly A[],
+  of: (artist: A) => GenreFamily | null,
+): GenreFamily | null => {
+  const families = new Set(artists.map(of).filter((family) => family !== null));
+  return families.size === 1 ? [...families][0]! : null;
 };
 
 /** A genre style: the tags of a family that sound alike, under one name. */
@@ -350,6 +402,10 @@ const genreFamilyForKey = (tag: string, key: string): GenreFamily | null =>
  */
 export const genreFamily = (tag: string, context?: GenreFamilyContext): GenreFamily | null => {
   const key = compact(tag);
+  if (key === RAP_FUNK)
+    return context
+      ? rapFunkFamily(context.artists, (artist) => rapFunkArtistFamily(artist, context))
+      : null;
   if (key === "funk" && context?.artists.some((artist) => isBrazilianFunkArtist(artist, context)))
     return BRAZILIAN_FUNK;
   return genreFamilyForKey(tag, key);
@@ -450,14 +506,40 @@ type SongGenres = Pick<DiscoverLibrarySong, "genre" | "genres">;
  * as each of its parts unless the table knows it whole ("Rap/Hip Hop").
  */
 export const songFamilies = (song: SongGenres, context?: GenreFamilyContext): GenreFamily[] =>
-  taggedSongFamilies(song, context && (() => genreFamily("Funk", context) === BRAZILIAN_FUNK));
+  taggedSongFamilies(
+    song,
+    context && {
+      brazilianFunk: () => genreFamily("Funk", context) === BRAZILIAN_FUNK,
+      rapFunk: () => genreFamily(RAP_FUNK, context),
+    },
+  );
 
-function taggedSongFamilies(song: SongGenres, brazilianFunk?: () => boolean): GenreFamily[] {
+/**
+ * `songFamilies` for a song whose artist's own tags lean to [lean] (`rapFunkLean`): how
+ * `genreProfile` reads `Rap/Funk Brasileiro` among an artist's other songs.
+ */
+export const songFamiliesLeaning = (song: SongGenres, lean: GenreFamily | null): GenreFamily[] =>
+  taggedSongFamilies(song, { brazilianFunk: () => false, rapFunk: () => lean });
+
+/** What a song's artists say of its ambiguous tags: bare Funk, and Rap/Funk Brasileiro. */
+interface ArtistEvidence {
+  /** Bare Funk is Brazilian funk, not R&B. */
+  readonly brazilianFunk: () => boolean;
+  /** Rap/Funk Brasileiro's family, or null when it's unknown. */
+  readonly rapFunk: () => GenreFamily | null;
+}
+
+function taggedSongFamilies(song: SongGenres, evidence?: ArtistEvidence): GenreFamily[] {
   const families = new Map<string, GenreFamily>();
   const values = song.genres?.length ? song.genres : [song.genre ?? ""];
+  let rapFunk = false;
   for (const value of values) {
     for (const part of genreTagParts(value)) {
       const tagKey = compact(part);
+      if (tagKey === RAP_FUNK) {
+        rapFunk = true;
+        continue;
+      }
       const family = genreFamilyForKey(part, tagKey);
       if (family === null) continue;
       // Keep bare Funk separate from explicit R&B tags until all tags have been read.
@@ -465,8 +547,14 @@ function taggedSongFamilies(song: SongGenres, brazilianFunk?: () => boolean): Ge
       if (!families.has(key)) families.set(key, family);
     }
   }
+  // The song's own funk or rap tag already says which it is.
+  if (rapFunk && !families.has(BRAZILIAN_FUNK.key) && !families.has(HIP_HOP.key)) {
+    const family = evidence?.rapFunk() ?? null;
+    if (family !== null) families.set(family.key, family);
+  }
   if (!families.has("funk")) return [...families.values()];
-  if (families.has(BRAZILIAN_FUNK.key) || brazilianFunk?.()) families.set("funk", BRAZILIAN_FUNK);
+  if (families.has(BRAZILIAN_FUNK.key) || evidence?.brazilianFunk())
+    families.set("funk", BRAZILIAN_FUNK);
   return [...new Set(families.values())];
 }
 
@@ -477,17 +565,30 @@ function librarySongFamilies(
   profileOf: GenreProfileOf,
 ): (song: DiscoverLibrarySong) => GenreFamily[] {
   const evidence = new Map<number, boolean>();
+  const rapFunk = new Map<number, GenreFamily | null>();
   const context = { graph: library.graph ?? null, profileOf };
   return (song) =>
-    taggedSongFamilies(song, () =>
-      song.artistIds.some((id) => {
-        if (!evidence.has(id)) {
-          const artist = artists.get(id);
-          evidence.set(id, artist !== undefined && isBrazilianFunkArtist(artist.name, context));
-        }
-        return evidence.get(id);
-      }),
-    );
+    taggedSongFamilies(song, {
+      brazilianFunk: () =>
+        song.artistIds.some((id) => {
+          if (!evidence.has(id)) {
+            const artist = artists.get(id);
+            evidence.set(id, artist !== undefined && isBrazilianFunkArtist(artist.name, context));
+          }
+          return evidence.get(id);
+        }),
+      rapFunk: () =>
+        rapFunkFamily(song.artistIds, (id) => {
+          if (!rapFunk.has(id)) {
+            const artist = artists.get(id);
+            rapFunk.set(
+              id,
+              artist === undefined ? null : rapFunkArtistFamily(artist.name, context),
+            );
+          }
+          return rapFunk.get(id) ?? null;
+        }),
+    });
 }
 
 /** Whether a tagged Library song is of the family named by a mix's seed. */
@@ -496,7 +597,7 @@ export function* genreMixLibraryFilterSteps(
   library: GenreMixLibrary,
 ): Generator<void, (song: DiscoverLibrarySong) => boolean> {
   const key = genreFamily(family)?.key;
-  if (key !== BRAZILIAN_FUNK.key && key !== "rb")
+  if (key !== BRAZILIAN_FUNK.key && key !== "rb" && key !== HIP_HOP.key)
     return (song) => key !== undefined && songFamilies(song).some((of) => of.key === key);
   const artists = yield* indexSteps(library.artists, (artist) => [artist.id, artist] as const);
   const profileOf = library.profileOf ?? (yield* libraryGenreProfilesSteps(library));

@@ -1,7 +1,7 @@
 /** Known genre profiles and their affinity; recommendation ranking treats unknown genre as neutral. */
 import { artistPhotoName } from "./artistPhoto.ts";
 import type { DiscoverLibrarySong, DiscoverSeedArtist } from "./discoverMixes.ts";
-import { songFamilies } from "./genreMixes.ts";
+import { rapFunkLean, songFamilies, songFamiliesLeaning, type GenreFamily } from "./genreMixes.ts";
 import { isRecord, readStoredRecord } from "./storedJson.ts";
 import { finishSteps } from "./buildSteps.ts";
 import { libraryArtistFinderSteps } from "./ytArtist.ts";
@@ -16,22 +16,36 @@ export type GenreProfile = ReadonlyMap<string, number>;
 export type GenreTagged = Pick<DiscoverLibrarySong, "genre" | "genres">;
 
 /** Adds [song]'s families to [weights], 1/n to each of its n; whether it has any. */
-const weighFamilies = (weights: Map<string, number>, song: GenreTagged): boolean => {
-  const families = songFamilies(song);
+const weighFamilies = (
+  weights: Map<string, number>,
+  song: GenreTagged,
+  lean?: GenreFamily | null,
+): boolean => {
+  const families = lean === undefined ? songFamilies(song) : songFamiliesLeaning(song, lean);
   for (const family of families)
     weights.set(family.key, (weights.get(family.key) ?? 0) + 1 / families.length);
   return families.length > 0;
 };
 
+/** [songs]' family weights and how many songs have a family, read with [lean] (`weighFamilies`). */
+const weighSongs = (songs: readonly GenreTagged[], lean?: GenreFamily | null) => {
+  const weights = new Map<string, number>();
+  let total = 0;
+  for (const song of songs) if (weighFamilies(weights, song, lean)) total += 1;
+  return { weights, total };
+};
+
 /**
  * The genre profile of [songs]: every value of each one's genre tag mapped
  * to its family, a song in n families adding 1/n to each (as Genre mixes
- * count it). Null when none of them has a genre.
+ * count it). Null when none of them has a genre. Deezer's `Rap/Funk Brasileiro`
+ * counts as Brazilian funk or rap when the other songs lean to one (`rapFunkLean`),
+ * and as no genre otherwise.
  */
 export const genreProfile = (songs: readonly GenreTagged[]): GenreProfile | null => {
-  const weights = new Map<string, number>();
-  let total = 0;
-  for (const song of songs) if (weighFamilies(weights, song)) total += 1;
+  const plain = weighSongs(songs);
+  const lean = rapFunkLean(plain.weights);
+  const { weights, total } = lean === null ? plain : weighSongs(songs, lean);
   if (total === 0) return null;
   return new Map([...weights].map(([key, weight]) => [key, weight / total]));
 };
