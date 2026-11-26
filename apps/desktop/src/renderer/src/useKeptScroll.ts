@@ -34,6 +34,8 @@ export function useKeptScroll<T extends HTMLElement>(entry: object, ready: boole
     scroller.addEventListener("scroll", keep, { passive: true });
     for (const kind of SCROLLING) scroller.addEventListener(kind, stop, { passive: true });
     return () => {
+      // A scroll event comes in the next frame, so one the page leaves before is read here.
+      keep();
       growth.disconnect();
       scroller.removeEventListener("scroll", keep);
       for (const kind of SCROLLING) scroller.removeEventListener(kind, stop);

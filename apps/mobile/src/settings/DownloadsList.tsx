@@ -102,7 +102,10 @@ function WifiWaitLine() {
   const line = wifiWaitLine(jobs, strings);
   if (line === null) return null;
   return (
-    <Text accessibilityLiveRegion="polite" className="mb-1 font-sans text-subheadline text-secondary">
+    <Text
+      accessibilityLiveRegion="polite"
+      className="mb-1 font-sans text-subheadline text-secondary"
+    >
       {line}
     </Text>
   );

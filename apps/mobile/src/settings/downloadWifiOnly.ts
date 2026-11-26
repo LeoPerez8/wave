@@ -27,7 +27,7 @@ const downloadWifiOnlySetting = persistedSetting<boolean>({
   onValue: tellJournal,
 });
 
-export const downloadWifiOnly = downloadWifiOnlySetting.get;
+const downloadWifiOnly = downloadWifiOnlySetting.get;
 
 export const setDownloadWifiOnly = downloadWifiOnlySetting.set;
 
