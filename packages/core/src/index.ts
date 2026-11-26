@@ -2599,6 +2599,8 @@ export {
   replacementDuplicateLines,
   replacementDuplicateLinesSteps,
   replacementDuplicates,
+  downloadDuplicates,
+  downloadDuplicatesSteps,
   replacementsUnderway,
   storedDuplicateCheck,
   duplicateCheckOpened,
@@ -2606,6 +2608,7 @@ export {
 } from "./replacementDuplicates.ts";
 export type {
   DuplicateCheckFile,
+  DuplicateKind,
   DuplicateCheckWhen,
   DuplicateFix,
   DuplicateOutcome,

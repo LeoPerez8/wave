@@ -285,7 +285,7 @@ test("actual startup jobs cannot read before global settlement; navigation pause
     const done = await result;
     assert.equal(done.index.known.length, 980);
     assert.equal(done.index.indexed.size, 980);
-    assert.deepEqual(done.duplicates, { outcomes: [], changed: [] });
+    assert.deepEqual(done.duplicates, { outcomes: [], downloads: [], changed: [] });
     assert.equal(tasks.size, 0);
     assert.equal(frames.size, 0);
     work.dispose();
@@ -484,7 +484,7 @@ test("duplicate jobs read audio pair by pair, retain the older track and recover
     assert.ok(turns >= 5);
     assert.deepEqual(
       runTestSync(checkDuplicateFiles(store, Effect.void, () => Effect.die("unexpected read"))),
-      { outcomes: [], changed: [] },
+      { outcomes: [], downloads: [], changed: [] },
     );
   } finally {
     fixture.close();

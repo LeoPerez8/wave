@@ -6,6 +6,7 @@ import {
   type DuplicateCheck,
   type DuplicateCheckEvent,
   type DuplicateCheckWhen,
+  type DuplicateKind,
   type YtDownloadJournalJob,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -26,12 +27,14 @@ import { LibraryStore } from "./LibraryStore";
 import { appRuntime } from "./runtime";
 
 /**
- * The check for songs an interrupted quality replacement left twice (docs/spec.md, "YT Music" ›
- * Download quality › Left twice): due once after the update that brings it, and again after a
- * replacement run that was interrupted, kept on this phone. When it runs is Core's
- * (`duplicateCheckStep`); this module only keeps the phone's copy and runs it.
+ * The check for songs an interrupted quality replacement left twice, and for songs downloaded
+ * again though the Library had them (docs/spec.md, "YT Music" › Download quality › Left twice,
+ * Downloaded again): due once after the update that brings it, and again after a replacement run
+ * that was interrupted, kept on this phone. When it runs is Core's (`duplicateCheckStep`); this
+ * module only keeps the phone's copy and runs it. The key changed when the check learned the
+ * downloaded-again pairs, so every phone runs it once more.
  */
-const KEY = "downloads.replacementDuplicatesCheck";
+const KEY = "downloads.duplicatesCheck";
 
 /** The check's log lines go with the download service's own. */
 const TAG = "WaveDownloads";
@@ -46,16 +49,29 @@ const TAG = "WaveDownloads";
 const checkReplacementDuplicates = (when: DuplicateCheckWhen) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
-    const { outcomes, changed } = yield* checkDuplicateFiles(store, startupTurnEffect, (paths) =>
-      Effect.tryPromise(() => WaveNative.readAudioLengths(paths)),
+    const { outcomes, downloads, changed } = yield* checkDuplicateFiles(
+      store,
+      startupTurnEffect,
+      (paths) => Effect.tryPromise(() => WaveNative.readAudioLengths(paths)),
     );
     if (changed.length > 0) {
       yield* finishFileDeletions("duplicateCheck", { between: startupTurnEffect });
       libraryEdited(changed);
     }
+    yield* writeLines(when, outcomes, "replacement");
+    yield* writeLines(when, downloads, "download");
+  });
+
+/** One block of the check's log: its summary, then a line per song it changed or left. */
+const writeLines = (
+  when: DuplicateCheckWhen,
+  outcomes: Parameters<typeof replacementDuplicateLinesSteps>[1],
+  kind: DuplicateKind,
+) =>
+  Effect.gen(function* () {
     yield* startupTurnEffect;
     const lines = yield* runSteps(
-      replacementDuplicateLinesSteps(when, outcomes),
+      replacementDuplicateLinesSteps(when, outcomes, kind),
       startupTurnEffect,
     );
     const summary = lines[0];
@@ -93,7 +109,7 @@ const run = async (when: DuplicateCheckWhen): Promise<void> => {
     tell({ kind: "ran", ok: true });
   } catch (error: unknown) {
     // Due still: the next launch tries again.
-    appLog("warn", TAG, `Couldn't check for songs a replacement left twice: ${String(error)}`);
+    appLog("warn", TAG, `Couldn't check for songs left twice: ${String(error)}`);
     tell({ kind: "ran", ok: false });
   }
 };

@@ -25,7 +25,7 @@ const WHEN: Record<FileDeletionsWhen, string> = {
   import: "after an import",
   replacementRun: "as a replacement run started",
   failedReplacement: "after a failed replacement",
-  duplicateCheck: "after the check for songs a replacement left twice",
+  duplicateCheck: "after the check for songs left twice",
 };
 
 /**

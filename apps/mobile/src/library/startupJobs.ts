@@ -6,11 +6,13 @@ import {
   unsearchedSongJob,
   reconcileScanSteps,
   replacementDuplicatesSteps,
+  downloadDuplicatesSteps,
   replacementDuplicateFixSteps,
   nextScanSaveSlice,
   scanSaveSliceSteps,
   SCAN_SAVE_SLICE,
   type ScanReconcileInput,
+  type DuplicateKind,
   type DuplicateOutcome,
   type PendingFavorite,
   type ReplacementDuplicate,
@@ -323,26 +325,38 @@ export const checkDuplicateFiles = (
     yield* turn;
     const files = yield* store.duplicateCheckFiles;
     const pairs = yield* runSteps(replacementDuplicatesSteps(files), turn);
-    const outcomes: { pair: ReplacementDuplicate; outcome: DuplicateOutcome }[] = [];
+    const downloadPairs = yield* runSteps(downloadDuplicatesSteps(files, pairs), turn);
     const changed: number[] = [];
-    for (const pair of pairs) {
-      yield* turn;
-      const read = yield* lengths([pair.old.path, pair.new.path]);
-      yield* turn;
-      const fix = yield* runSteps(
-        replacementDuplicateFixSteps(pair, { old: read[0] ?? null, new: read[1] ?? null }),
-        turn,
-      );
-      yield* turn;
-      if (fix.kind === "leave") {
-        outcomes.push({ pair, outcome: fix });
-        continue;
-      }
-      const fixed = yield* store.fixReplacementDuplicate(fix);
-      outcomes.push({ pair, outcome: fixed ? fix : { kind: "leave", reason: "changed" } });
-      if (fixed) changed.push(fix.keep.id, fix.drop.id);
-    }
-    return { outcomes, changed };
+    const fixAll = (found: readonly ReplacementDuplicate[], kind: DuplicateKind) =>
+      Effect.gen(function* () {
+        const outcomes: { pair: ReplacementDuplicate; outcome: DuplicateOutcome }[] = [];
+        for (const pair of found) {
+          yield* turn;
+          const read = yield* lengths([pair.old.path, pair.new.path]);
+          yield* turn;
+          const fix = yield* runSteps(
+            replacementDuplicateFixSteps(
+              pair,
+              { old: read[0] ?? null, new: read[1] ?? null },
+              kind,
+            ),
+            turn,
+          );
+          yield* turn;
+          if (fix.kind === "leave") {
+            outcomes.push({ pair, outcome: fix });
+            continue;
+          }
+          const fixed = yield* store.fixReplacementDuplicate(fix);
+          outcomes.push({ pair, outcome: fixed ? fix : { kind: "leave", reason: "changed" } });
+          if (fixed) changed.push(fix.keep.id, fix.drop.id);
+        }
+        return outcomes;
+      });
+    const outcomes = yield* fixAll(pairs, "replacement");
+    // Songs an import downloaded though the Library had them (Core's `downloadDuplicates`).
+    const downloads = yield* fixAll(downloadPairs, "download");
+    return { outcomes, downloads, changed };
   });
 
 /** Build the three native scanner columns in budgeted CPU steps, before its indivisible bridge call. */

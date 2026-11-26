@@ -96,11 +96,13 @@ const liveEntries = () =>
     .all();
 
 describe("the files the duplicate check looks at", () => {
-  test("MP3 and M4A files, with their recordings and their Track's star, plays and playlists", () => {
+  test("every file, with its recording, whether Wave downloaded it and its Track's star, plays and playlists", () => {
     const { mp3, m4a, indie } = leftTwice();
     play(mp3, 6);
     const rock = createPlaylist(db, "Rock", [{ source: "library", trackId: mp3 }], 1).playlistId;
     save([file("/Music/b.flac", { title: "Lossless" })]);
+    const flac = idOf("/Music/b.flac");
+    db.update(schema.tracks).set({ videoId: "abc" }).where(eq(schema.tracks.id, m4a)).run();
     assert.deepEqual(
       selectDuplicateCheckFiles(db).map((song) => [
         song.id,
@@ -112,10 +114,12 @@ describe("the files the duplicate check looks at", () => {
         song.plays,
         song.playlists,
         song.recordingKey !== null,
+        song.downloaded,
       ]),
       [
-        [mp3, MP3, "505", ["Arctic Monkeys"], 253_000, true, 2, [indie, rock], true],
-        [m4a, M4A, "505", ["Arctic Monkeys"], 253_000, false, 0, [], true],
+        [mp3, MP3, "505", ["Arctic Monkeys"], 253_000, true, 2, [indie, rock], true, false],
+        [m4a, M4A, "505", ["Arctic Monkeys"], 253_000, false, 0, [], true, true],
+        [flac, "/Music/b.flac", "Lossless", ["Arctic Monkeys"], 253_000, false, 0, [], true, false],
       ],
     );
   });

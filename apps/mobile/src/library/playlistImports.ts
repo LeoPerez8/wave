@@ -39,14 +39,20 @@ import { LibraryStore } from "./LibraryStore";
 
 import { playlistImports as imports } from "./playlistImportsStore";
 import { currentPlaylists, playlistsChanged } from "./playlists";
-import { appRuntime } from "./runtime";
+import { libraryOnceScanned } from "./libraryOnceScanned";
+import { appRuntime, runningScan } from "./runtime";
 
 type Job = PlaylistImport<YtAlbumSong>;
 
-/** The Library's songs, as an import matches them (`planLinkImport`). */
+/**
+ * The Library's songs, as an import matches them (`planLinkImport`), once the scan running now is
+ * through: read halfway, songs already on the phone would be queued for download (`libraryOnceScanned`).
+ */
 export const listLibrary = () =>
-  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-  appRuntime.runPromise(LibraryStore.use((store) => store.listSongs));
+  libraryOnceScanned(runningScan, () =>
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+    appRuntime.runPromise(LibraryStore.use((store) => store.listSongs)),
+  );
 
 /** The playlists whose import is giving them their songs now, so none is given twice. */
 const finishing = new Map<number, { job: Job; promise: Promise<void> }>();

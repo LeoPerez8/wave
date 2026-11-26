@@ -31,6 +31,8 @@ export interface DuplicateCheckFile {
   readonly plays: number;
   /** The playlists holding an entry of its Track (each once, in id order). */
   readonly playlists: readonly number[];
+  /** Whether Wave downloaded its file (its Track has a YouTube Music video); absent is no. */
+  readonly downloaded?: boolean;
 }
 
 /**
@@ -42,6 +44,9 @@ export interface ReplacementDuplicate<F extends DuplicateCheckFile = DuplicateCh
   readonly old: F;
   readonly new: F;
 }
+
+/** An MP3 or an M4A: the only files a replacement makes. */
+const replaceable = (file: DuplicateCheckFile): boolean => /\.(mp3|m4a)$/i.test(file.path);
 
 const sameArtists = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length &&
@@ -68,8 +73,8 @@ const sameRecording = (a: DuplicateCheckFile, b: DuplicateCheckFile): boolean =>
 export const replacementDuplicates = <F extends DuplicateCheckFile>(
   files: readonly F[],
 ): ReplacementDuplicate<F>[] => {
-  const byPath = new Map(files.map((file) => [file.path, file]));
-  return files.flatMap((older) =>
+  const byPath = new Map(files.filter(replaceable).map((file) => [file.path, file]));
+  return files.filter(replaceable).flatMap((older) =>
     (["soulseek", "youtube"] as const).flatMap((source) => {
       const { targetPath } = qualityReplacementTarget(older.path, source);
       const newer = targetPath === older.path ? undefined : byPath.get(targetPath);
@@ -146,7 +151,8 @@ const hasHistory = (file: DuplicateCheckFile): boolean =>
 export const replacementDuplicateFix = <F extends DuplicateCheckFile>(
   pair: ReplacementDuplicate<F>,
   lengths: DuplicateLengths,
-): DuplicateFix<F> => finishSteps(replacementDuplicateFixSteps(pair, lengths));
+  kind: DuplicateKind = "replacement",
+): DuplicateFix<F> => finishSteps(replacementDuplicateFixSteps(pair, lengths, kind));
 
 /** Why the check ran: once after the update that brought it, or after an interrupted run. */
 export type DuplicateCheckWhen = "update" | "interruptedRun";
@@ -286,23 +292,26 @@ const outcomeLine = (pair: ReplacementDuplicate, outcome: DuplicateOutcome): str
   }
 };
 
+/** Which pairs a log block is about: those a replacement left, or songs downloaded again. */
+export type DuplicateKind = "replacement" | "download";
+
+// not UI text: the app log's lines
+const HEADING: Record<DuplicateKind, string> = {
+  replacement: "Songs a replacement left twice",
+  download: "Songs downloaded again though the Library had them",
+};
+
 /**
  * What the check that ran [when] writes to the log (tag `WaveDownloads`):
  * how many pairs it found, fixed and left alone, then a line per song it
- * changed or left.
+ * changed or left. [kind] says which pairs ([DuplicateKind]); replacements' by default.
  */
 // not UI text: the app log's lines
 export const replacementDuplicateLines = (
   when: DuplicateCheckWhen,
   outcomes: readonly { readonly pair: ReplacementDuplicate; readonly outcome: DuplicateOutcome }[],
-): string[] => {
-  const fixed = outcomes.filter(({ outcome }) => outcome.kind === "fix").length;
-  const pairs = `${outcomes.length} ${outcomes.length === 1 ? "pair" : "pairs"}`;
-  return [
-    `Songs a replacement left twice, checked ${WHEN[when]}: ${pairs} found, ${fixed} fixed, ${outcomes.length - fixed} left alone`,
-    ...outcomes.map(({ pair, outcome }) => outcomeLine(pair, outcome)),
-  ];
-};
+  kind: DuplicateKind = "replacement",
+): string[] => finishSteps(replacementDuplicateLinesSteps(when, outcomes, kind));
 
 /** Pair indexing and detection can give up the thread between every file. */
 export function* replacementDuplicatesSteps<F extends DuplicateCheckFile>(
@@ -310,17 +319,18 @@ export function* replacementDuplicatesSteps<F extends DuplicateCheckFile>(
 ): Generator<void, ReplacementDuplicate<F>[]> {
   const byPath = new Map<string, F>();
   for (const file of files) {
-    byPath.set(file.path, file);
+    if (replaceable(file)) byPath.set(file.path, file);
     yield;
   }
   const pairs: ReplacementDuplicate<F>[] = [];
   for (const older of files) {
-    for (const source of ["soulseek", "youtube"] as const) {
-      const { targetPath } = qualityReplacementTarget(older.path, source);
-      const newer = targetPath === older.path ? undefined : byPath.get(targetPath);
-      if (newer !== undefined && newer.id > older.id && sameRecording(older, newer))
-        pairs.push({ old: newer, new: older });
-    }
+    if (replaceable(older))
+      for (const source of ["soulseek", "youtube"] as const) {
+        const { targetPath } = qualityReplacementTarget(older.path, source);
+        const newer = targetPath === older.path ? undefined : byPath.get(targetPath);
+        if (newer !== undefined && newer.id > older.id && sameRecording(older, newer))
+          pairs.push({ old: newer, new: older });
+      }
     yield;
   }
   return pairs;
@@ -330,11 +340,15 @@ export function* replacementDuplicatesSteps<F extends DuplicateCheckFile>(
 export function* replacementDuplicateFixSteps<F extends DuplicateCheckFile>(
   pair: ReplacementDuplicate<F>,
   lengths: DuplicateLengths,
+  kind: DuplicateKind = "replacement",
 ): Generator<void, DuplicateFix<F>> {
   const oldComplete = complete(pair.old, lengths.old);
   const songLength = oldComplete ? (lengths.old ?? 0) : pair.old.durationMs;
+  // A song downloaded again stays on the owner's file whenever that is complete: a download that
+  // plays longer or shorter is never a reason to delete the owner's own copy.
   const onNew =
-    complete(pair.new, lengths.new) && (songLength <= 0 || within(lengths.new ?? 0, songLength));
+    complete(pair.new, lengths.new) &&
+    (kind === "download" || songLength <= 0 || within(lengths.new ?? 0, songLength));
   if (!onNew && !oldComplete)
     return { kind: "leave", reason: "incomplete", incomplete: [pair.old.path, pair.new.path] };
   let merge: DuplicateMerge | null = null;
@@ -371,6 +385,7 @@ export function* replacementDuplicateFixSteps<F extends DuplicateCheckFile>(
 export function* replacementDuplicateLinesSteps(
   when: DuplicateCheckWhen,
   outcomes: readonly { readonly pair: ReplacementDuplicate; readonly outcome: DuplicateOutcome }[],
+  kind: DuplicateKind = "replacement",
 ): Generator<void, string[]> {
   let fixed = 0;
   const lines: string[] = [];
@@ -381,11 +396,83 @@ export function* replacementDuplicateLinesSteps(
   }
   const pairs = `${outcomes.length} ${outcomes.length === 1 ? "pair" : "pairs"}`;
   const result = [
-    `Songs a replacement left twice, checked ${WHEN[when]}: ${pairs} found, ${fixed} fixed, ${outcomes.length - fixed} left alone`,
+    `${HEADING[kind]}, checked ${WHEN[when]}: ${pairs} found, ${fixed} fixed, ${outcomes.length - fixed} left alone`,
   ];
   for (const line of lines) {
     result.push(line);
     yield;
   }
   return result;
+}
+
+const playableKey = (file: DuplicateCheckFile): string =>
+  `${normalizeSearchText(file.title)}|${file.artists.map(normalizeSearchText).join("|")}`;
+
+/**
+ * The songs Wave downloaded though the Library already had them (docs/spec.md, "YT Music" ›
+ * Download quality › Downloaded again): an import that compared a playlist with a Library still
+ * being scanned queued songs whose files the scan hadn't reached yet. Each pair is a Track Wave
+ * downloaded ([old], newer) and the Track of the file the owner had ([new], older, not a
+ * download), one recording (`sameRecording`), on different files. Only a song with exactly one
+ * of each is paired, so two copies the owner keeps on purpose are left alone; so is a Track
+ * already in one of [taken]'s pairs (the replacement pairs, fixed their own way). The pair goes
+ * back to one song as a replacement's does (`replacementDuplicateFix`): the owner's Track stays
+ * on its own file when that is complete audio, else on the download.
+ */
+export const downloadDuplicates = <F extends DuplicateCheckFile>(
+  files: readonly F[],
+  taken: readonly ReplacementDuplicate<F>[] = [],
+): ReplacementDuplicate<F>[] => finishSteps(downloadDuplicatesSteps(files, taken));
+
+/** [downloadDuplicates], giving up the thread between every file. */
+export function* downloadDuplicatesSteps<F extends DuplicateCheckFile>(
+  files: readonly F[],
+  taken: readonly ReplacementDuplicate<F>[] = [],
+): Generator<void, ReplacementDuplicate<F>[]> {
+  const skip = new Set<number>();
+  for (const pair of taken) {
+    skip.add(pair.old.id);
+    skip.add(pair.new.id);
+  }
+  // Each file under its recording key and under its title and artists: a pair shares either.
+  const byKey = new Map<string, F[]>();
+  const byName = new Map<string, F[]>();
+  const add = (index: Map<string, F[]>, key: string, file: F) => {
+    const list = index.get(key);
+    if (list === undefined) index.set(key, [file]);
+    else list.push(file);
+  };
+  for (const file of files) {
+    if (!skip.has(file.id)) {
+      if (file.recordingKey !== null) add(byKey, file.recordingKey, file);
+      add(byName, playableKey(file), file);
+    }
+    yield;
+  }
+  const pairs: ReplacementDuplicate<F>[] = [];
+  for (const download of files) {
+    if (download.downloaded === true && !skip.has(download.id)) {
+      const near = new Map<number, F>();
+      for (const file of [
+        ...(download.recordingKey === null ? [] : (byKey.get(download.recordingKey) ?? [])),
+        ...(byName.get(playableKey(download)) ?? []),
+      ])
+        if (file.path !== download.path && sameRecording(download, file)) near.set(file.id, file);
+      const others = [...near.values()];
+      const owners = others.filter((file) => file.downloaded !== true);
+      const original = owners[0];
+      if (
+        others.length === 1 &&
+        original !== undefined &&
+        original.id < download.id &&
+        !skip.has(original.id)
+      ) {
+        pairs.push({ old: download, new: original });
+        skip.add(original.id);
+        skip.add(download.id);
+      }
+    }
+    yield;
+  }
+  return pairs;
 }

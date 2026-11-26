@@ -1179,7 +1179,7 @@ export class LibraryStore extends Context.Service<
     readonly forgetFileDeletions: (
       paths: readonly string[],
     ) => Effect.Effect<void, LibraryStoreError>;
-    /** The MP3 and M4A files the check for songs a replacement left twice pairs (Core's `replacementDuplicates`). */
+    /** The files the check for songs left twice pairs (Core's `replacementDuplicates`, `downloadDuplicates`). */
     readonly duplicateCheckFiles: Effect.Effect<readonly DuplicateCheckFile[], LibraryStoreError>;
     /**
      * Puts a song a replacement left twice back to one (`fixReplacementDuplicate`): the second
