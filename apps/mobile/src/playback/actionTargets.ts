@@ -1,5 +1,6 @@
 import {
   canFixSong,
+  genreFamilyName,
   groupSongs,
   joinArtists,
   queueSongTrackId,
@@ -313,7 +314,14 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
                   covers: mixed.item.thumbPaths,
                 }
               : mixed.kind === "discoverMix"
-                ? { title: mixed.item.seed.name, subtitle: "", covers: undefined }
+                ? {
+                    title:
+                      mixed.item.seed.genre === undefined
+                        ? mixed.item.seed.name
+                        : genreFamilyName(mixed.item.seed.genre, currentLocalisation().strings),
+                    subtitle: "",
+                    covers: undefined,
+                  }
                 : mixed.kind === "followRelease"
                   ? {
                       title: mixed.item.release.title,

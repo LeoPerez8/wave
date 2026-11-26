@@ -1,5 +1,6 @@
 import {
   formatNumber,
+  genreFamilyName,
   RECAP_SLIDE_MS,
   recapAutoForward,
   recapBack,
@@ -206,13 +207,13 @@ function Story({ period, story }: { readonly period: RecapPeriod; readonly story
             <p className="recap-quiet recap-small">
               {first(strings.shareOfPlays(percent(top.share)))}
             </p>
-            <p className="recap-figure">{top.family.name}</p>
+            <p className="recap-figure">{genreFamilyName(top.family.name, text)}</p>
           </Rise>
           <RankedLines
             firstRank={2}
             lines={rest.map((genre) => ({
               key: genre.family.key,
-              title: genre.family.name,
+              title: genreFamilyName(genre.family.name, text),
               detail: percent(genre.share),
             }))}
           />
@@ -294,7 +295,7 @@ function Story({ period, story }: { readonly period: RecapPeriod; readonly story
               {story.genre !== null && (
                 <div className="recap-column">
                   <p className="recap-quiet recap-small">{strings.topGenre}</p>
-                  <p className="recap-title">{story.genre}</p>
+                  <p className="recap-title">{genreFamilyName(story.genre, text)}</p>
                 </div>
               )}
             </div>

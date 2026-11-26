@@ -26,6 +26,7 @@ export const discoverEn = {
   findingSongs: "Finding songs",
   /** A mix's caption and the name a saved copy gets. */
   mixTitle: (name: string) => `${name} mix`,
+  brazilianFunk: "Brazilian Funk",
   songs: (count: number) =>
     plural("en", count, {
       one: `${formatNumber("en", count)} song`,

@@ -4,12 +4,14 @@ import { describe, test } from "node:test";
 import {
   artistMixSeeds,
   blendDiscoverMix,
+  catalogueOf,
   discoverMix,
   discoverMixCaption,
   discoverMixFamiliarPool,
   discoverMixesBuilt,
   discoverMixesDue,
   genreFamily,
+  genreProfile,
   artistGraph,
   genreMixSeeds,
   mixKnownSongs,
@@ -79,6 +81,78 @@ describe("Genre families", () => {
     assert.notEqual(genreFamily("Metalcore")?.key, genreFamily("Rock")?.key);
   });
 
+  test("group Brazilian funk tags regardless of case or accents", () => {
+    const tags = [
+      "Funk Carioca",
+      "funk brasileiro",
+      "Brazilian Funk",
+      "BAILE FUNK",
+      "Funk Mandelão",
+      "funk mandelao",
+      "FUNK OSTENTAÇÃO",
+      "funk ostentacao",
+      "Funk Paulista",
+      "Funk Consciente",
+      "Brega Funk",
+      "Funk Automotivo",
+      "Funk de BH",
+      "Funk Proibidão",
+      "Funk Melody",
+      "Brazilian Phonk",
+    ];
+    for (const tag of tags)
+      assert.deepEqual(genreFamily(tag), { key: "brazilianfunk", name: "Brazilian Funk" }, tag);
+    assert.equal(genreFamily("Funk")?.name, "R&B");
+    assert.equal(genreFamily("R&B")?.name, "R&B");
+    assert.equal(genreFamily("Soul")?.name, "R&B");
+    assert.equal(genreFamily("Soul & Funk")?.name, "R&B");
+    assert.equal(genreFamily("Funk Metal")?.name, "Metal");
+    assert.equal(genreFamily("Bossa Nova")?.name, "Jazz");
+    assert.equal(genreFamily("Café Jazz")?.key, "caféjazz");
+  });
+
+  test("keeps Deezer's combined Rap/Funk Brasileiro genre together", () => {
+    assert.deepEqual(
+      genreProfile([{ genre: "Rap/Funk Brasileiro" }]),
+      new Map([["rapfunkbrasileiro", 1]]),
+    );
+    assert.deepEqual(
+      genreProfile([{ genre: "Rap; Funk Brasileiro" }]),
+      new Map([
+        ["hiphop", 0.5],
+        ["brazilianfunk", 0.5],
+      ]),
+    );
+  });
+
+  test("resolve a bare Funk tag from the artist's other tags or a majority of known neighbours", () => {
+    const graph = artistGraph({
+      catalog: [],
+      plays: [],
+      pages: [
+        { name: "MC Teste", similar: ["MC Fioti", "MC Hariel", "James Brown", "Unknown Artist"] },
+        { name: "MC Empate", similar: ["MC Fioti", "James Brown"] },
+      ].map(({ name, similar }) => ({
+        name,
+        similar: similar.map((name) => ({ name, browseId: name, audience: null })),
+      })),
+    });
+    const profiles = new Map([
+      ["MC Fioti", genreProfile([{ genre: "Funk Ostentação" }])],
+      ["MC Hariel", genreProfile([{ genre: "Funk Paulista" }])],
+      ["James Brown", genreProfile([{ genre: "Soul" }])],
+    ]);
+    const profileOf = (artist: string) => profiles.get(artist);
+    const classify = (artist: string) =>
+      genreFamily("Funk", { artists: [artist], graph, profileOf })?.name;
+    assert.equal(classify("MC Fioti"), "Brazilian Funk");
+    assert.equal(classify("MC Teste"), "Brazilian Funk");
+    assert.equal(classify("MC Empate"), "R&B");
+    assert.equal(classify("James Brown"), "R&B");
+    assert.equal(classify("Unknown Artist"), "R&B");
+    assert.equal(genreFamily("Soul", { artists: ["MC Fioti"], graph, profileOf })?.name, "R&B");
+  });
+
   test("make an unknown tag its own family, as typed", () => {
     assert.equal(genreFamily(" Shoegaze ")?.name, "Shoegaze");
     assert.equal(genreFamily("shoegaze")?.key, genreFamily("SHOEGAZE")?.key);
@@ -110,6 +184,63 @@ describe("Genre mixes' families", () => {
     );
     assert.equal(seeds[0]?.kind, "genre");
     assert.equal(seeds[0]?.genre, "Metal");
+  });
+
+  test("bare Funk songs count toward the same genre mix and familiar share", () => {
+    const library = {
+      ...libraryOf([
+        ...songsOf(3, "Funk", 1, 10),
+        ...songsOf(1, "Funk; Funk Paulista", 1, 10),
+        ...songsOf(1, "Funk Carioca", 3),
+        ...songsOf(1, "Funk", 4),
+        ...songsOf(5, "Funk", 2),
+      ]),
+      artists: [
+        { id: 1, name: "MC Teste" },
+        { id: 2, name: "James Brown" },
+        { id: 3, name: "MC Fioti" },
+        { id: 4, name: "MC Vizinho" },
+      ],
+      graph: artistGraph({
+        catalog: [],
+        plays: [],
+        pages: [
+          {
+            name: "MC Vizinho",
+            similar: [{ name: "MC Fioti", browseId: "fioti", audience: null }],
+          },
+        ],
+      }),
+    };
+    const known = mixKnownSongs({
+      library: library.songs,
+      playedRecordingKeys: [],
+      streamed: [],
+      playlisted: [],
+    });
+    const seeds = genreMixSeeds(library);
+    assert.deepEqual(
+      seeds.map(({ id }) => id),
+      ["genre:brazilianfunk", "genre:rb"],
+    );
+    for (const [seed, wanted] of [
+      [seeds[0]!, [1, 2, 3, 4, 5, 6]],
+      [seeds[1]!, [7, 8, 9, 10, 11]],
+    ] as const) {
+      const pool = discoverMixFamiliarPool(seed, {
+        radio: [],
+        known,
+        library,
+        taken: { tracks: new Set(), videos: new Set() },
+        length: 20,
+      });
+      assert.deepEqual(
+        pool
+          .flatMap((song) => (song.source === "library" ? [song.track.id] : []))
+          .sort((a, b) => a - b),
+        wanted,
+      );
+    }
   });
 
   test("need five Library songs", () => {
@@ -412,6 +543,15 @@ const seedOf = (genre: string) =>
   genreMixSeeds(libraryOf([...songsOf(3, genre, 1, 10), ...songsOf(3, genre, 2, 5)]))[0]!;
 
 describe("A genre mix", () => {
+  test("names a Brazilian funk mix in the listener's language", () => {
+    const seed = seedOf("Funk Carioca");
+    const mix = discoverMix(seed, radioSongs(12));
+    assert.ok(mix !== null);
+    const shown = blendDiscoverMix(mix, { level: 5 });
+    assert.equal(discoverMixCaption(shown, catalogueOf("en")).title, "Brazilian Funk mix");
+    assert.equal(discoverMixCaption(shown, catalogueOf("pt-BR")).title, "Mix de Funk Brasileiro");
+  });
+
   test("is named after its family, keeps its seed artists, and is saved and read back as one", () => {
     const seed = seedOf("Metalcore");
     const mix = discoverMix(seed, radioSongs(12));
