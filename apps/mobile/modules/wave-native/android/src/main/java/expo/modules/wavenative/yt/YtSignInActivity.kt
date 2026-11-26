@@ -17,6 +17,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.window.OnBackInvokedDispatcher
 import android.widget.FrameLayout
+import expo.modules.wavenative.account.GoogleAccountPicker
+import expo.modules.wavenative.account.ProviderSignInUrls
 import kotlinx.coroutines.CompletableDeferred
 
 /**
@@ -31,6 +33,7 @@ class YtSignInActivity : Activity() {
   private val main = Handler(Looper.getMainLooper())
   private var delivered = false
   private var tries = 0
+  private var pickingAccount = true
 
   @SuppressLint("SetJavaScriptEnabled")
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,8 +60,31 @@ class YtSignInActivity : Activity() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
       onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) { back() }
     }
+    if (savedInstanceState?.getBoolean(PICKING_ACCOUNT) == true) return
+    val email = intent.getStringExtra(EXTRA_EMAIL)
+    intent.removeExtra(EXTRA_EMAIL)
+    if (email != null) openSignInPage(email)
+    else if (savedInstanceState != null || !GoogleAccountPicker.open(this)) openSignInPage(null)
+  }
+
+  override fun onSaveInstanceState(outState: Bundle) {
+    super.onSaveInstanceState(outState)
+    outState.putBoolean(PICKING_ACCOUNT, pickingAccount)
+  }
+
+  @Deprecated("AccountManager returns its choice through an activity result")
+  override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    super.onActivityResult(requestCode, resultCode, data)
+    if (requestCode == GoogleAccountPicker.REQUEST_CODE)
+      openSignInPage(GoogleAccountPicker.email(resultCode, data))
+  }
+
+  private fun openSignInPage(email: String?) {
+    pickingAccount = false
     // A fresh page, so an earlier (expired) session doesn't sign straight back in.
-    clearWebData { webView.loadUrl(SIGN_IN_URL) }
+    clearWebData {
+      if (!isFinishing && !isDestroyed) webView.loadUrl(ProviderSignInUrls.ytMusic(email))
+    }
   }
 
   @Deprecated("Android 12: Back before OnBackInvokedDispatcher")
@@ -143,8 +169,8 @@ class YtSignInActivity : Activity() {
   companion object {
     private const val MUSIC_HOST = "music.youtube.com"
     private const val MUSIC_URL = "https://$MUSIC_HOST"
-    private const val SIGN_IN_URL =
-      "https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fmusic.youtube.com"
+    private const val EXTRA_EMAIL = "signInEmail"
+    private const val PICKING_ACCOUNT = "pickingAccount"
     private const val MAX_TRIES = 20
     private const val RETRY_MS = 500L
 
@@ -154,13 +180,15 @@ class YtSignInActivity : Activity() {
      * Opens the sign-in page over [activity] and waits for it to close: the
      * session it signed in with, or null when the owner backed out.
      */
-    suspend fun signIn(activity: Activity): YtCredentials? {
+    suspend fun signIn(activity: Activity, email: String?): YtCredentials? {
       val result = CompletableDeferred<YtCredentials?>()
       synchronized(this) {
         pending?.complete(null)
         pending = result
       }
-      activity.startActivity(Intent(activity, YtSignInActivity::class.java))
+      activity.startActivity(Intent(activity, YtSignInActivity::class.java).apply {
+        if (email != null) putExtra(EXTRA_EMAIL, email)
+      })
       return result.await()
     }
 

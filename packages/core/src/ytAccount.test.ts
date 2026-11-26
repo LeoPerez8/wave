@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { YT_ACCOUNT_SIGNED_OUT, stepYtAccount, ytAccountView } from "./index.ts";
-import type { YtAccount, YtAccountState, YtSession } from "./index.ts";
+import { YT_ACCOUNT_SIGNED_OUT, stepYtAccount, ytAccountView, ytSignInEmail } from "./index.ts";
+import type { YtAccount, YtAccountState, YtSession, WaveSession } from "./index.ts";
 
 const leo: YtAccount = {
   name: "Leo Perez",
@@ -134,4 +134,21 @@ describe("stepYtAccount", () => {
       note: "expired",
     });
   });
+});
+
+test("YT Music sign-in prefers the expired account, then Wave, then asks for an email", () => {
+  const wave: WaveSession = {
+    status: "signedIn",
+    account: { email: "wave@example.com", name: null, photoUrl: null },
+  };
+  assert.equal(ytSignInEmail({ status: "expired", account: leo }, wave), "leo@example.com");
+  assert.equal(
+    ytSignInEmail({ status: "expired", account: { ...leo, email: null } }, wave),
+    "wave@example.com",
+  );
+  assert.equal(ytSignInEmail({ status: "signedOut" }, wave), "wave@example.com");
+  assert.equal(
+    ytSignInEmail({ status: "signedOut" }, { status: "ended", account: wave.account }),
+    null,
+  );
 });

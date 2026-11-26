@@ -650,6 +650,7 @@ const connect = (
             sessions: ytSessions,
             online: () => true,
             startSignIn: () => ({ outcome: Promise.resolve(browser.outcome), cancel: () => {} }),
+            waveSession: () => ({ status: "signedOut" }),
           }),
           spotifyImportLayer({ fetch: () => Promise.reject(new Error("no network")) }).pipe(
             Layer.provideMerge(
