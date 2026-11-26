@@ -63,7 +63,7 @@ function DiscoverCard() {
           }
         />
         <Text className="px-3 pb-2 font-sans text-footnote text-secondary">
-          {strings.discover.faithfulnessNote}
+          {strings.discover.mobileFaithfulnessNote}
         </Text>
         <SettingsSlider
           compact

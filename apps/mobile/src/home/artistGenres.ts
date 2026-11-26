@@ -1,10 +1,13 @@
 /** Already stored artist profiles; recommendation reads never request genre data. */
 import {
+  artistProfileDue,
   artistProfilesKnown,
   libraryGenreProfiles,
   libraryGenreProfilesSteps,
   parseArtistProfiles,
   storedArtistProfiles,
+  withArtistProfiles,
+  type GenreProfile,
   type ArtistProfiles,
   type GenreProfileLibrary,
   type GenreProfileOf,
@@ -22,7 +25,15 @@ const profiles = persistedSetting<ArtistProfiles>({
 
 /** An outside artist's profile as looked up so far: undefined when never looked up. */
 export const lookedUpProfileOf: GenreProfileOf = (artist) =>
-  artistProfilesKnown(profiles.get())(artist);
+  artistProfilesKnown(profiles.get(), { legacyOnly: true })(artist);
+
+export const knownGenreMixProfiles = (): GenreProfileOf => artistProfilesKnown(profiles.get());
+
+export const genreMixArtistDue = (artist: string): boolean =>
+  artistProfileDue(profiles.get(), artist, Date.now());
+
+export const saveGenreMixArtistProfile = (artist: string, profile: GenreProfile | null): void =>
+  profiles.set(withArtistProfiles(profiles.get(), [[artist, profile, Date.now()]]));
 
 /** Known Library profiles, falling back to profiles already stored on the phone. */
 export const magicProfileOf = (library: GenreProfileLibrary): GenreProfileOf => {

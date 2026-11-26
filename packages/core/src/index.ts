@@ -1432,6 +1432,24 @@ export {
   restorableTrack,
 } from "./ytQueue.ts";
 export type { PlayerTrouble } from "./ytQueue.ts";
+export {
+  NETWORK_SLOW_GRACE_MS,
+  followNetworkSignal,
+  networkSignal,
+  networkSignalAnnouncement,
+  networkSignalLabel,
+  networkSignalLine,
+  networkSignalRecheckMs,
+} from "./networkSignal.ts";
+export type { NetworkSignal, NetworkSignalInput, NetworkSignalTrail } from "./networkSignal.ts";
+export {
+  GHOST_WAVE,
+  MINI_GHOST_WAVE,
+  ghostWaveFrame,
+  ghostWavePeriodMs,
+  miniGhostWavePath,
+} from "./ghostWave.ts";
+export type { GhostWaveFrame } from "./ghostWave.ts";
 export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
 export { settleBestQuality } from "./bestQuality.ts";
 export type { BestQualityState, BestQualityStep } from "./bestQuality.ts";
@@ -2453,6 +2471,7 @@ export type {
 export {
   GENRE_AFFINITY_THRESHOLD,
   artistProfilesKnown,
+  artistProfileDue,
   parseArtistProfiles,
   storedArtistProfiles,
   withArtistProfiles,
@@ -2924,6 +2943,8 @@ export type { LostLinkTap, LostTapReason } from "./lostTap.ts";
 export { createArtistGraphBuild, type ArtistGraphCatalogEntry } from "./artistGraphBuild.ts";
 export { mixKnownSongsSteps } from "./mixKnownSongs.ts";
 export { genreMixDjCandidatesSteps, genreMixSeedsSteps } from "./genreMixes.ts";
+export { faithfulGenreMixesSteps } from "./faithfulGenreMixes.ts";
+export { lookUpDeezerArtistGenre } from "./deezerArtistGenre.ts";
 export { mapSteps, sortSteps, finishSteps, filterSteps } from "./buildSteps.ts";
 export { libraryMixProfilesSteps } from "./genreAffinity.ts";
 export { rankPlaysSteps } from "./stats.ts";
