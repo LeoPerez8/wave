@@ -1,4 +1,4 @@
-import type { DjTile, DjTileKey } from "@wave/core";
+import { genreFamilyName, type DjTile, type DjTileKey } from "@wave/core";
 import { IconCircleCheckFilled, IconX } from "@tabler/icons-react-native";
 import type { ReactNode } from "react";
 import { ScrollView, Text, View } from "react-native";
@@ -112,10 +112,11 @@ function SelectionMark({
 }) {
   const { strings } = useLocalisation();
   const foreground = useThemeColor("foreground");
+  const name = tile.kind === "genre" ? genreFamilyName(tile.name, strings) : tile.name;
   return (
     <Press
       accessibilityRole="button"
-      accessibilityLabel={strings.dj.removeFromSelection(tile.name)}
+      accessibilityLabel={strings.dj.removeFromSelection(name)}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
@@ -134,7 +135,7 @@ function SelectionMark({
             numberOfLines={2}
             className="text-center font-sans text-caption font-medium text-foreground"
           >
-            {tile.name}
+            {name}
           </Text>
         </View>
       )}

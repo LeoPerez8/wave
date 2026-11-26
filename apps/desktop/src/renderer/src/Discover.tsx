@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import type { BrowseRow } from "../../shared/browse.ts";
-import type { MixRowId } from "@wave/core";
+import { genreFamilyName, type MixRowId } from "@wave/core";
 import type { DiscoverMixesView } from "../../shared/ytPages.ts";
 import { albumName, artistName, text } from "./text.ts";
 import { Shelf, YtQuiet, YtSongList } from "./YtLists.tsx";
@@ -12,6 +12,9 @@ import { Shelf, YtQuiet, YtSongList } from "./YtLists.tsx";
  */
 
 type Run = (action: Promise<unknown>) => void;
+
+export const mixTitle = ({ row, name }: DiscoverMixesView["mixes"][number]): string =>
+  text.discover.mixTitle(row === "genre-mixes" ? genreFamilyName(name, text) : name);
 
 /** Starts a Magic Queue from a Library song; a song that can't start one says it failed. */
 const startFrom = (run: Run, id: number) =>
@@ -143,20 +146,16 @@ export function DiscoverPage({
                 <section key={row} aria-label={text.discover.rows[row]}>
                   <h2>{text.discover.rows[row]}</h2>
                   {shown.map((mix) => (
-                    <section
-                      key={mix.id}
-                      className="yt-mix"
-                      aria-label={text.discover.mixTitle(mix.name)}
-                    >
+                    <section key={mix.id} className="yt-mix" aria-label={mixTitle(mix)}>
                       <h3>
                         <button className="yt-mix-title" onClick={() => onMix(mix.id)}>
-                          {text.discover.mixTitle(mix.name)}
+                          {mixTitle(mix)}
                         </button>
                         <span className="secondary"> · {text.discover.songs(mix.songs.total)}</span>
                       </h3>
                       <YtSongList
                         songs={mix.songs.items}
-                        label={text.discover.mixTitle(mix.name)}
+                        label={mixTitle(mix)}
                         onPlay={(index) => playMix(run, mix.id, index)}
                         onMenu={onSongMenu}
                       />

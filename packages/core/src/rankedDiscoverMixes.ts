@@ -45,7 +45,10 @@ export function* rankedDiscoverMixesSteps<L extends DiscoverLibrarySong>(
   );
   return yield* discoverMixesOfRadiosSteps(ranked, {
     known: sources.known,
-    library: sources.library,
+    library: {
+      ...sources.library,
+      ...(sources.profileOf === undefined ? {} : { profileOf: sources.profileOf }),
+    },
     ...(avoid === undefined ? {} : { avoid }),
   });
 }

@@ -2,6 +2,7 @@ import { useLocalisation } from "@/localisation/localisation";
 import { IconShare3, IconX } from "@tabler/icons-react-native";
 import {
   formatNumber,
+  genreFamilyName,
   RECAP_SLIDE_MS,
   recapBack,
   recapAutoForward,
@@ -357,7 +358,7 @@ function TopGenresSlide({ genres }: { genres: readonly RecapGenre[] }) {
             className="font-sans font-bold text-on-recap"
             style={{ fontSize: 56, lineHeight: 64 }}
           >
-            {top.family.name}
+            {genreFamilyName(top.family.name, strings)}
           </Text>
         </View>
       </Rise>
@@ -365,7 +366,10 @@ function TopGenresSlide({ genres }: { genres: readonly RecapGenre[] }) {
         entries={rest}
         firstRank={2}
         entryKey={(entry) => entry.family.key}
-        line={(entry) => ({ title: entry.family.name, detail: percent(entry.share) })}
+        line={(entry) => ({
+          title: genreFamilyName(entry.family.name, strings),
+          detail: percent(entry.share),
+        })}
       />
     </View>
   );
@@ -532,7 +536,12 @@ function SummarySlide({
             label={strings.recap.minutesListened}
             value={formatNumber(language, minutes)}
           />
-          {genre !== null && <SummaryFigure label={strings.recap.topGenre} value={genre.name} />}
+          {genre !== null && (
+            <SummaryFigure
+              label={strings.recap.topGenre}
+              value={genreFamilyName(genre.name, strings)}
+            />
+          )}
         </View>
       </Rise>
     </View>
