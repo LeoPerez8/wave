@@ -112,7 +112,6 @@ class SoulseekModule : Module() {
     // Download only on Wi-Fi (#1502): the synced switch, kept in the journal for the service.
     AsyncFunction("setDownloadWifiOnly") Coroutine { on: Boolean -> withContext(Dispatchers.IO) { downloads.setWifiOnly(on) } }
     // A song played while its download may wait for Wi-Fi: it downloads now, unless it's best quality.
-    AsyncFunction("playNowDownload") Coroutine { videoId: String -> withContext(Dispatchers.IO) { downloads.playNow(videoId) } }
     // Settings › Downloads' drag: the waiting jobs [ids] start in this order (Core's `moveQueuedJobs`).
     AsyncFunction("moveQueuedJobs") Coroutine { ids: List<String> -> withContext(Dispatchers.IO) { downloads.jobs.moveQueued(ids); downloads.changed() } }
 

@@ -53,6 +53,11 @@ export interface NativePlayerState extends PlayerPosition {
   readonly playWhenReady: boolean;
   /** Native network pause; false again on resume, cancellation or the ten-minute timeout. */
   readonly waitingForConnection: boolean;
+  /**
+   * The last wait ran out on its own (its ten minutes, or the output went away), not ended by the
+   * owner; false again once the song plays, another song comes or a new wait starts.
+   */
+  readonly waitRanOut: boolean;
   /** Current stream failure, including when JS connects after the error happened. */
   readonly errorCode: string | null;
   readonly index: number | null;

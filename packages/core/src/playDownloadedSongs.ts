@@ -64,16 +64,32 @@ const nextOnPhone = (
 };
 
 /**
- * Whether Play Downloaded Songs shows over [state]: a song plays, and an
- * entry ahead is on the phone or [library] (its playable songs) has a song
- * that isn't disliked. Cheaper than the pick (`playDownloadedSongs`).
+ * Whether the song playing over [state] can be held up by the network: one
+ * plays, and not from its own file on the phone. Just after a tap jumped to
+ * a song on the phone, the signal can still show for a moment; the button
+ * then hides, and a second tap does nothing.
+ */
+const heldUpByNetwork = (
+  state: QueueState,
+  onPhone: (trackId: string) => string | null,
+): boolean => {
+  const current = state.entries[state.index];
+  return current !== undefined && onPhone(current.trackId) !== current.trackId;
+};
+
+/**
+ * Whether Play Downloaded Songs shows over [state]: a song that can be held
+ * up plays, and an entry ahead is on the phone or [library] (its playable
+ * songs) has a song that isn't disliked. Cheaper than the pick
+ * (`playDownloadedSongs`), and it agrees with it: the stand-in plays every
+ * song that isn't disliked, a mood's "off" ones and other artists' last.
  */
 export const playDownloadedSongsShows = (
   state: QueueState,
   library: readonly MagicSong[],
   { onPhone, disliked = NO_DISLIKES }: PlayDownloadedSongsOptions,
 ): boolean =>
-  state.index >= 0 &&
+  heldUpByNetwork(state, onPhone) &&
   (nextOnPhone(state, onPhone) !== null ||
     library.some((song) => !isDisliked(disliked, { id: song.trackId })));
 
@@ -94,7 +110,7 @@ export function* playDownloadedSongsSteps(
   library: readonly MagicSong[],
   options: PlayDownloadedSongsOptions,
 ): Generator<void, DownloadedSongsPick | null> {
-  if (state.index < 0) return null;
+  if (!heldUpByNetwork(state, options.onPhone)) return null;
   const next = nextOnPhone(state, options.onPhone);
   if (next !== null) return { kind: "next", key: next.entry.key, trackId: next.trackId };
   // The stalled song's artists lead, then their neighbours by their hops in

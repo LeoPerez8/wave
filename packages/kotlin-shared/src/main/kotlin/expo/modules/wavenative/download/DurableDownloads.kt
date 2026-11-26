@@ -285,7 +285,7 @@ class DurableDownloads(
         existing.remove("token"); existing.remove("reason"); existing.remove("importFailure"); existing.remove("cause")
         // Retry starts again from the source decided now, Soulseek first while it has an account.
         existing.remove("fallback"); existing.remove("fellBackFrom"); existing.remove("fellBackCause"); existing.remove("video")
-        // Played while it waited for Wi-Fi: that was the song's last run.
+        // Played while it waited for Wi-Fi by an older build: that flag no longer releases it.
         existing.remove(PLAY_NOW)
         // Asked for again: it waits behind what's already queued.
         val key = existing["id"] as String
@@ -637,31 +637,16 @@ class DurableDownloads(
   /** Whether the network is metered, as last told ([setNetwork]). Read without the journal's lock. */
   fun metered(): Boolean = meteredView
 
-  /**
-   * The owner played song [videoId] (a job's id, or a song on it) while it may wait for Wi-Fi:
-   * playing streams the same audio, so it downloads now over whatever network there is, unless
-   * it's a best-quality (Soulseek) copy, which keeps waiting ([wifiHeld]). False with no such job.
-   */
-  @Synchronized fun playNow(videoId: String): Boolean {
-    val job = jobs[videoId] ?: jobs.values.firstOrNull { it.map("song")["videoId"] == videoId || it.maps("aliases").any { alias -> alias["videoId"] == videoId } }
-      ?: return false
-    if (!pending(job) || job[PLAY_NOW] == true) return true
-    val before = view.revision
-    job[PLAY_NOW] = true
-    persistNow(); announce(before)
-    return true
-  }
-
   /** The songs waiting for Wi-Fi ([wifiHeld]): what Settings › Downloads' line counts. */
   fun wifiWaitingCount(): Int = published.count { pending(it) && wifiHeld(it) }
 
   /**
    * Waits for Wi-Fi (Core's `downloadWaitsForWifi`): not downloaded yet, with the switch on on a
-   * metered network, unless the owner played it and it comes from YouTube. Reads [job] alone and
-   * the views, so it holds on the published copy.
+   * metered network, whatever its source. Playing the song only streams it: its download keeps
+   * waiting. Reads [job] alone and the views, so it holds on the published copy.
    */
   private fun wifiHeld(job: Map<String, Any?>) =
-    wifiOnlyView && meteredView && notDownloaded(job) && !(job[PLAY_NOW] == true && job["source"] == YOUTUBE)
+    wifiOnlyView && meteredView && notDownloaded(job)
 
   /** The switch or the network changed: songs now held go back in line, and readers see the change. */
   private fun wifiChanged(transport: DurableTransfer?) {
@@ -1570,7 +1555,7 @@ class DurableDownloads(
     private const val WIFI = "wifi"
     /** What readers see on a job waiting for Wi-Fi ([readerCopy]). */
     private const val WAITING_FOR_WIFI = "waitingForWifi"
-    /** The owner played the song while it waited for Wi-Fi ([playNow]). */
+    /** An older build's mark that the owner played the song while it waited for Wi-Fi; no longer read. */
     private const val PLAY_NOW = "playNow"
     /** Not downloaded yet ([notDownloaded]). */
     private val NOT_DOWNLOADED = setOf("queued", "preparing", "prepared", "transferring")

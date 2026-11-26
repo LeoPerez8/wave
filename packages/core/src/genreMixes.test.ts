@@ -18,6 +18,7 @@ import {
   mixSectionOfId,
   mixSeedArtists,
   parseDiscoverMixes,
+  songFamilies,
   storedDiscoverMixes,
 } from "./index.ts";
 
@@ -111,10 +112,22 @@ describe("Genre families", () => {
     assert.equal(genreFamily("Café Jazz")?.key, "caféjazz");
   });
 
-  test("keeps Deezer's combined Rap/Funk Brasileiro genre together", () => {
+  test("read Deezer's combined Rap/Funk Brasileiro genre from the artist's other tags", () => {
+    assert.equal(genreProfile([{ genre: "Rap/Funk Brasileiro" }]), null);
     assert.deepEqual(
-      genreProfile([{ genre: "Rap/Funk Brasileiro" }]),
-      new Map([["rapfunkbrasileiro", 1]]),
+      genreProfile([{ genre: "Rap/Funk Brasileiro" }, { genre: "Funk Carioca" }]),
+      new Map([["brazilianfunk", 1]]),
+    );
+    assert.deepEqual(
+      genreProfile([{ genre: "Rap/Funk Brasileiro" }, { genre: "Rap" }]),
+      new Map([["hiphop", 1]]),
+    );
+    assert.deepEqual(
+      genreProfile([{ genre: "Rap/Funk Brasileiro; Pop" }, { genre: "Funk Carioca" }]),
+      new Map([
+        ["pop", 0.25],
+        ["brazilianfunk", 0.75],
+      ]),
     );
     assert.deepEqual(
       genreProfile([{ genre: "Rap; Funk Brasileiro" }]),
@@ -123,6 +136,46 @@ describe("Genre families", () => {
         ["brazilianfunk", 0.5],
       ]),
     );
+  });
+
+  test("resolve Rap/Funk Brasileiro by the artist: Brazilian funk, rap, or unknown", () => {
+    const graph = artistGraph({
+      catalog: [],
+      plays: [],
+      pages: [
+        { name: "MC Novo", similar: ["MC Fioti", "MC Hariel", "Emicida"] },
+        { name: "Rapper Novo", similar: ["Emicida", "Criolo", "MC Fioti"] },
+        { name: "Dividido", similar: ["MC Fioti", "Emicida"] },
+      ].map(({ name, similar }) => ({
+        name,
+        similar: similar.map((name) => ({ name, browseId: name, audience: null })),
+      })),
+    });
+    const profiles = new Map([
+      ["MC Fioti", genreProfile([{ genre: "Funk Ostentação" }])],
+      ["MC Hariel", genreProfile([{ genre: "Funk Paulista" }])],
+      ["Emicida", genreProfile([{ genre: "Rap" }, { genre: "Rap/Funk Brasileiro" }])],
+      ["Criolo", genreProfile([{ genre: "Hip Hop" }])],
+    ]);
+    const profileOf = (artist: string) => profiles.get(artist);
+    const classify = (artist: string) =>
+      genreFamily("Rap/Funk Brasileiro", { artists: [artist], graph, profileOf })?.name ?? null;
+    assert.equal(classify("MC Fioti"), "Brazilian Funk");
+    assert.equal(classify("Emicida"), "Hip-Hop");
+    assert.equal(classify("MC Novo"), "Brazilian Funk");
+    assert.equal(classify("Rapper Novo"), "Hip-Hop");
+    assert.equal(classify("Dividido"), null);
+    assert.equal(classify("Unknown Artist"), null);
+    assert.equal(genreFamily("Rap/Funk Brasileiro"), null);
+    const families = (artist: string, genre = "Rap/Funk Brasileiro") =>
+      songFamilies({ genre }, { artists: [artist], graph, profileOf }).map(({ name }) => name);
+    assert.deepEqual(families("MC Novo"), ["Brazilian Funk"]);
+    assert.deepEqual(families("Rapper Novo"), ["Hip-Hop"]);
+    assert.deepEqual(families("Unknown Artist"), []);
+    assert.deepEqual(families("Unknown Artist", "Rap/Funk Brasileiro; Funk Carioca"), [
+      "Brazilian Funk",
+    ]);
+    assert.deepEqual(songFamilies({ genre: "Rap/Funk Brasileiro" }), []);
   });
 
   test("resolve a bare Funk tag from the artist's other tags or a majority of known neighbours", () => {
@@ -241,6 +294,28 @@ describe("Genre mixes' families", () => {
         wanted,
       );
     }
+  });
+
+  test("Library songs tagged Rap/Funk Brasileiro count in their artist's family", () => {
+    const library = {
+      ...libraryOf([
+        ...songsOf(3, "Funk Carioca", 1, 10),
+        ...songsOf(2, "Rap/Funk Brasileiro", 1, 10),
+        ...songsOf(3, "Rap", 2, 5),
+        ...songsOf(2, "Rap/Funk Brasileiro", 2, 5),
+        ...songsOf(5, "Rap/Funk Brasileiro", 3, 50),
+      ]),
+      artists: [
+        { id: 1, name: "MC Teste" },
+        { id: 2, name: "Emicida" },
+        { id: 3, name: "Ninguém Sabe" },
+      ],
+    };
+    const seeds = genreMixSeeds(library);
+    assert.deepEqual(
+      seeds.map(({ id }) => id),
+      ["genre:brazilianfunk", "genre:hiphop"],
+    );
   });
 
   test("need five Library songs", () => {

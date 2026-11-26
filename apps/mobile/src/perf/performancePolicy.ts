@@ -1200,6 +1200,9 @@ export const BACKGROUND_JOBS: Record<string, { readonly turns: string }> = {
  */
 export const MODULE_COLLECTIONS: Record<string, { readonly bound: string }> = {
   "home/mixPreDownload.ts#shown": { bound: "one entry per Home mix section, a fixed few" },
+  "home/mixArtistGenreLookup.ts#pending": {
+    bound: "the genre builds' artists still to look up on Deezer, each removed once looked up",
+  },
   "lib/networkMeter.ts#timingRuns": { bound: "runs being metered now, removed when each ends" },
   "motion/menuRequest.ts#armed": {
     bound: "one id per anchored editor declared in code, removed when its screen opens it",

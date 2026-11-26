@@ -1,5 +1,10 @@
 import { useRenderCost } from "@/lib/renderCost";
-import { nowPlayingRelatedChevronShown, playerNotice, type NetworkSignal } from "@wave/core";
+import {
+  networkSignalHoldsUp,
+  nowPlayingRelatedChevronShown,
+  playerNotice,
+  type NetworkSignal,
+} from "@wave/core";
 import { useLocalisation } from "@/localisation/localisation";
 import { beginTiming, activeTiming, noteTimingLinkFailure } from "@/lib/timing";
 import { IconChevronRight, IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
@@ -17,6 +22,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { CELL } from "@/catalog/grid";
+import { HELD_UP_EASE_MS, useHeldUpTitleStyle } from "@/catalog/WavyUnderline";
 import { subscribeAll } from "@wave/client/externalStore";
 import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
 import { useScopedSongStarred } from "@/library/favorites";
@@ -66,14 +72,14 @@ const SPRING = { damping: 18, stiffness: 180, mass: 1 } as const;
 /**
  * How the artwork loses its colour while the network holds the song up (Ghost
  * wave, #1498): saturation and brightness, Offline and Slow. It keeps its full
- * size: the song isn't paused.
+ * size: the song isn't paused. Playing and Back keep their whole colour.
  */
-const HELD_UP_LOOK = {
+const HELD_UP_LOOK: Record<NetworkSignal, { saturate: number; brightness: number }> = {
   offline: { saturate: 0.25, brightness: 0.85 },
   slow: { saturate: 0.6, brightness: 1 },
-} as const;
-/** How long the colour takes to go and come back. */
-const HELD_UP_EASE_MS = 1000;
+  playing: { saturate: 1, brightness: 1 },
+  back: { saturate: 1, brightness: 1 },
+};
 
 /**
  * The artwork's space as last measured, so the player view coming back (from
@@ -105,11 +111,11 @@ function NowPlayingArtwork({ uri, playing, signal, streamed }: ArtworkProps) {
   const { favorite, disabled, star } = useNowPlayingStar();
   const reduceMotion = useReducedMotion();
   const [fill, tertiary] = useThemeColor(["fill", "tertiary"]);
-  const heldUp = signal === "offline" || signal === "slow";
+  const heldUp = networkSignalHoldsUp(signal);
   // Held up by the network, the song isn't paused: the artwork stays at its full size.
   const fullSize = playing || heldUp;
   const scale = useSharedValue(fullSize ? 1 : PAUSED_SCALE);
-  const look = heldUp ? HELD_UP_LOOK[signal] : { saturate: 1, brightness: 1 };
+  const look = HELD_UP_LOOK[signal];
   const saturate = useSharedValue(look.saturate);
   const brightness = useSharedValue(look.brightness);
   // Whether the artwork has been in sight since it last came back: a play or
@@ -388,7 +394,7 @@ export function PlayerView({ item, details, playing }: Props) {
   const failure = useSyncExternalStore(playbackState.subscribe, playbackState.get);
   const notice = playerNotice(playerTrouble(failure), strings);
   const { signal } = useNetworkSignal();
-  const heldUp = signal === "offline" || signal === "slow";
+  const titleStyle = useHeldUpTitleStyle("foreground", networkSignalHoldsUp(signal));
   // Title, artist and album scroll together when too long (the notice in the album's place doesn't).
   const marquee = useMarqueeGroup([title, artist, notice === null ? album : null]);
   // Read ahead, so the screens open header-first; only while the sheet is
@@ -465,8 +471,9 @@ export function PlayerView({ item, details, playing }: Props) {
                 index={0}
                 standalone
                 role="header"
-                // Held up by the network, the title steps back to the secondary colour.
-                className={`font-sans text-title3 font-medium ${heldUp ? "text-secondary" : "text-foreground"}`}
+                className="font-sans text-title3 font-medium"
+                // Held up by the network, the title eases back to the secondary colour.
+                textStyle={titleStyle}
               />
             </View>
             {relatedChevron && (

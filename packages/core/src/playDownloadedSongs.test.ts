@@ -213,6 +213,35 @@ describe("Play Downloaded Songs", () => {
     });
   });
 
+  describe("agreeing with the button", () => {
+    test("shows exactly when a tap plays something: moods ruling every song off and songs by other artists still play", () => {
+      const SAD_LOUD: DjAudioFeatures = { energy: 0.8, valence: 0.2, acousticness: 0.1, mode: 0 };
+      const session = startDjQueue([djArtistTile("Picked")!], {
+        id: "dj1",
+        settings: { ...DEFAULT_DJ_SETTINGS, mood: ["energetic"] },
+      })!;
+      const state = playing(["s1"]);
+      const library = [song("fOther", "Someone Else")];
+      const more = options({ session, moodFeatures: new Map([["fOther", SAD_LOUD]]) });
+      assert.equal(playDownloadedSongsShows(state, library, more), true);
+      assert.deepEqual(playDownloadedSongs(state, library, more), {
+        kind: "library",
+        trackIds: ["fOther"],
+      });
+    });
+
+    test("a song playing from its own file isn't held up: no button, and a second tap does nothing", () => {
+      // Just after a tap jumped to it, the signal can still show for a moment.
+      const state = playing(["s1", "f2", "f3"], 1);
+      const library = [song("f9", "Stalled")];
+      assert.equal(playDownloadedSongsShows(state, library, options()), false);
+      assert.equal(playDownloadedSongs(state, library, options()), null);
+      // A streamed song with a Library copy still streams: it can be held up.
+      const copy = playing(["yt:d", "f2"]);
+      assert.equal(playDownloadedSongsShows(copy, library, options()), true);
+    });
+  });
+
   describe("with no song on the phone to play", () => {
     test("offers nothing, so the button doesn't show", () => {
       const state = playing(["s1", "s2"]);

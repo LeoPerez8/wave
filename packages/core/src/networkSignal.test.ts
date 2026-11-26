@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { catalogueOf } from "./localisation.ts";
 import {
   NETWORK_SLOW_GRACE_MS,
+  catalogueOf,
   followNetworkSignal,
   networkSignal,
   networkSignalAnnouncement,
+  networkSignalHoldsUp,
   networkSignalLabel,
   networkSignalLine,
   networkSignalRecheckMs,
@@ -18,6 +19,7 @@ const playing: NetworkSignalInput = {
   loading: false,
   loadingSinceMs: null,
   cutByNetwork: false,
+  waitRanOut: false,
   online: true,
   nowMs: 10_000,
 };
@@ -65,15 +67,32 @@ describe("networkSignal", () => {
   });
 
   test("after the wait, the paused song is Back once Android reports a connection", () => {
-    assert.equal(networkSignal({ ...playing, cutByNetwork: true }), "back");
+    assert.equal(networkSignal({ ...playing, cutByNetwork: true, waitRanOut: true }), "back");
   });
 
   test("after the wait, still offline, the paused song keeps showing Offline", () => {
-    assert.equal(networkSignal({ ...playing, cutByNetwork: true, online: false }), "offline");
+    assert.equal(
+      networkSignal({ ...playing, cutByNetwork: true, waitRanOut: true, online: false }),
+      "offline",
+    );
+  });
+
+  test("a pause by hand during the wait is a normal pause: no Offline, and no Back later", () => {
+    assert.equal(networkSignal({ ...playing, cutByNetwork: true }), "playing");
+    assert.equal(networkSignal({ ...playing, cutByNetwork: true, online: false }), "playing");
   });
 
   test("a loading time missing its start counts from now", () => {
     assert.equal(networkSignal({ ...playing, loading: true }), "playing");
+  });
+});
+
+describe("networkSignalHoldsUp", () => {
+  test("Offline and Slow hold the song up; playing and Back don't", () => {
+    assert.equal(networkSignalHoldsUp("offline"), true);
+    assert.equal(networkSignalHoldsUp("slow"), true);
+    assert.equal(networkSignalHoldsUp("playing"), false);
+    assert.equal(networkSignalHoldsUp("back"), false);
   });
 });
 
@@ -117,6 +136,13 @@ describe("followNetworkSignal", () => {
   test("another song playing after Offline isn't Back online", () => {
     const offline = followNetworkSignal(start.trail, "a", "offline");
     assert.equal(followNetworkSignal(offline.trail, "b", "playing").backOnline, false);
+  });
+
+  test("a pause by hand after Offline isn't Back online, and playing on from it says nothing", () => {
+    const offline = followNetworkSignal(start.trail, "a", "offline");
+    const paused = followNetworkSignal(offline.trail, "a", "playing", { paused: true });
+    assert.equal(paused.backOnline, false);
+    assert.equal(followNetworkSignal(paused.trail, "a", "playing").backOnline, false);
   });
 
   test("the wait ending paused is Back, not Back online, and playing on from it says nothing more", () => {

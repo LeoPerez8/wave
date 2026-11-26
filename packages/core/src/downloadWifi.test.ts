@@ -9,7 +9,6 @@ import {
   readDownloadWifiOnly,
   writeDownloadWifiOnly,
   wifiWaitLine,
-  wifiWaitPlayed,
   ytDownloadLine,
   ytDownloadsFromJournal,
 } from "./index.ts";
@@ -37,29 +36,15 @@ const metered = { wifiOnly: true, metered: true };
 
 describe("Download only on Wi-Fi", () => {
   test("on a metered network with the switch on, a download waits", () => {
-    assert.equal(downloadWaitsForWifi(metered, { source: "youtube" }), true);
-    assert.equal(downloadWaitsForWifi(metered, { source: "soulseek" }), true);
+    assert.equal(downloadWaitsForWifi(metered), true);
   });
 
   test("on an unmetered network it runs", () => {
-    assert.equal(
-      downloadWaitsForWifi({ wifiOnly: true, metered: false }, { source: "youtube" }),
-      false,
-    );
+    assert.equal(downloadWaitsForWifi({ wifiOnly: true, metered: false }), false);
   });
 
   test("with the switch off it runs on any network", () => {
-    assert.equal(
-      downloadWaitsForWifi({ wifiOnly: false, metered: true }, { source: "soulseek" }),
-      false,
-    );
-  });
-
-  test("a tap to play on a metered network runs it, unless it's best quality (Soulseek)", () => {
-    assert.equal(downloadWaitsForWifi(metered, { source: "youtube", playNow: true }), false);
-    assert.equal(downloadWaitsForWifi(metered, { source: "soulseek", playNow: true }), true);
-    // A job from before there was a choice of source is Soulseek's.
-    assert.equal(downloadWaitsForWifi(metered, { playNow: true }), true);
+    assert.equal(downloadWaitsForWifi({ wifiOnly: false, metered: true }), false);
   });
 
   test("the switch is on by default, for new and existing users alike", () => {
@@ -92,28 +77,5 @@ describe("Waiting for Wi-Fi in Settings › Downloads", () => {
     assert.equal(wifiWaitLine(jobs.slice(0, 1)), "Waiting for Wi-Fi · 1 song");
     assert.equal(wifiWaitLine(jobs, pt), "Aguardando Wi-Fi · 2 músicas");
     assert.equal(wifiWaitLine([job("c")]), null);
-  });
-});
-
-describe("Playing a song that waits for Wi-Fi", () => {
-  const jobs = [
-    job("waits", { waitingForWifi: true, source: "youtube", aliases: [song("same")] }),
-    job("missing:12", { waitingForWifi: true, source: "youtube" }),
-    job("runs", { source: "youtube" }),
-  ];
-
-  test("a streamed song names its waiting download, by its own video or one on the job", () => {
-    assert.equal(wifiWaitPlayed(jobs, "yt:waits"), "waits");
-    assert.equal(wifiWaitPlayed(jobs, "yt:same"), "waits");
-  });
-
-  test("a missing song names its own download", () => {
-    assert.equal(wifiWaitPlayed(jobs, "12"), "missing:12");
-  });
-
-  test("a song not waiting, or no song, names none", () => {
-    assert.equal(wifiWaitPlayed(jobs, "yt:runs"), null);
-    assert.equal(wifiWaitPlayed(jobs, "13"), null);
-    assert.equal(wifiWaitPlayed(jobs, null), null);
   });
 });

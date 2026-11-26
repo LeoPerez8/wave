@@ -14,16 +14,17 @@ object NetworkSignalPolicy {
 
   /**
    * [loadingSinceMs]: when the player began buffering with play-when-ready, or null
-   * while it isn't. [cutByNetwork]: the song stands on the offline stream error.
+   * while it isn't. [cutByNetwork]: the song stands on the offline stream error. [waitRanOut]: the
+   * wait ran out on its own, not ended by the owner's pause (a normal pause then).
    */
-  fun signal(waiting: Boolean, loadingSinceMs: Long?, cutByNetwork: Boolean, online: Boolean, nowMs: Long): NetworkSignal =
+  fun signal(waiting: Boolean, loadingSinceMs: Long?, cutByNetwork: Boolean, waitRanOut: Boolean, online: Boolean, nowMs: Long): NetworkSignal =
     when {
       waiting -> NetworkSignal.OFFLINE
       loadingSinceMs != null ->
         if (!cutByNetwork && nowMs - loadingSinceMs < SLOW_GRACE_MS) NetworkSignal.PLAYING
         else if (online) NetworkSignal.SLOW
         else NetworkSignal.OFFLINE
-      cutByNetwork -> if (online) NetworkSignal.BACK else NetworkSignal.OFFLINE
+      cutByNetwork && waitRanOut -> if (online) NetworkSignal.BACK else NetworkSignal.OFFLINE
       else -> NetworkSignal.PLAYING
     }
 

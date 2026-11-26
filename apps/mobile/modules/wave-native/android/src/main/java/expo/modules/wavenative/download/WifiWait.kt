@@ -51,9 +51,12 @@ object WifiWait {
  */
 class WifiWaitJob : JobService() {
   private val finished = java.util.concurrent.atomic.AtomicBoolean()
+  /** This run's work and Android stopping it ([WifiWaitHandoff.JobRun]). */
+  @Volatile private var run = WifiWaitHandoff.JobRun()
 
   override fun onStartJob(params: JobParameters): Boolean {
     finished.set(false)
+    val current = WifiWaitHandoff.JobRun().also { run = it }
     val downloads = AndroidDownloads.get(applicationContext)
     thread(isDaemon = true, name = "Wave Wi-Fi wait") {
       val served = try {
@@ -62,16 +65,23 @@ class WifiWaitJob : JobService() {
         WaveLog.w("WaveDownloads", "The downloads waiting for Wi-Fi couldn't start", e)
         true
       }
-      if (served) finish(params)
-      else downloads.startUnderJob(
-        onIdle = {
-          // Nothing left to download now: done, or waiting for Wi-Fi again (a new job waits for it).
-          downloads.stop(downloads.jobs.idleStop())
-          finish(params)
-          downloads.awaitWifi()
-        },
-        takenOver = { finish(params) },
-      )
+      if (served) {
+        finish(params)
+        return@thread
+      }
+      val started = current.startWork {
+        downloads.startUnderJob(
+          onIdle = {
+            // Nothing left to download now: done, or waiting for Wi-Fi again (a new job waits for it).
+            downloads.stop(downloads.jobs.idleStop())
+            finish(params)
+            downloads.awaitWifi()
+          },
+          takenOver = { finish(params) },
+        )
+      }
+      // Android stopped the job meanwhile: nothing starts after it ended, and it runs again.
+      if (!started) finish(params)
     }
     return true
   }
@@ -83,6 +93,7 @@ class WifiWaitJob : JobService() {
   /** Android stopped the job (its time, or the network became metered): its songs go back in line, and it runs again. */
   override fun onStopJob(params: JobParameters): Boolean {
     finished.set(true)
+    run.stopped()
     AndroidDownloads.get(applicationContext).stopUnderJob()
     return true
   }

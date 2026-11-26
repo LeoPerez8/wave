@@ -7,8 +7,15 @@ import {
   type MarqueeLineSize,
   type MarqueePlan,
 } from "@wave/core";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { Text, View, type AccessibilityRole } from "react-native";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ComponentProps,
+} from "react";
+import { View, type AccessibilityRole } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -132,6 +139,8 @@ type MarqueeTextProps = {
    * its text inside a control: right-to-left text then sits on its right.
    */
   fill?: boolean;
+  /** An animated style for the text itself (its colour easing, as the title's does while held up). */
+  textStyle?: ComponentProps<typeof Animated.Text>["style"];
 };
 
 /**
@@ -142,16 +151,17 @@ type MarqueeTextProps = {
  * animations removed it holds still and ends in an ellipsis.
  */
 export function MarqueeText(props: MarqueeTextProps) {
-  const { text, group, className, standalone, role } = props;
+  const { text, group, className, standalone, role, textStyle } = props;
   if (group.still) {
     return (
-      <Text
+      <Animated.Text
         numberOfLines={1}
         className={className}
+        style={textStyle}
         accessibilityRole={standalone ? role : undefined}
       >
         {text}
-      </Text>
+      </Animated.Text>
     );
   }
   return <ScrollingLine {...props} />;
@@ -165,6 +175,7 @@ function ScrollingLine({
   standalone,
   role,
   fill = false,
+  textStyle,
 }: MarqueeTextProps) {
   const rtl = readsRightToLeft(text);
   const [textWidth, setTextWidth] = useState<number | null>(null);
@@ -211,18 +222,19 @@ function ScrollingLine({
         accessibilityElementsHidden
         style={[{ width: STRIP_WIDTH, flexDirection: direction }, moveStyle]}
       >
-        <Text
+        <Animated.Text
           numberOfLines={1}
           className={className}
+          style={textStyle}
           onLayout={(event) => setTextWidth(event.nativeEvent.layout.width)}
         >
           {text}
-        </Text>
+        </Animated.Text>
         {overflows ? (
           <View style={rtl ? { marginRight: MARQUEE.gap } : { marginLeft: MARQUEE.gap }}>
-            <Text numberOfLines={1} className={className}>
+            <Animated.Text numberOfLines={1} className={className} style={textStyle}>
               {text}
-            </Text>
+            </Animated.Text>
           </View>
         ) : null}
       </Animated.View>

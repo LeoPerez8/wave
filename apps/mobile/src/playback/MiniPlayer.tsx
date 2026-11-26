@@ -1,5 +1,5 @@
 import { useRenderCost } from "@/lib/renderCost";
-import { playerNotice } from "@wave/core";
+import { networkSignalHoldsUp, playerNotice } from "@wave/core";
 import { useLocalisation } from "@/localisation/localisation";
 import {
   IconPlayerPauseFilled,
@@ -127,7 +127,7 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
     playerNotice(playerTrouble(playbackState.get()), strings),
   );
   const { signal } = useNetworkSignal();
-  const heldUp = signal === "offline" || signal === "slow";
+  const heldUp = networkSignalHoldsUp(signal);
   const accent = useThemeColor("accent");
   const bottom = useTabBarTop();
   const reduceMotion = useReducedMotion();

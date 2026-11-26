@@ -59,12 +59,15 @@ export const makeNetworkSignalStore = (
     const state = deps.playback.get();
     const input = networkSignalInput(state, deps.connectivity.get().online, deps.now());
     const signal = networkSignal(input);
-    const step = followNetworkSignal(trail, state.item?.id ?? null, signal);
+    const itemId = state.item?.id ?? null;
+    // "Back online" belongs to the song that came back: another song drops it.
+    const sameSong = trail === null || trail.itemId === itemId;
+    const step = followNetworkSignal(trail, itemId, signal, { paused: !state.playWhenReady });
     trail = step.trail;
     const wait = networkSignalRecheckMs(input);
     if (wait !== null) cancelRecheck = deps.setTimer(look, wait);
     const previous = shown.get();
-    let backOnline = previous.backOnline && signal === "playing";
+    let backOnline = previous.backOnline && signal === "playing" && sameSong;
     if (step.backOnline) {
       endBackOnline();
       backOnline = true;

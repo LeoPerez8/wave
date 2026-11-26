@@ -88,24 +88,6 @@ class DurableWifiWaitTest {
     assertEquals(true, job(owner, "a")["waitingForWifi"])
   }
 
-  @Test fun aSongPlayedWhileItWaitsDownloadsNowUnlessItIsBestQuality() = inFolder { folder ->
-    val journal = File(folder, "jobs")
-    val owner = DurableDownloads(journal)
-    owner.setNetwork(metered = true, NoTransfer)
-    owner.enqueue(song("streamed"), null, emptyMap(), "youtube")
-    owner.enqueue(song("best"), null, emptyMap(), "soulseek")
-    assertTrue(owner.playNow("streamed"))
-    assertTrue(owner.playNow("best"))
-    owner.advance(NoTransfer, Untouched)
-    assertEquals("preparing", job(owner, "streamed")["phase"])
-    assertNull(job(owner, "streamed")["waitingForWifi"])
-    assertEquals("queued", job(owner, "best")["phase"])
-    assertEquals(true, job(owner, "best")["waitingForWifi"])
-    assertFalse("a song with no job", owner.playNow("unknown"))
-    owner.flush()
-    assertNull(job(DurableDownloads(journal), "streamed")["waitingForWifi"])
-  }
-
   @Test fun thePauseOutranksTheWaitWhenTheServiceStops() = inFolder { folder ->
     val owner = DurableDownloads(File(folder, "jobs"))
     owner.setNetwork(metered = true, NoTransfer)

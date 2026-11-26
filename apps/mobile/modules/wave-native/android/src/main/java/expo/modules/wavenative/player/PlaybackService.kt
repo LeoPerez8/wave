@@ -282,7 +282,7 @@ class PlaybackService : MediaLibraryService() {
       }
     }
     watchOutput(reconnectWait != null)
-    StreamReconnectLink.setWaiting(reconnectWait != null, resuming = reconnectAttempt != null)
+    StreamReconnectLink.setWaiting(reconnectWait != null, resuming = reconnectAttempt != null, ranOut = result.gaveUp)
     stopIfLeftBehind(result.gaveUp)
   }
 
@@ -439,6 +439,7 @@ class PlaybackService : MediaLibraryService() {
       StreamReconnectLink.waitingForConnection,
       loadingSinceMs,
       YtStreamFailure.codeOf(player.playerError?.cause?.message) == "ytOffline",
+      StreamReconnectLink.waitRanOut,
       AndroidConnectivity.cache(this).current.online,
       SystemClock.elapsedRealtime(),
     )

@@ -9,6 +9,7 @@ const playing: PlaybackState = {
   isPlaying: true,
   playWhenReady: true,
   waitingForConnection: false,
+  waitRanOut: false,
   item: { id: "a", title: "A", artist: null, album: null, artworkUri: null },
   error: null,
   errorCode: null,
@@ -89,6 +90,7 @@ test("after the wait, the connection coming back turns Offline into Back", () =>
     isPlaying: false,
     playWhenReady: false,
     errorCode: "ytOffline",
+    waitRanOut: true,
   });
   assert.equal(store.get().signal, "offline");
   connectivity.set({ online: true, onMobileData: false });
@@ -97,4 +99,32 @@ test("after the wait, the connection coming back turns Offline into Back", () =>
     "No internet. The song continues when it's back.",
     "Internet's back. Tap play to continue.",
   ]);
+});
+
+test("a pause by hand during the wait is a normal pause: no Offline, no Back online, no Back", () => {
+  const { store, playback, connectivity } = setup();
+  store.subscribe(() => {});
+  connectivity.set({ online: false, onMobileData: false });
+  playback.set({ ...playing, waitingForConnection: true });
+  assert.equal(store.get().signal, "offline");
+  playback.set({
+    ...playing,
+    status: "idle",
+    isPlaying: false,
+    playWhenReady: false,
+    errorCode: "ytOffline",
+  });
+  assert.deepEqual(store.get(), { signal: "playing", backOnline: false });
+  connectivity.set({ online: true, onMobileData: false });
+  assert.deepEqual(store.get(), { signal: "playing", backOnline: false });
+});
+
+test("skipping while Back online shows doesn't carry it to the next song", () => {
+  const { store, playback } = setup();
+  store.subscribe(() => {});
+  playback.set({ ...playing, waitingForConnection: true });
+  playback.set(playing);
+  assert.deepEqual(store.get(), { signal: "playing", backOnline: true });
+  playback.set({ ...playing, item: { ...playing.item!, id: "b", title: "B" } });
+  assert.deepEqual(store.get(), { signal: "playing", backOnline: false });
 });
