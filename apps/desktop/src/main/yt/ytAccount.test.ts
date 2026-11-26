@@ -66,6 +66,10 @@ const desktop = (options: { readonly box?: SecretBox; readonly disk?: Map<string
     closeWindow: (_outcome: YtBrowserOutcome) => {},
     /** Tells YT Music's account of a Wave account session change, as `account.subscribe` does. */
     wave: (_session: WaveSession) => {},
+    /** The Wave account's session as YT Music's account reads it. */
+    waveSession: { status: "signedOut" } as WaveSession,
+    /** The email each browser sign-in opened Google's page with. */
+    emails: [] as (string | null)[],
   };
   const save = (session: unknown) => sessions.host["ytSession.save"]!({ session });
   const account = createYtAccount({
@@ -76,8 +80,10 @@ const desktop = (options: { readonly box?: SecretBox; readonly disk?: Map<string
       world.wave = listener;
       return () => (world.wave = () => {});
     },
-    startSignIn: () => {
+    waveSession: () => world.waveSession,
+    startSignIn: (email) => {
       world.browsers += 1;
+      world.emails.push(email);
       let end = (_outcome: YtBrowserOutcome) => {};
       const outcome = new Promise<YtBrowserOutcome>((resolve) => (end = resolve));
       world.closeWindow = end;
@@ -363,8 +369,14 @@ const WAVE: WaveSession = {
 
 test("a Wave account sign-in opens YT Music's sign-in next, when it's on and signed out", async () => {
   const { account, world, calls } = desktop({});
+  world.waveSession = WAVE;
   world.wave(WAVE);
   assert.equal(world.browsers, 1);
+  assert.deepEqual(
+    world.emails,
+    ["ana@example.com"],
+    "Google's page gets the Wave account's email",
+  );
   assert.equal(
     account.view().account?.kind === "signedOut" && account.view().account?.action,
     "signingIn",

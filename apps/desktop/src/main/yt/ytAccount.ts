@@ -10,6 +10,7 @@ import {
   ytLibraryFailure,
   ytLibraryPicker,
   ytSignInFollowsWave,
+  ytSignInEmail,
   type AppLanguage,
   type WaveSession,
   type YtAccountEvent,
@@ -33,12 +34,13 @@ export interface YtAccountDeps {
   readonly enabled: () => boolean;
   readonly online: () => boolean;
   /** Opens the browser on Google's sign-in (`startYtBrowserSignIn`). */
-  readonly startSignIn: () => YtBrowserSignIn;
+  readonly startSignIn: (email: string | null) => YtBrowserSignIn;
   /**
    * Hears the Wave account's session changes (`WaveAccountService.subscribe`): a signed-in one
    * means its sign-in just succeeded, which opens YouTube's sign-in next.
    */
   readonly waveSessions: (listener: (session: WaveSession) => void) => () => void;
+  readonly waveSession: () => WaveSession;
 }
 
 export interface YtAccountShape {
@@ -122,7 +124,7 @@ export const createYtAccount = (deps: YtAccountDeps): YtAccountShape => {
     }
     let browser: YtBrowserSignIn;
     try {
-      browser = deps.startSignIn();
+      browser = deps.startSignIn(ytSignInEmail(current().session, deps.waveSession()));
     } catch {
       dispatch({ type: "signInFailed", reason: "failed" });
       return;

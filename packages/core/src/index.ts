@@ -1306,6 +1306,7 @@ export {
   YT_ACCOUNT_SIGNED_OUT,
   stepYtAccount,
   ytAccountView,
+  ytSignInEmail,
   ytSignInFollowsWave,
 } from "./ytAccount.ts";
 export { ytAccountNotes } from "./ytAccountText.ts";

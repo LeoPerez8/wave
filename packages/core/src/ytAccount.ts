@@ -31,6 +31,14 @@ export interface YtAccount {
  */
 export type YtSession = AccountSession<YtAccount>;
 
+/** A known email for Google's page, or null to let the platform ask for one. */
+export const ytSignInEmail = (yt: YtSession, wave: WaveSession): string | null => {
+  const expiredEmail = yt.status === "expired" ? yt.account?.email : null;
+  return (
+    expiredEmail?.trim() || (wave.status === "signedIn" ? wave.account.email.trim() : "") || null
+  );
+};
+
 /** Why a sign-in didn't work: no network, or YouTube didn't accept or answer it. */
 export type YtSignInFailure = "offline" | "failed";
 

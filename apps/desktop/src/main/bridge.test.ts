@@ -651,6 +651,7 @@ const connect = (
             online: () => true,
             startSignIn: () => ({ outcome: Promise.resolve(browser.outcome), cancel: () => {} }),
             waveSessions: account.service.subscribe,
+            waveSession: account.service.session,
           }),
           spotifyImportLayer({ fetch: () => Promise.reject(new Error("no network")) }).pipe(
             Layer.provideMerge(
