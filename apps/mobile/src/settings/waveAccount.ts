@@ -17,6 +17,7 @@ import { currentLocalisation } from "@/localisation/localisation";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { WaveAccount, waveAccountErrorCode } from "@/native/waveAccount";
 import { confirmAction } from "@/overlay/alert";
+import { ytSignInAfterWave } from "@/settings/ytSignInAfterWave";
 
 /**
  * The sync service's URL and Wave's web client id, from app.config.ts extra;
@@ -132,12 +133,13 @@ export const signInWaveAccount = async (started?: () => void): Promise<WaveSignI
 };
 
 /**
- * Settings › Wave Account (Core's `stepWaveAccount`): the native module's
- * session, and any change it hears of while Settings is open (a 401 ends it).
- * Sign In shows the card about what goes up the first time, then Google's
- * account picker; cancelling either sends nothing. Sign Out on All Phones
- * asks first. Delete Account asks first, then opens Google's account picker
- * for a fresh sign-in, which the service needs to delete.
+ * Settings › Wave Account and the invitation (Core's `stepWaveAccount`): the
+ * native module's session, and any change it hears of while Settings is open
+ * (a 401 ends it). Sign In shows the card about what goes up the first time,
+ * then Google's account picker; cancelling either sends nothing. A sign-in
+ * that works opens YT Music's next when it's on and signed out. Sign Out on
+ * All Phones asks first. Delete Account asks first, then opens Google's
+ * account picker for a fresh sign-in, which the service needs to delete.
  */
 export const useWaveAccount = (): {
   readonly state: WaveAccountState;
@@ -157,8 +159,10 @@ export const useWaveAccount = (): {
 
   const signIn = useCallback(() => {
     void signInWaveAccount(() => dispatch({ type: "signInStarted" })).then((outcome) => {
-      if (outcome.type === "signedIn") dispatch({ type: "signInEnded", session: outcome.session });
-      else if (outcome.type === "cancelled") dispatch({ type: "signInCancelled" });
+      if (outcome.type === "signedIn") {
+        dispatch({ type: "signInEnded", session: outcome.session });
+        void ytSignInAfterWave(outcome.session);
+      } else if (outcome.type === "cancelled") dispatch({ type: "signInCancelled" });
       else if (outcome.type === "failed")
         dispatch({ type: "signInFailed", reason: outcome.reason });
     });
