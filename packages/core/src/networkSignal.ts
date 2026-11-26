@@ -12,8 +12,8 @@ import { en, type Catalogue } from "./catalogueEn.ts";
  * - `playing`: as today, nothing to say (a song paused by hand included).
  * - `offline`: the song waits for the network, or is held up without one.
  * - `slow`: the song loads with a connection, past the grace.
- * - `back`: the wait ended with the song paused where the network cut it, and
- *   Android reports a connection again: the owner taps play to go on.
+ * - `back`: the wait ran out on its own with the song paused where the network
+ *   cut it, and Android reports a connection again: the owner taps play to go on.
  */
 export type NetworkSignal = "playing" | "offline" | "slow" | "back";
 
@@ -27,6 +27,11 @@ export interface NetworkSignalInput {
   readonly loadingSinceMs: number | null;
   /** The song stands paused on a network failure (its stream error is the offline one). */
   readonly cutByNetwork: boolean;
+  /**
+   * The service's wait for the network ran out on its own (its ten minutes, or the output went
+   * away), not ended by the owner: a pause by hand during the wait is a normal pause.
+   */
+  readonly waitRanOut: boolean;
   /** Android reports a connection that reaches the internet. */
   readonly online: boolean;
   readonly nowMs: number;
@@ -43,8 +48,8 @@ const loadedMs = (input: NetworkSignalInput): number =>
  * Offline without a connection; a song loading again after the network cut it
  * (its offline error still standing) skips the grace, so the look doesn't
  * flash back to playing between the wait and the music. A song left paused on
- * the network's failure, the wait over, is Back with a connection and stays
- * Offline without one.
+ * the network's failure, the wait run out on its own, is Back with a connection
+ * and stays Offline without one; paused by hand during the wait, it shows nothing.
  */
 export const networkSignal = (input: NetworkSignalInput): NetworkSignal => {
   if (input.waitingForConnection) return "offline";
@@ -52,7 +57,7 @@ export const networkSignal = (input: NetworkSignalInput): NetworkSignal => {
     if (!input.cutByNetwork && loadedMs(input) < NETWORK_SLOW_GRACE_MS) return "playing";
     return input.online ? "slow" : "offline";
   }
-  if (input.cutByNetwork) return input.online ? "back" : "offline";
+  if (input.cutByNetwork && input.waitRanOut) return input.online ? "back" : "offline";
   return "playing";
 };
 
@@ -73,13 +78,15 @@ export interface NetworkSignalTrail {
 /**
  * Follows the signal from one report to the next. [backOnline] is true once,
  * when the song that showed Offline plays again within the wait: Now Playing
- * shows "Back online" for a moment. Another song playing, or the wait ending
- * paused (Back, which has its own line), forgets the cut.
+ * shows "Back online" for a moment. Another song playing, the song [paused]
+ * (by hand: no Back online then), or the wait ending paused (Back, which has its
+ * own line), forgets the cut.
  */
 export const followNetworkSignal = (
   trail: NetworkSignalTrail | null,
   itemId: string | null,
   signal: NetworkSignal,
+  { paused = false }: { readonly paused?: boolean } = {},
 ): { readonly trail: NetworkSignalTrail; readonly backOnline: boolean } => {
   const cut = trail !== null && trail.itemId === itemId && trail.cut;
   switch (signal) {
@@ -90,7 +97,7 @@ export const followNetworkSignal = (
     case "back":
       return { trail: { itemId, cut: false }, backOnline: false };
     case "playing":
-      return { trail: { itemId, cut: false }, backOnline: cut };
+      return { trail: { itemId, cut: false }, backOnline: cut && !paused };
   }
 };
 

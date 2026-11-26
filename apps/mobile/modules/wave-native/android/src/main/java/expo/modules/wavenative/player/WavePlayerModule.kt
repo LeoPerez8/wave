@@ -672,6 +672,7 @@ class WavePlayerModule : Module() {
       "isPlaying" to player.isPlaying,
       "playWhenReady" to player.playWhenReady,
       "waitingForConnection" to StreamReconnectLink.waitingForConnection,
+      "waitRanOut" to StreamReconnectLink.waitRanOut,
       "errorCode" to YtStreamFailure.codeOf(player.playerError?.cause?.message),
       "index" to if (item == null) null else player.currentMediaItemIndex,
       "item" to item?.let {

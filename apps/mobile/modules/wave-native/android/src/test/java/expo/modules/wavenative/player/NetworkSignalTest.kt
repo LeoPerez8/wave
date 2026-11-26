@@ -6,8 +6,8 @@ import org.junit.Test
 /** Same inputs and answers as Core's public networkSignal tests. */
 class NetworkSignalTest {
   private val now = 10_000L
-  private fun signal(waiting: Boolean = false, loadingFor: Long? = null, cut: Boolean = false, online: Boolean = true) =
-    NetworkSignalPolicy.signal(waiting, loadingFor?.let { now - it }, cut, online, now)
+  private fun signal(waiting: Boolean = false, loadingFor: Long? = null, cut: Boolean = false, ranOut: Boolean = false, online: Boolean = true) =
+    NetworkSignalPolicy.signal(waiting, loadingFor?.let { now - it }, cut, ranOut, online, now)
 
   @Test fun aSongThatPlaysOrIsPausedByHandShowsNothing() {
     assertEquals(NetworkSignal.PLAYING, signal())
@@ -32,8 +32,13 @@ class NetworkSignalTest {
   }
 
   @Test fun afterTheWaitThePausedSongIsBackOnlineAndOfflineWithout() {
-    assertEquals(NetworkSignal.BACK, signal(cut = true))
-    assertEquals(NetworkSignal.OFFLINE, signal(cut = true, online = false))
+    assertEquals(NetworkSignal.BACK, signal(cut = true, ranOut = true))
+    assertEquals(NetworkSignal.OFFLINE, signal(cut = true, ranOut = true, online = false))
+  }
+
+  @Test fun aPauseByHandDuringTheWaitIsANormalPause() {
+    assertEquals(NetworkSignal.PLAYING, signal(cut = true))
+    assertEquals(NetworkSignal.PLAYING, signal(cut = true, online = false))
   }
 
   @Test fun theGraceAsksForALookWhenItEnds() {

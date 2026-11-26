@@ -109,4 +109,26 @@ class StreamReconnectTest {
       StreamReconnectLink.setWaiting(false)
     }
   }
+
+  @Test fun theLinkSaysWhetherTheWaitRanOutOnItsOwn() {
+    var heard = 0
+    val stop = StreamReconnectLink.listen { heard++ }
+    try {
+      StreamReconnectLink.setWaiting(true)
+      assertFalse(StreamReconnectLink.waitRanOut)
+      StreamReconnectLink.setWaiting(false, ranOut = true)
+      assertTrue("the wait ran out", StreamReconnectLink.waitRanOut)
+      assertEquals(2, heard)
+      // The owner plays, or another song comes: the song no longer stands where the wait left it.
+      StreamReconnectLink.setWaiting(false)
+      assertFalse(StreamReconnectLink.waitRanOut)
+      assertEquals("readers hear it", 3, heard)
+      StreamReconnectLink.setWaiting(true)
+      StreamReconnectLink.setWaiting(false)
+      assertFalse("the owner's pause ended it", StreamReconnectLink.waitRanOut)
+    } finally {
+      stop()
+      StreamReconnectLink.setWaiting(false)
+    }
+  }
 }

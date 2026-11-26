@@ -8,6 +8,7 @@ const playing: NativePlayerState = {
   isPlaying: true,
   playWhenReady: true,
   waitingForConnection: false,
+  waitRanOut: false,
   errorCode: null,
   index: 0,
   item: { id: "a", title: "A", artist: null, album: null, artworkUri: null },
@@ -238,13 +239,14 @@ test("the network signal's input: the wait, the loading, the song the network cu
     () => now,
   );
   const paused = { ...playing, status: "idle", isPlaying: false, playWhenReady: false } as const;
-  stores.reportState({ ...paused, errorCode: "ytOffline" });
+  stores.reportState({ ...paused, errorCode: "ytOffline", waitRanOut: true });
   now = 6_000;
   assert.deepEqual(networkSignalInput(stores.playbackState.get(), false, now), {
     waitingForConnection: false,
     loading: false,
     loadingSinceMs: null,
     cutByNetwork: true,
+    waitRanOut: true,
     online: false,
     nowMs: 6_000,
   });
@@ -254,6 +256,7 @@ test("the network signal's input: the wait, the loading, the song the network cu
     loading: true,
     loadingSinceMs: 6_000,
     cutByNetwork: true,
+    waitRanOut: false,
     online: true,
     nowMs: 6_000,
   });

@@ -22,8 +22,9 @@ export const playerTrouble = (state: PlaybackState): PlayerTrouble => ({
 
 /**
  * What Core's `networkSignal` reads of the playing song, with the phone's
- * connection and the time: the wait, the loading and since when, and whether
- * it stands paused on the network's failure (its offline error).
+ * connection and the time: the wait, the loading and since when, whether
+ * it stands paused on the network's failure (its offline error), and whether
+ * the wait ran out on its own rather than by the owner's pause.
  */
 export const networkSignalInput = (
   state: PlaybackState,
@@ -34,6 +35,7 @@ export const networkSignalInput = (
   loading: state.loadingSince !== null,
   loadingSinceMs: state.loadingSince,
   cutByNetwork: state.errorCode === "ytOffline",
+  waitRanOut: state.waitRanOut,
   online,
   nowMs,
 });
@@ -65,6 +67,7 @@ export const makePlaybackStores = (
     isPlaying: false,
     playWhenReady: false,
     waitingForConnection: false,
+    waitRanOut: false,
     item: null,
     error: null,
     errorCode: null,
