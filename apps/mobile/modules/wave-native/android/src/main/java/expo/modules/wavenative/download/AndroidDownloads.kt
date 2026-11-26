@@ -337,22 +337,24 @@ class AndroidDownloads private constructor(private val context: Context) {
   }
 
   /**
-   * Called from the user's tap, the resumed Activity or an update's restart. Failure never starts
-   * unprotected work. Whether the service runs the songs now (or none are left to download).
+   * Called from the user's tap, the resumed Activity, an update's restart or the Wi-Fi job. Failure
+   * never starts unprotected work. Whether the service runs the songs now (or none are left to
+   * download). The Wi-Fi job is cancelled only once Android accepted the service: refused, the job
+   * that asked runs the downloads itself ([WifiWaitHandoff]).
    */
   fun requestService(): Boolean {
     if (!jobs.hasWork()) { awaitWifi(); return true }
-    WifiWait.cancel(context)
-    try { context.startForegroundService(Intent(context, YtDownloadService::class.java)); return true }
-    catch (error: Exception) {
-      // Never unprotected work: started jobs go back in line, and all wait for the next launch.
-      if (synchronized(this) { worker == null }) {
-        WaveLog.w(TAG, DownloadServiceLines.refused(restart = false, describe(error)))
-        jobs.interrupt(transport); changed()
-        return false
-      } else WaveLog.w(TAG, "Android refused to start the download service again; it goes on", error)
-      return true
-    }
+    val error = WifiWaitHandoff.startService(
+      start = { context.startForegroundService(Intent(context, YtDownloadService::class.java)) },
+      cancelWait = { WifiWait.cancel(context) },
+    ) ?: return true
+    // Never unprotected work: started jobs go back in line, and all wait for the next launch.
+    if (synchronized(this) { worker == null }) {
+      WaveLog.w(TAG, DownloadServiceLines.refused(restart = false, describe(error)))
+      jobs.interrupt(transport); changed()
+      return false
+    } else WaveLog.w(TAG, "Android refused to start the download service again; it goes on", error)
+    return true
   }
 
   /**
