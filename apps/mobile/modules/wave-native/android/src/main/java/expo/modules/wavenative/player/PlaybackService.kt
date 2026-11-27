@@ -918,7 +918,9 @@ class PlaybackService : MediaLibraryService() {
     /**
      * Wave's own controller (the JS module) may also start and cancel the sleep
      * timer. Auto gets the default library commands, and its connection starts
-     * JS right away, ahead of its first browse request.
+     * JS right away, ahead of its first browse request. Any other controller (a
+     * watch, another app's media controls) gets at least [RemoteControls]'
+     * transport commands, and its first connection writes a line to the app log.
      */
     override fun onConnect(
       session: MediaSession,
@@ -943,6 +945,21 @@ class PlaybackService : MediaLibraryService() {
             AutoLyricsSession.withCommand(MoreFromArtistSession.withCommand(AutoModesSession.sessionCommands)),
           )
           .setAvailablePlayerCommands(AutoModesSession.playerCommands)
+      } else if (controller.packageName != packageName) {
+        // A watch or another app's media controls: Next, Previous and play/pause even when Media3 can't verify it.
+        val commands =
+          if (controller.isTrusted) {
+            MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS
+          } else {
+            RemoteControls.untrustedPlayerCommands.also(result::setAvailablePlayerCommands)
+          }
+        if (RemoteControls.firstConnection(controller.packageName)) {
+          val legacy = controller.controllerVersion == MediaSession.ControllerInfo.LEGACY_CONTROLLER_VERSION
+          WaveLog.i(
+            RemoteControls.LOG_TAG,
+            RemoteControls.connectedLine(controller.packageName, legacy, controller.isTrusted, commands::contains),
+          )
+        }
       }
       return result.build()
     }
