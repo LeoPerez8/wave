@@ -44,6 +44,15 @@ export const importsEn = {
   cantOpen: "Can't open this",
   sharedLinks:
     "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from YouTube Music and Spotify links.",
+  /** The toast offering a copied link (docs/spec.md, "Opening a song link"); [service] is a brand. */
+  copiedSongLink: (service: string): string => `${service} song link copied`,
+  copiedPlaylist: (service: string): string => `${service} playlist copied`,
+  copiedAlbum: (service: string): string => `${service} album copied`,
+  copiedArtist: (service: string): string => `${service} artist copied`,
+  /** A short link, whose kind is known only once followed. */
+  copiedLink: (service: string): string => `${service} link copied`,
+  listen: "Listen",
+  open: "Open",
   /** Opening a song link. */
   findingSong: "Finding song…",
   songOffline: "You're offline",

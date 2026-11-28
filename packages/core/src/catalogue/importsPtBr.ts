@@ -49,6 +49,13 @@ export const importsPtBr: typeof importsEn = {
   cantOpen: "Não é possível abrir isto",
   sharedLinks:
     "O Wave abre músicas e artistas de links do YouTube, do YouTube Music, do Spotify e do Deezer, playlists de links do YouTube Music e do Spotify, e álbuns de links do YouTube Music e do Spotify.",
+  copiedSongLink: (service: string): string => `Link de música do ${service} copiado`,
+  copiedPlaylist: (service: string): string => `Playlist do ${service} copiada`,
+  copiedAlbum: (service: string): string => `Álbum do ${service} copiado`,
+  copiedArtist: (service: string): string => `Artista do ${service} copiado`,
+  copiedLink: (service: string): string => `Link do ${service} copiado`,
+  listen: "Ouvir",
+  open: "Abrir",
   findingSong: "Procurando música…",
   songOffline: "Você está offline",
   songOfflineMessage: "Conecte-se à internet para abrir esta música.",

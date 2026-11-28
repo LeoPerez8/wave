@@ -1796,6 +1796,13 @@ export type {
   SharedTextImport,
 } from "./playlistLinks.ts";
 export {
+  copiedLinkOffer,
+  looksAtClipboard,
+  offeredLinkKey,
+  readsCopiedText,
+} from "./copiedLinkOffer.ts";
+export type { ClipHint, CopiedLinkOffer, CopiedLinkReturn } from "./copiedLinkOffer.ts";
+export {
   deezerShortLinkLanding,
   linkedYtSong,
   recogniseSongLink,
