@@ -37,6 +37,7 @@ import { CardEntries } from "@/overlay/CardEntries";
 import { useOverlayFlow } from "@/overlay/flow";
 import { dismissAllOverlays, followUp, openOverlay, presentOverlay } from "@/overlay/overlay";
 import { ytMusicEnabled } from "@/settings/ytMusic";
+import { openSmartLink } from "./openSmartLink";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 
@@ -161,7 +162,8 @@ export const openLinkImport = (text: string): void => {
  * Opens what [text] shared to Wave from another app names (Core's
  * `sharedTextImport`): the song a song link names, playing (`openSongLink`;
  * a Spotify short link to a playlist opens its import card once followed),
- * the import card for its playlist, as From a Link opens it, or a short
+ * the import card for its playlist, as From a Link opens it, what a smart
+ * link's page points to (`openSmartLink`), or a short
  * message saying what Wave opens (or that YT Music is off).
  * Nothing is read for a message. The cards open before the share (a link
  * card left open while the link was fetched from Spotify) are dismissed.
@@ -175,6 +177,7 @@ export const openSharedText = (text: string): void => {
   );
   if (shared.kind === "import") openImportCard(shared.link);
   else if (shared.kind === "song") void openSongLink(shared.link, { openPlaylist: openImportCard });
+  else if (shared.kind === "smart") void openSmartLink(shared.url, openSharedText);
   else void showMessage(shared.title, shared.message);
 };
 

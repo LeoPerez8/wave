@@ -17,6 +17,7 @@ import {
 import { cantOpenNotice, ytMusicOffNotice, type ImportNotice } from "./linkNotices.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import { recogniseSongLink, type SongLink } from "./songLinkOpening.ts";
+import { smartLinkPage } from "./smartLinkHosts.ts";
 import type { ImportService, LinkImportPlan } from "./playlistImport.ts";
 import type { YtSong } from "./ytMusic.ts";
 import type { YtQuietReason } from "./ytSearch.ts";
@@ -214,6 +215,8 @@ export const spotifyShortLinkLanding = (
 export type SharedTextImport =
   | { readonly kind: "import"; readonly link: PlaylistLink }
   | { readonly kind: "song"; readonly link: SongLink }
+  /** A smart link: its page is read for the link it points to (`smartLinkTarget`). */
+  | { readonly kind: "smart"; readonly url: string }
   | ({ readonly kind: "notice" } & ImportNotice);
 
 /**
@@ -222,8 +225,9 @@ export type SharedTextImport =
  * card for the playlist named by the first web address or Spotify URI in it
  * (the bare link YouTube Music's app shares, Spotify's link or short link, or
  * a link among words, punctuation after it dropped), as
- * `recognisePlaylistLink` reads it. Anything else, a bare playlist id
- * included, gets a notice saying what Wave opens, and with YT Music off
+ * `recognisePlaylistLink` reads it, else a smart link's page to read
+ * (`smartLinkPage`). Anything else, a bare playlist id included, gets a
+ * notice saying what Wave opens, and with YT Music off
  * everything gets one saying to turn it on.
  */
 export const sharedTextImport = (
@@ -237,6 +241,8 @@ export const sharedTextImport = (
   const address = addressIn(text);
   const check = address === null ? null : recognisePlaylistLink(address);
   if (check?.ok === true) return { kind: "import", link: check.link };
+  const smart = smartLinkPage(text);
+  if (smart !== null) return { kind: "smart", url: smart };
   return { kind: "notice", ...cantOpenNotice(language) };
 };
 

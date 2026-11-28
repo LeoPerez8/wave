@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  recognisePlaylistLink,
   recogniseSongLink,
   SONG_LINK_SAMPLES,
   songLinkHandling,
@@ -65,7 +66,7 @@ describe("the Open song links in Wave row's line", () => {
   test("says which links open in Wave, in English and Portuguese", () => {
     assert.equal(
       songLinkHandlingLine("all"),
-      "On: YouTube Music, Spotify and Deezer links open in Wave.",
+      "On: YouTube Music, YouTube playlist, Spotify, Deezer and release page links open in Wave.",
     );
     assert.equal(
       songLinkHandlingLine("some"),
@@ -77,7 +78,7 @@ describe("the Open song links in Wave row's line", () => {
     );
     assert.equal(
       songLinkHandlingLine("all", "pt-BR"),
-      "Ativado: links do YouTube Music, Spotify e Deezer abrem no Wave.",
+      "Ativado: links do YouTube Music, de playlist do YouTube, do Spotify, do Deezer e de páginas de lançamento abrem no Wave.",
     );
     assert.equal(
       songLinkHandlingLine("some", "pt-BR"),
@@ -157,7 +158,7 @@ describe("apps that still open their own song links", () => {
     );
     assert.deepEqual(setup, {
       handling: "all",
-      line: "On: YouTube Music, Spotify and Deezer links open in Wave.",
+      line: "On: YouTube Music, YouTube playlist, Spotify, Deezer and release page links open in Wave.",
       turnOff: [],
     });
   });
@@ -193,6 +194,28 @@ describe("apps that still open their own song links", () => {
   });
 });
 
+test("the YouTube app opening YouTube playlist links adds a step to turn them off in YouTube", () => {
+  const youtube = { packageName: "com.google.android.youtube", label: "YouTube" };
+  const setup = songLinkSetup(
+    { allowed: true, hosts: hosts([SELECTED, SELECTED, SELECTED, SELECTED]) },
+    { web: CHROME, youtubeMusic: CHROME, youtube, spotify: CHROME, deezer: CHROME },
+  );
+  assert.deepEqual(setup.turnOff, [
+    {
+      service: "youtube",
+      packageName: "com.google.android.youtube",
+      step: "YouTube still opens YouTube playlist links. Turn off Open supported links there first.",
+      button: "Turn Off in YouTube",
+    },
+  ]);
+  assert.equal(setup.handling, "some");
+  assert.equal(
+    songLinkSetup({ allowed: false, hosts: hosts([]) }, { web: CHROME, youtube }, "pt-BR")
+      .turnOff[0]?.step,
+    "O YouTube ainda abre os links de playlist do YouTube. Desative Abrir links compatíveis nele primeiro.",
+  );
+});
+
 test("the setup's handling comes alone, an app holding its links making all some", () => {
   const allOn = { allowed: true, hosts: hosts([SELECTED, SELECTED, SELECTED, SELECTED]) };
   assert.equal(songLinkSetupHandling(allOn, { web: CHROME, spotify: SPOTIFY }), "some");
@@ -209,4 +232,11 @@ test("each service's sample link, which Android is asked about, is a song link o
   assert.equal(recogniseSongLink(SONG_LINK_SAMPLES.spotify)?.service, "spotify");
   assert.equal(recogniseSongLink(SONG_LINK_SAMPLES.deezer)?.service, "deezer");
   assert.equal(recogniseSongLink(SONG_LINK_SAMPLES.web), null);
+});
+
+test("YouTube's sample link, which Android is asked about, is a YouTube playlist link on www.youtube.com", () => {
+  const sample = SONG_LINK_SAMPLES.youtube;
+  assert.equal(new URL(sample).host, "www.youtube.com");
+  assert.equal(recogniseSongLink(sample), null);
+  assert.equal(recognisePlaylistLink(sample).ok, true);
 });

@@ -318,7 +318,8 @@ export const settingsPtBr: typeof settingsEn = {
   rescanLibrary: "Verificar Biblioteca de Novo",
   songLinks: "Links de música",
   openSongLinksInWave: "Abrir links de música no Wave",
-  songLinksAll: "Ativado: links do YouTube Music, Spotify e Deezer abrem no Wave.",
+  songLinksAll:
+    "Ativado: links do YouTube Music, de playlist do YouTube, do Spotify, do Deezer e de páginas de lançamento abrem no Wave.",
   songLinksSome:
     "Ativado para alguns links. Toque para ativar os outros na página Abrir por padrão do Android.",
   songLinksNone:
@@ -380,8 +381,19 @@ export const settingsPtBr: typeof settingsEn = {
     steps: ["Toque em Adicionar link.", "Marque todos os links.", "Toque em Adicionar."],
     turnOn: "Ativar",
   },
-  songLinkServices: { youtubeMusic: "YouTube Music", spotify: "Spotify", deezer: "Deezer" },
-  songLinksHeldBy: (app: string, service: string) => `O ${app} ainda abre os links do ${service}.`,
+  songLinkServices: {
+    youtubeMusic: "YouTube Music",
+    youtube: "YouTube",
+    spotify: "Spotify",
+    deezer: "Deezer",
+  },
+  songLinkKinds: {
+    youtubeMusic: "os links do YouTube Music",
+    youtube: "os links de playlist do YouTube",
+    spotify: "os links do Spotify",
+    deezer: "os links do Deezer",
+  },
+  songLinksHeldBy: (app: string, links: string) => `O ${app} ainda abre ${links}.`,
   songLinksTurnOffFirst: "Desative Abrir links compatíveis nele primeiro.",
   turnOffIn: (app: string) => `Desativar no ${app}`,
   itsSongsLeaveYourLibraryTheFiles:
