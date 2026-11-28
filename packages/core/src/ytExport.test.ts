@@ -18,6 +18,8 @@ import {
   writeYtLibraryOrigins,
   ytExportPicker,
   ytExportPickerView,
+  queueYtExportRun,
+  ytExportRunDone,
   ytExportRunLine,
   ytExportSignInAlert,
   ytExportSummaryLine,
@@ -227,6 +229,24 @@ describe("the export run's line in Settings", () => {
   test("has no line while nothing is queued", () => {
     assert.equal(ytExportRunLine({ done: 0, total: 0 }), null);
     assert.equal(ytExportRunLine({ done: 9, total: 9 }), null);
+  });
+});
+
+describe("the export run's count", () => {
+  test("an export queued while none runs starts a new count", () => {
+    assert.deepEqual(queueYtExportRun({ done: 0, total: 0 }, 3), { done: 0, total: 3 });
+    assert.deepEqual(queueYtExportRun({ done: 9, total: 9 }, 2), { done: 0, total: 2 });
+  });
+
+  test("an export queued during a run adds its items to the total", () => {
+    assert.deepEqual(queueYtExportRun({ done: 3, total: 9 }, 4), { done: 3, total: 13 });
+  });
+
+  test("each item sent, skipped or dropped counts one more done", () => {
+    assert.deepEqual(ytExportRunDone({ done: 3, total: 9 }), { done: 4, total: 9 });
+    const last = ytExportRunDone({ done: 8, total: 9 });
+    assert.deepEqual(last, { done: 9, total: 9 });
+    assert.equal(ytExportRunLine(last), null);
   });
 });
 

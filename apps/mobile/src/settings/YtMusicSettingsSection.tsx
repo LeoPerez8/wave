@@ -75,7 +75,7 @@ function ExportRows() {
       <View className="items-start justify-center" style={{ minHeight: grid.row }}>
         <TextButton label={strings.imports.exportToYtMusic} onPress={() => void openYtExport()} />
       </View>
-      <Text className="font-sans text-footnote text-secondary">
+      <Text className="mt-2 font-sans text-footnote text-secondary">
         {strings.imports.exportSignInMessage}
       </Text>
     </View>
@@ -93,12 +93,8 @@ export function YtMusicSettingsSection() {
   /** Turning it off waits for the warning: the switch shows off meanwhile, and Cancel puts it back. */
   const [askingOff, setAskingOff] = useState(false);
   const onSwitch = (on: boolean) => {
-    if (on) {
-      void switchYtMusic(true);
-      return;
-    }
-    setAskingOff(true);
-    void switchYtMusic(false).finally(() => setAskingOff(false));
+    setAskingOff(!on);
+    void switchYtMusic(on).finally(() => setAskingOff(false));
   };
 
   return (

@@ -188,6 +188,22 @@ export interface YtExportRunCount {
 }
 
 /**
+ * An export of [items] items queued: with none running it starts a new
+ * count, else its items join the run's total.
+ */
+export const queueYtExportRun = (
+  { done, total }: YtExportRunCount,
+  items: number,
+): YtExportRunCount =>
+  done >= total ? { done: 0, total: items } : { done, total: total + items };
+
+/** One more item of the run sent, skipped as deleted, or dropped when an export stopped. */
+export const ytExportRunDone = ({ done, total }: YtExportRunCount): YtExportRunCount => ({
+  done: done + 1,
+  total,
+});
+
+/**
  * The line in Settings › Accounts › YT Music while exports run: "Exporting
  * playlists · 3 of 9", as Library's import batch line counts; null once
  * nothing is left queued.

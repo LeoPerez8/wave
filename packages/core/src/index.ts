@@ -2687,6 +2687,8 @@ export {
   addYtLikes,
   ytExportPicker,
   ytExportPickerView,
+  queueYtExportRun,
+  ytExportRunDone,
   ytExportRunLine,
   ytExportSignInAlert,
   ytExportSummaryLine,

@@ -21,7 +21,9 @@ import {
   EXPORT_WAITING_PROGRESS,
   exportingProgress,
   NO_YT_EXPORT,
+  queueYtExportRun,
   syncSharedPlaylist,
+  ytExportRunDone,
   ytExportRunLine,
   ytExportSummaryLine,
   type SharedSongs,
@@ -64,8 +66,7 @@ let sending: number | null = null;
 export const exportRunCount = makeExternalStore<YtExportRunCount>({ done: 0, total: 0 });
 
 /** One more item of the run is done with. */
-const countDone = (): void =>
-  exportRunCount.update(({ done, total }) => ({ done: done + 1, total }));
+const countDone = (): void => exportRunCount.update(ytExportRunDone);
 
 /** "Exporting playlists · 3 of 9" while exports run; null once none is left queued. */
 export const useYtExportRunLine = (): string | null => {
@@ -161,9 +162,7 @@ let running: Promise<void> = Promise.resolve();
  * after any export still running.
  */
 export const exportToYtMusic = (items: readonly YtExportItem[]): Promise<void> => {
-  exportRunCount.update(({ done, total }) =>
-    done >= total ? { done: 0, total: items.length } : { done, total: total + items.length },
-  );
+  exportRunCount.update((count) => queueYtExportRun(count, items.length));
   for (const item of items) {
     const id = progressId(item);
     queued.set(id, (queued.get(id) ?? 0) + 1);
