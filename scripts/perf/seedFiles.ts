@@ -81,3 +81,20 @@ export const mp3File = (tags: SeedFileTags): Uint8Array => {
   view.setUint32(8, audioFrames * FRAME_BYTES);
   return bytes;
 };
+
+/**
+ * The root shell command that hands the seeded database to [pkg]'s user [owner] and labels it as
+ * the app's own data. `restorecon` alone left a reinstalled app's database with the previous
+ * install's SELinux categories, so the app couldn't open it (#1535); the app's data directory,
+ * which Android made for this install, carries the right ones.
+ */
+export const seedOwnership = ({ pkg, owner }: { pkg: string; owner: string }): string => {
+  const data = `/data/data/${pkg}`;
+  const files = `${data}/files`;
+  const database = `${files}/SQLite`;
+  return (
+    `chown ${owner}:${owner} ${files} ${database} ${database}/wave.db && chmod 771 ${files}` +
+    ` && chmod 600 ${database}/wave.db && restorecon -R ${files}` +
+    ` && chcon -R "$(stat -c %C ${data})" ${files}`
+  );
+};
