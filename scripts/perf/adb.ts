@@ -22,6 +22,9 @@ const adb = (args: readonly string[], input?: string): Promise<string> =>
         reject(new Error(`adb ${args.join(" ")}: ${stderr.trim()}`));
       else resolve(stdout);
     });
+    // An adb that exits without reading its input (`adb devices`) closes the pipe first: the
+    // write fails with EPIPE, which is no error of the command's.
+    child.stdin.on("error", () => {});
     child.stdin.end(input ?? "");
   });
 
