@@ -1304,6 +1304,7 @@ export type {
 } from "./spotifyAccount.ts";
 export {
   YT_ACCOUNT_SIGNED_OUT,
+  confirmYtMusicOff,
   stepYtAccount,
   ytAccountView,
   ytSignInEmail,
@@ -1802,9 +1803,19 @@ export type {
   SharedTextImport,
 } from "./playlistLinks.ts";
 export {
+  copiedLinkOffer,
+  looksAtClipboard,
+  offeredLinkKey,
+  copiedTextReading,
+  CLIP_LOOK_AGAIN_MS,
+} from "./copiedLinkOffer.ts";
+export type { ClipHint, CopiedLinkOffer, CopiedLinkReturn } from "./copiedLinkOffer.ts";
+export {
   deezerShortLinkLanding,
   linkedYtSong,
+  opensOnDesktop,
   recogniseSongLink,
+  songLinkKind,
   songLinkLibraryCopy,
   songLinkNotice,
   songLinkNotFound,
@@ -1815,6 +1826,7 @@ export {
 export type {
   LinkedSong,
   SongLink,
+  SongLinkKind,
   SongLinkFailure,
   SongLinkNotFound,
   SongLinkPlay,
@@ -1920,7 +1932,7 @@ export { readSpotifyPlaylist, spotifyEmbed, spotifyPlaylistPage } from "./spotif
 export type { ServiceTrack, TrackRead, TrackReadFailure } from "./serviceTrack.ts";
 export { readSpotifyTrack } from "./spotifyTrack.ts";
 export { SMART_LINK_HOSTS, smartLinkPage } from "./smartLinkHosts.ts";
-export { smartLinkTarget } from "./smartLinks.ts";
+export { smartLinkLanding, smartLinkTarget, type OpensSongLink } from "./smartLinks.ts";
 export {
   albumLinkOpening,
   readSpotifyAlbum,
@@ -1929,7 +1941,17 @@ export {
   type FoundYtAlbum,
   type ServiceAlbum,
 } from "./spotifyAlbum.ts";
+export { ytAlbumPlaylistOpening, type YtAlbumPlaylistRead } from "./ytAlbumPlaylist.ts";
 export { readDeezerTrack, type DeezerAnswer, type DeezerTransport } from "./deezerTrack.ts";
+export {
+  artistLinkOpening,
+  readDeezerArtist,
+  readSpotifyArtist,
+  ytChannelLinkOpening,
+  type ArtistLinkOpening,
+  type ArtistRead,
+  type YtArtistNameRead,
+} from "./artistLink.ts";
 export type {
   SpotifyAnswer,
   SpotifyEmbed,
@@ -2665,6 +2687,9 @@ export {
   addYtLikes,
   ytExportPicker,
   ytExportPickerView,
+  queueYtExportRun,
+  ytExportRunDone,
+  ytExportRunLine,
   ytExportSignInAlert,
   ytExportSummaryLine,
 } from "./ytExport.ts";
@@ -2674,6 +2699,7 @@ export type {
   YtExportPickerView,
   YtExportPlaylist,
   YtExportRow,
+  YtExportRunCount,
   YtExportSummary,
 } from "./ytExport.ts";
 export {

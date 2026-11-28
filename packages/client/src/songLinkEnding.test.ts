@@ -138,3 +138,130 @@ test("an album Spotify doesn't have says so in album words", async () => {
     failure: { unread: "missing", service: "spotify", album: true },
   });
 });
+
+const pagePorts = (
+  overrides: Partial<NonNullable<Parameters<typeof songLinkEnding>[1]["pages"]>> = {},
+) => ({
+  albumPlaylist: async () => {
+    throw new Error("Not an album playlist");
+  },
+  artistPage: async () => {
+    throw new Error("Not a channel");
+  },
+  spotifyArtist: async () => {
+    throw new Error("Not a Spotify artist");
+  },
+  deezerArtist: async () => {
+    throw new Error("Not a Deezer artist");
+  },
+  searchArtists: async () => null,
+  ...overrides,
+});
+
+const radiohead = { name: "Radiohead", browseId: "UCq19-LqvG35A-30oyAiPiqA", audience: 9 };
+
+test("a YT Music album link opens its page, with nothing asked", async () => {
+  const ending = await songLinkEnding(
+    { service: "ytAlbum", browseId: "MPREb_06zfD9zt7QK" },
+    albumPorts({ pages: pagePorts() }),
+    new AbortController().signal,
+  );
+  assert.deepEqual(ending, { album: "MPREb_06zfD9zt7QK", read: null });
+});
+
+test("a YT Music album playlist opens the album its songs name", async () => {
+  const asked: string[] = [];
+  const ending = await songLinkEnding(
+    { service: "ytAlbumPlaylist", playlistId: "OLAK5uy_pink" },
+    albumPorts({
+      pages: pagePorts({
+        albumPlaylist: async (id) => {
+          asked.push(id);
+          return {
+            ok: true,
+            playlist: {
+              title: "Pink Moon",
+              author: "Nick Drake",
+              artworkUrl: null,
+              songs: [{ albumId: "MPREb_06zfD9zt7QK" }],
+            },
+          };
+        },
+      }),
+    }),
+    new AbortController().signal,
+  );
+  assert.deepEqual(asked, ["OLAK5uy_pink"]);
+  assert.deepEqual(ending, {
+    album: "MPREb_06zfD9zt7QK",
+    read: { title: "Pink Moon", artists: ["Nick Drake"], artworkUrl: null },
+  });
+});
+
+test("a channel link opens the artist YT Music reads it as", async () => {
+  const ending = await songLinkEnding(
+    { service: "ytArtist", channelId: "UCiryJZISyBldwm9ocAE-QfQ" },
+    albumPorts({
+      pages: pagePorts({ artistPage: async () => ({ ok: true, name: "Nick Drake" }) }),
+    }),
+    new AbortController().signal,
+  );
+  assert.deepEqual(ending, { artist: "UCiryJZISyBldwm9ocAE-QfQ", name: "Nick Drake" });
+});
+
+test("a Spotify artist link searches YT Music for the name Spotify gives", async () => {
+  const searched: string[] = [];
+  const ending = await songLinkEnding(
+    { service: "spotifyArtist", artistId: "4Z8W4fKeB5YxbusRsdQVPb" },
+    albumPorts({
+      pages: pagePorts({
+        spotifyArtist: async () => ({ ok: true, name: "Radiohead" }),
+        searchArtists: async (query) => {
+          searched.push(query);
+          return [radiohead];
+        },
+      }),
+    }),
+    new AbortController().signal,
+  );
+  assert.deepEqual(searched, ["Radiohead"]);
+  assert.deepEqual(ending, { artist: radiohead.browseId, name: "Radiohead" });
+});
+
+test("a Deezer short link that lands on an artist opens the matching artist", async () => {
+  const ending = await songLinkEnding(
+    { service: "deezerShort", url: "https://link.deezer.com/s/abc" },
+    albumPorts({
+      follow: async () => ({ url: "https://www.deezer.com/br/artist/399", body: "" }),
+      pages: pagePorts({
+        deezerArtist: async () => ({ ok: true, name: "Radiohead" }),
+        searchArtists: async () => [radiohead],
+      }),
+    }),
+    new AbortController().signal,
+  );
+  assert.deepEqual(ending, { artist: radiohead.browseId, name: "Radiohead" });
+});
+
+test("an artist Deezer doesn't have says so in artist words", async () => {
+  const ending = await songLinkEnding(
+    { service: "deezerArtist", artistId: "399" },
+    albumPorts({
+      pages: pagePorts({ deezerArtist: async () => ({ ok: false, reason: "missing" }) }),
+    }),
+    new AbortController().signal,
+  );
+  assert.deepEqual(ending, {
+    play: "failed",
+    failure: { unread: "missing", service: "deezer", artist: true },
+  });
+});
+
+test("an artist link where the platform reads no pages can't be opened", async () => {
+  const ending = await songLinkEnding(
+    { service: "spotifyArtist", artistId: "4Z8W4fKeB5YxbusRsdQVPb" },
+    albumPorts(),
+    new AbortController().signal,
+  );
+  assert.deepEqual(ending, { play: "failed", failure: "cantOpen" });
+});

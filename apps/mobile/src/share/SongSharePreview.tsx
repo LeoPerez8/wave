@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PixelRatio, Share, StyleSheet, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
+import { markLinkOffered } from "@/library/offeredLink";
 import { appLog } from "@/log/appLog";
 import { WaveNative } from "@/native/waveNative";
 import { addScreenBackHandler } from "@/overlay/back";
@@ -62,6 +63,8 @@ const copyLink = async (url: string): Promise<void> => {
   const { strings } = currentLocalisation();
   try {
     await WaveNative.writeClipboardText(strings.share.songLink, url);
+    // Wave's own copy isn't offered back on the next return.
+    markLinkOffered(url);
     void showToast(strings.share.linkCopied);
   } catch (error) {
     appLog("warn", LOG_TAG, `Couldn't copy the song's link: ${String(error)}`);

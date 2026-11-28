@@ -43,7 +43,18 @@ export const importsEn = {
   /** Sharing something to Wave that isn't a song or playlist link. */
   cantOpen: "Can't open this",
   sharedLinks:
-    "Wave opens songs from YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from Spotify links.",
+    "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube, YouTube Music and Spotify links, albums from YouTube Music and Spotify links, and release pages that link to them.",
+  /** The toast offering a copied link (docs/spec.md, "Opening a song link"); [service] is a brand. */
+  copiedSongLink: (service: string): string => `${service} song link copied`,
+  copiedPlaylist: (service: string): string => `${service} playlist copied`,
+  copiedAlbum: (service: string): string => `${service} album copied`,
+  copiedArtist: (service: string): string => `${service} artist copied`,
+  /** A short link, whose kind is known only once followed. */
+  copiedLink: (service: string): string => `${service} link copied`,
+  /** A release page (a smart link), whose link is known only once its page is read. */
+  copiedReleasePage: "Release page link copied",
+  listen: "Listen",
+  open: "Open",
   /** Opening a song link. */
   findingSong: "Finding song…",
   songOffline: "You're offline",
@@ -64,6 +75,13 @@ export const importsEn = {
   albumOfflineMessage: "Connect to the internet to open this album.",
   albumNotFound: "Couldn't find this album on YouTube Music",
   albumUnreadMissing: (service: string): string => `${service} doesn't have the album it links to.`,
+  /** Opening an artist link. */
+  findingArtist: "Finding artist…",
+  artistOfflineMessage: "Connect to the internet to open this artist.",
+  artistNotFound: "Couldn't find this artist",
+  artistChannelNotFound: "YouTube Music has no artist page for this channel.",
+  artistUnreadMissing: (service: string): string =>
+    `${service} doesn't have the artist it links to.`,
   ytMusicNoAnswerMessage: "YouTube Music didn't answer. Try again later.",
   offline: "You're offline. Try again when you're back online.",
   playlistFailed:
@@ -131,6 +149,9 @@ export const importsEn = {
   export: "Export",
   exportWaiting: "Waiting to export",
   exportingOf: (done: string, total: string): string => `Exporting ${done} of ${total}`,
+  /** Settings › Accounts › YT Music while an export runs (`ytExportRunLine`). */
+  exportingPlaylists: (done: string, total: string): string =>
+    `Exporting playlists · ${done} of ${total}`,
   liked: (count: number): string => `${n(count)} liked`,
   exportSignInMessage:
     "Exporting makes private copies of your playlists on your YouTube Music account and likes your favorites there.",

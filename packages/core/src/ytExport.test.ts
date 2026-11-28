@@ -18,6 +18,9 @@ import {
   writeYtLibraryOrigins,
   ytExportPicker,
   ytExportPickerView,
+  queueYtExportRun,
+  ytExportRunDone,
+  ytExportRunLine,
   ytExportSignInAlert,
   ytExportSummaryLine,
   ytNewPlaylistPrivacy,
@@ -202,6 +205,48 @@ describe("the export's summary", () => {
       ytExportSummaryLine({ playlists: 1, found: 1_200, total: 1_234, liked: 1_200 }, "pt-BR"),
       "1 playlist exportada · 1.200 de 1.234 músicas encontradas · 1.200 curtidas",
     );
+  });
+});
+
+describe("the export run's line in Settings", () => {
+  test("counts the items sent of every item queued", () => {
+    assert.equal(ytExportRunLine({ done: 3, total: 9 }), "Exporting playlists · 3 of 9");
+    assert.equal(ytExportRunLine({ done: 0, total: 1 }), "Exporting playlists · 0 of 1");
+    assert.equal(
+      ytExportRunLine({ done: 1_000, total: 1_234 }),
+      "Exporting playlists · 1,000 of 1,234",
+    );
+  });
+
+  test("says it in Brazilian Portuguese", () => {
+    assert.equal(ytExportRunLine({ done: 3, total: 9 }, "pt-BR"), "Exportando playlists · 3 de 9");
+    assert.equal(
+      ytExportRunLine({ done: 1_000, total: 1_234 }, "pt-BR"),
+      "Exportando playlists · 1.000 de 1.234",
+    );
+  });
+
+  test("has no line while nothing is queued", () => {
+    assert.equal(ytExportRunLine({ done: 0, total: 0 }), null);
+    assert.equal(ytExportRunLine({ done: 9, total: 9 }), null);
+  });
+});
+
+describe("the export run's count", () => {
+  test("an export queued while none runs starts a new count", () => {
+    assert.deepEqual(queueYtExportRun({ done: 0, total: 0 }, 3), { done: 0, total: 3 });
+    assert.deepEqual(queueYtExportRun({ done: 9, total: 9 }, 2), { done: 0, total: 2 });
+  });
+
+  test("an export queued during a run adds its items to the total", () => {
+    assert.deepEqual(queueYtExportRun({ done: 3, total: 9 }, 4), { done: 3, total: 13 });
+  });
+
+  test("each item sent, skipped or dropped counts one more done", () => {
+    assert.deepEqual(ytExportRunDone({ done: 3, total: 9 }), { done: 4, total: 9 });
+    const last = ytExportRunDone({ done: 8, total: 9 });
+    assert.deepEqual(last, { done: 9, total: 9 });
+    assert.equal(ytExportRunLine(last), null);
   });
 });
 

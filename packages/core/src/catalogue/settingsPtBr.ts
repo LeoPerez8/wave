@@ -77,6 +77,18 @@ export const settingsPtBr: typeof settingsEn = {
       "este. Nada nos celulares é apagado. Inicie sessão novamente nos celulares que você usa.",
     action: "Finalizar Sessão em Todos os Celulares",
   },
+  turnOffYtMusic: {
+    title: "Desativar o YT Music?",
+    message:
+      "O Wave para de fazer pedidos ao YouTube. Você perde:\n" +
+      "• Busca online e músicas por streaming\n" +
+      "• DJ, Descobrir e Playlists da comunidade no Início\n" +
+      "• Fila Mágica e sugestões nas playlists\n" +
+      "• Downloads, importações e Exportar pelo YT Music\n" +
+      "As músicas baixadas continuam tocando e nada é apagado.",
+    everyPhone: "Vale para todos os seus celulares com a Conta Wave.",
+    action: "Desativar",
+  },
   launcherIcon: {
     title: "Alterar também o ícone do app?",
     dropsFromHomeScreen:
@@ -325,6 +337,9 @@ export const settingsPtBr: typeof settingsEn = {
     "Ativado para alguns links. Toque para ativar os outros na página Abrir por padrão do Android.",
   songLinksNone:
     "Desativado: os links abrem no próprio app ou no navegador. Toque para ativá-los na página Abrir por padrão do Android.",
+  offerCopiedLinks: "Oferecer links copiados",
+  offerCopiedLinksLine:
+    "Quando você volta ao Wave com um link de música copiado, ele pergunta se quer abri-lo.",
   wavePicksUpNewChangedAndRemoved:
     "O Wave detecta arquivos novos, alterados e removidos sempre que você o abre e quando você puxa a Biblioteca para baixo.",
   skipVoiceNotesAndRecordings: "Ignorar mensagens de voz e gravações",

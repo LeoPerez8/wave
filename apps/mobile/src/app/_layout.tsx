@@ -39,6 +39,7 @@ import { OverlayHost } from "@/overlay/OverlayHost";
 import { AndroidBack } from "@/overlay/AndroidBack";
 import { PhotoCropperHost } from "@/library/PhotoCropperHost";
 import { FollowCurrentRoute } from "@/library/routes";
+import { useCopiedLinkToasts } from "@/library/copiedLinkOffer";
 import { useOpenSharedText } from "@/library/sharedText";
 import { YtLibraryPickerHost } from "@/library/YtLibraryPickerHost";
 import { launchScanDone } from "@/library/replacementDuplicates";
@@ -89,6 +90,8 @@ export default function RootLayout() {
   // A playlist link shared from YT Music or a browser opens its import card, once Wave can
   // read the Library (the import matches against it).
   useOpenSharedText(granted);
+  // A song link copied in another app is offered in a toast on the way back to Wave.
+  useCopiedLinkToasts(granted);
   useRecognizeRequests(granted);
 
   // What the first screen and the player need starts now: the player, the queue it restores,

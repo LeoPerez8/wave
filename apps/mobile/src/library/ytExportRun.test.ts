@@ -26,6 +26,7 @@ const stubs: Record<string, string> = {
   "@/localisation/localisation": stubModule(`
     import { catalogueOf } from ${core};
     export const currentLocalisation = () => ({ language: "en", strings: catalogueOf("en") });
+    export const useLocalisation = currentLocalisation;
   `),
   "@/log/appLog": stubModule(`
     export const appLog = (level, tag, message) => globalThis.exportTest.calls.push("log " + message);
@@ -88,7 +89,7 @@ registerHooks({
   },
 });
 
-const { exportToYtMusic } = await import("./ytExportRun.ts");
+const { exportRunCount, exportToYtMusic } = await import("./ytExportRun.ts");
 
 const playlist = (playlistId: number, name: string) =>
   ({ kind: "playlist", playlistId, name }) as const;
@@ -243,4 +244,33 @@ test("a failure keeps the line of a playlist another Export still has queued", a
   await second;
   assert.equal(shared.calls.filter((call) => call === "match 2").length, 1);
   assert.ok(shared.calls.at(-3) === "end 2");
+});
+
+test("counts the items queued since none ran, and those sent, until the last is sent", async () => {
+  const counts: string[] = [];
+  const stop = exportRunCount.subscribe(() => {
+    const { done, total } = exportRunCount.get();
+    counts.push(`${done}/${total}`);
+  });
+  await exportToYtMusic([{ kind: "favorites" }, playlist(1, "Road trip"), playlist(2, "Gym")]);
+  stop();
+  assert.deepEqual(counts, ["0/3", "1/3", "2/3", "3/3"]);
+});
+
+test("a second Export pressed during a run grows the total; the next run starts again from none", async () => {
+  const first = exportToYtMusic([playlist(1, "Road trip"), playlist(2, "Gym")]);
+  const second = exportToYtMusic([playlist(2, "Gym")]);
+  assert.deepEqual(exportRunCount.get(), { done: 0, total: 3 });
+  await Promise.all([first, second]);
+  assert.deepEqual(exportRunCount.get(), { done: 3, total: 3 });
+  const third = exportToYtMusic([playlist(1, "Road trip")]);
+  assert.deepEqual(exportRunCount.get(), { done: 0, total: 1 });
+  await third;
+});
+
+test("a deleted playlist counts as done, and a failure counts what it dropped", async () => {
+  shared.playlists.delete(1);
+  shared.failing = 2;
+  await exportToYtMusic([playlist(1, "Road trip"), playlist(2, "Gym"), playlist(3, "Later")]);
+  assert.deepEqual(exportRunCount.get(), { done: 3, total: 3 });
 });
