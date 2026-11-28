@@ -83,7 +83,7 @@ export const usePhoneEffects = (): PhoneEffects => usePhoneEffectsSession().effe
 export const setFullGlass = (on: boolean): void => {
   const current = currentSession();
   const next = ownerFullEffects(current, on);
-  if (next === current || next.ownerFull === current.ownerFull) return;
+  if (next.ownerFull === current.ownerFull) return;
   try {
     const stored = writeFullGlassChoice(on);
     if (stored === null) Storage.removeItemSync(FULL_GLASS_KEY);

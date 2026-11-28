@@ -533,7 +533,10 @@ export const playlistItems = sqliteTable(
  * `markPlaylistsLinked`). Never synced.
  */
 export const playlistRevisions = sqliteTable("playlist_revisions", {
-  /** A playlist's id, or 0 for the Library's tracks, albums and covers. No foreign key. */
+  /**
+   * A playlist's id, 0 for the Library's tracks, albums and covers, or -1 for the entries'
+   * revision the last whole-Library link saw (`playlists.ts`, `LINKED_REVISION`). No foreign key.
+   */
   playlistId: integer("playlist_id").primaryKey(),
   revision: integer("revision").notNull().default(0),
 });

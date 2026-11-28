@@ -712,6 +712,9 @@ export const movePlaylistItems = (
 /** Track ids per query, well under SQLite's limit on bound values. */
 const LINK_CHUNK = 500;
 
+/** The Library's row in `playlist_revisions` (no playlist has id 0). */
+const LIBRARY_REVISION = 0;
+
 /**
  * The row of `playlist_revisions` that keeps the entries' revision
  * (`selectPlaylistEntriesRevision`) the last whole-Library link left: no
@@ -1459,9 +1462,6 @@ const summaryCache = new WeakMap<
   LibraryDatabase,
   Map<number, { readonly at: string; readonly summary: PlaylistSummary }>
 >();
-
-/** The Library's row in `playlist_revisions` (no playlist has id 0). */
-const LIBRARY_REVISION = 0;
 
 /**
  * [playlistIds]' mosaics, totals and newest entry dates. Those whose entries (or the Library's
