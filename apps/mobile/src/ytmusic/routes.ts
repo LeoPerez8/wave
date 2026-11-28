@@ -18,13 +18,16 @@ export type YtListScreen = "yt-album" | "yt-playlist";
 let opening:
   { readonly screen: YtListScreen; readonly id: string; readonly head: YtListHead } | undefined;
 
-const open = (screen: YtListScreen, id: string, head: YtListHead): void => {
-  opening = { screen, id, head };
+const open = (screen: YtListScreen, id: string, head: YtListHead | undefined): void => {
+  opening = head === undefined ? undefined : { screen, id, head };
   router.push(`/library/${screen}/${encodeURIComponent(id)}` as Href);
 };
 
-/** Opens a YT Music album's songs (its `MPREb_…` page), on the Library stack. */
-export const openYtAlbum = (browseId: string, head: YtListHead): void =>
+/**
+ * Opens a YT Music album's songs (its `MPREb_…` page), on the Library stack; with no [head]
+ * (a shared album link, nothing read yet) the page heads itself once it's read.
+ */
+export const openYtAlbum = (browseId: string, head?: YtListHead): void =>
   open("yt-album", browseId, head);
 
 /**

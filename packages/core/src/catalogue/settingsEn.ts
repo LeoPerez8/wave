@@ -348,6 +348,9 @@ export const settingsEn = {
   songLinksSome: "On for some links. Tap to turn on the rest in Android's Open by default page.",
   songLinksNone:
     "Off: links open in their own app or the browser. Tap to turn them on in Android's Open by default page.",
+  offerCopiedLinks: "Offer copied links",
+  offerCopiedLinksLine:
+    "When you come back to Wave with a song link copied, it asks whether to open it.",
   wavePicksUpNewChangedAndRemoved:
     "Wave picks up new, changed and removed files each time you open it, and when you pull down in the Library.",
   skipVoiceNotesAndRecordings: "Skip voice notes and recordings",

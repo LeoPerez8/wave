@@ -68,12 +68,10 @@ describe("a shared YouTube Music song link", () => {
     );
   });
 
-  test("albums, artists, plain YouTube and anything else say what Wave opens", () => {
+  test("handles, other pages and anything else say what Wave opens", () => {
     for (const text of [
-      "https://music.youtube.com/browse/MPREb_ABC123def45",
-      "https://music.youtube.com/channel/UCiMhD4jzUqG-IgPzUmmytRQ",
-      `https://www.youtube.com/watch?v=${VIDEO}`,
-      `https://youtu.be/${VIDEO}`,
+      "https://music.youtube.com/browse/FEmusic_home",
+      "https://www.youtube.com/@justice",
       "https://music.youtube.com/watch?v=",
       "https://music.youtube.com/watch?v=not a video",
       "https://music.youtube.com/watch?v=short",
@@ -87,7 +85,7 @@ describe("a shared YouTube Music song link", () => {
           kind: "notice",
           title: "Can't open this",
           message:
-            "Wave opens songs from YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from Spotify links.",
+            "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube, YouTube Music and Spotify links, albums from YouTube Music and Spotify links, and release pages that link to them.",
         },
         text,
       );
@@ -180,10 +178,10 @@ describe("a shared Spotify song link", () => {
     }
   });
 
-  test("artists, podcasts and malformed ids say what Wave opens", () => {
+  test("podcasts and malformed ids say what Wave opens", () => {
     for (const text of [
       "https://open.spotify.com/album/tooShort",
-      `https://open.spotify.com/artist/${TRACK}`,
+      "https://open.spotify.com/artist/tooShort",
       `https://open.spotify.com/episode/${TRACK}`,
       "https://open.spotify.com/track/tooShort",
       `https://open.spotify.com/track/${TRACK}/extra`,
@@ -195,7 +193,7 @@ describe("a shared Spotify song link", () => {
           kind: "notice",
           title: "Can't open this",
           message:
-            "Wave opens songs from YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from Spotify links.",
+            "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube, YouTube Music and Spotify links, albums from YouTube Music and Spotify links, and release pages that link to them.",
         },
         text,
       );
@@ -249,10 +247,10 @@ describe("where a shared Spotify short link lands", () => {
     );
   });
 
-  test("anywhere else (a profile, an artist, no Spotify page), it opens nothing", () => {
+  test("anywhere else (a profile, an episode, no Spotify page), it opens nothing", () => {
     for (const [url, body] of [
       ["https://spotify.app.link/uszhQI5hT3b?_p=1", '"https://open.spotify.com/user/leo"'],
-      ["https://open.spotify.com/artist/4uLU6hMCjMI75M1A2tKUQC", ""],
+      ["https://open.spotify.com/episode/4uLU6hMCjMI75M1A2tKUQC", ""],
       ["https://spotify.link/nothing", "<html></html>"],
     ] as const) {
       assert.equal(spotifyShortLinkLanding(url, body), null, url);
@@ -643,7 +641,7 @@ describe("what a Spotify song link that doesn't play says", () => {
     assert.deepEqual(songLinkNotice("cantOpen"), {
       title: "Can't open this",
       message:
-        "Wave opens songs from YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from Spotify links.",
+        "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube, YouTube Music and Spotify links, albums from YouTube Music and Spotify links, and release pages that link to them.",
     });
   });
 

@@ -10,7 +10,7 @@ const NOT_OPENED = {
   kind: "notice",
   title: "Can't open this",
   message:
-    "Wave opens songs from YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from Spotify links.",
+    "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube, YouTube Music and Spotify links, albums from YouTube Music and Spotify links, and release pages that link to them.",
 };
 
 describe("a shared Deezer song link", () => {
@@ -57,10 +57,9 @@ describe("a shared Deezer song link", () => {
     }
   });
 
-  test("albums, artists, playlists, podcasts and ids that aren't a number say what Wave opens", () => {
+  test("albums, playlists, podcasts and ids that aren't a number say what Wave opens", () => {
     for (const text of [
       "https://www.deezer.com/album/302127",
-      "https://www.deezer.com/br/artist/27",
       "https://www.deezer.com/playlist/13957557901",
       "https://www.deezer.com/episode/789681271",
       "https://www.deezer.com/track/302127x",
@@ -78,7 +77,7 @@ describe("a shared Deezer song link", () => {
       kind: "notice",
       title: "Não é possível abrir isto",
       message:
-        "O Wave abre músicas de links do YouTube Music, do Spotify e do Deezer, playlists de links do YouTube Music e do Spotify, e álbuns de links do Spotify.",
+        "O Wave abre músicas e artistas de links do YouTube, do YouTube Music, do Spotify e do Deezer, playlists de links do YouTube, do YouTube Music e do Spotify, álbuns de links do YouTube Music e do Spotify, e páginas de lançamento que levam a eles.",
     });
   });
 
@@ -99,11 +98,10 @@ describe("where a followed Deezer short link lands", () => {
     }
   });
 
-  test("on an album, a playlist, an artist, an episode or Deezer's dead-link page, it opens nothing", () => {
+  test("on an album, a playlist, an episode or Deezer's dead-link page, it opens nothing", () => {
     for (const url of [
       "https://www.deezer.com/br/album/792251411?host=0",
       "https://www.deezer.com/br/playlist/13957557901",
-      "https://www.deezer.com/br/artist/85032562",
       "https://www.deezer.com/br/episode/789681271",
       "https://www.deezer.com/deezer-links-404",
       "https://link.deezer.com/s/30abcdefghij",
