@@ -27,3 +27,18 @@ export const cantOpenNotice = (language: AppLanguage = "en"): ImportNotice => {
   const text = catalogueOf(language).imports;
   return { title: text.cantOpen, message: text.sharedLinks };
 };
+
+/**
+ * What a smart link that opens nothing says, in [language]: offline, or its
+ * page out of reach. A page that points to nothing Wave opens says
+ * "Can't open this" (`cantOpenNotice`).
+ */
+export const smartLinkNotice = (
+  failure: "offline" | "unreachable",
+  language: AppLanguage = "en",
+): ImportNotice => {
+  const text = catalogueOf(language).imports;
+  return failure === "offline"
+    ? { title: text.songOffline, message: text.linkOfflineMessage }
+    : { title: text.songLinkDoesntOpen, message: text.smartLinkUnreachable };
+};

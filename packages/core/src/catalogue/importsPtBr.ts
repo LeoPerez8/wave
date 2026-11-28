@@ -59,6 +59,10 @@ export const importsPtBr: typeof importsEn = {
   songUnreadUnreachable: (service: string): string =>
     `Não foi possível acessar o ${service}. Verifique sua conexão e tente novamente.`,
   songUnreadFailed: (service: string): string => `O ${service} não respondeu como esperado.`,
+  openingLink: "Abrindo link…",
+  linkOfflineMessage: "Conecte-se à internet para abrir este link.",
+  smartLinkUnreachable:
+    "Não foi possível acessar a página dele. Verifique sua conexão e tente novamente.",
   findingAlbum: "Procurando álbum…",
   albumOfflineMessage: "Conecte-se à internet para abrir este álbum.",
   albumNotFound: "Não achei esse álbum no YouTube Music",

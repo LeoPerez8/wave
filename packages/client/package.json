@@ -11,6 +11,7 @@
     "./testing": "./src/db/testDatabase.ts",
     "./testing/fastAgainFixture": "./src/db/fastAgainFixture.ts",
     "./songLinkEnding": "./src/songLinkEnding.ts",
+    "./smartLinkEnding": "./src/smartLinkEnding.ts",
     "./serviceTransport": "./src/serviceTransport.ts",
     "./askWaveService": "./src/askWaveService.ts",
     "./downloads/lookups": "./src/downloads/lookups.ts",

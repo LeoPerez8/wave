@@ -55,6 +55,10 @@ export const importsEn = {
   songUnreadUnreachable: (service: string): string =>
     `Couldn't reach ${service}. Check your connection and try again.`,
   songUnreadFailed: (service: string): string => `${service} didn't answer as expected.`,
+  /** Opening a smart link (a release's page with one button per service). */
+  openingLink: "Opening link…",
+  linkOfflineMessage: "Connect to the internet to open this link.",
+  smartLinkUnreachable: "Couldn't reach its page. Check your connection and try again.",
   /** Opening a Spotify album link. */
   findingAlbum: "Finding album…",
   albumOfflineMessage: "Connect to the internet to open this album.",

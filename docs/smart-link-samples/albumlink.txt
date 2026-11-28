@@ -1,0 +1,3 @@
+data-emotion="css 1spf6ft">.css-1spf6ft{display:block;border-radius:4px;}@media (hover: hover){.css-1spf6ft:hover{background:#f0f5f9;}}</style><a href="https://open.spotify.com/album/7rZmgT2kEqkCMR6VHcloJM" target="_blank" rel="noopener noreferrer" aria-label="Listen to excapecore. by excape. on Spotify" data-test-id="link" class="css
+…
+ayName":"Spotify","linkId":"link|auto|spotify","platform":"spotify","show":true,"uniqueId":"spotify|album|7rZmgT2kEqkCMR6VHcloJM","country":"BR","url":"https://open.spotify.com/album/7rZmgT2kEqkCMR6VHcloJM","nativeAppUriDesktop":"spotify:album:7rZmgT2kEqkCMR6VHcloJM"},{"displayName":"Apple Music","linkId":"link|auto|appleMusic","platf

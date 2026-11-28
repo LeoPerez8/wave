@@ -525,3 +525,51 @@ test("Share's link items copy only a song's own share addresses", async () => {
     closeTestDatabase(db);
   }
 });
+
+test("a pasted smart link opens what its page points to: a Spotify album, on its YT Music page", async () => {
+  const db = await openTestDatabase();
+  try {
+    const { readFileSync } = await import("node:fs");
+    const embed = readFileSync(
+      new URL("../../../../../docs/spotify-samples/embed-album.html", import.meta.url),
+      "utf8",
+    );
+    const fetched: string[] = [];
+    const links = createDesktopLinks({
+      db,
+      enabled: () => true,
+      online: () => true,
+      call: async (method, params) => {
+        assert.equal(method, "searchAlbums");
+        assert.deepEqual(params, { query: "excapecore. excape." });
+        return [{ browseId: "MPREb_yw1SaHCwkmb", title: "excapecore.", artists: ["excape."] }];
+      },
+      start: async () => {
+        throw new Error("An album link plays nothing");
+      },
+      writeClipboard: () => {},
+      changed: () => {},
+      fetch: async (input) => {
+        const url = String(input);
+        fetched.push(url);
+        if (url === "https://fanlink.tv/dreams-album")
+          return new Response(
+            '{"url":"https:\\/\\/open.spotify.com\\/intl-de\\/album\\/7rZmgT2kEqkCMR6VHcloJM?si=x"}',
+          );
+        if (url === "https://open.spotify.com/embed/album/7rZmgT2kEqkCMR6VHcloJM")
+          return new Response(embed);
+        throw new Error(`Unexpected fetch ${url}`);
+      },
+    });
+    assert.deepEqual(await links.open("save & stream https://fanlink.tv/dreams-album", "en"), {
+      kind: "album",
+      browseId: "MPREb_yw1SaHCwkmb",
+    });
+    assert.deepEqual(fetched, [
+      "https://fanlink.tv/dreams-album",
+      "https://open.spotify.com/embed/album/7rZmgT2kEqkCMR6VHcloJM",
+    ]);
+  } finally {
+    closeTestDatabase(db);
+  }
+});
