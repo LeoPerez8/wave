@@ -1,5 +1,6 @@
 import type {
   Appearance,
+  ClipHint,
   FramingSquare,
   GainTagText,
   LaunchTheme,
@@ -216,6 +217,12 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   pickPlaylistFiles(): Promise<readonly PickedPlaylistFile[]>;
   /** Opens the system file picker for files of any type (BlackPlayer's stats), read as `pickPlaylistFiles` reads them. */
   pickStatFiles(): Promise<readonly PickedPlaylistFile[]>;
+  /**
+   * What the clip's description says (Core's `ClipHint`), read without its text so Android shows no
+   * paste notice; null when there's no clip or Wave isn't the focused app. Absent from an APK built
+   * before it (a JS-only repack).
+   */
+  readClipHint?(): Promise<ClipHint | null>;
   /** The clipboard's text, or null when it holds none. Only readable while Wave is in front. */
   readClipboardText(): Promise<string | null>;
   /** Puts [text] on the clipboard, labelled [label] (Android shows its own "Copied" on 13+). */
