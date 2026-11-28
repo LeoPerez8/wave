@@ -74,7 +74,29 @@ export interface StepMetrics {
    * before phases existed don't have it.
    */
   readonly phasesMs?: Readonly<Record<string, number | null>>;
+  /**
+   * Each component's longest `useRenderCost` span after the touch (`render.span` marks, #1533):
+   * from its render to its commit's layout effects. Only names that rendered are listed.
+   */
+  readonly renderSpansMs?: Readonly<Record<string, number>>;
 }
+
+/** The longest span of each component that rendered from [anchorAt] on (`render.span` marks). */
+const renderSpans = (
+  entries: readonly PerfEntry[],
+  anchorAt: number | null,
+): Record<string, number> => {
+  const longest: Record<string, number> = {};
+  if (anchorAt === null) return longest;
+  for (const mark of marks(entries)) {
+    if (mark.name !== "render.span" || mark.at < anchorAt || mark.detail === undefined) continue;
+    const cut = mark.detail.lastIndexOf(" ");
+    const name = mark.detail.slice(0, cut);
+    const ms = Number(mark.detail.slice(cut + 1));
+    if (cut > 0 && Number.isFinite(ms)) longest[name] = Math.max(longest[name] ?? 0, ms);
+  }
+  return longest;
+};
 
 const round = (value: number): number => Math.round(value * 100) / 100;
 
@@ -215,6 +237,7 @@ export const stepMetrics = (step: {
       totalMs: round(longTasks.reduce((sum, task) => sum + task.duration, 0)),
       maxMs: longTasks.reduce((max, task) => Math.max(max, task.duration), 0),
     },
+    renderSpansMs: renderSpans(entries, anchorAt),
     ...(step.phases === undefined
       ? {}
       : {
