@@ -92,6 +92,15 @@ const SHARE_LINKS = [
   /^https:\/\/open\.spotify\.com\/track\/[A-Za-z0-9]{1,64}$/u,
 ];
 
+/** Album and artist links the phone opens and the desktop doesn't yet (#1522). */
+const PHONE_ONLY_LINKS: ReadonlySet<string> = new Set([
+  "ytAlbum",
+  "ytAlbumPlaylist",
+  "ytArtist",
+  "spotifyArtist",
+  "deezerArtist",
+]);
+
 /** Whether [url] is a song address Share copies. */
 export const isShareLink = (url: unknown): url is string =>
   typeof url === "string" && SHARE_LINKS.some((pattern) => pattern.test(url));
@@ -460,6 +469,9 @@ export const createDesktopLinks = (options: LinksOptions) => {
     open: async (text: string, language: "en" | "pt-BR"): Promise<OpenLinkResult> => {
       const shared = sharedTextImport(text, { ytMusic: true });
       if (shared.kind === "notice") return { kind: "ignored" } as const;
+      // The phone opens these (#1522); the desktop doesn't yet, so they go as before.
+      if (shared.kind === "song" && PHONE_ONLY_LINKS.has(shared.link.service))
+        return { kind: "ignored" } as const;
       const notice = (failure: Parameters<typeof songLinkNotice>[0]): OpenLinkResult => ({
         kind: "notice",
         notice: songLinkNotice(failure, language),
@@ -519,6 +531,8 @@ export const createDesktopLinks = (options: LinksOptions) => {
       );
       if ("playlist" in ending) return preview(ending.playlist, language);
       if ("album" in ending) return { kind: "album", browseId: ending.album };
+      // Without the page ports an artist link ends in "Can't open this", never here.
+      if ("artist" in ending) return { kind: "ignored" };
       if (ending.play === "failed") return notice(ending.failure);
       if (ending.play === "notFound")
         return {

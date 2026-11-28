@@ -13,6 +13,7 @@ import {
   linkParts,
   queryValue,
   spotifyAddress,
+  type LinkParts,
 } from "./linkText.ts";
 import { cantOpenNotice, ytMusicOffNotice, type ImportNotice } from "./linkNotices.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
@@ -22,8 +23,8 @@ import type { YtSongSearch } from "./spotifyImport.ts";
 import { joinArtists, type YtSong } from "./ytMusic.ts";
 
 /**
- * A song a link names, as Wave reads it from the link alone, or a Spotify
- * album (`spotifyAlbum`), which opens on its YT Music page instead of playing.
+ * A song a link names, as Wave reads it from the link alone, or an album or
+ * artist, which opens on its YT Music page instead of playing.
  */
 export type SongLink =
   | {
@@ -55,11 +56,90 @@ export type SongLink =
    * A Deezer short link (`link.deezer.com/s/<code>`, `deezer.page.link/<code>`),
    * which names a song only once followed (`deezerShortLinkLanding`).
    */
-  | { readonly service: "deezerShort"; readonly url: string };
+  | { readonly service: "deezerShort"; readonly url: string }
+  /** A YouTube Music album's page, opened as it is. */
+  | {
+      readonly service: "ytAlbum";
+      /** The album's browse id (`MPREb_…`). */
+      readonly browseId: string;
+    }
+  /** A YouTube Music album's own playlist, opened as the album its songs name. */
+  | {
+      readonly service: "ytAlbumPlaylist";
+      /** The album's playlist id (`OLAK5uy_…`): all that is sent. */
+      readonly playlistId: string;
+    }
+  /** A YouTube or YouTube Music channel, opened as that YT Music artist. */
+  | {
+      readonly service: "ytArtist";
+      /** The channel id (`UC…`): all that is sent. */
+      readonly channelId: string;
+    }
+  /** A Spotify artist, looked for on YouTube Music by the name Spotify gives. */
+  | {
+      readonly service: "spotifyArtist";
+      /** Spotify's artist id: all that is sent to Spotify. */
+      readonly artistId: string;
+    }
+  /** A Deezer artist, looked for on YouTube Music by the name Deezer gives. */
+  | {
+      readonly service: "deezerArtist";
+      /** Deezer's artist id (digits): all that is sent to Deezer. */
+      readonly artistId: string;
+    };
 
 const YT_MUSIC_HOST = "music.youtube.com";
+/** YouTube's hosts, YouTube Music's among them. */
+const YOUTUBE_HOSTS = new Set([
+  "music.youtube.com",
+  "youtube.com",
+  "www.youtube.com",
+  "m.youtube.com",
+]);
+/** YouTube's short links, which only ever name a video. */
+const YOUTU_BE = "youtu.be";
 /** What a YouTube video id is: 11 letters, digits, `-` and `_`. */
 const VIDEO_ID = /^[\w-]{11}$/u;
+/** A Short's page, `/shorts/<id>`. */
+const SHORTS_PATH = /^\/shorts\/([\w-]{11})\/?$/u;
+/** A `youtu.be` link's path, `/<id>`. */
+const YOUTU_BE_PATH = /^\/([\w-]{11})\/?$/u;
+
+/** An album's page on YouTube Music, `/browse/MPREb_…`. */
+const ALBUM_PATH = /^\/browse\/(MPREb_[\w-]+)\/?$/u;
+/** An album's own playlist id, `OLAK5uy_…`. */
+const ALBUM_PLAYLIST_ID = /^OLAK5uy_[\w-]{10,}$/u;
+/** A channel's page, `/channel/UC…` (a channel id is `UC` and 22 more). */
+const CHANNEL_PATH = /^\/channel\/(UC[\w-]{22})\/?$/u;
+
+/** The video a YouTube `watch` link or Short names, or null. */
+const youtubeVideo = (parts: LinkParts): string | null => {
+  if (parts.path !== "/watch") return SHORTS_PATH.exec(parts.path)?.[1] ?? null;
+  const videoId = queryValue(parts.query, "v");
+  return videoId !== null && VIDEO_ID.test(videoId) ? videoId : null;
+};
+
+/**
+ * What a YouTube or YouTube Music link names: a video (`watch?v=`, a Short,
+ * `youtu.be`), an album's page (`/browse/MPREb_…`, YouTube Music's only) or
+ * playlist (`/playlist?list=OLAK5uy_…`), or a channel (`/channel/UC…`).
+ */
+const youtubeLink = (parts: LinkParts): SongLink | null => {
+  if (parts.host === YOUTU_BE) {
+    const videoId = YOUTU_BE_PATH.exec(parts.path)?.[1];
+    return videoId === undefined ? null : { service: "ytMusic", videoId };
+  }
+  if (!YOUTUBE_HOSTS.has(parts.host)) return null;
+  const videoId = youtubeVideo(parts);
+  if (videoId !== null) return { service: "ytMusic", videoId };
+  const browseId = parts.host === YT_MUSIC_HOST ? ALBUM_PATH.exec(parts.path)?.[1] : undefined;
+  if (browseId !== undefined) return { service: "ytAlbum", browseId };
+  const list = parts.path === "/playlist" ? queryValue(parts.query, "list") : null;
+  if (list !== null && ALBUM_PLAYLIST_ID.test(list))
+    return { service: "ytAlbumPlaylist", playlistId: list };
+  const channelId = CHANNEL_PATH.exec(parts.path)?.[1];
+  return channelId === undefined ? null : { service: "ytArtist", channelId };
+};
 
 /** The song a Spotify link names: a track's or album's page or URI, or a short link to follow. */
 const spotifySong = (link: string): SongLink | null => {
@@ -67,22 +147,24 @@ const spotifySong = (link: string): SongLink | null => {
   if (spotify?.at === "short") return { service: "spotifyShort", url: spotify.url };
   if (spotify?.at !== "page" || !isSpotifyId(spotify.id)) return null;
   if (spotify.kind === "track") return { service: "spotify", trackId: spotify.id };
-  return spotify.kind === "album" ? { service: "spotifyAlbum", albumId: spotify.id } : null;
+  if (spotify.kind === "album") return { service: "spotifyAlbum", albumId: spotify.id };
+  return spotify.kind === "artist" ? { service: "spotifyArtist", artistId: spotify.id } : null;
 };
 
 /**
- * The track a Deezer short link (`deezerShort`) names once followed: where
- * following it landed ([url]), a track's page on deezer.com (its locale and
- * parameters ignored). Null anywhere else: an album, a playlist, an artist, an
- * episode, or Deezer's page for a dead link (`deezer-links-404`).
+ * The track or artist a Deezer short link (`deezerShort`) names once
+ * followed: where following it landed ([url]), a track's or artist's page on
+ * deezer.com (its locale and parameters ignored). Null anywhere else: an
+ * album, a playlist, an episode, or Deezer's page for a dead link
+ * (`deezer-links-404`).
  */
 export const deezerShortLinkLanding = (
   url: string,
-): Extract<SongLink, { readonly service: "deezer" }> | null => {
+): Extract<SongLink, { readonly service: "deezer" | "deezerArtist" }> | null => {
   const page = deezerAddress(url);
-  return page?.at === "page" && page.kind === "track" && isDeezerId(page.id)
-    ? { service: "deezer", trackId: page.id }
-    : null;
+  if (page?.at !== "page" || !isDeezerId(page.id)) return null;
+  if (page.kind === "track") return { service: "deezer", trackId: page.id };
+  return page.kind === "artist" ? { service: "deezerArtist", artistId: page.id } : null;
 };
 
 /** The song a Deezer link names: a track's page, or a short link to follow. */
@@ -94,27 +176,53 @@ const deezerSong = (link: string): SongLink | null => {
 };
 
 /**
- * The song [text] names: the first web address or Spotify URI in it
- * (punctuation after it dropped), else the whole text as a link without its
- * scheme. A YouTube Music song link is `music.youtube.com/watch?v=<id>`, its
- * other parameters ignored, a playlist's `list=` too. A Spotify one is a
- * track's page (`open.spotify.com/track/<id>`, after a locale or `/embed`,
- * parameters ignored), its URI (`spotify:track:<id>`), an album's page or URI
- * (`open.spotify.com/album/<id>`, `spotify:album:<id>`), or a short link
- * (`spotify.link/<code>`), which is followed before Wave knows it's a song.
- * A Deezer one is a track's page (`deezer.com/track/<id>`, after a locale,
- * parameters ignored, the id digits) or a short link (`link.deezer.com/s/<code>`,
- * `deezer.page.link/<code>`), followed first too. Null for anything else,
- * plain YouTube links included.
+ * The song, album or artist [text] names: the first web address or Spotify
+ * URI in it (punctuation after it dropped), else the whole text as a link
+ * without its scheme. A YouTube song link is a video, on YouTube Music or
+ * YouTube (`watch?v=<id>` on any of its hosts, a Short, `youtu.be/<id>`), its
+ * other parameters ignored, a playlist's `list=` too. A YouTube Music album
+ * is its page (`music.youtube.com/browse/MPREb_…`) or its playlist
+ * (`/playlist?list=OLAK5uy_…`, YouTube's host too), and a channel
+ * (`/channel/UC…`) is an artist. A Spotify one is a track's page
+ * (`open.spotify.com/track/<id>`, after a locale or `/embed`, parameters
+ * ignored), its URI (`spotify:track:<id>`), an album's or artist's page or URI
+ * (`open.spotify.com/album/<id>`, `spotify:artist:<id>`), or a short link
+ * (`spotify.link/<code>`), which is followed before Wave knows what it names.
+ * A Deezer one is a track's or artist's page (`deezer.com/track/<id>`, after
+ * a locale, parameters ignored, the id digits) or a short link
+ * (`link.deezer.com/s/<code>`, `deezer.page.link/<code>`), followed first
+ * too. Null for anything else: a YouTube handle (`@name`), Deezer albums and
+ * playlists, playlists Wave imports instead.
  */
 export const recogniseSongLink = (text: string): SongLink | null => {
   const link = addressIn(text) ?? text.trim();
   const song = spotifySong(link) ?? deezerSong(link);
   if (song !== null) return song;
   const parts = linkParts(link);
-  if (parts === null || parts.host !== YT_MUSIC_HOST || parts.path !== "/watch") return null;
-  const videoId = queryValue(parts.query, "v");
-  return videoId !== null && VIDEO_ID.test(videoId) ? { service: "ytMusic", videoId } : null;
+  return parts === null ? null : youtubeLink(parts);
+};
+
+/** What a link opens: a song that plays, or an album's or artist's page. */
+export type SongLinkKind = "song" | "album" | "artist";
+
+/**
+ * What [link] opens: a song, an album (a YT Music album's page or playlist, a
+ * Spotify album) or an artist (a YouTube channel, a Spotify or Deezer
+ * artist). A short link counts as a song until it's followed.
+ */
+export const songLinkKind = (link: SongLink): SongLinkKind => {
+  switch (link.service) {
+    case "ytAlbum":
+    case "ytAlbumPlaylist":
+    case "spotifyAlbum":
+      return "album";
+    case "ytArtist":
+    case "spotifyArtist":
+    case "deezerArtist":
+      return "artist";
+    default:
+      return "song";
+  }
 };
 
 /**
@@ -243,22 +351,27 @@ export type TrackService = "spotify" | "deezer";
  * `failed`), a video YouTube Music can't play (`unplayable`), YT Music turned
  * off, a song that isn't found, the track not read from its service
  * (`unread`), or a short link that names no song or playlist (`cantOpen`).
- * A Spotify album link has its own: offline, not on YouTube Music, and its
- * page not read (`unread` with `album`).
+ * An album link has its own: offline, not on YouTube Music, and its page
+ * not read (`unread` with `album`); so does an artist link (`artistOffline`,
+ * `artistNotFound`, `unread` with `artist`).
  */
 export type SongLinkFailure =
   | "offline"
   | "albumOffline"
+  | "artistOffline"
   | "failed"
   | "unplayable"
   | "disabled"
   | "cantOpen"
   | { readonly notFound: Pick<LinkedSong, "title" | "artists"> }
   | { readonly albumNotFound: { readonly title: string; readonly artists: readonly string[] } }
+  /** No YT Music artist for the link: by the name its service gave, or a channel (no name). */
+  | { readonly artistNotFound: { readonly name: string | null } }
   | {
       readonly unread: TrackReadFailure;
       readonly service: TrackService;
       readonly album?: true;
+      readonly artist?: true;
     };
 
 /** A song another service's link named, as YouTube Music's search would play it, or why nothing plays. */
@@ -323,9 +436,20 @@ export const songLinkNotice = (
         title: text.albumNotFound,
         message: `${failure.albumNotFound.title} · ${joinArtists(failure.albumNotFound.artists)}`,
       };
+    if ("artistNotFound" in failure)
+      return {
+        title: text.artistNotFound,
+        message: failure.artistNotFound.name ?? text.artistChannelNotFound,
+      };
     const service = TRACK_SERVICE_NAMES[failure.service];
+    const missing =
+      failure.album === true
+        ? text.albumUnreadMissing
+        : failure.artist === true
+          ? text.artistUnreadMissing
+          : text.songUnreadMissing;
     const unread = {
-      missing: failure.album === true ? text.albumUnreadMissing : text.songUnreadMissing,
+      missing,
       unreachable: text.songUnreadUnreachable,
       failed: text.songUnreadFailed,
     }[failure.unread];
@@ -336,6 +460,8 @@ export const songLinkNotice = (
       return { title: text.songOffline, message: text.songOfflineMessage };
     case "albumOffline":
       return { title: text.songOffline, message: text.albumOfflineMessage };
+    case "artistOffline":
+      return { title: text.songOffline, message: text.artistOfflineMessage };
     case "disabled":
       return ytMusicOffNotice(language);
     case "unplayable":
