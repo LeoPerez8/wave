@@ -54,13 +54,21 @@ which matches the ~60 ms per answer it logged.
 Genre mixes come out the same: the lookup's requests, parsing and profiles haven't changed
 (`deezerArtistGenre.test.ts` and the lookup's tests pass unchanged).
 
-## Emulator: not run
+## Emulator run (code review of #1539): the lookup didn't run
 
-No emulator run was possible on 2026-11-28. The AVD `wave-run-903` holds only its
-`snapshots/` folder (no config), `emulator -list-avds` lists nothing, and `df -h /` showed
-7.5 GB free while `scripts/emulator-apk.sh` needs 12 GB. There are no before/after emulator
-numbers. On the x86_64 emulator a 40 KB count takes a few ms either way, so the 50 ms line
-would not separate them there anyway.
+AVD `wave-run-903` (android-36 x86_64, SwiftShader), perf build of `fix/1528-code-review` at
+`1b9227e36` (which has this ticket, as the integration tip does), 28 November. The Library at the
+ticket's size: `seed.ts --scale 0.25 --songs 740 --artists 300` (740 songs, 300 artists, 15
+playlists), the emulator's network on (`api.deezer.com` answered a ping). Then 16 minutes of
+`perf.ts run --scenario tab-switch,push-settings,now-playing,tab-switch,push-settings` (80 tab
+switches, 22 pushes and pops; `now-playing` found no mini player, since nothing played).
+
+No `JS blocked … by Genre mix artist lookup` line, but no lookup either: none of the 100 measured steps'
+background slices names the job, and Wave logged no Deezer artist request. The genre mixes built
+(`Genre mixes build` blocks, 50 to 94 ms) and Deezer's streamed genre lookups answered "no search
+results". The lookup queues the artists of YouTube Music songs the Library has no profile of, and the
+seed's generated artists gave it none to look up. So this run can't show the 50 ms line or the pause
+during a tab switch, push or Now Playing either way; the phone's log answers both.
 
 ## Phone run: pending
 
