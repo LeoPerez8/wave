@@ -22,6 +22,7 @@ import {
   timingRoute,
 } from "./timing";
 import { createFingerDown } from "./fingerDown";
+import { sendJsEntriesTo } from "./startJsEntries";
 import { createStartupWork } from "./startupWork";
 import { BackgroundWorkName, shareSlicesWith } from "./stepped";
 
@@ -45,6 +46,9 @@ const blocks = createJsBlockLog({
     setTimeout(run, ms);
   },
 });
+// A block nothing named held says what kind of work it was: a timer, a native event, Effect
+// work, or React rendering or running its effects (#1531).
+sendJsEntriesTo(blocks);
 let active = (AppState.currentState ?? "active") === "active";
 AppState.addEventListener("change", (state) => {
   const now = state === "active";
@@ -299,10 +303,12 @@ export const backgroundTransition = {
 
 /** The root view's touches, which background work waits out. */
 export const touchStarted = (): void => {
+  blocks.touched(performance.now());
   work.touchStarted();
   fingerDown.started();
 };
 export const touchEnded = (event: GestureResponderEvent): void => {
+  blocks.touched(performance.now());
   // Another finger still down keeps the touch going.
   if (event.nativeEvent.touches.length !== 0) return;
   work.touchEnded();

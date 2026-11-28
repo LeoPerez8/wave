@@ -13,6 +13,9 @@
  * Each block gets one line (#1432): a slice that wrote its own keeps its long task from adding
  * another, however much background work ran before that task was reported or judged. A startup
  * start is "startup <name>" only during startup; one that waited minutes is just <name>.
+ * A block none of these names says which kind of work held it (#1531): React rendering or running
+ * a render's effects, a timer, a native event or Effect work (whichever held most of it), a
+ * touch, or else work nothing saw (a native module's answer, or garbage collection).
  */
 import { timingDuration } from "./timing.ts";
 
@@ -106,7 +109,34 @@ export interface JsBlockLog {
    * <name>" before the first screen settled or within `STARTUP_WORK_MS` after, else [name].
    */
   readonly startupWork: (name: string, at: number) => string;
+  /**
+   * React committed a render at [at] (its layout effects had run), whatever rendered (#1531). A
+   * block nothing named says it rendered: "rendering untimed components".
+   */
+  readonly committed: (at: number) => void;
+  /** React finished running a render's passive effects at [at] (#1531). */
+  readonly effectsRan: (at: number) => void;
+  /**
+   * JS that Wave's named work didn't start ran from [startedAt] for [durationMs] (#1531): a
+   * timer's callback, a native event's listeners or an Effect run, named by its kind ("running a
+   * timer"). A block nothing named says it, weighed against React's renders and effects.
+   */
+  readonly entryRan: (name: string, startedAt: number, durationMs: number) => void;
+  /** The root view heard a touch begin or end at [at]: its handlers run on the thread (#1531). */
+  readonly touched: (at: number) => void;
 }
+
+/** A block React committed in, with no timed screen or section rendering, says so (#1531). */
+export const UNTIMED_RENDER = "rendering untimed components";
+/** A block React ran a render's passive effects in, after the render, says so (#1531). */
+export const RENDER_EFFECTS = "running effects after a render";
+/** A block a touch began or ended in, with nothing else seen, says so (#1531). */
+export const TOUCH = "handling a touch";
+/**
+ * A block with nothing seen in it at all (#1531): a native module's callback or promise answer
+ * that no timer, event or render followed, or the runtime's own garbage collection.
+ */
+export const UNSEEN_WORK = "unseen work (a native callback or GC)";
 
 /** What a block is put down to with no named work, before the first screen settled. */
 const STARTUP = "startup";
@@ -117,7 +147,7 @@ export const jsBlockLine = (block: {
   readonly screen: string;
   readonly work: string | null;
 }): string =>
-  `JS blocked ${timingDuration(block.durationMs)} on ${block.screen} by ${block.work ?? "no background work"}`;
+  `JS blocked ${timingDuration(block.durationMs)} on ${block.screen} by ${block.work ?? UNSEEN_WORK}`;
 
 // not UI text: the app log's line
 export const jsPausedLine = (block: {
@@ -193,6 +223,10 @@ export const createJsBlockLog = ({ write, screen, later }: JsBlockLogPorts): JsB
   const renders: Span[] = [];
   const works: Span[] = [];
   const steps: { readonly name: string; readonly at: number }[] = [];
+  /** React's commits and effect runs, as points: each held the thread since the work before it. */
+  const reactMarks: Span[] = [];
+  const entries: Span[] = [];
+  const touches: Span[] = [];
   /** The times Wave was off screen, as JS heard them; the last one open while it still is. */
   const away: Span[] = [];
   let settledAt: number | null = null;
@@ -247,6 +281,32 @@ export const createJsBlockLog = ({ write, screen, later }: JsBlockLogPorts): JsB
     for (const { name, at } of steps) if (at < end) step = name;
     return step === undefined ? STARTUP : `${STARTUP} (${step})`;
   };
+  /**
+   * What kind of work held [from, to] when nothing named did (#1531). React says only when a
+   * commit or an effect run ended, so each holds the block from the latest such end before it
+   * (or the block's start) until its own.
+   */
+  const kindWithin = (from: number, to: number): string => {
+    const marks = reactMarks
+      .filter((mark) => within(mark, from, to))
+      .sort((a, b) => a.from - b.from);
+    const entered = entries.filter((entry) => within(entry, from, to));
+    const spans: Span[] = [...entered];
+    let since = from;
+    for (const mark of marks) {
+      const at = mark.from;
+      // A render committed inside an entry's own call (a `flushSync`) is that entry's work.
+      if (!entered.some((entry) => entry.from < at && at < entry.to)) {
+        for (const entry of entered) if (entry.to <= at && entry.to > since) since = entry.to;
+        spans.push({ name: mark.name, from: since, to: at, logged: false });
+      }
+      since = Math.max(since, at);
+    }
+    return (
+      mostWithin(spans, from, to)?.name ??
+      (touches.some((touch) => within(touch, from, to)) ? TOUCH : UNSEEN_WORK)
+    );
+  };
   return {
     sliceRan: (name, startedAt, durationMs) => {
       const logged = durationMs > JS_BLOCK_MS && log(startedAt, durationMs, () => name);
@@ -297,6 +357,18 @@ export const createJsBlockLog = ({ write, screen, later }: JsBlockLogPorts): JsB
       const last = away.at(-1);
       if (last?.to === Number.POSITIVE_INFINITY) last.to = at;
     },
+    committed: (at) => {
+      keep(reactMarks, { name: UNTIMED_RENDER, from: at, to: at, logged: false }, KEPT_RENDERS);
+    },
+    entryRan: (name, startedAt, durationMs) => {
+      keep(entries, { name, from: startedAt, to: startedAt + durationMs, logged: false });
+    },
+    touched: (at) => {
+      keep(touches, { name: TOUCH, from: at, to: at, logged: false });
+    },
+    effectsRan: (at) => {
+      keep(reactMarks, { name: RENDER_EFFECTS, from: at, to: at, logged: false }, KEPT_RENDERS);
+    },
     startupWork: (name, at) =>
       settledAt === null || at - settledAt <= STARTUP_WORK_MS ? `${STARTUP} ${name}` : name,
     longTask: (startTime, durationMs) => {
@@ -316,7 +388,8 @@ export const createJsBlockLog = ({ write, screen, later }: JsBlockLogPorts): JsB
           rendering ??
           slice?.name ??
           latestWithin(works, startTime, end)?.name ??
-          (settledAt === null || startTime < settledAt ? startup(end) : null)
+          (settledAt === null || startTime < settledAt ? startup(end) : null) ??
+          kindWithin(startTime, end)
         );
       });
     },
