@@ -228,3 +228,19 @@ test("a tab whose params or options changed while hidden renders once, not again
     await tabs.close();
   }
 });
+
+test("a re-tap that pops a tab back to its root renders that tab, and only it", async () => {
+  const tabs = await mount();
+  try {
+    await tabs.show("library");
+    const pushed: NestedState = { index: 1, routes: [{ name: "index" }, { name: "album/[id]" }] };
+    await tabs.change("library", { state: pushed });
+    // The trigger's press (`tabPress`) pops the tab's stack to its root while it shows.
+    const root: NestedState = { index: 0, routes: [{ name: "index" }] };
+    assert.deepEqual(await rendersDuring(() => tabs.change("library", { state: root })), [
+      "library",
+    ]);
+  } finally {
+    await tabs.close();
+  }
+});

@@ -19,6 +19,7 @@ const harness = {
   drawn: [] as string[],
   presses: new Map<string, (event: unknown) => void>(),
   triggered: [] as string[],
+  searchFocus: 0,
 };
 Object.assign(globalThis, { __tabBarTest: harness });
 
@@ -73,7 +74,9 @@ const [{ TabBar }] = await loadWithStubs<[typeof import("./TabBar.tsx")]>(
        };`,
     ),
     "@/perf/perf": stubModule(`export const useRenderCount = () => {};`),
-    "@/search/focusRequest": stubModule(`export const requestSearchFocus = () => {};`),
+    "@/search/focusRequest": stubModule(
+      `export const requestSearchFocus = () => { ${t}.searchFocus++; };`,
+    ),
     "@/settings/tabBar": stubModule(
       `const bar = ${JSON.stringify(BAR)};
        export const useTabBar = () => bar;`,
@@ -141,6 +144,25 @@ test("a tab not drawn again still taps with its trigger as it is now", async () 
       `switch albums ${harness.version}`,
       `press albums ${harness.version}`,
     ]);
+  } finally {
+    await bar.close();
+  }
+});
+
+test("tapping Search asks for its field's focus, when it switches and when it's re-tapped", async () => {
+  const bar = await drawn();
+  try {
+    harness.searchFocus = 0;
+    harness.triggered.length = 0;
+    await act(() => harness.presses.get("search")!({}));
+    assert.equal(harness.searchFocus, 1);
+    await act(() => navigate("search"));
+    // On screen now: the tap is a re-tap, and it still brings the keyboard up.
+    await act(() => harness.presses.get("search")!({}));
+    assert.equal(harness.searchFocus, 2);
+    // Other tabs never ask for it.
+    await act(() => harness.presses.get("library")!({}));
+    assert.equal(harness.searchFocus, 2);
   } finally {
     await bar.close();
   }
