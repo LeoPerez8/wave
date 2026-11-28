@@ -46,7 +46,7 @@ const matches = (text: string, pattern: RegExp): number => text.match(pattern)?.
  * held a weak phone's JS thread about 60 ms per 40 KB answer, and most answers are plain ASCII.
  */
 const utf8Bytes = (text: string): number => {
-  if (/^[\x00-\x7f]*$/.test(text)) return text.length;
+  if (!/[\u0080-￿]/.test(text)) return text.length;
   return (
     text.length +
     matches(text, /[\u0080-߿]/g) +
