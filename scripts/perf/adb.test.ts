@@ -12,7 +12,10 @@ describe("adb", () => {
   const path = process.env.PATH;
   before(() => {
     const adb = join(dir, "adb");
-    writeFileSync(adb, '#!/bin/sh\nprintf "List of devices attached\\nemulator-5554\\tdevice\\n"\n');
+    writeFileSync(
+      adb,
+      '#!/bin/sh\nprintf "List of devices attached\\nemulator-5554\\tdevice\\n"\n',
+    );
     chmodSync(adb, 0o755);
     process.env.PATH = `${dir}${delimiter}${path ?? ""}`;
   });

@@ -7,9 +7,9 @@
 import { MAX_TABS } from "./tabBar.ts";
 
 /**
- * How hidden tab screens are kept. Which is best is measured on the phone
- * (docs/performance/304-warmed-tabs.md), so a bundle can pick any of them
- * (`EXPO_PUBLIC_WAVE_TABS`, read by `parseTabScreens`).
+ * How hidden tab screens are kept. Which is best is measured (docs/performance/304-warmed-tabs.md,
+ * 1535-tabs-mode.md), so a bundle can pick any of them (`EXPO_PUBLIC_WAVE_TABS`, read by
+ * `parseTabScreens`).
  */
 export interface TabScreens {
   /** Take a hidden tab's views out of the window (react-native-screens detaches it). */
@@ -21,10 +21,14 @@ export interface TabScreens {
   readonly keepLayout: boolean;
   /**
    * Freeze a hidden tab's React tree: no renders until it shows again, when
-   * the updates it missed render once (#1358, Performance rules 1 and 2). Only
-   * with `detach`: react-native-screens freezes only the screens it manages.
+   * the updates it missed render once (#1358). Off by default since #1535: showing a frozen
+   * tab again cost each switch about 38 ms of its first frame on the emulator, and a hidden
+   * tab renders little anyway (its stores pause, and #1534 keeps the navigator's renders out of
+   * it). Only with `detach`: react-native-screens freezes only the screens it manages.
    */
   readonly freeze: boolean;
+  /** Freeze a screen under a push until it shows again (#1423), whatever `freeze` says. */
+  readonly freezeStacks: boolean;
   /**
    * A hidden screen keeps following external stores (playing ids, stars, scan
    * status) and re-renders with them, as before #722. By default it pauses
@@ -36,21 +40,22 @@ export interface TabScreens {
 }
 
 /**
- * expo-router's defaults, every tab on the bar kept (#304); hidden screens
- * pause (#722) and hidden tabs freeze (#1358).
+ * expo-router's defaults, every tab on the bar kept (#304); hidden screens pause (#722), hidden
+ * tabs aren't frozen (#1535, after #1358 froze them) and screens under a push are (#1423).
  */
 const DEFAULT_TAB_SCREENS: TabScreens = {
   detach: true,
   keepLayout: false,
-  freeze: true,
+  freeze: false,
+  freezeStacks: true,
   followHidden: false,
   retain: MAX_TABS,
 };
 
 /**
  * The choices [value] names, separated by commas or spaces: `detach` or
- * `attach`, `keep-layout` or `display-none`, `freeze` or `thaw`, `follow` or `pause`,
- * `retain=<n>`. Anything not named, unknown or out of range stays at its default.
+ * `attach`, `keep-layout` or `display-none`, `freeze` or `thaw`, `freeze-stacks` or
+ * `thaw-stacks`, `follow` or `pause`, `retain=<n>`. Anything not named, unknown or out of range stays at its default.
  */
 export const parseTabScreens = (value: string | undefined): TabScreens => {
   let screens = DEFAULT_TAB_SCREENS;
@@ -62,6 +67,8 @@ export const parseTabScreens = (value: string | undefined): TabScreens => {
       screens = { ...screens, keepLayout: token === "keep-layout" };
     } else if (token === "freeze" || token === "thaw")
       screens = { ...screens, freeze: token === "freeze" };
+    else if (token === "freeze-stacks" || token === "thaw-stacks")
+      screens = { ...screens, freezeStacks: token === "freeze-stacks" };
     else if (token === "follow" || token === "pause")
       screens = { ...screens, followHidden: token === "follow" };
     else if (retain !== undefined && Number(retain) >= 1)
@@ -76,6 +83,7 @@ export const describeTabScreens = (screens: TabScreens): string =>
     screens.detach ? "detach" : "attach",
     screens.keepLayout ? "keep-layout" : "display-none",
     ...(screens.detach ? [screens.freeze ? "freeze" : "thaw"] : []),
+    ...(screens.freezeStacks ? [] : ["thaw-stacks"]),
     ...(screens.followHidden ? ["follow"] : []),
     `retain=${screens.retain}`,
   ].join(",");

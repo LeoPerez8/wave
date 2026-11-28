@@ -7,9 +7,10 @@ import { loadWithStubs, nativeStubs, stubModule } from "../perf/renderHarness.ts
 
 // A tab switch hands every kept tab to the tab renderer again: expo-router's `TabSlot` renders
 // on each navigation and calls each tab's `descriptor.render()`, which returns new elements,
-// and react-native-screens lets the tab being left render once more before it freezes
-// (`DelayedFreeze`). A kept tab whose route, nested state and options are as they were isn't
-// rendered for it, shown or hidden; one whose nested route or options changed is (#1534).
+// and in a bundle that freezes hidden tabs, react-native-screens lets the tab being left render
+// once more before it freezes (`DelayedFreeze`). A kept tab whose route, nested state and options
+// are as they were isn't rendered for it, shown or hidden; one whose nested route or options
+// changed is (#1534).
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -212,20 +213,20 @@ test("a tab whose nested route changed renders, and only that tab", async () => 
   }
 });
 
-test("a tab whose params or options changed while hidden renders when it shows", async () => {
+test("a tab whose params or options changed while hidden renders once, not again when it shows", async () => {
   const tabs = await mount();
   try {
-    // Hidden and frozen: nothing renders until it shows, then it renders once.
+    // Hidden, not frozen by default (#1535): it renders once as they change, and showing it
+    // renders nothing. A comparison bundle's frozen tab renders once when it shows instead.
     assert.deepEqual(
       await rendersDuring(() => tabs.change("albums", { params: { sort: "year" } })),
-      [],
+      ["albums"],
     );
-    assert.deepEqual(await rendersDuring(() => tabs.show("albums")), ["albums"]);
-    assert.deepEqual(
-      await rendersDuring(() => tabs.setOptions("library", { title: "Library" })),
-      [],
-    );
-    assert.deepEqual(await rendersDuring(() => tabs.show("library")), ["library"]);
+    assert.deepEqual(await rendersDuring(() => tabs.show("albums")), []);
+    assert.deepEqual(await rendersDuring(() => tabs.setOptions("library", { title: "Library" })), [
+      "library",
+    ]);
+    assert.deepEqual(await rendersDuring(() => tabs.show("library")), []);
     // The same options again, in a new object as each navigation makes them: no render.
     assert.deepEqual(
       await rendersDuring(() => tabs.setOptions("library", { title: "Library" })),
