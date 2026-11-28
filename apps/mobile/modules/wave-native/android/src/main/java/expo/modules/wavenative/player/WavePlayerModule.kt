@@ -440,6 +440,7 @@ class WavePlayerModule : Module() {
       withController(promise) { player ->
         StreamReconnectLink.onOwnerCommand?.invoke(false)
         CrossfadeLink.pausedForSearch = false
+        PauseLog.causes.note("Wave", SystemClock.elapsedRealtime())
         // A finished or failed item starts over.
         if (player.playbackState == Player.STATE_ENDED) player.seekToDefaultPosition()
         if (player.playbackState == Player.STATE_IDLE) player.prepare()
@@ -453,6 +454,7 @@ class WavePlayerModule : Module() {
       withController(promise) { player ->
         StreamReconnectLink.onOwnerCommand?.invoke(false)
         CrossfadeLink.pausedForSearch = forSearch == true
+        PauseLog.causes.note(if (forSearch == true) "Wave, while the song to play is searched" else "Wave", SystemClock.elapsedRealtime())
         player.pause()
         promise.resolve(null)
       }
