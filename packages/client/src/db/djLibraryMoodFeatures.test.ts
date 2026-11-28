@@ -148,7 +148,25 @@ test("the Library's features read in one statement, off the thread as on it (#15
     { trackId: downloaded, isrc: "USRC17607839", features: loud, checkedAt: 10 },
     { trackId: tagged, isrc: "GBAYE0601498", features: loud, checkedAt: 10 },
   ]);
-  addCandidates(db, { songs: [{ videoId: "v1", title: "Downloaded", artists: ["Artist"], album: null, albumId: null, durationMs: 1, artworkUrl: null, explicit: false }], seed: "Artist" }, 10);
+  addCandidates(
+    db,
+    {
+      songs: [
+        {
+          videoId: "v1",
+          title: "Downloaded",
+          artists: ["Artist"],
+          album: null,
+          albumId: null,
+          durationMs: 1,
+          artworkUrl: null,
+          explicit: false,
+        },
+      ],
+      seed: "Artist",
+    },
+    10,
+  );
   keepDjMoodFeatures(db, [{ videoId: "v1", isrc: null, features: calm, checkedAt: 10 }]);
   const reads = readConnections(async () => asyncReadClient(db));
   const replayed = await replayRead(reads, djLibraryMoodFeatureRows, () => 0);
@@ -160,5 +178,8 @@ test("the Library's features read in one statement, off the thread as on it (#15
       [String(tagged), loud],
     ]),
   );
-  assert.deepEqual(finishSteps(djMoodFeaturesSteps(replayed.value)), selectDjLibraryMoodFeatures(db));
+  assert.deepEqual(
+    finishSteps(djMoodFeaturesSteps(replayed.value)),
+    selectDjLibraryMoodFeatures(db),
+  );
 });

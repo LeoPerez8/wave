@@ -191,17 +191,28 @@ test("3,700 videos' features read in one statement, off the thread as on it (#15
       videoId,
       isrc: null,
       features:
-        at % 5 === 0 ? null : { energy: (at % 100) / 100, valence: 0.5, acousticness: 0.3, mode: 1 },
+        at % 5 === 0
+          ? null
+          : { energy: (at % 100) / 100, valence: 0.5, acousticness: 0.3, mode: 1 },
       checkedAt: 20,
     })),
   );
   const asked = [...ids, "not kept"];
   const reads = readConnections(async () => asyncReadClient(db));
-  const replayed = await replayRead(reads, (d) => djMoodFeatureRows(d, asked), () => 0);
+  const replayed = await replayRead(
+    reads,
+    (d) => djMoodFeatureRows(d, asked),
+    () => 0,
+  );
   assert.equal(replayed.statements, 1);
   const features = finishSteps(djMoodFeaturesSteps(replayed.value));
   assert.deepEqual(features, selectDjMoodFeatures(db, asked));
   assert.equal(features.size, 2_960);
-  assert.deepEqual(features.get("v00001"), { energy: 0.01, valence: 0.5, acousticness: 0.3, mode: 1 });
+  assert.deepEqual(features.get("v00001"), {
+    energy: 0.01,
+    valence: 0.5,
+    acousticness: 0.3,
+    mode: 1,
+  });
   assert.equal(features.has("v00000"), false);
 });

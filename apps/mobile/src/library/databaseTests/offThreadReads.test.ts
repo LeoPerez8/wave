@@ -201,7 +201,10 @@ test("DJ mood features read off the thread in one statement each, as the synchro
     const log = await appLog();
     const here = await loadLibraryStore(root, fixture.db);
     const away = await loadLibraryStore(root, fixture.db, { offThreadReads: true });
-    const reads: [string, (store: typeof here) => Effect.Effect<ReadonlyMap<string, unknown>, unknown>][] = [
+    const reads: [
+      string,
+      (store: typeof here) => Effect.Effect<ReadonlyMap<string, unknown>, unknown>,
+    ][] = [
       ["djMoodFeatures", (s) => s.djMoodFeatures([...videoIds, "not kept"])],
       ["djLibraryMoodFeatures", (s) => s.djLibraryMoodFeatures()],
     ];
@@ -214,9 +217,15 @@ test("DJ mood features read off the thread in one statement each, as the synchro
     const catalog = Effect.runSync(here.djMoodFeatures(videoIds));
     assert.equal(catalog.size, videoIds.filter((_, at) => at % 5 !== 0 && at % 7 !== 0).length);
     const found = (_: unknown, at: number) => at % 5 !== 0 && at % 7 !== 0;
-    assert.equal(Effect.runSync(here.djLibraryMoodFeatures()).size, videoIds.slice(0, 50).filter(found).length);
+    assert.equal(
+      Effect.runSync(here.djLibraryMoodFeatures()).size,
+      videoIds.slice(0, 50).filter(found).length,
+    );
     log.flush();
-    assert.deepEqual(log.lines.filter((line) => line.includes("runs on the JS thread")), []);
+    assert.deepEqual(
+      log.lines.filter((line) => line.includes("runs on the JS thread")),
+      [],
+    );
   } finally {
     fixture.close();
   }
