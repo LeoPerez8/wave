@@ -102,3 +102,24 @@ test("Search's screen is built hidden in idle time, so its first tap shows a kep
     "warm Search before the scan",
   );
 });
+
+test("mood features are read only for a session with a mood, never on Home's start (#1532)", () => {
+  const files = readdirSync(src, { recursive: true, encoding: "utf8" }).filter(
+    (path) => /\.tsx?$/.test(path) && !path.includes(".test."),
+  );
+  let reads = 0;
+  for (const path of files) {
+    const source = read(path);
+    for (const match of source.matchAll(/\.(djMoodFeatures|djLibraryMoodFeatures)\(/g)) {
+      reads++;
+      // The read sits in the empty-mood branch's other arm: `mood.length === 0 ? new Map() : …`.
+      const before = source.slice(Math.max(0, match.index - 240), match.index);
+      assert.match(
+        before,
+        /mood \?\? \[\]\)?\.length === 0|mood\.length === 0/,
+        `${path} reads ${match[1]} without a mood`,
+      );
+    }
+  }
+  assert.ok(reads >= 6, "the DJ's and the stand-ins' mood reads were found");
+});

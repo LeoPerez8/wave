@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { normalizeTrack } from "@wave/core";
+import { djMoodFeaturesSteps, finishSteps, normalizeTrack } from "@wave/core";
 import { eq } from "drizzle-orm";
 
 import type { IndexedTrack } from "../types.ts";
@@ -10,14 +10,16 @@ import { addCandidates } from "./candidateCatalog.ts";
 import { creditSplits } from "./credits.ts";
 import {
   DJ_LIBRARY_MOOD_MISS_TTL_MS,
+  djLibraryMoodFeatureRows,
   keepDjLibraryMoodFeatures,
   pendingDjLibraryMoodSongs,
   selectDjLibraryMoodFeatures,
 } from "./djLibraryMoodFeatures.ts";
 import { keepDjMoodFeatures } from "./djMoodFeatures.ts";
+import { readConnections, replayRead } from "./offThreadReads.ts";
 import { saveBatch } from "./save.ts";
 import { tracks } from "./schema.ts";
-import { openTestDatabase } from "./testDatabase.ts";
+import { asyncReadClient, openTestDatabase } from "./testDatabase.ts";
 import { trackQuery } from "./tracks.ts";
 
 type Db = Awaited<ReturnType<typeof openTestDatabase>>;
@@ -133,4 +135,30 @@ test("a song downloaded from a video goes by that video's stream features before
   );
   keepDjMoodFeatures(db, [{ videoId: "v1", isrc: null, features: calm, checkedAt: 10 }]);
   assert.deepEqual(selectDjLibraryMoodFeatures(db), new Map([[String(downloaded), calm]]));
+});
+
+test("the Library's features read in one statement, off the thread as on it (#1532)", async () => {
+  const db = await openTestDatabase();
+  save(db, [scanned("Downloaded", "USRC17607839"), scanned("Tagged", "GBAYE0601498")]);
+  const downloaded = idOf(db, "Downloaded");
+  const tagged = idOf(db, "Tagged");
+  db.update(tracks).set({ videoId: "v1" }).where(eq(tracks.id, downloaded)).run();
+  const calm = { energy: 0.2, valence: 0.6, acousticness: 0.8, mode: 1 as const };
+  keepDjLibraryMoodFeatures(db, [
+    { trackId: downloaded, isrc: "USRC17607839", features: loud, checkedAt: 10 },
+    { trackId: tagged, isrc: "GBAYE0601498", features: loud, checkedAt: 10 },
+  ]);
+  addCandidates(db, { songs: [{ videoId: "v1", title: "Downloaded", artists: ["Artist"], album: null, albumId: null, durationMs: 1, artworkUrl: null, explicit: false }], seed: "Artist" }, 10);
+  keepDjMoodFeatures(db, [{ videoId: "v1", isrc: null, features: calm, checkedAt: 10 }]);
+  const reads = readConnections(async () => asyncReadClient(db));
+  const replayed = await replayRead(reads, djLibraryMoodFeatureRows, () => 0);
+  assert.equal(replayed.statements, 1);
+  assert.deepEqual(
+    finishSteps(djMoodFeaturesSteps(replayed.value)),
+    new Map([
+      [String(downloaded), calm],
+      [String(tagged), loud],
+    ]),
+  );
+  assert.deepEqual(finishSteps(djMoodFeaturesSteps(replayed.value)), selectDjLibraryMoodFeatures(db));
 });

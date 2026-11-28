@@ -1,6 +1,11 @@
 /** Phone-local ReccoBeats feature cache for songs in the candidate catalog. */
-import { and, asc, eq, gt, inArray, isNull, lte, or } from "drizzle-orm";
-import type { DjAudioFeatures } from "@wave/core";
+import { and, asc, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import {
+  djMoodFeaturesSteps,
+  finishSteps,
+  type DjAudioFeatures,
+  type DjMoodFeatureRow,
+} from "@wave/core";
 
 import type { LibraryDatabase } from "./database.ts";
 import { candidateSongs, djMoodFeatures } from "./schema.ts";
@@ -143,27 +148,26 @@ export const keepDjMoodFeatures = (
   });
 };
 
+/**
+ * The kept feature rows of the requested videos, misses included, by video id (Core's
+ * `djMoodFeaturesSteps` reads them). One statement whatever the count: a replayed read runs
+ * again from the top after each statement, so a statement per 500 ids made thousands of
+ * videos cost a pass each, the last ones holding the JS thread longest (#1532).
+ */
+export const djMoodFeatureRows = (
+  db: LibraryDatabase,
+  videoIds: readonly string[],
+): DjMoodFeatureRow[] =>
+  videoIds.length === 0
+    ? []
+    : db.all<DjMoodFeatureRow>(sql`SELECT video_id AS id, energy, valence, acousticness, mode
+        FROM dj_mood_features
+        WHERE video_id IN (SELECT value FROM json_each(${JSON.stringify(videoIds)}))
+          AND energy IS NOT NULL`);
+
 /** Cached feature rows for the requested videos; misses are omitted. */
 export const selectDjMoodFeatures = (
   db: LibraryDatabase,
   videoIds: readonly string[],
-): ReadonlyMap<string, DjAudioFeatures> => {
-  const found = new Map<string, DjAudioFeatures>();
-  for (const ids of chunks(videoIds)) {
-    for (const row of db
-      .select()
-      .from(djMoodFeatures)
-      .where(inArray(djMoodFeatures.videoId, ids))
-      .all()) {
-      if (row.energy == null || row.valence == null || row.acousticness == null) continue;
-      if (row.mode !== 0 && row.mode !== 1) continue;
-      found.set(row.videoId, {
-        energy: row.energy,
-        valence: row.valence,
-        acousticness: row.acousticness,
-        mode: row.mode,
-      });
-    }
-  }
-  return found;
-};
+): ReadonlyMap<string, DjAudioFeatures> =>
+  finishSteps(djMoodFeaturesSteps(djMoodFeatureRows(db, videoIds)));
