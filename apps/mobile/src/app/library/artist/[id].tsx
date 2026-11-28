@@ -624,6 +624,7 @@ function ArtistContent({
         scrollEnabled={scrollable}
         ref={list}
         className="flex-1"
+        stagedRows
         data={items}
         keyExtractor={itemKey}
         song={source}

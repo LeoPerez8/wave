@@ -81,13 +81,19 @@ const springOpened = (id: number | undefined, generation: number): void => {
   if (id !== undefined) timingTransitionEnd(id);
   updateSettled();
 };
-/** Called after the player commit; a frame passes before its content is reported drawn. */
+/**
+ * Called after the player commit (the sheet's layout effect, and a frame after a spring starts
+ * for an open with no commit of its own). The frame after the commit is the open's first frame,
+ * as a pushed screen's is (#1537); it used to wait a frame more before it started counting. A
+ * frame later its content is reported drawn.
+ */
 export const nowPlayingContentCommitted = (): void => {
   const id = sheetTimingId;
   const generation = motionGeneration;
+  if (!isNowPlayingShown()) return;
+  if (id !== undefined) timingSurfaceCommitted(id, false);
   requestAnimationFrame(() => {
-    if (generation !== motionGeneration || id !== sheetTimingId || !isNowPlayingShown()) return;
-    if (id !== undefined) timingSurfaceCommitted(id, false);
+    if (generation !== motionGeneration || id !== sheetTimingId) return;
     requestAnimationFrame(() => {
       if (generation !== motionGeneration || id !== sheetTimingId) return;
       contentDrawn = true;

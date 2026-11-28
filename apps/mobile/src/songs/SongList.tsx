@@ -7,7 +7,7 @@ import {
 import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import { Fragment, useCallback, useMemo } from "react";
 import type { ComponentProps, ReactNode, Ref } from "react";
-import { View } from "react-native";
+import { useWindowDimensions, View } from "react-native";
 import Animated from "react-native-reanimated";
 
 import { AlphabetSpine } from "@/catalog/AlphabetSpine";
@@ -19,6 +19,7 @@ import { useStagedCount } from "@/lib/stagedCount";
 import { listMounts } from "@wave/core";
 
 import { useSongRows, type SongRowsOptions } from "./useSongRows";
+import { useStagedRows } from "./stagedRows";
 
 export type { SongListSelection } from "./useSongRows";
 
@@ -47,6 +48,12 @@ export type SongListProps<T> = Omit<
       readonly style: ComponentProps<typeof Animated.View>["style"];
       readonly accessory?: ReactNode;
     } | null;
+    /**
+     * A pushed screen's list (#1537): its first frame draws the head and a few rows, and the
+     * rest of a screen follows a few rows a frame (`useStagedRows`), so the push's motion
+     * starts sooner. The footer waits for the last row.
+     */
+    readonly stagedRows?: boolean;
   };
 
 /** The list owns subscriptions. Recycled leaves receive primitive display props and stable actions. */
@@ -70,9 +77,13 @@ export function SongList<T>({
   animated = false,
   lifted,
   extraData,
+  stagedRows = false,
+  ListFooterComponent,
   ...list
 }: SongListProps<T>) {
   useRenderCount("SongList");
+  const { height: windowHeight } = useWindowDimensions();
+  const given = useStagedRows(data, stagedRows, windowHeight);
   const rows = useSongRows({
     data,
     keyExtractor,
@@ -117,7 +128,8 @@ export function SongList<T>({
     <>
       <List
         {...list}
-        data={data}
+        data={given}
+        ListFooterComponent={given === data ? ListFooterComponent : null}
         keyExtractor={keyExtractor}
         renderItem={row}
         extraData={state}

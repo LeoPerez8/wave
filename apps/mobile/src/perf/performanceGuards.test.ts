@@ -378,6 +378,16 @@ test("Followed artists mounts only the follows on screen, however many there are
   assert.match(page, /const FollowedArtistItem = memo\(/);
 });
 
+test("an album's, an artist's and a playlist's song lists stage their rows (#1537)", () => {
+  // Legend List renders a window and its draw distance of rows before a push's first paint.
+  for (const file of [
+    "app/library/album/[id].tsx",
+    "app/library/artist/[id].tsx",
+    "library/PlaylistItems.tsx",
+  ])
+    assert.match(sources[file] ?? "", /<SongList[^>]*\n\s+stagedRows\n/, file);
+});
+
 test("artwork URIs come from the one helper (#726)", () => {
   assert.deepEqual(shared.fileUriCallers, listed(ARTWORK_URI_BUILDERS));
   assert.deepEqual(
