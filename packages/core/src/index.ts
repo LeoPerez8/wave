@@ -1000,8 +1000,12 @@ export { BACKGROUND_WORK_LIMITS, createBackgroundWork, runStepSlice } from "./ba
 export {
   JS_BLOCK_MS,
   PAUSE_HEARD_MS,
+  RENDER_EFFECTS,
   STARTUP_WORK_MS,
+  TOUCH,
   TURN_WORK_MS,
+  UNSEEN_WORK,
+  UNTIMED_RENDER,
   createJsBlockLog,
   jsBlockLine,
   jsPausedLine,

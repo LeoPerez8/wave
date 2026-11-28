@@ -43,7 +43,7 @@ describe("a JS block over 50 ms while a screen is shown writes one line", () => 
     const { log, lines } = setup("/");
     log.sliceRan("scan", 100, 7);
     log.longTask(5000, 1500);
-    assert.deepEqual(lines, ["JS blocked 1.5 s on / by no background work"]);
+    assert.deepEqual(lines, ["JS blocked 1.5 s on / by unseen work (a native callback or GC)"]);
   });
 
   test("a long task starting on a turn the scheduler gave is put down to that turn's work", () => {
@@ -74,7 +74,9 @@ describe("a long task names the work still running in it", () => {
     const { log, lines } = setup();
     log.workBegan("DJ opening", 1000)(1200);
     log.longTask(1400, 90);
-    assert.deepEqual(lines, ["JS blocked 90 ms on /search by no background work"]);
+    assert.deepEqual(lines, [
+      "JS blocked 90 ms on /search by unseen work (a native callback or GC)",
+    ]);
   });
 
   test("of two running works, the one begun last names it", () => {
@@ -104,7 +106,9 @@ describe("a long task names the work still running in it", () => {
     const { log, lines } = setup();
     log.turnTaken("Genre pages", 1000);
     log.longTask(3000, 70);
-    assert.deepEqual(lines, ["JS blocked 70 ms on /search by no background work"]);
+    assert.deepEqual(lines, [
+      "JS blocked 70 ms on /search by unseen work (a native callback or GC)",
+    ]);
   });
 
   test("a turn held for its own task alone names that task and no block after it (#1449)", () => {
@@ -115,7 +119,7 @@ describe("a long task names the work still running in it", () => {
     log.longTask(1150, 70);
     assert.deepEqual(lines, [
       "JS blocked 60 ms on /search by DJ mood lookup: ISRCs",
-      "JS blocked 70 ms on /search by no background work",
+      "JS blocked 70 ms on /search by unseen work (a native callback or GC)",
     ]);
   });
 
@@ -137,7 +141,7 @@ describe("a long task before the first screen settles is startup's", () => {
     log.longTask(1000, 400);
     assert.deepEqual(lines, [
       "JS blocked 400 ms on / by startup",
-      "JS blocked 400 ms on / by no background work",
+      "JS blocked 400 ms on / by unseen work (a native callback or GC)",
     ]);
   });
 
@@ -157,7 +161,7 @@ describe("a long task before the first screen settles is startup's", () => {
     log.startupStep("waiting for Home's content", 50);
     log.firstSettled(90);
     log.longTask(100, 400);
-    assert.deepEqual(lines, ["JS blocked 400 ms on / by no background work"]);
+    assert.deepEqual(lines, ["JS blocked 400 ms on / by unseen work (a native callback or GC)"]);
   });
 
   test("named work running then still names it", () => {
@@ -322,7 +326,9 @@ describe("a long task that spans Wave leaving the screen is a pause, not a block
     log.longTask(1000, 120);
     show("/library");
     run();
-    assert.deepEqual(lines, ["JS blocked 120 ms on /search by no background work"]);
+    assert.deepEqual(lines, [
+      "JS blocked 120 ms on /search by unseen work (a native callback or GC)",
+    ]);
   });
 
   test("a render that follows the lookup's turn is named as the render, though its commit came after the long task's report (#1449)", () => {
@@ -440,5 +446,98 @@ describe("only work started during startup is named as startup's (#1432)", () =>
     log.turnTaken(name, 300_000);
     log.longTask(300_100, 268);
     assert.deepEqual(lines, ["JS blocked 268 ms on /search by downloads"]);
+  });
+});
+
+describe("a long task no named work held says which kind of work it was (#1531)", () => {
+  test("one React committed a render in names it as an untimed render", () => {
+    const { log, lines } = setup("/library");
+    log.committed(1080);
+    log.longTask(1000, 90);
+    assert.deepEqual(lines, ["JS blocked 90 ms on /library by rendering untimed components"]);
+  });
+
+  test("one React ran a render's effects in, after a render in an earlier task, names the effects", () => {
+    const { log, lines } = setup("/library");
+    log.committed(900);
+    log.effectsRan(1085);
+    log.longTask(1000, 90);
+    assert.deepEqual(lines, ["JS blocked 90 ms on /library by running effects after a render"]);
+  });
+
+  test("of a render and its effects in one task, the one that held more of it names it", () => {
+    const { log, lines } = setup("/");
+    log.committed(1020);
+    log.effectsRan(1110);
+    log.longTask(1000, 120);
+    log.committed(2090);
+    log.effectsRan(2100);
+    log.longTask(2000, 110);
+    assert.deepEqual(lines, [
+      "JS blocked 120 ms on / by running effects after a render",
+      "JS blocked 110 ms on / by rendering untimed components",
+    ]);
+  });
+
+  test("a timer, a native event's listeners or an Effect run that held it names it", () => {
+    const { log, lines } = setup();
+    log.entryRan("handling native event onJobsChanged", 1000, 85);
+    log.longTask(1000, 90);
+    assert.deepEqual(lines, ["JS blocked 90 ms on /search by handling native event onJobsChanged"]);
+  });
+
+  test("a render after an Effect run in the same task names it when it held more of the task", () => {
+    const { log, lines } = setup();
+    log.entryRan("running an Effect", 1000, 30);
+    log.committed(1120);
+    log.longTask(1000, 125);
+    assert.deepEqual(lines, ["JS blocked 125 ms on /search by rendering untimed components"]);
+  });
+
+  test("and the Effect run names it when it held more", () => {
+    const { log, lines } = setup();
+    log.entryRan("running an Effect", 1000, 100);
+    log.committed(1120);
+    log.longTask(1000, 125);
+    assert.deepEqual(lines, ["JS blocked 125 ms on /search by running an Effect"]);
+  });
+
+  test("a render committed inside a timer's own callback is the timer's", () => {
+    const { log, lines } = setup();
+    log.entryRan("running a timer", 1000, 120);
+    log.committed(1110);
+    log.longTask(1000, 125);
+    assert.deepEqual(lines, ["JS blocked 125 ms on /search by running a timer"]);
+  });
+
+  test("named work still beats the kind", () => {
+    const { log, lines } = setup();
+    log.entryRan("running a timer", 1000, 120);
+    log.committed(1121);
+    log.renderRan("MiniPlayer", 1000, 121);
+    log.sliceRan("scan", 1300, 4);
+    log.longTask(1000, 125);
+    log.longTask(1290, 125);
+    assert.deepEqual(lines, [
+      "JS blocked 125 ms on /search by rendering MiniPlayer",
+      "JS blocked 125 ms on /search by scan",
+    ]);
+  });
+
+  test("one a touch began or ended in, with nothing else seen, names the touch's handlers", () => {
+    const { log, lines } = setup();
+    log.touched(1010);
+    log.longTask(1000, 90);
+    assert.deepEqual(lines, ["JS blocked 90 ms on /search by handling a touch"]);
+  });
+
+  test("one nothing was seen in says so, and never 'no background work'", () => {
+    const { log, lines } = setup();
+    log.touched(500);
+    log.committed(900);
+    log.longTask(1000, 90);
+    assert.deepEqual(lines, [
+      "JS blocked 90 ms on /search by unseen work (a native callback or GC)",
+    ]);
   });
 });
