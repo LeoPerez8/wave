@@ -61,11 +61,13 @@ export const reconcileScan = <T extends IndexedFile>(
 ): ScanChanges<T> => finishSteps(reconcileScanSteps(input));
 
 /**
- * What a scan does last, from the files it [saved], the indexed files
- * [gone], whether playlists' entries changed since they were last linked
- * ([entriesChanged]: a sync or an import brought YT Music entries, or no
- * link ran yet in this process), and whether a scanned folder had never
- * finished a scan before ([firstScan]).
+ * What a scan does last, from the files it [saved] (new, changed or
+ * moved) and found [gone], playlists' entries' revision now ([entriesRevision]: it rises with
+ * every write to them, a sync's, an import's, a link's), the revision the
+ * last whole-Library link left them at ([linkedRevision], kept in the
+ * Library's database, so a new process doesn't link again; null when no
+ * link has run), and whether a
+ * scanned folder had never finished a scan before ([firstScan]).
  */
 export interface ScanEnd {
   /**
@@ -86,15 +88,17 @@ export interface ScanEnd {
 export const scanEnd = ({
   saved,
   gone,
-  entriesChanged,
+  entriesRevision,
+  linkedRevision,
   firstScan,
 }: {
   readonly saved: number;
   readonly gone: number;
-  readonly entriesChanged: boolean;
+  readonly entriesRevision: number;
+  readonly linkedRevision: number | null;
   readonly firstScan: boolean;
 }): ScanEnd => ({
-  linkEntries: saved > 0 || entriesChanged,
+  linkEntries: saved + gone > 0 || entriesRevision !== linkedRevision,
   announce: gone > 0 ? "removed" : saved > 0 ? "added" : firstScan ? "scanned" : null,
 });
 
