@@ -176,3 +176,16 @@ at the player or images, `Java Heap` at the native modules. Record the numbers h
 | before (`1358-before`) |  pending |    pending |  pending |     pending |          pending | pending         |
 | after (`1358-after`)   |  pending |    pending |  pending |     pending |          pending | pending         |
 | 30 min playback        |  pending |    pending |  pending |     pending |                — | pending         |
+
+**The emulator's version, by #1535** (`wave-run-903`, perf builds of `2f2a0300d`, the reference
+Library seeded; `docs/performance/1535-tabs-mode.md`). Not the phone run above, which stays
+pending. "Frozen" is this ticket's default, "not frozen" #1535's (hidden tabs unfrozen, screens
+under a push still frozen). Four runs of `tab-switch` each; the emulator draws in software, so
+`Graphics` reads 0.
+
+| Run (emulator)      | PSS at end of `tab-switch`, each run | Native heap (median) | `tab-switch` first frame p90 |
+| ------------------- | ------------------------------------ | -------------------: | ---------------------------: |
+| frozen (`freeze`)   | 644, 434, 499, 447 MB                |               179 MB |                       282 ms |
+| not frozen (`thaw`) | 459, 441, 427, 443 MB                |               168 MB |                       196 ms |
+
+Freezing hidden tabs didn't lower PSS on the emulator; #1535 turned it off by default.
