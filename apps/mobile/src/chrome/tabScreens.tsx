@@ -10,6 +10,7 @@ import {
 } from "@wave/core";
 import type { TabSlot } from "expo-router/ui";
 import {
+  memo,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -130,13 +131,64 @@ function TabCommitMark({
   return children;
 }
 
+type TabDescriptor = Parameters<RenderTab>[0];
+
+let childStateKey: symbol | undefined;
+/**
+ * The nested navigator's state a tab's route carries. react-navigation keeps a route's object
+ * while its key, name and params hold, and hangs the nested state on it under a private symbol
+ * (`CHILD_STATE`), so a push inside a tab changes this and not the route.
+ */
+const childStateOf = (route: TabDescriptor["route"]): unknown => {
+  childStateKey ??= Object.getOwnPropertySymbols(route).find(
+    (key) => key.description === "CHILD_STATE",
+  );
+  return childStateKey === undefined
+    ? (route as { state?: unknown }).state
+    : (route as unknown as Record<symbol, unknown>)[childStateKey];
+};
+
+const sameOptions = (a: object, b: object): boolean => {
+  if (a === b) return true;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((key) => Object.hasOwn(b, key) && Object.is(a[key as never], b[key as never]));
+};
+
+type TabContentProps = { name: string; descriptor: TabDescriptor; childState: unknown };
+
+/**
+ * A kept tab's content, rendered again only when its route, nested state, navigation or
+ * options changed (#1534). expo-router's `TabSlot` renders on every navigation and each
+ * tab's `descriptor.render()` returns new elements, so without this a switch rendered every
+ * kept tab whole: the tab left once more before its freeze lands (react-native-screens'
+ * `DelayedFreeze`) and the tab shown as it unfroze. The tab's own state and stores still
+ * render what changed in it.
+ */
+const TabContent = memo(
+  function TabContent({ name, descriptor }: TabContentProps) {
+    return (
+      <PageGradientScope>
+        <RenderCost name={`tab:${name}`}>{descriptor.render()}</RenderCost>
+      </PageGradientScope>
+    );
+  },
+  (previous, next) =>
+    previous.name === next.name &&
+    previous.childState === next.childState &&
+    previous.descriptor.route === next.descriptor.route &&
+    previous.descriptor.navigation === next.descriptor.navigation &&
+    sameOptions(previous.descriptor.options, next.descriptor.options),
+);
+
 /**
  * Renders the tab screens for `TabSlot` as expo-router's default does, with
  * `TAB_SCREENS`' choices: a tab not [kept] isn't rendered while hidden (a kept
  * one is, even before its first visit), a
  * hidden tab freezes and can keep its layout. Each tab has its page-top gradient's scope
- * (`PageGradientScope`). Perf builds mark each tab's commit
- * and layout (`tab.commit`, `tab.layout`).
+ * (`PageGradientScope`), and its content renders only when its route or options change
+ * (`TabContent`), so a switch renders neither the tab left nor the tab shown. Perf builds
+ * mark each tab's commit and layout (`tab.commit`, `tab.layout`).
  */
 export const renderTabScreens =
   (kept: readonly string[]): RenderTab =>
@@ -148,6 +200,9 @@ export const renderTabScreens =
     const look = TAB_SCREENS.keepLayout
       ? [styles.laidOut, isFocused ? styles.front : styles.back]
       : [styles.screen, isFocused ? styles.focused : styles.unfocused];
+    const content = (
+      <TabContent name={name} descriptor={descriptor} childState={childStateOf(descriptor.route)} />
+    );
     return (
       <Screen
         key={descriptor.route.key}
@@ -163,17 +218,13 @@ export const renderTabScreens =
             : undefined
         }
       >
-        <PageGradientScope>
-          <RenderCost name={`tab:${name}`}>
-            {PERF_ENABLED ? (
-              <TabCommitMark name={name} focused={isFocused}>
-                {descriptor.render()}
-              </TabCommitMark>
-            ) : (
-              descriptor.render()
-            )}
-          </RenderCost>
-        </PageGradientScope>
+        {PERF_ENABLED ? (
+          <TabCommitMark name={name} focused={isFocused}>
+            {content}
+          </TabCommitMark>
+        ) : (
+          content
+        )}
       </Screen>
     );
   };
