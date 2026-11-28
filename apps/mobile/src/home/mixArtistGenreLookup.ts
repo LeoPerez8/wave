@@ -61,6 +61,8 @@ const lookUp = (name: string, meter: ArtistLookupMeter) =>
       try {
         const response = await fetch(url, { signal: controller.signal });
         const text = await response.text();
+        // The answer may come back while the owner's tap is in flight: it waits that out (#1530).
+        await freeTurnAlone(JOB);
         return inSlice(JOB, () => {
           meter.received(answerBytes(response.headers.get("content-length"), text));
           if (!response.ok) throw new Error(`Deezer HTTP ${response.status}`);
