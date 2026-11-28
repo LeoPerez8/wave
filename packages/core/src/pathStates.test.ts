@@ -5,7 +5,7 @@ import { rememberPathStates } from "./index.ts";
 
 // The tabs navigator reads each tab's route from its path on every navigation, and the router
 // builds its whole route config again for each read (#1486). The reads are remembered by path,
-// config and segments, and each one still gets a state of its own, as before.
+// config and the route groups in the segments, and each one still gets a state of its own.
 
 type State = { routes: { name: string; params?: Record<string, string>; state?: State }[] };
 
@@ -47,13 +47,13 @@ test("each read gets a state of its own, so changing one changes no other", () =
   });
 });
 
-test("another path, other segments or another config is read from the router", () => {
+test("another path, other route groups in the segments or another config is read from the router", () => {
   const router = counting();
   const config = {};
   const read = rememberPathStates(router.read);
   read("/library", config, ["(tabs)", "index"]);
   read("/search", config, ["(tabs)", "index"]);
-  read("/library", config, ["(tabs)", "search"]);
+  read("/library", config, ["(other)", "index"]);
   read("/library", {}, ["(tabs)", "index"]);
   read("/library", undefined, ["(tabs)", "index"]);
   assert.equal(router.calls.length, 5);
@@ -61,15 +61,30 @@ test("another path, other segments or another config is read from the router", (
   assert.equal(router.calls.length, 5);
 });
 
-test("segments are told apart by their boundaries, not their joined text", () => {
+test("segments that differ only outside route groups share one read (#1534)", () => {
+  // The router weighs the segments only by the groups they hold at each position, when it sorts
+  // its routes, so a tab's first visit or a push reads no tab's route again.
   const router = counting();
   const config = {};
   const read = rememberPathStates(router.read);
-  read("/library", config, ["a", "b"]);
-  read("/library", config, ["a/b"]);
+  const first = read("/library", config, ["(tabs)", "index"]);
+  assert.deepEqual(read("/library", config, ["(tabs)", "search"]), first);
+  read("/library", config, ["(tabs)", "playlists", "[id]"]);
+  assert.equal(router.calls.length, 1);
+  read("/library", config, ["library", "album", "[id]"]);
   read("/library", config, []);
   read("/library", config);
-  assert.equal(router.calls.length, 4);
+  assert.equal(router.calls.length, 2);
+});
+
+test("a group is told apart by its position in the segments", () => {
+  const router = counting();
+  const config = {};
+  const read = rememberPathStates(router.read);
+  read("/library", config, ["(tabs)"]);
+  read("/library", config, ["library", "(tabs)"]);
+  read("/library", config, ["(tabs)", "(tabs)"]);
+  assert.equal(router.calls.length, 3);
 });
 
 test("a path with no route is remembered too", () => {
