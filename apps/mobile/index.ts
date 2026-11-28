@@ -1,6 +1,9 @@
 // The app log starts before anything else, so it sees everything that follows (src/log/appLog.ts).
 // oxlint-disable-next-line import/no-unassigned-import
 import "./src/log/startAppLog";
+// Then the ways into the JS thread, timed for the block log before modules add their listeners.
+// oxlint-disable-next-line import/no-unassigned-import
+import "./src/lib/startJsEntries";
 // The app entry: Expo Router's root component (the `main` surface the Activity renders)…
 import "expo-router/entry";
 

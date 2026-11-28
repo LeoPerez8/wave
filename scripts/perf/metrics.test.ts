@@ -199,6 +199,22 @@ describe("stepMetrics", () => {
     });
   });
 
+  it("keeps each component's longest render span after the touch (#1533)", () => {
+    const metrics = stepMetrics({
+      frames,
+      summary: SUMMARY,
+      flush: flush([
+        { kind: "mark", name: "render.span", detail: "MiniPlayer 300", at: 990 },
+        { kind: "touch", eventAt: 1_000, at: 1_010 },
+        { kind: "mark", name: "render.span", detail: "MiniPlayer 12.5", at: 1_040 },
+        { kind: "mark", name: "render.span", detail: "tab:index 4", at: 1_045 },
+        { kind: "mark", name: "render.span", detail: "MiniPlayer 31.2", at: 1_200 },
+      ]),
+      expect: undefined,
+    });
+    assert.deepEqual(metrics.renderSpansMs, { MiniPlayer: 31.2, "tab:index": 4 });
+  });
+
   it("without a perf build, keeps the frame burst and leaves the latencies out", () => {
     const metrics = stepMetrics({
       frames: frames.slice(1),

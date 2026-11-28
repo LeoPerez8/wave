@@ -51,7 +51,7 @@ export const bench: FastAgainBench = {
     // are reported as unavailable, never timed as empty or zero-cost reads.
     const reads: readonly [read: string, method: string, args?: readonly unknown[]][] = [
       ...[
-        "playlistEntriesRevision",
+        "playlistLinkRevisions",
         "listPendingFavorites",
         "pendingFileDeletions",
         "countTracks",

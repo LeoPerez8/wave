@@ -32,6 +32,8 @@ import {
   deletePlaylist,
   finishPlaylistOpening,
   linkPlaylistEntries,
+  markPlaylistsLinked,
+  selectPlaylistLinkRevisions,
   movePlaylistItem,
   playlistLinkSteps,
   playlistOpeningSteps,
@@ -414,6 +416,23 @@ describe("linkPlaylistEntries", () => {
     assert.equal(selectPlaylistEntriesRevision(db), added);
     linkPlaylistEntries(db, 0);
     assert.ok(selectPlaylistEntriesRevision(db) > added);
+  });
+
+  test("the revision a whole-Library link left is kept with the Library until entries change", () => {
+    assert.deepEqual(selectPlaylistLinkRevisions(db), {
+      entries: selectPlaylistEntriesRevision(db),
+      linked: null,
+    });
+    appendPlaylistSongs(db, playlistId, [stream(yt("a", { title: "Lucky" }))], 0);
+    markPlaylistsLinked(db);
+    const linked = selectPlaylistLinkRevisions(db);
+    assert.equal(linked.linked, linked.entries);
+    // Keeping it isn't an entry written.
+    assert.equal(selectPlaylistEntriesRevision(db), linked.entries);
+    appendPlaylistSongs(db, playlistId, [stream(yt("b", { title: "Reckoner" }))], 0);
+    const after = selectPlaylistLinkRevisions(db);
+    assert.ok(after.entries > linked.entries);
+    assert.equal(after.linked, linked.entries);
   });
 
   test("deleting the Library song then takes its entries out, as for any Library song", () => {

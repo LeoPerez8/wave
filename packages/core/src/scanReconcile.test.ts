@@ -172,7 +172,14 @@ describe("saving a scan batch in slices", () => {
 });
 
 describe("what a scan does once it ends", () => {
-  const quiet = { saved: 0, gone: 0, entriesChanged: false, firstScan: false };
+  // Playlists' entries are at revision 7, and the last link left them there.
+  const quiet = {
+    saved: 0,
+    gone: 0,
+    entriesRevision: 7,
+    linkedRevision: 7,
+    firstScan: false,
+  };
 
   test("a rescan that found nothing new and nothing gone links nothing and tells no screen", () => {
     assert.deepEqual(scanEnd(quiet), { linkEntries: false, announce: null });
@@ -183,7 +190,14 @@ describe("what a scan does once it ends", () => {
   });
 
   test("entries that came since the last link (a sync, an import) are linked with no file saved", () => {
-    assert.deepEqual(scanEnd({ ...quiet, entriesChanged: true }), {
+    assert.deepEqual(scanEnd({ ...quiet, entriesRevision: 9 }), {
+      linkEntries: true,
+      announce: null,
+    });
+  });
+
+  test("entries no link has seen yet (none ran on this Library) are linked", () => {
+    assert.deepEqual(scanEnd({ ...quiet, linkedRevision: null }), {
       linkEntries: true,
       announce: null,
     });
@@ -203,8 +217,8 @@ describe("what a scan does once it ends", () => {
     });
   });
 
-  test("files gone are shown at once, everywhere", () => {
-    assert.deepEqual(scanEnd({ ...quiet, gone: 2 }), { linkEntries: false, announce: "removed" });
+  test("files gone are linked again and shown at once, everywhere", () => {
+    assert.deepEqual(scanEnd({ ...quiet, gone: 2 }), { linkEntries: true, announce: "removed" });
     assert.deepEqual(scanEnd({ ...quiet, saved: 1, gone: 2 }), {
       linkEntries: true,
       announce: "removed",

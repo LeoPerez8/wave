@@ -60,4 +60,32 @@ describe("answerBytes", () => {
     assert.equal(answerBytes(null, '{"name":"Beyoncé"}'), 19);
     assert.equal(answerBytes("chunked", "日本"), 6);
   });
+
+  test("counts emoji, mixed text and a lone surrogate as UTF-8 writes them", () => {
+    const encoded = (text: string) => new TextEncoder().encode(text).length;
+    for (const text of ["", "plain", "Ação é 日本 😀 ok", "😀😀", "a\ud800b", "\udc00", "ß—€"])
+      assert.equal(answerBytes(null, text), encoded(text), JSON.stringify(text));
+  });
+
+  // #1530: Android unzips Deezer's answers and drops their Content-Length, so the size is
+  // counted on the JS thread for every answer; a walk of each character there held the
+  // reference phone's JS about 60 ms per 40 KB album.
+  test("counts an answer's size in less time than parsing it takes", () => {
+    const track = (id: number) =>
+      `{"id":${id},"title":"Voc\\u00ea J\\u00e1 Sabe","link":"https:\\/\\/www.deezer.com\\/track\\/${id}","duration":163}`;
+    const body = `{"data":[${Array.from({ length: 2000 }, (_, id) => track(id)).join(",")}]}`;
+    const median = (run: () => void) => {
+      const times: number[] = [];
+      for (let i = 0; i < 9; i++) {
+        const startedAt = performance.now();
+        run();
+        times.push(performance.now() - startedAt);
+      }
+      return times.sort((a, b) => a - b)[4]!;
+    };
+    const parsing = median(() => JSON.parse(body));
+    const counting = median(() => answerBytes(null, body));
+    assert.equal(answerBytes(null, body), body.length);
+    assert.ok(counting < parsing, `counting took ${counting} ms, parsing ${parsing} ms`);
+  });
 });
