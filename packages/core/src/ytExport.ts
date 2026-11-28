@@ -194,8 +194,7 @@ export interface YtExportRunCount {
 export const queueYtExportRun = (
   { done, total }: YtExportRunCount,
   items: number,
-): YtExportRunCount =>
-  done >= total ? { done: 0, total: items } : { done, total: total + items };
+): YtExportRunCount => (done >= total ? { done: 0, total: items } : { done, total: total + items });
 
 /** One more item of the run sent, skipped as deleted, or dropped when an export stopped. */
 export const ytExportRunDone = ({ done, total }: YtExportRunCount): YtExportRunCount => ({
