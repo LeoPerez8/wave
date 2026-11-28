@@ -5,7 +5,7 @@ import { useAppliedGlassSettings } from "@/settings/glass";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { glassProbe } from "./glassProbe";
-import { phoneEffects } from "./phoneEffects";
+import { usePhoneEffects } from "./phoneEffects";
 import { NativeGlassView } from "./waveGlass";
 
 /**
@@ -19,7 +19,8 @@ import { NativeGlassView } from "./waveGlass";
  * refraction shader by itself. A perf build launched with a glass probe drops
  * the layers the probe names (Core `glassLayers`, issue #316). A phone whose
  * frame times measured weak (`./phoneEffects`, #1357) draws the opaque surface
- * old Android draws, recording no backdrop (#1491).
+ * old Android draws, recording no backdrop (#1491), until the owner turns Full
+ * glass on (#1538), which redraws every glass at once.
  */
 
 type Props = {
@@ -38,7 +39,7 @@ export function GlassSurface({
   glass,
 }: Props & { glass: GlassSettings }) {
   const surface = useThemeColor("surface");
-  const layers = glassLayers(glass, glassProbe(), phoneEffects());
+  const layers = glassLayers(glass, glassProbe(), usePhoneEffects());
   if (!CAN_BLUR || layers.opaque) {
     return (
       <View

@@ -93,9 +93,9 @@ export const startupReplay = async (context: FastAgainContext, store: LibrarySto
           };
         }
         yield* turn; // The native unchanged scan completes on a later event-loop task.
-        const revision = yield* store.playlistEntriesRevision;
+        const revisions = yield* store.playlistLinkRevisions;
         yield* turn; // Both revisions explicitly wait before the atomic linking effect.
-        const linked = yield* store.linkPlaylistEntries; // first launch has linkedAtRevision=null
+        const linked = yield* store.linkPlaylistEntries; // first launch has no linked revision
         if (jobs === null) {
           yield* turn; // ti's one cleanup freeTurnEffect, then markScanned in the same task.
           yield* store.filesGone([]);
@@ -145,7 +145,7 @@ export const startupReplay = async (context: FastAgainContext, store: LibrarySto
           columns, // Keep and verify the actual native inputs, rather than discard map results.
           excluded,
           firstScan,
-          revisionRead: revision !== undefined,
+          revisionRead: revisions !== undefined,
           linked,
           imported: imported?.items.map((item) =>
             item.source === "library" ? item.track.id : item.song.title,

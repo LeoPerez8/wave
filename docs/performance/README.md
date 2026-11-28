@@ -277,20 +277,21 @@ position. Then, for each step:
 Times line up because `performance.now()`, a touch's native timestamp and gfxinfo's frame
 timestamps all use Android's CLOCK_MONOTONIC.
 
-| Metric         | Meaning                                                                                                                                           | Needs a perf build |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------: |
-| `firstFrameMs` | Touch to the first frame that finished rendering after it: the **first visible response**. The frame reaches the screen about one refresh later.  |        yes         |
-| `responseMs`   | Touch to the step's response mark: **navigation latency** (`route`), **keyboard latency** (`keyboard.show`), Now Playing or Queue shown.          |        yes         |
-| `settleMs`     | Touch to the last frame before 250 ms without frames: when the transition finished.                                                               |        yes         |
-| `burstMs`      | First to last frame of that burst. The only latency a plain APK gives.                                                                            |         no         |
-| `inputToJsMs`  | Touch to JavaScript's touch handler: input delayed by a busy JS thread.                                                                           |        yes         |
-| `frames`       | Frames rendered in the window, deadline misses, jank counters (slow UI thread, high input latency), the frame-time histogram.                     |         no         |
-| `frameParts`   | The kept frames split into parts (mean, p90, max ms): pre-draw and layout, draw (UI thread), sync, issue (RenderThread), GPU after the swap.      |         no         |
-| `renders`      | Renders per instrumented component in the step.                                                                                                   |        yes         |
-| `phasesMs`     | Touch to the first mark of each phase the step names (`phases` in `scenarios.ts`), e.g. a tab's `tab.commit` and `tab.layout`. Null if none came. |        yes         |
-| `longTasks`    | Long tasks React Native reported in the step, when it reports them.                                                                               |        yes         |
-| `launch`       | `am start -W`: `TotalTime`, `WaitTime`, launch state. A perf build adds React Native's startup timings.                                           |         no         |
-| memory         | `dumpsys meminfo` after each scenario plus `memoryIdleMs` idle: PSS, RSS, Java and native heap, graphics; views, activities, binders alive.       |         no         |
+| Metric          | Meaning                                                                                                                                                                                            | Needs a perf build |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------: |
+| `firstFrameMs`  | Touch to the first frame that finished rendering after it: the **first visible response**. The frame reaches the screen about one refresh later.                                                   |        yes         |
+| `responseMs`    | Touch to the step's response mark: **navigation latency** (`route`), **keyboard latency** (`keyboard.show`), Now Playing or Queue shown.                                                           |        yes         |
+| `settleMs`      | Touch to the last frame before 250 ms without frames: when the transition finished.                                                                                                                |        yes         |
+| `burstMs`       | First to last frame of that burst. The only latency a plain APK gives.                                                                                                                             |         no         |
+| `inputToJsMs`   | Touch to JavaScript's touch handler: input delayed by a busy JS thread.                                                                                                                            |        yes         |
+| `frames`        | Frames rendered in the window, deadline misses, jank counters (slow UI thread, high input latency), the frame-time histogram.                                                                      |         no         |
+| `frameParts`    | The kept frames split into parts (mean, p90, max ms): pre-draw and layout, draw (UI thread), sync, issue (RenderThread), GPU after the swap.                                                       |         no         |
+| `renders`       | Renders per instrumented component in the step.                                                                                                                                                    |        yes         |
+| `phasesMs`      | Touch to the first mark of each phase the step names (`phases` in `scenarios.ts`), e.g. a tab's `tab.commit` and `tab.layout`. Null if none came.                                                  |        yes         |
+| `longTasks`     | Long tasks React Native reported in the step, when it reports them.                                                                                                                                |        yes         |
+| `renderSpansMs` | Each timed component's longest `useRenderCost` span after the touch (`render.span` marks, #1533): from its render to its commit, or to the end of its own subtree's render for `useOwnRenderCost`. |        yes         |
+| `launch`        | `am start -W`: `TotalTime`, `WaitTime`, launch state. A perf build adds React Native's startup timings.                                                                                            |         no         |
+| memory          | `dumpsys meminfo` after each scenario plus `memoryIdleMs` idle: PSS, RSS, Java and native heap, graphics; views, activities, binders alive.                                                        |         no         |
 
 `summary` reports each latency as median / 90th percentile, the frames' pooled 50th, 90th and
 99th percentiles and the share that missed their deadline. `Missing` counts steps whose response
@@ -430,7 +431,8 @@ in JavaScript), `summarized` (mosaics and totals worked out again), `pageReads`,
 copies them to each step as `playlistWork`. `import.progressShown` counts the import
 notification's updates; the runner adds it to `importProgress`.
 
-Render counts are in RootLayout, TabsLayout, LibraryLayout, TabBar, MiniPlayer, NowPlayingSheet,
+Render counts are in RootLayout, TabsLayout, LibraryLayout, TabBar, MiniPlayer (its pill, and
+MiniPlayerSong, the playing song's part, #1533), NowPlayingSheet,
 PlayerView, UpNextList, UpNextRow, HistoryRow, Scrubber, HomeScreen, LibraryScreen, SearchScreen,
 SettingsScreen, LargeTitleScreen (Home's and Library's), SongsList, PagedSongList, GenreSongList,
 TrackList, ArtistStatsBlock, PlaylistsList, PlaylistScreen and PlaylistImportLine, and in the

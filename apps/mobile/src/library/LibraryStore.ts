@@ -68,14 +68,14 @@ import {
 import {
   pendingDjMoodSongs,
   keepDjMoodFeatures,
-  selectDjMoodFeatures,
+  djMoodFeatureRows,
   type DjMoodFeatureWrite,
   type DjMoodLookupPage,
 } from "@wave/client/db/djMoodFeatures";
 import {
   pendingDjLibraryMoodSongs,
   keepDjLibraryMoodFeatures,
-  selectDjLibraryMoodFeatures,
+  djLibraryMoodFeatureRows,
   type DjLibraryMoodFeatureWrite,
   type DjLibraryMoodSong,
 } from "@wave/client/db/djLibraryMoodFeatures";
@@ -134,6 +134,7 @@ import {
   recommendationEntriesPage,
   recommendationFeedbackPage,
 } from "@wave/client/db/recommendationPages";
+import { djMoodFeaturesSteps } from "@wave/core";
 import type {
   AppLanguage,
   KeptSongs,
@@ -380,7 +381,9 @@ import {
   readPlaylistOpening,
   selectPlaylistEntries,
   selectPlaylistGraveyard,
+  markPlaylistsLinked,
   selectPlaylistEntriesRevision,
+  selectPlaylistLinkRevisions,
   linkPlaylistEntries,
   playlistLinkSteps,
   readPlaylistLinks,
@@ -608,7 +611,8 @@ export class LibraryStore extends Context.Service<
     /**
      * Turns playlists' YT Music entries the Library now has into its songs, in
      * the same place, matched against the whole Library; a scan runs it once
-     * when it ends. Returns how many entries it changed.
+     * when it ends. Keeps the entries' revision it left (`playlistLinkRevisions`).
+     * Returns how many entries it changed.
      */
     readonly linkPlaylistEntries: Effect.Effect<number, LibraryStoreError>;
     /**
@@ -616,8 +620,14 @@ export class LibraryStore extends Context.Service<
      * a scan's first save doesn't (#1436); nothing once a save has.
      */
     readonly warmCreditSplits: Effect.Effect<void, LibraryStoreError>;
-    /** Rises whenever playlists' entries are written: whether a link has new entries to see. */
-    readonly playlistEntriesRevision: Effect.Effect<number, LibraryStoreError>;
+    /**
+     * Playlists' entries' revision, which rises whenever they're written, and the one the last
+     * `linkPlaylistEntries` left (null before any): whether a link has new entries to see.
+     */
+    readonly playlistLinkRevisions: Effect.Effect<
+      { readonly entries: number; readonly linked: number | null },
+      LibraryStoreError
+    >;
     /** Whether one of [roots] has never finished a scan (Core's `scanEnd` `firstScan`). */
     readonly hasUnscannedRoot: (
       roots: readonly string[],
@@ -1861,7 +1871,8 @@ const make = Effect.gen(function* () {
       ).pipe(Effect.tap(() => Effect.sync(() => publishSavedRecordings(tracks)))),
 
     // The whole Library's link reads off the JS thread and matches in steps; its write runs the
-    // whole link again only if playlists' entries changed in between (#1436).
+    // whole link again only if playlists' entries changed in between (#1436). It keeps the
+    // revision it left, so a later process's scan that changed nothing doesn't link (#1529).
     linkPlaylistEntries: Effect.gen(function* () {
       const revision = yield* attempt("read the playlists' revision", (db) =>
         selectPlaylistEntriesRevision(db),
@@ -1874,16 +1885,19 @@ const make = Effect.gen(function* () {
         ({ links, drops }) => links.length + drops.length,
       );
       return yield* writeAttempt("link playlist entries", () =>
-        db.transaction((tx) =>
-          selectPlaylistEntriesRevision(tx) === revision
-            ? writePlaylistLinks(tx, Date.now(), found)
-            : linkPlaylistEntries(tx, Date.now()),
-        ),
+        db.transaction((tx) => {
+          const changed =
+            selectPlaylistEntriesRevision(tx) === revision
+              ? writePlaylistLinks(tx, Date.now(), found)
+              : linkPlaylistEntries(tx, Date.now());
+          markPlaylistsLinked(tx);
+          return changed;
+        }),
       );
     }),
 
-    playlistEntriesRevision: attempt("read the playlists' revision", (db) =>
-      selectPlaylistEntriesRevision(db),
+    playlistLinkRevisions: attempt("read the playlists' revision", (db) =>
+      selectPlaylistLinkRevisions(db),
     ),
 
     warmCreditSplits: Effect.suspend(() =>
@@ -2445,8 +2459,15 @@ const make = Effect.gen(function* () {
       ),
     keepDjMoodFeatures: (writes) =>
       writeAttempt("save DJ mood features", () => keepDjMoodFeatures(db, writes)),
+    // One statement, its rows read as features in slices: thousands of candidates held JS
+    // for seconds in a statement per 500 ids, each one a replay pass (#1532).
     djMoodFeatures: (videoIds) =>
-      attempt("read DJ mood features", (db) => selectDjMoodFeatures(db, videoIds)),
+      attemptStepped(
+        "read DJ mood features",
+        LIBRARY_READ_REPLAY,
+        (db) => djMoodFeatureRows(db, videoIds),
+        djMoodFeaturesSteps,
+      ),
     pendingDjLibraryMoodSongs: (afterTrackId, now) =>
       attempt("read pending DJ Library mood songs", (db) =>
         pendingDjLibraryMoodSongs(db, afterTrackId, now),
@@ -2454,7 +2475,12 @@ const make = Effect.gen(function* () {
     keepDjLibraryMoodFeatures: (writes) =>
       writeAttempt("save DJ Library mood features", () => keepDjLibraryMoodFeatures(db, writes)),
     djLibraryMoodFeatures: () =>
-      attempt("read DJ Library mood features", (db) => selectDjLibraryMoodFeatures(db)),
+      attemptStepped(
+        "read DJ Library mood features",
+        LIBRARY_READ_REPLAY,
+        djLibraryMoodFeatureRows,
+        djMoodFeaturesSteps,
+      ),
     songGenres: (ids, includeStreamedGenres = true) =>
       attempt("read the songs' genres", (db) => songGenres(db, ids, includeStreamedGenres)),
 

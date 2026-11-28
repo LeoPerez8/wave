@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { CatalogPageSong } from "@wave/core";
+import { djMoodFeaturesSteps, finishSteps, type CatalogPageSong } from "@wave/core";
 import { eq } from "drizzle-orm";
 
 import { addCandidates } from "./candidateCatalog.ts";
@@ -9,12 +9,14 @@ import {
   DJ_MOOD_MAX_FAILURES,
   DJ_MOOD_MISS_TTL_MS,
   DJ_MOOD_RETRY_MS,
+  djMoodFeatureRows,
   keepDjMoodFeatures,
   pendingDjMoodSongs,
   selectDjMoodFeatures,
 } from "./djMoodFeatures.ts";
+import { readConnections, replayRead } from "./offThreadReads.ts";
 import { candidateSongs } from "./schema.ts";
-import { openTestDatabase } from "./testDatabase.ts";
+import { asyncReadClient, openTestDatabase } from "./testDatabase.ts";
 
 const song = (videoId: string): CatalogPageSong => ({
   videoId,
@@ -177,4 +179,40 @@ test("a stored song that cannot be read is reported with the page cursor so it c
   );
   keepDjMoodFeatures(db, [{ videoId: "b", isrc: null, features: null, checkedAt: 20 }]);
   assert.deepEqual(pendingDjMoodSongs(db, "", 20).unreadable, []);
+});
+
+test("3,700 videos' features read in one statement, off the thread as on it (#1532)", async () => {
+  const db = await openTestDatabase();
+  const ids = Array.from({ length: 3_700 }, (_, at) => `v${String(at).padStart(5, "0")}`);
+  addCandidates(db, { songs: ids.map(song), seed: "Artist" }, 10);
+  keepDjMoodFeatures(
+    db,
+    ids.map((videoId, at) => ({
+      videoId,
+      isrc: null,
+      features:
+        at % 5 === 0
+          ? null
+          : { energy: (at % 100) / 100, valence: 0.5, acousticness: 0.3, mode: 1 },
+      checkedAt: 20,
+    })),
+  );
+  const asked = [...ids, "not kept"];
+  const reads = readConnections(async () => asyncReadClient(db));
+  const replayed = await replayRead(
+    reads,
+    (d) => djMoodFeatureRows(d, asked),
+    () => 0,
+  );
+  assert.equal(replayed.statements, 1);
+  const features = finishSteps(djMoodFeaturesSteps(replayed.value));
+  assert.deepEqual(features, selectDjMoodFeatures(db, asked));
+  assert.equal(features.size, 2_960);
+  assert.deepEqual(features.get("v00001"), {
+    energy: 0.01,
+    valence: 0.5,
+    acousticness: 0.3,
+    mode: 1,
+  });
+  assert.equal(features.has("v00000"), false);
 });

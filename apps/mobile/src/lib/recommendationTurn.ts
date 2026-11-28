@@ -27,7 +27,7 @@ export const createRecommendationWork = (host: {
   };
   /**
    * [name] got its turn (the block log's `turnTaken`, #1447): the pages it reads next run
-   * outside any slice, so without the mark a long one logs as no background work.
+   * outside any slice, so without the mark a long one isn't put down to its work.
    */
   readonly turnTaken?: (name: string) => void;
 }) => {

@@ -98,12 +98,6 @@ const FOLDERS: LibraryChange = { kind: "folders" };
 const ENTRIES_LINKED: LibraryChange = { kind: "playlists" };
 
 /**
- * Playlists' entries' revision (`playlistEntriesRevision`) when a scan last
- * linked them; null until the first scan of this process links.
- */
-let linkedAtRevision: number | null = null;
-
-/**
  * The owner changed the library outside a scan (deleted songs, edited tags,
  * the Wave account sent changes): lists over tracks re-read straight away.
  * [trackIds]: the tracks changed, when known. A download landing is
@@ -415,10 +409,12 @@ const scanFolders = (roots: readonly string[]) =>
     );
 
     const finished = completed !== undefined && !completed.cancelled;
+    const revisions = yield* store.playlistLinkRevisions;
     const end = scanEnd({
       saved,
       gone: finished ? missing.length : 0,
-      entriesChanged: (yield* store.playlistEntriesRevision) !== linkedAtRevision,
+      entriesRevision: revisions.entries,
+      linkedRevision: revisions.linked,
       firstScan,
     });
     // Playlists' YT Music entries become the songs this scan (or one cut short) brought in,
@@ -427,7 +423,6 @@ const scanFolders = (roots: readonly string[]) =>
     if (end.linkEntries) {
       yield* startupTurnEffect;
       linked = yield* store.linkPlaylistEntries;
-      linkedAtRevision = yield* store.playlistEntriesRevision;
     }
     if (completed === undefined || completed.cancelled) {
       announceSaved();

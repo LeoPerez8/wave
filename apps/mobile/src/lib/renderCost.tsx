@@ -13,6 +13,9 @@
  *   commit under [id] (`commit:<id>` with the render counts) and marks every
  *   commit over 16 ms as `render.commit`, with its phase, actual and base
  *   durations and the route shown. Elsewhere it renders its children alone.
+ *
+ * Perf builds also mark each `useRenderCost` span as `render.span` ("<name> <ms>"), so a run
+ * reads a render's span even when no long task named it (#1533).
  */
 import {
   Profiler,
@@ -37,7 +40,29 @@ import { timingRoute } from "./timing";
  */
 export function useRenderCost(name: string): void {
   "use no memo";
-  useCommitSpans(name, null);
+  useCommitSpans(name, null, null);
+}
+
+/**
+ * `useRenderCost` for chrome that renders in the same commit as larger work after it in the tree
+ * (#1533): [name]'s span ends when its own subtree has rendered, so what React renders after it
+ * (the closed Now Playing following a new song, a theme change's screens) and the commit aren't
+ * put down to it. Place the returned element last in what the component returns.
+ */
+export function useOwnRenderCost(name: string): ReactElement {
+  "use no memo";
+  const endedAt = useRef<number | null>(null);
+  useCommitSpans(name, null, endedAt);
+  // A new element each render, so React renders it after the rest of the subtree.
+  return <RenderEnd atRef={endedAt} />;
+}
+
+/** `useOwnRenderCost`'s last child: its render says the subtree before it has rendered. */
+function RenderEnd({ atRef }: { atRef: RefObject<number | null> }): null {
+  "use no memo";
+  // oxlint-disable-next-line react/purity, react/refs -- the subtree's end is what this measures.
+  atRef.current = performance.now();
+  return null;
 }
 
 /**
@@ -46,7 +71,11 @@ export function useRenderCost(name: string): void {
  * that span too (#1490): React re-runs every layout effect under it, which can hold the thread
  * longer than a render.
  */
-function useCommitSpans(name: string, showStartRef: RefObject<number | null> | null): void {
+function useCommitSpans(
+  name: string,
+  showStartRef: RefObject<number | null> | null,
+  endRef: RefObject<number | null> | null,
+): void {
   "use no memo";
   const startedAt = useRef<number | null>(null);
   const committedAt = useRef(Number.NEGATIVE_INFINITY);
@@ -57,11 +86,17 @@ function useCommitSpans(name: string, showStartRef: RefObject<number | null> | n
     const from = startedAt.current;
     const previous = committedAt.current;
     const shownFrom = showStartRef?.current ?? null;
+    // An own span ends where its subtree's render did (`useOwnRenderCost`); else at this commit.
+    const endedAt = endRef?.current ?? null;
     startedAt.current = null;
     committedAt.current = now;
     if (showStartRef !== null) showStartRef.current = null;
-    if (from !== null && from >= previous) renderRan(name, from, now - from);
-    else if (from === null && shownFrom !== null) shownAgain(name, shownFrom, now - shownFrom);
+    if (endRef !== null) endRef.current = null;
+    if (from !== null && from >= previous) {
+      const to = endedAt !== null && endedAt >= from ? endedAt : now;
+      renderRan(name, from, to - from);
+      if (PERF_ENABLED) perfMark("render.span", `${name} ${round(to - from)}`);
+    } else if (from === null && shownFrom !== null) shownAgain(name, shownFrom, now - shownFrom);
   });
 }
 
@@ -113,7 +148,7 @@ export function PerfProfiler({ id, children }: { id: string; children: ReactNode
 export function RenderCost({ name, children }: { name: string; children: ReactNode }) {
   "use no memo";
   const showStartRef = useRef<number | null>(null);
-  useCommitSpans(name, showStartRef);
+  useCommitSpans(name, showStartRef, null);
   return (
     <PerfProfiler id={name}>
       <ShowStart atRef={showStartRef} />

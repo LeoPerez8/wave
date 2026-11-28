@@ -326,6 +326,7 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
       ref={list}
       scrollEnabled={scrollable}
       className="flex-1"
+      stagedRows
       data={items}
       keyExtractor={itemKey}
       song={source}
