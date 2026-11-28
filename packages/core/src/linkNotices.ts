@@ -29,15 +29,15 @@ export const cantOpenNotice = (language: AppLanguage = "en"): ImportNotice => {
 };
 
 /**
- * What a smart link that opens nothing says, in [language]: offline, or its
- * page out of reach. A page that points to nothing Wave opens says
- * "Can't open this" (`cantOpenNotice`).
+ * What a smart link that opens nothing says, in [language]: offline, its page
+ * out of reach, or a page pointing to nothing Wave opens ("Can't open this").
  */
 export const smartLinkNotice = (
-  failure: "offline" | "unreachable",
+  failure: "offline" | "unreachable" | "cantOpen",
   language: AppLanguage = "en",
 ): ImportNotice => {
   const text = catalogueOf(language).imports;
+  if (failure === "cantOpen") return cantOpenNotice(language);
   return failure === "offline"
     ? { title: text.songOffline, message: text.linkOfflineMessage }
     : { title: text.songLinkDoesntOpen, message: text.smartLinkUnreachable };

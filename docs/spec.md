@@ -1305,6 +1305,7 @@ Every translation ticket follows it, so one English term always gets the same Po
 | About `<x>` left                                                                | Cerca de `<x>` restantes                                                        |
 | Song links (Settings › Accounts)                                                | Links de música                                                                 |
 | Open song links in Wave                                                         | Abrir links de música no Wave                                                   |
+| Release page (a smart link: one button per service)                             | Página de lançamento                                                            |
 | Open by default (Android's page)                                                | Abrir por padrão                                                                |
 
 ### Visual design

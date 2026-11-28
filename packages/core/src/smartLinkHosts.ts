@@ -39,7 +39,10 @@ const smartPage = (host: string, path: string): boolean =>
   SMART_LINK_HOSTS.some((entry) => {
     if (!onHost(entry, host)) return false;
     const prefix = entry.pathPrefix ?? "/";
-    return path.startsWith(prefix) && path.slice(prefix.length).replace(/\/+$/u, "") !== "";
+    if (!path.startsWith(prefix)) return false;
+    const rest = path.slice(prefix.length).replace(/\/+$/u, "");
+    // Under a prefix (HyperFollow's), a release is `<artist>/<release>`; elsewhere any path is.
+    return entry.pathPrefix === undefined ? rest !== "" : /^[^/]+\/[^/]+/u.test(rest);
   });
 
 /**

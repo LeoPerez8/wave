@@ -44,6 +44,7 @@ describe("a smart link shared to Wave", () => {
   test("other pages on those hosts, and look-alike hosts, say what Wave opens", () => {
     for (const url of [
       "https://distrokid.com/pricing",
+      "https://distrokid.com/hyperfollow/psylounge",
       "https://fanlink.tv/",
       "https://notlnk.to/radicaloptimism",
       "https://lnk.to.example.com/x",
@@ -121,6 +122,15 @@ describe("what a smart link's page points to", () => {
     assert.equal(smartLinkTarget(page(youtubePlaylist)), youtubePlaylist);
   });
 
+  test("a link inside JSON written as an HTML attribute (`&quot;`) is read whole", () => {
+    assert.deepEqual(
+      opened(
+        '<div data-links="{&quot;spotify&quot;:&quot;https:\\/\\/open.spotify.com\\/album\\/7rZmgT2kEqkCMR6VHcloJM&quot;}"></div>',
+      ),
+      { kind: "song", link: { service: "spotifyAlbum", albumId: "7rZmgT2kEqkCMR6VHcloJM" } },
+    );
+  });
+
   test("a page with nothing Wave opens (artists, bare hosts, other sites) points nowhere", () => {
     assert.equal(
       smartLinkTarget(
@@ -140,7 +150,12 @@ describe("what a smart link that opens nothing says", () => {
     });
     assert.deepEqual(smartLinkNotice("unreachable"), {
       title: "This link doesn't open",
-      message: "Couldn't reach its page. Check your connection and try again.",
+      message: "Couldn't reach the link's page. Check your connection and try again.",
+    });
+    assert.deepEqual(smartLinkNotice("cantOpen"), {
+      title: "Can't open this",
+      message:
+        "Wave opens songs from YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from Spotify links.",
     });
     assert.deepEqual(smartLinkNotice("offline", "pt-BR"), {
       title: "Você está offline",
@@ -148,7 +163,8 @@ describe("what a smart link that opens nothing says", () => {
     });
     assert.deepEqual(smartLinkNotice("unreachable", "pt-BR"), {
       title: "Este link não abre",
-      message: "Não foi possível acessar a página dele. Verifique sua conexão e tente novamente.",
+      message:
+        "Não foi possível acessar a página do link. Verifique sua conexão e tente novamente.",
     });
   });
 });
@@ -182,7 +198,7 @@ describe("the smart-link hosts Android hands Wave when tapped", () => {
   test("every link a tap brings at a release's path is a smart link Wave reads", () => {
     for (const entry of SMART_LINK_HOSTS) {
       const host = entry.host.replace("*.", "artist.");
-      const url = `https://${host}${entry.pathPrefix ?? ""}/someone/release`;
+      const url = `https://${host}${entry.pathPrefix ?? "/"}someone/release`;
       assert.equal(sharedTextImport(url, on).kind, "smart", url);
     }
   });

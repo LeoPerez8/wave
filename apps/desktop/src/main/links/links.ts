@@ -478,13 +478,7 @@ export const createDesktopLinks = (options: LinksOptions) => {
           AbortSignal.timeout(20_000),
         );
         if (!("link" in ending))
-          return {
-            kind: "notice",
-            notice:
-              ending.failure === "unreachable"
-                ? smartLinkNotice("unreachable", language)
-                : cantOpenNotice(language),
-          };
+          return { kind: "notice", notice: smartLinkNotice(ending.failure, language) };
         shared = sharedTextImport(ending.link, { ytMusic: true });
         if (shared.kind === "notice" || shared.kind === "smart")
           return { kind: "notice", notice: cantOpenNotice(language) };

@@ -58,7 +58,7 @@ export const importsEn = {
   /** Opening a smart link (a release's page with one button per service). */
   openingLink: "Opening link…",
   linkOfflineMessage: "Connect to the internet to open this link.",
-  smartLinkUnreachable: "Couldn't reach its page. Check your connection and try again.",
+  smartLinkUnreachable: "Couldn't reach the link's page. Check your connection and try again.",
   /** Opening a Spotify album link. */
   findingAlbum: "Finding album…",
   albumOfflineMessage: "Connect to the internet to open this album.",

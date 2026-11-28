@@ -2,9 +2,9 @@
  * Opening a smart link shared to Wave (docs/spec.md, "Opening a song link" › Smart links): its
  * page is read once, with "Opening link…" meanwhile, and the link it points to opens as if it had
  * been shared (`openSharedText`). Core picks that link (`smartLinkTarget`) and says what a smart
- * link that opens nothing shows (`smartLinkNotice`, `cantOpenNotice`).
+ * link that opens nothing shows (`smartLinkNotice`).
  */
-import { cantOpenNotice, smartLinkNotice } from "@wave/core";
+import { smartLinkNotice } from "@wave/core";
 import { followShortLink } from "@wave/client/serviceTransport";
 import { smartLinkEnding } from "@wave/client/smartLinkEnding";
 
@@ -45,6 +45,5 @@ export const openSmartLink = async (url: string, open: (text: string) => void): 
   }
   if (opening !== undefined) dismissToast(opening);
   if ("link" in ending) open(ending.link);
-  else if (ending.failure === "unreachable") say(smartLinkNotice("unreachable", language));
-  else say(cantOpenNotice(language));
+  else say(smartLinkNotice(ending.failure, language));
 };

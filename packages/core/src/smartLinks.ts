@@ -8,8 +8,9 @@ import { recognisePlaylistLink } from "./playlistLinks.ts";
 import { recogniseSongLink } from "./songLinkOpening.ts";
 
 /**
- * The page's text with its links written plainly: JSON's `\/` and `/`,
- * and HTML's character references for `/`, `=`, `:` and `&`.
+ * The page's text with its links written plainly: JSON's `\/` and `\u002F`,
+ * and HTML's character references for `/`, `=`, `:`, `"` (JSON in an
+ * attribute, which would otherwise run into the link) and `&`.
  */
 const plain = (body: string): string =>
   body
@@ -17,6 +18,7 @@ const plain = (body: string): string =>
     .replace(/&#(?:47|x2f);/giu, "/")
     .replace(/&#(?:61|x3d);/giu, "=")
     .replace(/&#(?:58|x3a);/giu, ":")
+    .replace(/&(?:quot|#34|#x22);/giu, '"')
     .replace(/&(?:amp|#38|#x26);/giu, "&");
 
 /** A link to a service's page, up to a quote, a space, a tag or an escape. */

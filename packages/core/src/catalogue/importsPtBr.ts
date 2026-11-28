@@ -62,7 +62,7 @@ export const importsPtBr: typeof importsEn = {
   openingLink: "Abrindo link…",
   linkOfflineMessage: "Conecte-se à internet para abrir este link.",
   smartLinkUnreachable:
-    "Não foi possível acessar a página dele. Verifique sua conexão e tente novamente.",
+    "Não foi possível acessar a página do link. Verifique sua conexão e tente novamente.",
   findingAlbum: "Procurando álbum…",
   albumOfflineMessage: "Conecte-se à internet para abrir este álbum.",
   albumNotFound: "Não achei esse álbum no YouTube Music",
