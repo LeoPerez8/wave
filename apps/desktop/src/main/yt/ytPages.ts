@@ -170,7 +170,8 @@ const artistOf = (value: unknown): YtArtistCandidate | undefined => {
   };
 };
 
-const albums = (value: unknown) => list(value).flatMap((item) => albumOf(item) ?? []);
+/** The albums in a Kotlin `searchAlbums` answer, the malformed ones left out. */
+export const albums = (value: unknown) => list(value).flatMap((item) => albumOf(item) ?? []);
 const artists = (value: unknown) => list(value).flatMap((item) => artistOf(item) ?? []);
 
 export const createYtPages = (deps: YtPagesDeps): YtPagesShape => {

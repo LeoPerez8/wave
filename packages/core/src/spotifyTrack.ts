@@ -10,7 +10,7 @@ import type { ServiceTrack, TrackRead } from "./serviceTrack.ts";
 import { embedPageProps, embedRequest, type SpotifyTransport } from "./spotifyPlaylist.ts";
 
 /** The largest image in a list of `{ url, maxWidth }`, which Spotify doesn't order by size. */
-const largestImage = (images: unknown): string | null => {
+export const largestImage = (images: unknown): string | null => {
   let best: { readonly url: string; readonly width: number } | null = null;
   for (const image of array(images)) {
     const url = text(at(image, "url"));

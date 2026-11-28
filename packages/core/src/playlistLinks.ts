@@ -180,7 +180,8 @@ export const spotifyShortLinkTarget = (url: string, body: string): PlaylistLinkC
  * following it landed ([url]) when that's Spotify's own page, otherwise the
  * first Spotify page in what it answered ([body]; Branch's page for apps
  * names it in its script). A track plays, a playlist opens the import card,
- * and anything else (a profile, an album, no page) is null.
+ * an album opens its YT Music page, and anything else (a profile, an
+ * artist, no page) is null.
  */
 export const spotifyShortLinkLanding = (
   url: string,
@@ -191,11 +192,16 @@ export const spotifyShortLinkLanding = (
       readonly kind: "import";
       readonly link: Extract<PlaylistLink, { readonly service: "spotify" }>;
     }
+  | {
+      readonly kind: "album";
+      readonly link: Extract<SongLink, { readonly service: "spotifyAlbum" }>;
+    }
   | null => {
   const page = spotifyAddress(url)?.at === "page" ? url : SPOTIFY_PAGE.exec(body)?.[0];
   if (page === undefined) return null;
   const song = recogniseSongLink(page);
   if (song?.service === "spotify") return { kind: "song", link: song };
+  if (song?.service === "spotifyAlbum") return { kind: "album", link: song };
   const playlist = recognisePlaylistLink(page);
   if (!playlist.ok || playlist.link.service !== "spotify") return null;
   return { kind: "import", link: playlist.link };

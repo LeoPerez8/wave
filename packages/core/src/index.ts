@@ -1913,6 +1913,14 @@ export type {
 export { readSpotifyPlaylist, spotifyEmbed, spotifyPlaylistPage } from "./spotifyPlaylist.ts";
 export type { ServiceTrack, TrackRead, TrackReadFailure } from "./serviceTrack.ts";
 export { readSpotifyTrack } from "./spotifyTrack.ts";
+export {
+  albumLinkOpening,
+  readSpotifyAlbum,
+  type AlbumLinkOpening,
+  type AlbumRead,
+  type FoundYtAlbum,
+  type ServiceAlbum,
+} from "./spotifyAlbum.ts";
 export { readDeezerTrack, type DeezerAnswer, type DeezerTransport } from "./deezerTrack.ts";
 export type {
   SpotifyAnswer,

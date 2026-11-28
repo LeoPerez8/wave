@@ -21,7 +21,10 @@ import type { ServiceTrack, TrackReadFailure } from "./serviceTrack.ts";
 import type { YtSongSearch } from "./spotifyImport.ts";
 import { joinArtists, type YtSong } from "./ytMusic.ts";
 
-/** A song a link names, as Wave reads it from the link alone. */
+/**
+ * A song a link names, as Wave reads it from the link alone, or a Spotify
+ * album (`spotifyAlbum`), which opens on its YT Music page instead of playing.
+ */
 export type SongLink =
   | {
       readonly service: "ytMusic";
@@ -39,6 +42,11 @@ export type SongLink =
    */
   | { readonly service: "spotifyShort"; readonly url: string }
   | {
+      readonly service: "spotifyAlbum";
+      /** Spotify's album id: all that is sent to Spotify. */
+      readonly albumId: string;
+    }
+  | {
       readonly service: "deezer";
       /** Deezer's track id (digits): all that is sent to Deezer. */
       readonly trackId: string;
@@ -53,13 +61,13 @@ const YT_MUSIC_HOST = "music.youtube.com";
 /** What a YouTube video id is: 11 letters, digits, `-` and `_`. */
 const VIDEO_ID = /^[\w-]{11}$/u;
 
-/** The song a Spotify link names: a track's page or URI, or a short link to follow. */
+/** The song a Spotify link names: a track's or album's page or URI, or a short link to follow. */
 const spotifySong = (link: string): SongLink | null => {
   const spotify = spotifyAddress(link);
   if (spotify?.at === "short") return { service: "spotifyShort", url: spotify.url };
-  return spotify?.at === "page" && spotify.kind === "track" && isSpotifyId(spotify.id)
-    ? { service: "spotify", trackId: spotify.id }
-    : null;
+  if (spotify?.at !== "page" || !isSpotifyId(spotify.id)) return null;
+  if (spotify.kind === "track") return { service: "spotify", trackId: spotify.id };
+  return spotify.kind === "album" ? { service: "spotifyAlbum", albumId: spotify.id } : null;
 };
 
 /**
@@ -91,7 +99,8 @@ const deezerSong = (link: string): SongLink | null => {
  * scheme. A YouTube Music song link is `music.youtube.com/watch?v=<id>`, its
  * other parameters ignored, a playlist's `list=` too. A Spotify one is a
  * track's page (`open.spotify.com/track/<id>`, after a locale or `/embed`,
- * parameters ignored), its URI (`spotify:track:<id>`), or a short link
+ * parameters ignored), its URI (`spotify:track:<id>`), an album's page or URI
+ * (`open.spotify.com/album/<id>`, `spotify:album:<id>`), or a short link
  * (`spotify.link/<code>`), which is followed before Wave knows it's a song.
  * A Deezer one is a track's page (`deezer.com/track/<id>`, after a locale,
  * parameters ignored, the id digits) or a short link (`link.deezer.com/s/<code>`,
@@ -234,15 +243,23 @@ export type TrackService = "spotify" | "deezer";
  * `failed`), a video YouTube Music can't play (`unplayable`), YT Music turned
  * off, a song that isn't found, the track not read from its service
  * (`unread`), or a short link that names no song or playlist (`cantOpen`).
+ * A Spotify album link has its own: offline, not on YouTube Music, and its
+ * page not read (`unread` with `album`).
  */
 export type SongLinkFailure =
   | "offline"
+  | "albumOffline"
   | "failed"
   | "unplayable"
   | "disabled"
   | "cantOpen"
   | { readonly notFound: Pick<LinkedSong, "title" | "artists"> }
-  | { readonly unread: TrackReadFailure; readonly service: TrackService };
+  | { readonly albumNotFound: { readonly title: string; readonly artists: readonly string[] } }
+  | {
+      readonly unread: TrackReadFailure;
+      readonly service: TrackService;
+      readonly album?: true;
+    };
 
 /** A song another service's link named, as YouTube Music's search would play it, or why nothing plays. */
 export type TrackLinkPlay<S, L> =
@@ -301,9 +318,14 @@ export const songLinkNotice = (
         title: text.songNotFound,
         message: `${failure.notFound.title} · ${joinArtists(failure.notFound.artists)}`,
       };
+    if ("albumNotFound" in failure)
+      return {
+        title: text.albumNotFound,
+        message: `${failure.albumNotFound.title} · ${joinArtists(failure.albumNotFound.artists)}`,
+      };
     const service = TRACK_SERVICE_NAMES[failure.service];
     const unread = {
-      missing: text.songUnreadMissing,
+      missing: failure.album === true ? text.albumUnreadMissing : text.songUnreadMissing,
       unreachable: text.songUnreadUnreachable,
       failed: text.songUnreadFailed,
     }[failure.unread];
@@ -312,6 +334,8 @@ export const songLinkNotice = (
   switch (failure) {
     case "offline":
       return { title: text.songOffline, message: text.songOfflineMessage };
+    case "albumOffline":
+      return { title: text.songOffline, message: text.albumOfflineMessage };
     case "disabled":
       return ytMusicOffNotice(language);
     case "unplayable":

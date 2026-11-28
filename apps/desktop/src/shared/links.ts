@@ -51,6 +51,8 @@ export const linkBridge = (invoke: Invoke) => ({
 export type OpenLinkResult =
   | { readonly kind: "ignored" }
   | { readonly kind: "playing" }
+  /** A Spotify album link's album, on its YT Music page (`MPREb_…`). */
+  | { readonly kind: "album"; readonly browseId: string }
   | { readonly kind: "notice"; readonly notice: ImportNotice }
   | { readonly kind: "notFound"; readonly song: SongLinkNotFound }
   | { readonly kind: "playlist"; readonly token: string; readonly view: LinkImportView };

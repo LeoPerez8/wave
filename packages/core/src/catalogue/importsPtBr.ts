@@ -48,7 +48,7 @@ export const importsPtBr: typeof importsEn = {
   cantImport: "Não é possível importar isto",
   cantOpen: "Não é possível abrir isto",
   sharedLinks:
-    "O Wave abre músicas de links do YouTube Music, do Spotify e do Deezer, e playlists de links do YouTube Music e do Spotify.",
+    "O Wave abre músicas de links do YouTube Music, do Spotify e do Deezer, playlists de links do YouTube Music e do Spotify, e álbuns de links do Spotify.",
   findingSong: "Procurando música…",
   songOffline: "Você está offline",
   songOfflineMessage: "Conecte-se à internet para abrir esta música.",
@@ -59,6 +59,10 @@ export const importsPtBr: typeof importsEn = {
   songUnreadUnreachable: (service: string): string =>
     `Não foi possível acessar o ${service}. Verifique sua conexão e tente novamente.`,
   songUnreadFailed: (service: string): string => `O ${service} não respondeu como esperado.`,
+  findingAlbum: "Procurando álbum…",
+  albumOfflineMessage: "Conecte-se à internet para abrir este álbum.",
+  albumNotFound: "Não achei esse álbum no YouTube Music",
+  albumUnreadMissing: (service: string): string => `O ${service} não tem o álbum deste link.`,
   ytMusicNoAnswerMessage: "O YouTube Music não respondeu. Tente novamente mais tarde.",
   offline: "Você está offline. Tente novamente quando estiver online.",
   playlistFailed:

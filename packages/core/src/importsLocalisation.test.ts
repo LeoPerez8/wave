@@ -90,7 +90,7 @@ describe("importing from a link, in Portuguese", () => {
       kind: "notice",
       title: "Não é possível abrir isto",
       message:
-        "O Wave abre músicas de links do YouTube Music, do Spotify e do Deezer, e playlists de links do YouTube Music e do Spotify.",
+        "O Wave abre músicas de links do YouTube Music, do Spotify e do Deezer, playlists de links do YouTube Music e do Spotify, e álbuns de links do Spotify.",
     });
   });
 });

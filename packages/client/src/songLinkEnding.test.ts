@@ -22,6 +22,10 @@ test("a linked video already in the Library plays its file without a network loo
       follow: async () => {
         throw new Error("Not a short link");
       },
+      spotifyAlbum: async () => {
+        throw new Error("Not an album");
+      },
+      searchAlbums: async () => null,
     },
     new AbortController().signal,
   );
@@ -48,10 +52,89 @@ test("a Spotify short playlist link opens its import instead of looking for a so
         url: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
         body: "",
       }),
+      spotifyAlbum: async () => {
+        throw new Error("Not an album");
+      },
+      searchAlbums: async () => null,
     },
     new AbortController().signal,
   );
   assert.deepEqual(ending, {
     playlist: { service: "spotify", playlistId: "37i9dQZF1DXcBWIGoYBM5M" },
+  });
+});
+
+const albumPorts = (overrides: Partial<Parameters<typeof songLinkEnding>[1]> = {}) => ({
+  stored: async () => null,
+  find: async () => () => null,
+  radio: async () => null,
+  search: async () => null,
+  spotify: async () => {
+    throw new Error("An album must not read a track");
+  },
+  deezer: async () => {
+    throw new Error("Not Deezer");
+  },
+  follow: async () => {
+    throw new Error("Not a short link");
+  },
+  spotifyAlbum: async () => ({
+    ok: true as const,
+    album: { title: "excapecore.", artists: ["excape."], artworkUrl: null },
+  }),
+  searchAlbums: async () => [
+    { title: "excapecore.", artists: ["excape."], browseId: "MPREb_excapecore" },
+  ],
+  ...overrides,
+});
+
+test("a Spotify album link opens the same album on YT Music", async () => {
+  const asked: string[] = [];
+  const ending = await songLinkEnding(
+    { service: "spotifyAlbum", albumId: "7rZmgT2kEqkCMR6VHcloJM" },
+    albumPorts({
+      spotifyAlbum: async (id) => {
+        asked.push(id);
+        return {
+          ok: true,
+          album: { title: "excapecore.", artists: ["excape."], artworkUrl: null },
+        };
+      },
+    }),
+    new AbortController().signal,
+  );
+  assert.deepEqual(asked, ["7rZmgT2kEqkCMR6VHcloJM"]);
+  assert.deepEqual(ending, {
+    album: "MPREb_excapecore",
+    read: { title: "excapecore.", artists: ["excape."], artworkUrl: null },
+  });
+});
+
+test("a Spotify short link that lands on an album opens it", async () => {
+  const ending = await songLinkEnding(
+    { service: "spotifyShort", url: "https://spotify.link/abc" },
+    albumPorts({
+      follow: async () => ({
+        url: "https://open.spotify.com/album/7rZmgT2kEqkCMR6VHcloJM",
+        body: "",
+      }),
+    }),
+    new AbortController().signal,
+  );
+  assert.deepEqual(ending, {
+    album: "MPREb_excapecore",
+    read: { title: "excapecore.", artists: ["excape."], artworkUrl: null },
+  });
+});
+
+test("an album Spotify doesn't have says so in album words", async () => {
+  const ending = await songLinkEnding(
+    { service: "spotifyAlbum", albumId: "7rZmgT2kEqkCMR6VHcloJM" },
+    albumPorts({ spotifyAlbum: async () => ({ ok: false, reason: "missing" }) }),
+    new AbortController().signal,
+  );
+  assert.deepEqual(ending, {
+    play: "failed",
+    failure: { unread: "missing", service: "spotify", album: true },
   });
 });

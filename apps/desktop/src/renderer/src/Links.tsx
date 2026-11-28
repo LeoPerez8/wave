@@ -1,5 +1,5 @@
 import { sharedTextImport, confirmImportReplace } from "@wave/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { OpenLinkResult, CopyLinkResult } from "../../shared/links.ts";
 import { ConfirmDialog, Toast, trapTab } from "./SongActions.tsx";
 import { language, text } from "./text.ts";
@@ -15,34 +15,49 @@ const editing = (target: EventTarget | null) =>
 export function Links({
   onPlaying,
   onPlaylist,
+  onAlbum,
   onSearch,
   onChanged,
 }: {
   readonly onPlaying: () => void;
   readonly onPlaylist: (id: number) => void;
+  /** Opens a YT Music album's page (`MPREb_…`): where a Spotify album link goes. */
+  readonly onAlbum: (browseId: string) => void;
   readonly onSearch: (query: string) => void;
   readonly onChanged: () => void;
 }) {
-  const [opened, setOpened] = useState<Exclude<OpenLinkResult, { kind: "ignored" | "playing" }>>();
+  const [opened, setOpened] =
+    useState<Exclude<OpenLinkResult, { kind: "ignored" | "playing" | "album" }>>();
   const [toast, setToast] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [replace, setReplace] = useState<{ token: string; name: string }>();
+  // The latest opener, read when a link answers: an inline handler mustn't re-run the listeners' effect.
+  const albumRef = useRef(onAlbum);
+  useEffect(() => {
+    albumRef.current = onAlbum;
+  });
   const close = useCallback(() => setOpened(undefined), []);
   const hideToast = useCallback(() => setToast(undefined), []);
   useEffect(() => {
     let active = true;
     let request = 0;
     const open = (value: string) => {
-      if (sharedTextImport(value, { ytMusic: true }).kind === "notice") return false;
+      const shared = sharedTextImport(value, { ytMusic: true });
+      if (shared.kind === "notice") return false;
       const serial = ++request;
       setOpened(undefined);
       setBusy(true);
-      setToast(text.imports.findingSong);
+      setToast(
+        shared.kind === "song" && shared.link.service === "spotifyAlbum"
+          ? text.imports.findingAlbum
+          : text.imports.findingSong,
+      );
       void window.wave.links
         .open(value)
         .then((result) => {
           if (!active || serial !== request) return;
           if (result.kind === "playing") onPlaying();
+          else if (result.kind === "album") albumRef.current(result.browseId);
           else if (result.kind !== "ignored") setOpened(result);
         })
         .catch(() => {
