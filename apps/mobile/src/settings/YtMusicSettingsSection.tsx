@@ -1,4 +1,5 @@
 import { releaseBackgroundLine, ytAccountNotes, ytAccountView, type YtAccount } from "@wave/core";
+import { useState } from "react";
 import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -7,6 +8,8 @@ import { Hairline } from "@/catalog/Hairline";
 import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { TextButton } from "@/components/TextButton";
 import { backgroundReleaseStatus } from "@/library/releaseDates";
+import { useYtExportRunLine } from "@/library/ytExportRun";
+import { openYtExport } from "@/library/YtLibraryPickerHost";
 import { useLocalisation } from "@/localisation/localisation";
 
 import { AccountPhoto } from "./AccountPhoto";
@@ -14,7 +17,8 @@ import { ChoiceSection } from "./ChoiceRow";
 import { searchOnlineChoice } from "./searchOnline";
 import { SignInRows } from "./SignInRows";
 import { useYtAccount } from "./ytAccount";
-import { setYtMusicEnabled, useYtMusicEnabled } from "./ytMusic";
+import { useYtMusicEnabled } from "./ytMusic";
+import { switchYtMusic } from "./ytMusicSwitch";
 
 /** The signed-in account: its picture, name and email, and Sign Out. */
 function AccountRow({ account, onSignOut }: { account: YtAccount; onSignOut: () => void }) {
@@ -50,6 +54,34 @@ function AccountRow({ account, onSignOut }: { account: YtAccount; onSignOut: () 
   );
 }
 
+/**
+ * Export to YT Music, as Library › Playlists › Import Playlists offers it:
+ * the picker, then the export's progress while it runs. Pressed again
+ * during a run, its export goes after it.
+ */
+function ExportRows() {
+  const { strings } = useLocalisation();
+  const line = useYtExportRunLine();
+  return (
+    <View className="mt-6">
+      <Hairline />
+      {line !== null && (
+        <View className="justify-center" style={{ minHeight: grid.row }}>
+          <Text accessibilityLiveRegion="polite" className="font-sans text-body text-foreground">
+            {line}
+          </Text>
+        </View>
+      )}
+      <View className="items-start justify-center" style={{ minHeight: grid.row }}>
+        <TextButton label={strings.imports.exportToYtMusic} onPress={() => void openYtExport()} />
+      </View>
+      <Text className="mt-2 font-sans text-footnote text-secondary">
+        {strings.imports.exportSignInMessage}
+      </Text>
+    </View>
+  );
+}
+
 /** Settings › Accounts › YT Music: whether Search also looks on YouTube Music, and the account it uses. */
 export function YtMusicSettingsSection() {
   const { strings } = useLocalisation();
@@ -58,6 +90,12 @@ export function YtMusicSettingsSection() {
   const releaseLine = releaseBackgroundLine(backgroundReleaseStatus.useValue());
   const account = useYtAccount();
   const view = ytAccountView(account.state, enabled);
+  /** Turning it off waits for the warning: the switch shows off meanwhile, and Cancel puts it back. */
+  const [askingOff, setAskingOff] = useState(false);
+  const onSwitch = (on: boolean) => {
+    setAskingOff(!on);
+    void switchYtMusic(on).finally(() => setAskingOff(false));
+  };
 
   return (
     <View>
@@ -65,8 +103,8 @@ export function YtMusicSettingsSection() {
       <Hairline />
       <SettingsSwitch
         label={strings.settings.useYTMusic}
-        value={enabled}
-        onValueChange={setYtMusicEnabled}
+        value={enabled && !askingOff}
+        onValueChange={onSwitch}
       />
       <Hairline />
       <Text className="mt-2 font-sans text-footnote text-secondary">
@@ -92,7 +130,10 @@ export function YtMusicSettingsSection() {
         <View className="mt-6">
           <Hairline />
           {view.kind === "account" ? (
-            <AccountRow account={view.account} onSignOut={account.signOut} />
+            <>
+              <AccountRow account={view.account} onSignOut={account.signOut} />
+              {enabled && <ExportRows />}
+            </>
           ) : (
             <SignInRows
               action={view.action}

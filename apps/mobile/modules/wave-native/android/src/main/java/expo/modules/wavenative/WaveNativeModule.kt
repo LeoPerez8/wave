@@ -68,6 +68,7 @@ import expo.modules.wavenative.scan.ScanSlot
 import expo.modules.wavenative.scan.ScannedTrack
 import expo.modules.wavenative.scan.artworkToMap
 import expo.modules.wavenative.scan.trackToMap
+import expo.modules.wavenative.share.ClipHint
 import expo.modules.wavenative.share.ShareShortcut
 import expo.modules.wavenative.share.SharedTextInbox
 import expo.modules.wavenative.tags.AlbumPlace
@@ -382,6 +383,14 @@ class WaveNativeModule : Module() {
     AsyncFunction("readClipboardText") {
       val clipboard = context.getSystemService(ClipboardManager::class.java)
       clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
+    }.runOnQueue(Queues.MAIN)
+
+    /**
+     * What the clip's description says (Core's `ClipHint`), without reading its text, so Android shows
+     * no paste notice; null when there's no clip or Wave isn't the focused app (Android 10+ hides it).
+     */
+    AsyncFunction("readClipHint") {
+      ClipHint.of(context.getSystemService(ClipboardManager::class.java)?.primaryClipDescription)
     }.runOnQueue(Queues.MAIN)
 
     /** Puts [text] on the clipboard, labelled [label] (Copy Link on the song share sheet). */

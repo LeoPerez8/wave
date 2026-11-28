@@ -35,6 +35,7 @@ import {
   desktopSongShareMenu,
   spotifyRecordingLink,
   joinArtists,
+  opensOnDesktop,
   type SongLinksState,
   type SpotifySong,
   type SpotifyTrackState,
@@ -463,6 +464,9 @@ export const createDesktopLinks = (options: LinksOptions) => {
     open: async (text: string, language: "en" | "pt-BR"): Promise<OpenLinkResult> => {
       let shared = sharedTextImport(text, { ytMusic: true });
       if (shared.kind === "notice") return { kind: "ignored" } as const;
+      // YT Music albums and artists open only on the phone yet (#1522), so they go as before.
+      if (shared.kind === "song" && !opensOnDesktop(shared.link))
+        return { kind: "ignored" } as const;
       const notice = (failure: Parameters<typeof songLinkNotice>[0]): OpenLinkResult => ({
         kind: "notice",
         notice: songLinkNotice(failure, language),
@@ -476,11 +480,17 @@ export const createDesktopLinks = (options: LinksOptions) => {
           shared.url,
           (url, body, signal) => followShortLink(url, { body }, signal, options.fetch),
           AbortSignal.timeout(20_000),
+          // Of the page's links, only one the desktop opens: not a YT Music album or an artist.
+          opensOnDesktop,
         );
         if (!("link" in ending))
           return { kind: "notice", notice: smartLinkNotice(ending.failure, language) };
         shared = sharedTextImport(ending.link, { ytMusic: true });
-        if (shared.kind === "notice" || shared.kind === "smart")
+        if (
+          shared.kind === "notice" ||
+          shared.kind === "smart" ||
+          (shared.kind === "song" && !opensOnDesktop(shared.link))
+        )
           return { kind: "notice", notice: cantOpenNotice(language) };
       }
       if (!options.online())
@@ -537,6 +547,8 @@ export const createDesktopLinks = (options: LinksOptions) => {
       );
       if ("playlist" in ending) return preview(ending.playlist, language);
       if ("album" in ending) return { kind: "album", browseId: ending.album };
+      // Without the page ports an artist link ends in "Can't open this", never here.
+      if ("artist" in ending) return { kind: "ignored" };
       if (ending.play === "failed") return notice(ending.failure);
       if (ending.play === "notFound")
         return {

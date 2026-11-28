@@ -174,6 +174,9 @@ export const settleFirstRun = (): void => {
   });
 };
 
+/** Whether the welcome tour (the invitation and the tour cards) isn't over in this launch. */
+export const isFirstRunDue = (): boolean => runner?.isDue() ?? false;
+
 /**
  * Once Wave holds access, follows the phone until the invitation and tour finish:
  * they wait for Now Playing, another card or the background, and an update's

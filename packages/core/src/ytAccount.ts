@@ -1,5 +1,7 @@
 /**
- * The YouTube account Wave uses for YT Music, as Settings › YT Music shows it.
+ * The YouTube account Wave uses for YT Music, as Settings › YT Music shows it,
+ * and the warning its Use YT Music switch gives before turning off
+ * (`confirmYtMusicOff`).
  * Signing in is optional: signed out, YT Music works the same, and an expired
  * session counts as signed out until the owner signs in again. The session
  * itself (its cookie) stays native; Core only sees who is signed in.
@@ -15,7 +17,24 @@ import {
   type AccountSignInState,
   type AccountView,
 } from "./accountSignIn.ts";
+import type { AlertSpec } from "./alert.ts";
+import { en, type Catalogue } from "./catalogueEn.ts";
 import type { WaveSession } from "./waveAccount.ts";
+
+/**
+ * Use YT Music turned off on this phone asks first, saying what stops; Cancel
+ * keeps it on. Signed in to a Wave account ([synced]), the setting syncs, so
+ * a last line says every phone of the account turns it off too.
+ */
+export const confirmYtMusicOff = (
+  synced: boolean,
+  { settings: { turnOffYtMusic: text } }: Catalogue = en,
+) =>
+  ({
+    title: text.title,
+    message: synced ? `${text.message}\n${text.everyPhone}` : text.message,
+    action: { label: text.action, destructive: true },
+  }) satisfies AlertSpec;
 
 /** The signed-in account, as YouTube Music names it. */
 export interface YtAccount {

@@ -35,6 +35,7 @@ import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import { libraryQuery, useLibraryQuery } from "@/library/hooks";
 import { LibraryStore, type LibraryStoreError } from "@/library/LibraryStore";
+import { markLinkOffered } from "@/library/offeredLink";
 import { playlistsChanged } from "@/library/playlists";
 import { appRuntime } from "@/library/runtime";
 import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
@@ -224,6 +225,8 @@ export const openInvite = (playlist: CollaborativeTarget): void => {
 const copyLink = async (url: string): Promise<void> => {
   try {
     await WaveNative.writeClipboardText(text().inviteLink, url);
+    // Wave's own copy isn't offered back on the next return.
+    markLinkOffered(url);
     void showToast(text().linkCopied);
   } catch {
     void showToast(text().copyFailed);

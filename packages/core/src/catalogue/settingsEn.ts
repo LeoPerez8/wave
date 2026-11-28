@@ -23,6 +23,8 @@ export const settingsEn = {
     developer: "Developer",
     versionHistory: "Version History",
   },
+  /** Settings › Layout's head over its editor rows (not "Pages": the tab bar isn't one). */
+  layoutCustomizeHead: "Customize",
   /** Settings › Layout's editor rows, by `LayoutPage` id. */
   layoutPages: {
     home: "Home",
@@ -87,6 +89,20 @@ export const settingsEn = {
       "Every phone signed in to this Wave account signs out, this one too. Nothing on the " +
       "phones is deleted. Sign in again on the phones you use.",
     action: "Sign Out on All Phones",
+  },
+  /** Asked before Use YT Music turns off on this phone (`confirmYtMusicOff`). */
+  turnOffYtMusic: {
+    title: "Turn Off YT Music?",
+    message:
+      "Wave stops sending requests to YouTube. You lose:\n" +
+      "• Online search and streamed songs\n" +
+      "• DJ, Discover and Community playlists on Home\n" +
+      "• Magic Queue and playlist suggestions\n" +
+      "• Downloads, imports and Export through YT Music\n" +
+      "Downloaded songs keep playing and nothing is deleted.",
+    /** Its last line while signed in to a Wave account, which syncs the setting. */
+    everyPhone: "This applies to every phone signed in to your Wave account.",
+    action: "Turn Off",
   },
   /** Asked before new colours change the app icon (`launcherIconSwitch`). */
   launcherIcon: {
@@ -346,6 +362,9 @@ export const settingsEn = {
   songLinksSome: "On for some links. Tap to turn on the rest in Android's Open by default page.",
   songLinksNone:
     "Off: links open in their own app or the browser. Tap to turn them on in Android's Open by default page.",
+  offerCopiedLinks: "Offer copied links",
+  offerCopiedLinksLine:
+    "When you come back to Wave with a song link copied, it asks whether to open it.",
   wavePicksUpNewChangedAndRemoved:
     "Wave picks up new, changed and removed files each time you open it, and when you pull down in the Library.",
   skipVoiceNotesAndRecordings: "Skip voice notes and recordings",

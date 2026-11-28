@@ -181,8 +181,8 @@ export const spotifyShortLinkTarget = (url: string, body: string): PlaylistLinkC
  * following it landed ([url]) when that's Spotify's own page, otherwise the
  * first Spotify page in what it answered ([body]; Branch's page for apps
  * names it in its script). A track plays, a playlist opens the import card,
- * an album opens its YT Music page, and anything else (a profile, an
- * artist, no page) is null.
+ * an album opens its YT Music page, an artist is looked for on YT Music, and
+ * anything else (a profile, an episode, no page) is null.
  */
 export const spotifyShortLinkLanding = (
   url: string,
@@ -197,12 +197,17 @@ export const spotifyShortLinkLanding = (
       readonly kind: "album";
       readonly link: Extract<SongLink, { readonly service: "spotifyAlbum" }>;
     }
+  | {
+      readonly kind: "artist";
+      readonly link: Extract<SongLink, { readonly service: "spotifyArtist" }>;
+    }
   | null => {
   const page = spotifyAddress(url)?.at === "page" ? url : SPOTIFY_PAGE.exec(body)?.[0];
   if (page === undefined) return null;
   const song = recogniseSongLink(page);
   if (song?.service === "spotify") return { kind: "song", link: song };
   if (song?.service === "spotifyAlbum") return { kind: "album", link: song };
+  if (song?.service === "spotifyArtist") return { kind: "artist", link: song };
   const playlist = recognisePlaylistLink(page);
   if (!playlist.ok || playlist.link.service !== "spotify") return null;
   return { kind: "import", link: playlist.link };
@@ -210,7 +215,8 @@ export const spotifyShortLinkLanding = (
 
 /**
  * What sharing text to Wave does: open the import card for its playlist,
- * play the song it names (`openSongLink`), or say why not.
+ * play the song or open the album or artist it names (`openSongLink`), or
+ * say why not.
  */
 export type SharedTextImport =
   | { readonly kind: "import"; readonly link: PlaylistLink }
@@ -221,7 +227,8 @@ export type SharedTextImport =
 
 /**
  * What text shared to Wave from another app (Android's share sheet) opens:
- * the song a song link in it names (`recogniseSongLink`), else the import
+ * the song, album or artist a link in it names (`recogniseSongLink`; an
+ * album's YouTube Music playlist is the album), else the import
  * card for the playlist named by the first web address or Spotify URI in it
  * (the bare link YouTube Music's app shares, Spotify's link or short link, or
  * a link among words, punctuation after it dropped), as
