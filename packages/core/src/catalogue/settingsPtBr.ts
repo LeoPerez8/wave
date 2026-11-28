@@ -156,6 +156,17 @@ export const settingsPtBr: typeof settingsEn = {
   off: "Desativado",
   tint: "Tonalidade",
   rim: "Borda",
+  fullGlass: {
+    label: "Vidro completo",
+    simplified: (date: string) =>
+      `O Wave simplificou o vidro em ${date}: este celular perdeu quadros na maioria das animações, então o vidro fica com a superfície simples por enquanto.`,
+    simplifiedFullOn: (date: string) =>
+      `O Wave simplificou o vidro em ${date} porque este celular perdeu quadros na maioria das animações. O Vidro completo traz o efeito de volta.`,
+    confirmTitle: "Ativar o vidro completo?",
+    confirmMessage:
+      "Neste celular, o vidro completo deixa as animações menos suaves e as trocas de tela mais lentas, e gasta mais bateria.",
+    turnOn: "Ativar",
+  },
   howTheTabBarMiniPlayerMenus:
     "Como a barra de abas, o miniplayer, os menus e os diálogos mostram o que está atrás. O desfoque suaviza, a refração curva as bordas, a tonalidade mantém o texto legível e a borda dá brilho ao contorno. Desativar a refração mantém os outros efeitos; desativar a borda remove o contorno. A amostra mostra cada alteração; o vidro do app muda quando você sai de Aparência.",
   resetToDefaults: "Restaurar padrões",

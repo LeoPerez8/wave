@@ -1,4 +1,4 @@
-import { useRenderCost } from "@/lib/renderCost";
+import { useOwnRenderCost } from "@/lib/renderCost";
 import { networkSignalHoldsUp, playerNotice } from "@wave/core";
 import { useLocalisation } from "@/localisation/localisation";
 import {
@@ -14,7 +14,14 @@ import {
   type SkipDirection,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { memo, useEffect, useRef, useSyncExternalStore, type ComponentRef } from "react";
+import {
+  memo,
+  useEffect,
+  useRef,
+  useSyncExternalStore,
+  type ComponentRef,
+  type RefObject,
+} from "react";
 import { Text, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
@@ -100,6 +107,8 @@ const finishOpen = (
 const usePlaybackField = <K extends "item" | "playWhenReady">(key: K) =>
   useSyncExternalStore(playbackState.subscribe, () => playbackState.get()[key]);
 
+const songLoaded = () => playbackState.get().item !== null;
+
 type Props = {
   /** `nativeID` of the view behind the mini player, for the glass. */
   backdropId: string;
@@ -113,19 +122,16 @@ type Props = {
  * it for Now Playing, swipe it up for Now Playing too. A long press opens the
  * playing song's action card, floating beside the pill. It floats above the tab
  * bar, or above the system inset on screens without one. Memoized: the layouts holding it render on
- * navigation, and it needn't (pass a stable `onOpen`).
+ * navigation, and it needn't (pass a stable `onOpen`). A song change, play or pause renders only
+ * the song's part (`MiniPlayerSong`); the pill's glass, frame and gestures stay as they were.
  */
 export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props) {
-  const { strings } = useLocalisation();
   useRenderCount("MiniPlayer");
-  useRenderCost("MiniPlayer");
-  const item = usePlaybackField("item");
-  const playing = usePlaybackField("playWhenReady");
-  // Why playback stopped; null while the song plays as usual, and for the network's
-  // holdups, which the network signal shows instead (the artist line stays).
-  const notice = useSyncExternalStore(playbackState.subscribe, () =>
-    playerNotice(playerTrouble(playbackState.get()), strings),
-  );
+  // Its own render only: what renders after it in the same commit (the closed Now Playing
+  // following the song, a theme change's screens) isn't the mini player's (#1533).
+  const renderEnd = useOwnRenderCost("MiniPlayer");
+  // Whether a song is loaded, not which: a song change renders `MiniPlayerSong` alone.
+  const shown = useSyncExternalStore(playbackState.subscribe, songLoaded);
   const { signal } = useNetworkSignal();
   const heldUp = networkSignalHoldsUp(signal);
   const accent = useThemeColor("accent");
@@ -242,102 +248,144 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
     transform: [{ translateX: offset.get() }],
   }));
 
+  if (!shown) return null;
+
+  return (
+    <>
+      <OnFloatingChrome value>
+        <GestureDetector gesture={openPan}>
+          <View
+            pointerEvents="box-none"
+            className="absolute"
+            ref={pill}
+            style={{ left: grid.margin, right: grid.margin, bottom, height: chrome.miniPlayer }}
+            onLayout={(event) => {
+              const measured = Math.max(1, event.nativeEvent.layout.width);
+              widthRef.current = measured;
+              width.set(measured);
+            }}
+          >
+            <Glass backdropId={backdropId} cornerRadius={RADIUS} />
+            <View className="flex-1 overflow-hidden" style={{ borderRadius: RADIUS }}>
+              <GestureDetector gesture={pan}>
+                <Animated.View className="flex-1 flex-row items-center" style={contentStyle}>
+                  <MiniPlayerSong onOpen={onOpen} pill={pill} heldUp={heldUp} />
+                </Animated.View>
+              </GestureDetector>
+              {heldUp && (
+                // Inside the pill and on the RenderThread: nothing animates behind the glass (#93).
+                <NativeWaveGhost
+                  pointerEvents="none"
+                  importantForAccessibility="no-hide-descendants"
+                  accessibilityElementsHidden
+                  color={accent}
+                  period={signal}
+                  animating={!reduceMotion}
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    right: 0,
+                    bottom: GHOST_INSET,
+                    height: GHOST_HEIGHT,
+                  }}
+                />
+              )}
+            </View>
+          </View>
+        </GestureDetector>
+      </OnFloatingChrome>
+      {renderEnd}
+    </>
+  );
+});
+
+type SongProps = {
+  /** Opens Now Playing. */
+  onOpen: () => void;
+  /** The pill, which the song's card (on a long press) floats beside and highlights. */
+  pill: RefObject<ComponentRef<typeof View> | null>;
+  /** Whether the network holds the song up: its thumbnail loses its colour. */
+  heldUp: boolean;
+};
+
+/**
+ * The playing song's part of the mini player: its cover, title and artist (or why it stopped),
+ * which open Now Playing, and the play/pause and next buttons. The only part a song change,
+ * play or pause renders (#1533).
+ */
+const MiniPlayerSong = memo(function MiniPlayerSong({ onOpen, pill, heldUp }: SongProps) {
+  const { strings } = useLocalisation();
+  useRenderCount("MiniPlayerSong");
+  // Its own name, so a song change's span isn't read as the whole pill's.
+  const renderEnd = useOwnRenderCost("MiniPlayerSong");
+  const item = usePlaybackField("item");
+  const playing = usePlaybackField("playWhenReady");
+  // Why playback stopped; null while the song plays as usual, and for the network's
+  // holdups, which the network signal shows instead (the artist line stays).
+  const notice = useSyncExternalStore(playbackState.subscribe, () =>
+    playerNotice(playerTrouble(playbackState.get()), strings),
+  );
   if (item === null) return null;
   const title = item.title ?? strings.playbackText.unknownTitle;
   const subtitle = notice ?? item.artist ?? strings.playbackText.unknownArtist;
 
   return (
-    <OnFloatingChrome value>
-      <GestureDetector gesture={openPan}>
-        <View
-          pointerEvents="box-none"
-          className="absolute"
-          ref={pill}
-          style={{ left: grid.margin, right: grid.margin, bottom, height: chrome.miniPlayer }}
-          onLayout={(event) => {
-            const measured = Math.max(1, event.nativeEvent.layout.width);
-            widthRef.current = measured;
-            width.set(measured);
-          }}
-        >
-          <Glass backdropId={backdropId} cornerRadius={RADIUS} />
-          <View className="flex-1 overflow-hidden" style={{ borderRadius: RADIUS }}>
-            <GestureDetector gesture={pan}>
-              <Animated.View className="flex-1 flex-row items-center" style={contentStyle}>
-                <Press
-                  accessibilityRole="button"
-                  accessibilityLabel={strings.playbackText.nowPlayingValueValue(title, subtitle)}
-                  accessibilityHint={strings.playbackText.opensNowPlaying}
-                  accessibilityActions={[
-                    { name: "next", label: strings.playbackText.nextTrack },
-                    { name: "previous", label: strings.playbackText.previousTrack },
-                  ]}
-                  onAccessibilityAction={(event) =>
-                    skip(event.nativeEvent.actionName === "next" ? "next" : "previous")
-                  }
-                  onPress={onOpen}
-                  onLongPress={openPlayingActions}
-                  highlightAs={{ view: pill, radius: RADIUS }}
-                  haptic="selection"
-                  depth={0.015}
-                  className="flex-1 flex-row items-center self-stretch"
-                  style={{ gap: CELL * 1.5, paddingLeft: ART_INSET }}
-                >
-                  {/* Held up by the network, the thumbnail loses its colour, at its full size. */}
-                  <View style={heldUp ? HELD_UP_THUMB : undefined}>
-                    <Artwork uri={item.artworkUri ?? undefined} size={ART} radius={ART_RADIUS} />
-                  </View>
-                  <View className="flex-1">
-                    <Text
-                      numberOfLines={1}
-                      className="font-sans text-body font-medium text-foreground"
-                    >
-                      {title}
-                    </Text>
-                    <Text numberOfLines={1} className="font-sans text-body text-secondary">
-                      {subtitle}
-                    </Text>
-                  </View>
-                </Press>
-                <View className="flex-row" style={{ paddingRight: CELL / 2 }}>
-                  <IconButton
-                    icon={playing ? IconPlayerPauseFilled : IconPlayerPlayFilled}
-                    label={
-                      playing
-                        ? strings.playbackText.pauseValue(title)
-                        : strings.playbackText.playValue(title)
-                    }
-                    onPress={togglePlayPause}
-                  />
-                  <IconButton
-                    icon={IconPlayerTrackNextFilled}
-                    label={strings.playbackText.nextTrack}
-                    onPress={skipToNext}
-                  />
-                </View>
-              </Animated.View>
-            </GestureDetector>
-            {heldUp && (
-              // Inside the pill and on the RenderThread: nothing animates behind the glass (#93).
-              <NativeWaveGhost
-                pointerEvents="none"
-                importantForAccessibility="no-hide-descendants"
-                accessibilityElementsHidden
-                color={accent}
-                period={signal}
-                animating={!reduceMotion}
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  right: 0,
-                  bottom: GHOST_INSET,
-                  height: GHOST_HEIGHT,
-                }}
-              />
-            )}
-          </View>
+    <>
+      <Press
+        accessibilityRole="button"
+        accessibilityLabel={strings.playbackText.nowPlayingValueValue(title, subtitle)}
+        accessibilityHint={strings.playbackText.opensNowPlaying}
+        accessibilityActions={[
+          { name: "next", label: strings.playbackText.nextTrack },
+          { name: "previous", label: strings.playbackText.previousTrack },
+        ]}
+        onAccessibilityAction={(event) =>
+          skip(event.nativeEvent.actionName === "next" ? "next" : "previous")
+        }
+        onPress={onOpen}
+        onLongPress={openPlayingActions}
+        highlightAs={{ view: pill, radius: RADIUS }}
+        haptic="selection"
+        depth={0.015}
+        className="flex-1 flex-row items-center self-stretch"
+        style={{ gap: CELL * 1.5, paddingLeft: ART_INSET }}
+      >
+        {/* Held up by the network, the thumbnail loses its colour, at its full size. */}
+        <View style={heldUp ? HELD_UP_THUMB : undefined}>
+          <Artwork uri={item.artworkUri ?? undefined} size={ART} radius={ART_RADIUS} />
         </View>
-      </GestureDetector>
-    </OnFloatingChrome>
+        <View className="flex-1">
+          <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
+            {title}
+          </Text>
+          <Text numberOfLines={1} className="font-sans text-body text-secondary">
+            {subtitle}
+          </Text>
+        </View>
+      </Press>
+      <View className="flex-row" style={{ paddingRight: CELL / 2 }}>
+        <IconButton
+          icon={playing ? IconPlayerPauseFilled : IconPlayerPlayFilled}
+          label={
+            playing ? strings.playbackText.pauseValue(title) : strings.playbackText.playValue(title)
+          }
+          onPress={togglePlayPause}
+        />
+        <NextButton />
+      </View>
+      {renderEnd}
+    </>
+  );
+});
+
+/** Next track, the same for every song: a song change leaves it as it was. */
+const NextButton = memo(function NextButton() {
+  const { strings } = useLocalisation();
+  return (
+    <IconButton
+      icon={IconPlayerTrackNextFilled}
+      label={strings.playbackText.nextTrack}
+      onPress={skipToNext}
+    />
   );
 });

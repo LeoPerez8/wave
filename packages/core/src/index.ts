@@ -773,16 +773,21 @@ export type { GlassLayers, GlassProbe } from "./glassProbe.ts";
 export {
   EMPTY_FRAME_TALLY,
   effectsVerdict,
+  fullGlassNotice,
   judgeFrames,
+  ownerFullEffects,
   phoneEffectsLine,
   readEffectsVerdict,
+  readFullGlassChoice,
   sessionEffects,
   tallyFrames,
   WEAK_PHONE_RULE,
   writeEffectsVerdict,
+  writeFullGlassChoice,
 } from "./phoneEffects.ts";
 export type {
   EffectsVerdict,
+  FullGlassNotice,
   FrameTally,
   FrameWindow,
   PhoneEffects,
@@ -1000,8 +1005,12 @@ export { BACKGROUND_WORK_LIMITS, createBackgroundWork, runStepSlice } from "./ba
 export {
   JS_BLOCK_MS,
   PAUSE_HEARD_MS,
+  RENDER_EFFECTS,
   STARTUP_WORK_MS,
+  TOUCH,
   TURN_WORK_MS,
+  UNSEEN_WORK,
+  UNTIMED_RENDER,
   createJsBlockLog,
   jsBlockLine,
   jsPausedLine,
@@ -3561,12 +3570,20 @@ export {
   DJ_MOOD_LOW_ENERGY,
   DJ_MOOD_SAD_VALENCE,
   djMedianAudioFeatures,
+  djMoodFeaturesSteps,
   djMoodFiltered,
   djFirstMoodFit,
   djMoodFilteredSteps,
   djMoodFit,
 } from "./djMood.ts";
-export type { DjAudioFeatures, DjMoodFit, DjMoodPools, DjMoodRankable, DjMoods } from "./djMood.ts";
+export type {
+  DjAudioFeatures,
+  DjMoodFeatureRow,
+  DjMoodFit,
+  DjMoodPools,
+  DjMoodRankable,
+  DjMoods,
+} from "./djMood.ts";
 export {
   MAGIC_STAND_IN_SONGS,
   magicStandIn,

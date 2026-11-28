@@ -28,6 +28,33 @@ export const djMedianAudioFeatures = (rows: readonly DjAudioFeatures[]): DjAudio
         mode: median(rows.map(({ mode }) => mode)) as 0 | 1,
       };
 
+/** A kept feature row, by the id its candidates name it with; a miss has no energy. */
+export interface DjMoodFeatureRow {
+  readonly id: string;
+  readonly energy: number | null;
+  readonly valence: number | null;
+  readonly acousticness: number | null;
+  readonly mode: number | null;
+}
+
+/**
+ * Kept feature rows as the mood filter reads them, by id: a row reads only with its four
+ * fields and a mode of 0 or 1, and a later row for an id replaces an earlier one that read
+ * (a stream's features replace an ISRC tag's). A step per row, so a read of thousands gives
+ * way between them (#1532).
+ */
+export function* djMoodFeaturesSteps(
+  rows: Iterable<DjMoodFeatureRow>,
+): Generator<void, ReadonlyMap<string, DjAudioFeatures>> {
+  const found = new Map<string, DjAudioFeatures>();
+  for (const { id, energy, valence, acousticness, mode } of rows) {
+    if (energy != null && valence != null && acousticness != null && (mode === 0 || mode === 1))
+      found.set(id, { energy, valence, acousticness, mode });
+    yield;
+  }
+  return found;
+}
+
 /** A stream candidate shape accepted by the mood filter. */
 export interface DjMoodRankable {
   readonly score: number;

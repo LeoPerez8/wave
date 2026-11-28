@@ -82,11 +82,12 @@ describe("the kept tabs as the tab navigator sees them (#1438)", () => {
 });
 
 describe("how hidden tabs are kept (chosen at bundle time, for the comparison)", () => {
-  test("by default a hidden tab is out of the window, display none and frozen, the whole bar kept (#1358)", () => {
+  test("by default a hidden tab is out of the window, display none and not frozen, the whole bar kept (#1535)", () => {
     assert.deepEqual(parseTabScreens(undefined), {
       detach: true,
       keepLayout: false,
-      freeze: true,
+      freeze: false,
+      freezeStacks: true,
       followHidden: false,
       retain: 5,
     });
@@ -98,14 +99,16 @@ describe("how hidden tabs are kept (chosen at bundle time, for the comparison)",
       detach: true,
       keepLayout: true,
       freeze: true,
+      freezeStacks: true,
       followHidden: false,
       retain: 3,
     });
-    assert.deepEqual(parseTabScreens("thaw"), { ...parseTabScreens(undefined), freeze: false });
+    assert.deepEqual(parseTabScreens("freeze"), { ...parseTabScreens(undefined), freeze: true });
     assert.deepEqual(parseTabScreens("attach"), {
       detach: false,
       keepLayout: false,
       freeze: false,
+      freezeStacks: true,
       followHidden: false,
       retain: 5,
     });
@@ -126,6 +129,14 @@ describe("how hidden tabs are kept (chosen at bundle time, for the comparison)",
     assert.equal(parseTabScreens("attach").freeze, false);
   });
 
+  test("a screen under a push stays frozen unless a bundle thaws stacks, whatever the tabs do (#1423, #1535)", () => {
+    assert.equal(parseTabScreens("thaw").freezeStacks, true);
+    assert.equal(parseTabScreens("attach").freezeStacks, true);
+    assert.equal(parseTabScreens("thaw-stacks").freezeStacks, false);
+    assert.equal(parseTabScreens("thaw-stacks").freeze, false);
+    assert.equal(parseTabScreens("thaw-stacks freeze-stacks").freezeStacks, true);
+  });
+
   test("a later choice wins: thaw then freeze freezes", () => {
     assert.equal(parseTabScreens("thaw freeze").freeze, true);
     assert.equal(parseTabScreens("freeze,thaw").freeze, false);
@@ -143,13 +154,16 @@ describe("how hidden tabs are kept (chosen at bundle time, for the comparison)",
     assert.deepEqual(parseTabScreens(describeTabScreens(attached)), attached);
     assert.equal(
       describeTabScreens(parseTabScreens(undefined)),
-      "detach,display-none,freeze,retain=5",
+      "detach,display-none,thaw,retain=5",
     );
-    const thawed = parseTabScreens("thaw");
-    assert.equal(describeTabScreens(thawed), "detach,display-none,thaw,retain=5");
-    assert.deepEqual(parseTabScreens(describeTabScreens(thawed)), thawed);
+    const frozen = parseTabScreens("freeze");
+    assert.equal(describeTabScreens(frozen), "detach,display-none,freeze,retain=5");
+    assert.deepEqual(parseTabScreens(describeTabScreens(frozen)), frozen);
+    const liveStacks = parseTabScreens("thaw-stacks");
+    assert.equal(describeTabScreens(liveStacks), "detach,display-none,thaw,thaw-stacks,retain=5");
+    assert.deepEqual(parseTabScreens(describeTabScreens(liveStacks)), liveStacks);
     const following = parseTabScreens("follow");
-    assert.equal(describeTabScreens(following), "detach,display-none,freeze,follow,retain=5");
+    assert.equal(describeTabScreens(following), "detach,display-none,thaw,follow,retain=5");
     assert.deepEqual(parseTabScreens(describeTabScreens(following)), following);
   });
 });

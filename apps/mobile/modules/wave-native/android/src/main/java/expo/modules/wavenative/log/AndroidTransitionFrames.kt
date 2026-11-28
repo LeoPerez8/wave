@@ -42,6 +42,11 @@ class AndroidTransitionFrames(private val context: () -> Context) {
     }
   }
 
+  /** [atMs]: the UI frame's time the motion started at (Choreographer's clock, as the frames'). */
+  fun mark(id: Int, atMs: Double) {
+    main.post { frames.mark(id, atMs) }
+  }
+
   fun stop(id: Int, report: (FrameTotals?) -> Unit) {
     val at = System.nanoTime() / 1_000_000.0
     endings[id] = at

@@ -39,7 +39,20 @@ import {
   type UnsearchedSong,
   type YtAlbumSong,
 } from "@wave/core";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 
 import type { PlaylistAddResult, PlaylistDetail, PlaylistRow } from "../types.ts";
 import { chunks } from "./chunks.ts";
@@ -699,6 +712,16 @@ export const movePlaylistItems = (
 /** Track ids per query, well under SQLite's limit on bound values. */
 const LINK_CHUNK = 500;
 
+/** The Library's row in `playlist_revisions` (no playlist has id 0). */
+const LIBRARY_REVISION = 0;
+
+/**
+ * The row of `playlist_revisions` that keeps the entries' revision
+ * (`selectPlaylistEntriesRevision`) the last whole-Library link left: no
+ * playlist has id -1, and no trigger writes it.
+ */
+const LINKED_REVISION = -1;
+
 /**
  * A number that rises whenever any playlist's entries are written (here,
  * by a sync, by an import, by a link), from `playlist_revisions`: a scan
@@ -708,8 +731,37 @@ export const selectPlaylistEntriesRevision = (db: LibraryDatabase): number =>
   db
     .select({ sum: sql<number>`coalesce(sum(${schema.playlistRevisions.revision}), 0)` })
     .from(schema.playlistRevisions)
-    .where(ne(schema.playlistRevisions.playlistId, LIBRARY_REVISION))
+    .where(gt(schema.playlistRevisions.playlistId, LIBRARY_REVISION))
     .get()?.sum ?? 0;
+
+/**
+ * The entries' revision now and the one the last whole-Library link left
+ * (`markPlaylistsLinked`; null when none has on this Library): a scan that
+ * changed no song links only when they differ (Core's `scanEnd`).
+ */
+export const selectPlaylistLinkRevisions = (
+  db: LibraryDatabase,
+): { readonly entries: number; readonly linked: number | null } => ({
+  entries: selectPlaylistEntriesRevision(db),
+  linked:
+    db
+      .select({ revision: schema.playlistRevisions.revision })
+      .from(schema.playlistRevisions)
+      .where(eq(schema.playlistRevisions.playlistId, LINKED_REVISION))
+      .get()?.revision ?? null,
+});
+
+/**
+ * Keeps the entries' revision as the one a whole-Library link left. Run it
+ * in the link's transaction, after its writes.
+ */
+export const markPlaylistsLinked = (db: LibraryDatabase): void => {
+  const revision = selectPlaylistEntriesRevision(db);
+  db.insert(schema.playlistRevisions)
+    .values({ playlistId: LINKED_REVISION, revision })
+    .onConflictDoUpdate({ target: schema.playlistRevisions.playlistId, set: { revision } })
+    .run();
+};
 
 /**
  * Whether any of the Library songs [trackIds] is in a playlist (an entry not
@@ -1410,9 +1462,6 @@ const summaryCache = new WeakMap<
   LibraryDatabase,
   Map<number, { readonly at: string; readonly summary: PlaylistSummary }>
 >();
-
-/** The Library's row in `playlist_revisions` (no playlist has id 0). */
-const LIBRARY_REVISION = 0;
 
 /**
  * [playlistIds]' mosaics, totals and newest entry dates. Those whose entries (or the Library's

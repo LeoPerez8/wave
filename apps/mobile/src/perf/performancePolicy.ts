@@ -1088,7 +1088,7 @@ export const OWN_PRESS: Record<string, Exception> = {
     reason:
       "The mark on the player's right edge that opens the Queue (#1292): its face is a thin bar, not a glyph or text.",
   },
-  "playback/MiniPlayer.tsx#MiniPlayer": {
+  "playback/MiniPlayer.tsx#MiniPlayerSong": {
     reason: "The whole mini player opens Now Playing, with its accessibility actions.",
   },
   "nowPlaying/SleepTimer.tsx#SleepTimerButton": {

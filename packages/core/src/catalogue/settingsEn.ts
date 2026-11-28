@@ -175,6 +175,18 @@ export const settingsEn = {
   off: "Off",
   tint: "Tint",
   rim: "Rim",
+  /** Appearance › Glass on a phone Wave judged weak (#1538); the date is the verdict's. */
+  fullGlass: {
+    label: "Full glass",
+    simplified: (date: string) =>
+      `Wave simplified the glass on ${date}: this phone dropped frames in most animations, so the glass is the plain surface for now.`,
+    simplifiedFullOn: (date: string) =>
+      `Wave simplified the glass on ${date} because this phone dropped frames in most animations. Full glass brings it back.`,
+    confirmTitle: "Turn on full glass?",
+    confirmMessage:
+      "On this phone the full glass makes animations less smooth and screen changes slower, and it uses more battery.",
+    turnOn: "Turn On",
+  },
   howTheTabBarMiniPlayerMenus:
     "How the tab bar, mini player, menus and dialogs show what's behind them. Blur softens it, refraction bends it at the edges (off leaves blur, tint and rim), tint lays the surface colour over it so text stays legible, and the rim is the bright edge (off removes it). The sample shows each change; the app's glass takes it once you leave Appearance.",
   resetToDefaults: "Reset to defaults",

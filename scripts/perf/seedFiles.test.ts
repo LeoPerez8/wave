@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { referenceCatalogue } from "../../packages/client/src/db/referenceSeed.ts";
-import { mp3File, mp3DurationMs } from "./seedFiles.ts";
+import { mp3File, mp3DurationMs, seedOwnership } from "./seedFiles.ts";
 
 const song = {
   title: "Falling Home",
@@ -68,5 +68,26 @@ describe("mp3DurationMs", () => {
   it("is the length the seeded database gives each song", () => {
     for (const each of referenceCatalogue().songs.slice(0, 200))
       assert.equal(mp3DurationMs(each.frames), each.durationMs, each.file);
+  });
+});
+
+describe("seedOwnership", () => {
+  const command = seedOwnership({ pkg: "dev.leoperez.wave", owner: "10217" });
+
+  it("gives the pushed files to the app's user", () => {
+    assert.match(
+      command,
+      /chown 10217:10217 \/data\/data\/dev\.leoperez\.wave\/files \/data\/data\/dev\.leoperez\.wave\/files\/SQLite \/data\/data\/dev\.leoperez\.wave\/files\/SQLite\/wave\.db/,
+    );
+  });
+
+  // restorecon left a reinstalled app's database with the previous install's categories, which
+  // the app can't open; the app's data directory carries this install's (#1535).
+  it("labels them as the app's own data directory, after restorecon", () => {
+    const restorecon = command.indexOf("restorecon -R /data/data/dev.leoperez.wave/files");
+    const chcon = command.indexOf(
+      'chcon -R "$(stat -c %C /data/data/dev.leoperez.wave)" /data/data/dev.leoperez.wave/files',
+    );
+    assert.ok(restorecon >= 0 && chcon > restorecon, command);
   });
 });

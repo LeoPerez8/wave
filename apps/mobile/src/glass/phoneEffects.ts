@@ -1,16 +1,20 @@
 import {
   EMPTY_FRAME_TALLY,
   effectsVerdict,
+  ownerFullEffects,
   phoneEffectsLine,
   readEffectsVerdict,
+  readFullGlassChoice,
   sessionEffects,
   tallyFrames,
   writeEffectsVerdict,
+  writeFullGlassChoice,
   type FrameTally,
   type PhoneEffects,
   type SessionEffects,
 } from "@wave/core";
 import { Storage } from "expo-sqlite/kv-store";
+import { useSyncExternalStore } from "react";
 import { Platform } from "react-native";
 
 import { afterFirstSettled } from "@/lib/backgroundWork";
@@ -22,32 +26,75 @@ import { WaveGlass } from "./waveGlass";
 /**
  * Weak phones get simpler heavy effects (docs/spec.md › Fluidity, #1357).
  * This session's effects are fixed at start from the verdict the phone's own
- * frame times gave last time (Core's `sessionEffects`), so nothing changes look
- * mid-session. A session drawing the full effects measures: once startup has
- * settled, the frame meter's windows are tallied until Core can judge them,
- * and the verdict is kept for the next start.
+ * frame times gave last time (Core's `sessionEffects`), so Wave's verdict never
+ * changes look mid-session. A session drawing the full effects measures: once
+ * startup has settled, the frame meter's windows are tallied until Core can
+ * judge them, and the verdict is kept for the next start. Over a weak verdict
+ * the owner's Full glass (Settings › Appearance, #1538) draws the full effects
+ * at once and on every start, measuring nothing; it's kept on this phone only.
  */
 
 /** The key-value store's key for the last verdict. */
 const VERDICT_KEY = "wave.phoneEffects.verdict";
+/** The key-value store's key for the owner's Full glass; not a synced setting. */
+const FULL_GLASS_KEY = "wave.phoneEffects.fullGlass";
 const LOG_TAG = "WaveEffects";
 
 let session: SessionEffects | null = null;
+const listeners = new Set<() => void>();
+
+const storedItem = (key: string): string | null => {
+  try {
+    return Storage.getItemSync(key);
+  } catch {
+    return null;
+  }
+};
 
 const currentSession = (): SessionEffects => {
-  if (session !== null) return session;
-  let stored: string | null = null;
-  try {
-    stored = Storage.getItemSync(VERDICT_KEY);
-  } catch {
-    stored = null;
-  }
-  session = sessionEffects(readEffectsVerdict(stored), Date.now());
+  session ??= sessionEffects(
+    readEffectsVerdict(storedItem(VERDICT_KEY)),
+    Date.now(),
+    readFullGlassChoice(storedItem(FULL_GLASS_KEY)),
+  );
   return session;
 };
 
-/** What this session draws: `full` as designed, `simple` on a phone measured weak. */
+const subscribe = (listener: () => void): (() => void) => {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+};
+
+/** What this session draws now: `full` as designed, `simple` on a phone measured weak. */
 export const phoneEffects = (): PhoneEffects => currentSession().effects;
+
+/** This session's effects; re-renders when the owner turns Full glass on or off. */
+export const usePhoneEffectsSession = (): SessionEffects =>
+  useSyncExternalStore(subscribe, currentSession);
+
+/** What this session draws; re-renders when the owner turns Full glass on or off. */
+export const usePhoneEffects = (): PhoneEffects => usePhoneEffectsSession().effects;
+
+/**
+ * Turns the owner's Full glass on or off: kept on this phone at once, and the
+ * glass everywhere follows at once. Off goes back to the verdict (simplified),
+ * whose re-check the next start runs as before.
+ */
+export const setFullGlass = (on: boolean): void => {
+  const current = currentSession();
+  const next = ownerFullEffects(current, on);
+  if (next.ownerFull === current.ownerFull) return;
+  try {
+    const stored = writeFullGlassChoice(on);
+    if (stored === null) Storage.removeItemSync(FULL_GLASS_KEY);
+    else Storage.setItemSync(FULL_GLASS_KEY, stored);
+  } catch (cause) {
+    appLog("warn", LOG_TAG, `Full glass not kept: ${String(cause)}`);
+  }
+  session = next;
+  appLog("info", LOG_TAG, phoneEffectsLine(next, Date.now()));
+  for (const listener of listeners) listener();
+};
 
 /** Tallies the frame meter's windows until they can be judged, then keeps the verdict. */
 const measureFrames = (): (() => void) => {

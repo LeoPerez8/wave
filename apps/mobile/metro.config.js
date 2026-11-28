@@ -1,4 +1,5 @@
 const { getDefaultConfig } = require("expo/metro-config");
+const path = require("node:path");
 const { withUniwindConfig } = require("uniwind/metro");
 
 /** @type {import("expo/metro-config").MetroConfig} */
@@ -10,6 +11,14 @@ const getTransformOptions = config.transformer.getTransformOptions;
 config.transformer.getTransformOptions = async (...args) => {
   const options = await getTransformOptions(...args);
   return { ...options, transform: { ...options.transform, inlineRequires: true } };
+};
+
+// React's commits reach the JS block log through a hook its renderer finds as it loads, so the
+// hook goes in before every module (#1531, reactCommitHook.js).
+const getPolyfills = config.serializer.getPolyfills;
+config.serializer.getPolyfills = (options) => {
+  const polyfills = getPolyfills(options);
+  return options.platform ? [...polyfills, path.join(__dirname, "reactCommitHook.js")] : polyfills;
 };
 
 // Perf profiler builds (#1423): React's profiling renderer, so `<Profiler>`'s `onRender` runs in a

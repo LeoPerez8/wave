@@ -1,3 +1,6 @@
+import { formatDate } from "./formatting.ts";
+import { catalogueOf, type AppLanguage } from "./localisation.ts";
+
 /**
  * Weak phones get simpler heavy effects (docs/spec.md › Fluidity, #1357).
  * Whether a phone is weak comes from its own frame times, never a model list:
@@ -72,10 +75,14 @@ export const effectsVerdict = (tally: FrameTally, now: number): EffectsVerdict |
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * What one session draws, fixed at start from the last verdict: it never
- * changes mid-session. A phone is measured only while it draws the full
- * effects, so the simple ones can't make a weak phone look strong; a weak
- * verdict is re-measured once it's `recheckDays` old.
+ * What one session draws, fixed at start from the last verdict: Wave's own
+ * verdict never changes it mid-session. A phone is measured only while it
+ * draws the full effects, so the simple ones can't make a weak phone look
+ * strong; a weak verdict is re-measured once it's `recheckDays` old.
+ *
+ * Over a weak verdict the owner can turn the full effects back on
+ * (Settings › Appearance › Full glass, #1538): their choice wins, at once and
+ * on every start, and while it's on nothing measures, the re-check included.
  */
 export interface SessionEffects {
   readonly effects: PhoneEffects;
@@ -83,15 +90,75 @@ export interface SessionEffects {
   readonly measure: boolean;
   /** The verdict it started from. */
   readonly verdict: EffectsVerdict | null;
+  /** Whether the owner's Full glass is drawing the full effects over a weak verdict. */
+  readonly ownerFull: boolean;
 }
 
-export const sessionEffects = (verdict: EffectsVerdict | null, now: number): SessionEffects => {
-  if (verdict === null || verdict.effects === "full")
-    return { effects: "full", measure: true, verdict };
+const isWeak = (verdict: EffectsVerdict | null): verdict is EffectsVerdict =>
+  verdict !== null && verdict.effects === "simple";
+
+/**
+ * This session's effects from [verdict], and from the owner's Full glass
+ * ([ownerFull]), which counts only over a weak verdict: the switch shows only
+ * there, and nothing measures while it's on, so a stored choice without one
+ * can't keep a phone from being measured.
+ */
+export const sessionEffects = (
+  verdict: EffectsVerdict | null,
+  now: number,
+  ownerFull = false,
+): SessionEffects => {
+  if (!isWeak(verdict)) return { effects: "full", measure: true, verdict, ownerFull: false };
+  if (ownerFull) return { effects: "full", measure: false, verdict, ownerFull: true };
   const due = now - verdict.judgedAt >= WEAK_PHONE_RULE.recheckDays * DAY_MS;
   return due
-    ? { effects: "full", measure: true, verdict }
-    : { effects: "simple", measure: false, verdict };
+    ? { effects: "full", measure: true, verdict, ownerFull: false }
+    : { effects: "simple", measure: false, verdict, ownerFull: false };
+};
+
+/**
+ * [session] once the owner turns Full glass [on] or off, mid-session. On, the
+ * full effects come back at once; off, the glass simplifies at once, and the
+ * next start follows the verdict again, its re-check included. Neither starts
+ * the frame meter mid-session.
+ */
+export const ownerFullEffects = (session: SessionEffects, on: boolean): SessionEffects => {
+  if (!isWeak(session.verdict)) return session;
+  return on
+    ? { ...session, effects: "full", measure: false, ownerFull: true }
+    : { ...session, effects: "simple", measure: false, ownerFull: false };
+};
+
+/** The owner's Full glass as stored on this phone (never synced); anything but "on" is off. */
+export const readFullGlassChoice = (stored: string | null): boolean => stored === "on";
+
+/** What to store for Full glass; off removes the key. */
+export const writeFullGlassChoice = (on: boolean): string | null => (on ? "on" : null);
+
+/** What Settings › Appearance › Glass adds on a phone judged weak. */
+export interface FullGlassNotice {
+  /** Why the glass was simplified, and when. */
+  readonly text: string;
+  /** The Full glass switch. */
+  readonly on: boolean;
+}
+
+/**
+ * Appearance's notice and Full glass switch for [session]; null leaves the
+ * Glass section as it is: a phone drawing the full effects by its own verdict,
+ * never measured, or in its re-check session.
+ */
+export const fullGlassNotice = (
+  session: SessionEffects,
+  language: AppLanguage,
+): FullGlassNotice | null => {
+  const { verdict } = session;
+  if (!isWeak(verdict) || (session.effects === "full" && !session.ownerFull)) return null;
+  const strings = catalogueOf(language).settings.fullGlass;
+  const date = formatDate(language, verdict.judgedAt);
+  return session.ownerFull
+    ? { text: strings.simplifiedFullOn(date), on: true }
+    : { text: strings.simplified(date), on: false };
 };
 
 const isCount = (value: unknown): value is number =>
@@ -123,6 +190,8 @@ const daysAgo = (judgedAt: number, now: number): string => {
 
 /** The app log's line for [session], written once per start. */
 export const phoneEffectsLine = (session: SessionEffects, now: number): string => {
+  // not UI text: the app log's line
+  if (session.ownerFull) return "Phone effects: full (turned on by the owner)";
   const { verdict } = session;
   const why =
     verdict === null

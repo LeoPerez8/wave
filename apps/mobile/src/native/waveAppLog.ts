@@ -6,7 +6,14 @@ import { NativeModule, requireOptionalNativeModule } from "expo";
  * which native code writes to as well. Core's `appLog.ts` decides what goes in it.
  */
 type WaveAppLogEvents = {
-  timingFrames: (event: TimingFrames & { id: number; measured: boolean }) => void;
+  /** `motion`: null unless `markTimingFrames` marked the transition's motion (#1536). */
+  timingFrames: (
+    event: Omit<TimingFrames, "motion"> & {
+      id: number;
+      measured: boolean;
+      motion?: Omit<TimingFrames, "motion"> | null;
+    },
+  ) => void;
   /** Native code wants the Hermes heap for a memory line: answer with `reportHermesHeap`. */
   hermesHeapWanted: () => void;
   /** Android warned that memory is short: write the waiting log entries now. */
@@ -17,6 +24,12 @@ declare class WaveAppLogModule extends NativeModule<WaveAppLogEvents> {
   /** Appends formatted entries off the JS thread; resolves the log's size in bytes. */
   timingFrameIntervalMs?(): number;
   startTimingFrames?(id: number, ageMs: number): void;
+  /**
+   * The transition's motion started at [atMs], a UI frame's time (Choreographer's clock, as
+   * Reanimated's frame timestamps): its frames are counted apart from then (#1536). Missing in
+   * older builds.
+   */
+  markTimingFrames?(id: number, atMs: number): void;
   stopTimingFrames?(id: number): void;
   takeTimingHitches?(): number[];
   append(text: string): Promise<number>;

@@ -278,6 +278,11 @@ export const hitchLine = (
 export interface TimingFrames {
   readonly count: number;
   readonly longestGapMs: number;
+  /**
+   * The part of the transition after its motion started, when the motion started after the
+   * screen's first frame (a tab's slide, #1536): the gaps that began at or after its start.
+   */
+  readonly motion?: Omit<TimingFrames, "motion">;
 }
 
 export const missedFramesLine = (
@@ -287,5 +292,9 @@ export const missedFramesLine = (
 ): string | null => {
   if (frames.count <= 0) return null;
   const name = KIND_NAMES[transition.kind];
-  return `${name[0]!.toUpperCase()}${name.slice(1)} to ${transition.to} missed ${frames.count} frames (longest gap ${timingDuration(frames.longestGapMs)}; ${lane})`;
+  const line = `${name[0]!.toUpperCase()}${name.slice(1)} to ${transition.to} missed ${frames.count} frames (longest gap ${timingDuration(frames.longestGapMs)}; ${lane})`;
+  const motion = frames.motion;
+  return motion === undefined
+    ? line
+    : `${line}; its motion missed ${motion.count} (longest gap ${timingDuration(motion.longestGapMs)})`;
 };

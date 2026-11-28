@@ -8,17 +8,19 @@ import { parseTabScreens } from "@wave/core";
 import { MODULE_COLLECTIONS } from "./performancePolicy.ts";
 import { mobileSources } from "./sourceAudit.mjs";
 
-// Memory (docs/spec.md › Fluidity, #1358): hidden tabs stay frozen, and every
-// collection a module keeps for the session says what bounds it (Performance
+// Memory (docs/spec.md › Fluidity, #1358): hidden tabs follow no store, screens under a push stay
+// frozen, and every collection a module keeps for the session says what bounds it (Performance
 // rules, 12).
 
 const app = join(import.meta.dirname, "..", "..");
 const repo = join(app, "..", "..");
 const sources = mobileSources(join(app, "src"));
 
-test("a hidden tab is frozen by default: it renders nothing and follows no store (#1358)", () => {
+// #1535 measured the frozen tab's return costing each switch's first frame, so a hidden tab is no
+// longer frozen; its stores still pause, and #1534 keeps the navigator's renders out of it.
+test("a hidden tab is detached and follows no store, and isn't frozen by default (#1358, #1535)", () => {
   const screens = parseTabScreens(undefined);
-  assert.equal(screens.freeze, true);
+  assert.equal(screens.freeze, false);
   assert.equal(screens.detach, true);
   assert.equal(screens.followHidden, false);
   const tabs = sources["chrome/tabScreens.tsx"]!;
@@ -104,7 +106,7 @@ test("a planted unbounded cache fails the guard", () => {
   ]);
 });
 
-test("a screen under a push is frozen as a hidden tab is (#1423)", () => {
+test("a screen under a push is frozen, whatever hidden tabs do (#1423, #1535)", () => {
   const stacks = Object.entries(sources).filter(([, text]) => /<Stack(?![.\w])/.test(text));
   assert.ok(stacks.length >= 3, "the root, Library and section-tab stacks are found");
   for (const [file, text] of stacks) {
@@ -113,6 +115,7 @@ test("a screen under a push is frozen as a hidden tab is (#1423)", () => {
     }
     assert.match(text, /const screenOptions = useStackScreenOptions\(\);/, file);
   }
+  assert.equal(parseTabScreens(undefined).freezeStacks, true);
   const tabs = sources["chrome/tabScreens.tsx"]!;
-  assert.match(tabs, /freezeOnBlur: TAB_SCREENS\.freeze/);
+  assert.match(tabs, /freezeOnBlur: TAB_SCREENS\.freezeStacks/);
 });

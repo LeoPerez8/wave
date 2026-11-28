@@ -528,11 +528,15 @@ export const playlistItems = sqliteTable(
  * gone with its song. Row 0 is the Library's: raised when a track's length or
  * album, an album's cover or a cover's files change. Library › Playlists
  * works out again only the playlists whose counter (or the Library's) moved
- * since it last read them (`db/playlists.ts`). Never synced; no row is a
- * revision of 0.
+ * since it last read them (`db/playlists.ts`). Row -1 is no counter: it
+ * keeps the entries' revision the last whole-Library link left (a scan's,
+ * `markPlaylistsLinked`). Never synced.
  */
 export const playlistRevisions = sqliteTable("playlist_revisions", {
-  /** A playlist's id, or 0 for the Library's tracks, albums and covers. No foreign key. */
+  /**
+   * A playlist's id, 0 for the Library's tracks, albums and covers, or -1 for the entries'
+   * revision the last whole-Library link saw (`playlists.ts`, `LINKED_REVISION`). No foreign key.
+   */
   playlistId: integer("playlist_id").primaryKey(),
   revision: integer("revision").notNull().default(0),
 });

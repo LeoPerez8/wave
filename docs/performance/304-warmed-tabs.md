@@ -59,11 +59,12 @@ will choose how hidden tabs are kept. Nothing below is a phone measurement.
   | `display-none` (default)    | `display: none`: showing it lays the subtree out again                                             |
   | `keep-layout` (with detach) | keeps its layout, every tab filling the slot (`position: absolute`): showing it lays nothing out   |
   | `freeze` (with detach)      | its React tree is frozen (`freezeOnBlur`): no renders while hidden, pending ones run when it shows |
-  | `thaw`                      | not frozen (the default before #1358)                                                              |
+  | `thaw` (default)            | not frozen (the default before #1358, and again since #1535)                                       |
   | `retain=<n>`                | at most n tabs kept mounted, the shown one included                                                |
 
-  **Since #1358 the default freezes** (`detach,display-none,freeze,retain=5`; see
-  `docs/performance/1358-frozen-tabs-memory.md`). Before it, the default was unchanged: the ticket asks to measure before
+  **Since #1535 the default doesn't freeze** (`detach,display-none,thaw,retain=5`; #1358 had
+  made it freeze, `docs/performance/1358-frozen-tabs-memory.md`, and #1535 measured the frozen
+  tab's return costing each switch's first frame, `docs/performance/1535-tabs-mode.md`). Before it, the default was unchanged: the ticket asks to measure before
   choosing, and no phone was attached. A perf build reports its choice in `tabs.screens`.
 
 ### Instrumentation
@@ -120,12 +121,18 @@ What each choice is expected to show, to check against the numbers rather than a
   `useFocusedVersion`); can add work to the switch that unfreezes.
 - `retain=3`: less memory, a `first` visit cost each time an evicted tab comes back.
 
-| Step                      | Before      | After (default) | Best choice |
-| ------------------------- | ----------- | --------------- | ----------- |
-| `tab-first/idle/first`    | **pending** | **pending**     | **pending** |
-| `tab-switch/idle/tab`     | **pending** | **pending**     | **pending** |
-| `rapid-tabs/idle/burst`   | **pending** | **pending**     | **pending** |
-| memory after `tab-switch` | **pending** | **pending**     | **pending** |
+**Measured by #1535, on the emulator** (`wave-run-903`, perf builds of `2f2a0300d`, which carry
+#304, #1358 and #1534; `docs/performance/1535-tabs-mode.md` has every choice and how the runs
+went). First frame median / p90 in ms; "After (default)" is the default those builds shipped
+(`detach,display-none,freeze`), "Best choice" the one #1535 adopted (`detach,display-none,thaw`).
+The phone confirms them from the owner's next exported log.
+
+| Step                      | Before (a82e41d)         | After (default), 4 runs | Best choice (`thaw`), 4 runs |
+| ------------------------- | ------------------------ | ----------------------- | ---------------------------- |
+| `tab-first/idle/first`    | not measured: no old APK | 242 / 322               | 239 / 265                    |
+| `tab-switch/idle/tab`     | not measured: no old APK | 168 / 282               | 130 / 196                    |
+| `rapid-tabs/idle/burst`   | not measured: no old APK | settle 837 / 927        | settle 829 / 972             |
+| memory after `tab-switch` | not measured: no old APK | PSS 434 to 644 MB       | PSS 427 to 459 MB            |
 
 ## Behavior kept
 

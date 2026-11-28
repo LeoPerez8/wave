@@ -8,8 +8,10 @@ import {
   type TabBar,
   type TabBarTab,
 } from "@wave/core";
+import { CHILD_STATE } from "expo-router/build/react-navigation/core/useRouteCache";
 import type { TabSlot } from "expo-router/ui";
 import {
+  memo,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -28,13 +30,13 @@ import { PERF_ENABLED, perfMark, registerPerfMeta } from "@/perf/perf";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /**
- * How hidden tabs are kept (#304). By default: taken out of the window, hidden
- * with `display: none` and frozen (#1358), so a hidden tab renders nothing; the
- * updates it missed render once when it shows again, and its stores already
- * paused (`useSightedStore`) catch up then. A bundle built with
- * `EXPO_PUBLIC_WAVE_TABS` (e.g. `keep-layout`, `attach`, `thaw`, `retain=3`)
- * picks another, for the phone comparison in docs/performance/304-warmed-tabs.md.
- * `perf/memoryGuards.test.ts` keeps the default frozen.
+ * How hidden tabs are kept (#304). By default: taken out of the window and hidden with
+ * `display: none`, not frozen (#1535: showing a frozen tab again cost each switch's first
+ * frame). A hidden tab still renders little: its stores pause (`useSightedStore`) and catch up
+ * once when it shows, and `TabContent` keeps the navigator's renders out of it (#1534). A bundle
+ * built with `EXPO_PUBLIC_WAVE_TABS` (e.g. `keep-layout`, `attach`, `freeze`, `retain=3`) picks
+ * another, for the comparison in docs/performance/1535-tabs-mode.md.
+ * `perf/memoryGuards.test.ts` keeps the default.
  */
 export const TAB_SCREENS = parseTabScreens(process.env.EXPO_PUBLIC_WAVE_TABS);
 
@@ -42,9 +44,10 @@ registerPerfMeta("tabs", () => ({ screens: describeTabScreens(TAB_SCREENS) }), t
 
 /**
  * Every stack's screen options: no header, the theme's background, and a
- * screen under a push frozen as a hidden tab is (#1423), so a list or Home
- * under a pushed album renders nothing until it shows again. `thaw` bundles
- * leave them live too. `perf/memoryGuards.test.ts` keeps every stack on these.
+ * screen under a push frozen (#1423), so a list or Home under a pushed album renders nothing
+ * until it shows again. Hidden tabs aren't frozen since #1535; screens under a push still are,
+ * since pops weren't measured there. `thaw-stacks` bundles leave them live.
+ * `perf/memoryGuards.test.ts` keeps every stack on these.
  */
 export const useStackScreenOptions = () => {
   const background = useThemeColor("background");
@@ -52,7 +55,7 @@ export const useStackScreenOptions = () => {
     () => ({
       headerShown: false,
       contentStyle: { backgroundColor: background },
-      freezeOnBlur: TAB_SCREENS.freeze,
+      freezeOnBlur: TAB_SCREENS.freezeStacks,
     }),
     [background],
   );
@@ -130,13 +133,64 @@ function TabCommitMark({
   return children;
 }
 
+type TabDescriptor = Parameters<RenderTab>[0];
+
+// expo-router's copy of react-navigation keeps a route's nested state under this private symbol.
+// Without it `TabContent` can't see a push inside a kept tab, so a bundle that lost it fails
+// loudly in development; `tabRenders.test.ts` drives expo-router's own route cache.
+if (process.env.NODE_ENV !== "production" && typeof CHILD_STATE !== "symbol")
+  throw new Error("expo-router no longer exports CHILD_STATE from its route cache");
+
+/**
+ * The nested navigator's state a tab's route carries. react-navigation keeps a route's object
+ * while its key, name and params hold, and hangs the nested state on it under `CHILD_STATE`
+ * (`useRouteCache`, which drops `route.state`), so a push inside a tab changes this and not the
+ * route.
+ */
+const childStateOf = (route: TabDescriptor["route"]): unknown =>
+  (route as unknown as Record<symbol, unknown>)[CHILD_STATE];
+
+const sameOptions = (a: object, b: object): boolean => {
+  if (a === b) return true;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((key) => Object.hasOwn(b, key) && Object.is(a[key as never], b[key as never]));
+};
+
+type TabContentProps = { name: string; descriptor: TabDescriptor; childState: unknown };
+
+/**
+ * A kept tab's content, rendered again only when its route, nested state, navigation or
+ * options changed (#1534). expo-router's `TabSlot` renders on every navigation and each
+ * tab's `descriptor.render()` returns new elements, so without this a switch rendered every
+ * kept tab whole: the tab left once more before its freeze lands (react-native-screens'
+ * `DelayedFreeze`) and the tab shown as it unfroze. The tab's own state and stores still
+ * render what changed in it.
+ */
+const TabContent = memo(
+  function TabContent({ name, descriptor }: TabContentProps) {
+    return (
+      <PageGradientScope>
+        <RenderCost name={`tab:${name}`}>{descriptor.render()}</RenderCost>
+      </PageGradientScope>
+    );
+  },
+  (previous, next) =>
+    previous.name === next.name &&
+    previous.childState === next.childState &&
+    previous.descriptor.route === next.descriptor.route &&
+    previous.descriptor.navigation === next.descriptor.navigation &&
+    sameOptions(previous.descriptor.options, next.descriptor.options),
+);
+
 /**
  * Renders the tab screens for `TabSlot` as expo-router's default does, with
  * `TAB_SCREENS`' choices: a tab not [kept] isn't rendered while hidden (a kept
- * one is, even before its first visit), a
- * hidden tab freezes and can keep its layout. Each tab has its page-top gradient's scope
- * (`PageGradientScope`). Perf builds mark each tab's commit
- * and layout (`tab.commit`, `tab.layout`).
+ * one is, even before its first visit), and a comparison bundle's hidden tab can freeze or keep
+ * its layout. Each tab has its page-top gradient's scope
+ * (`PageGradientScope`), and its content renders only when its route or options change
+ * (`TabContent`), so a switch renders neither the tab left nor the tab shown. Perf builds
+ * mark each tab's commit and layout (`tab.commit`, `tab.layout`).
  */
 export const renderTabScreens =
   (kept: readonly string[]): RenderTab =>
@@ -148,6 +202,9 @@ export const renderTabScreens =
     const look = TAB_SCREENS.keepLayout
       ? [styles.laidOut, isFocused ? styles.front : styles.back]
       : [styles.screen, isFocused ? styles.focused : styles.unfocused];
+    const content = (
+      <TabContent name={name} descriptor={descriptor} childState={childStateOf(descriptor.route)} />
+    );
     return (
       <Screen
         key={descriptor.route.key}
@@ -163,17 +220,13 @@ export const renderTabScreens =
             : undefined
         }
       >
-        <PageGradientScope>
-          <RenderCost name={`tab:${name}`}>
-            {PERF_ENABLED ? (
-              <TabCommitMark name={name} focused={isFocused}>
-                {descriptor.render()}
-              </TabCommitMark>
-            ) : (
-              descriptor.render()
-            )}
-          </RenderCost>
-        </PageGradientScope>
+        {PERF_ENABLED ? (
+          <TabCommitMark name={name} focused={isFocused}>
+            {content}
+          </TabCommitMark>
+        ) : (
+          content
+        )}
       </Screen>
     );
   };
