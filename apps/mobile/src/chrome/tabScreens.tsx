@@ -8,6 +8,7 @@ import {
   type TabBar,
   type TabBarTab,
 } from "@wave/core";
+import { CHILD_STATE } from "expo-router/build/react-navigation/core/useRouteCache";
 import type { TabSlot } from "expo-router/ui";
 import {
   memo,
@@ -134,20 +135,20 @@ function TabCommitMark({
 
 type TabDescriptor = Parameters<RenderTab>[0];
 
-let childStateKey: symbol | undefined;
+// expo-router's copy of react-navigation keeps a route's nested state under this private symbol.
+// Without it `TabContent` can't see a push inside a kept tab, so a bundle that lost it fails
+// loudly in development; `tabRenders.test.ts` drives expo-router's own route cache.
+if (process.env.NODE_ENV !== "production" && typeof CHILD_STATE !== "symbol")
+  throw new Error("expo-router no longer exports CHILD_STATE from its route cache");
+
 /**
  * The nested navigator's state a tab's route carries. react-navigation keeps a route's object
- * while its key, name and params hold, and hangs the nested state on it under a private symbol
- * (`CHILD_STATE`), so a push inside a tab changes this and not the route.
+ * while its key, name and params hold, and hangs the nested state on it under `CHILD_STATE`
+ * (`useRouteCache`, which drops `route.state`), so a push inside a tab changes this and not the
+ * route.
  */
-const childStateOf = (route: TabDescriptor["route"]): unknown => {
-  childStateKey ??= Object.getOwnPropertySymbols(route).find(
-    (key) => key.description === "CHILD_STATE",
-  );
-  return childStateKey === undefined
-    ? (route as { state?: unknown }).state
-    : (route as unknown as Record<symbol, unknown>)[childStateKey];
-};
+const childStateOf = (route: TabDescriptor["route"]): unknown =>
+  (route as unknown as Record<symbol, unknown>)[CHILD_STATE];
 
 const sameOptions = (a: object, b: object): boolean => {
   if (a === b) return true;

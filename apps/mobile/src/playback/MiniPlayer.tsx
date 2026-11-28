@@ -107,7 +107,7 @@ const finishOpen = (
 const usePlaybackField = <K extends "item" | "playWhenReady">(key: K) =>
   useSyncExternalStore(playbackState.subscribe, () => playbackState.get()[key]);
 
-const somethingPlays = () => playbackState.get().item !== null;
+const songLoaded = () => playbackState.get().item !== null;
 
 type Props = {
   /** `nativeID` of the view behind the mini player, for the glass. */
@@ -131,7 +131,7 @@ export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props
   // following the song, a theme change's screens) isn't the mini player's (#1533).
   const renderEnd = useOwnRenderCost("MiniPlayer");
   // Whether a song is loaded, not which: a song change renders `MiniPlayerSong` alone.
-  const shown = useSyncExternalStore(playbackState.subscribe, somethingPlays);
+  const shown = useSyncExternalStore(playbackState.subscribe, songLoaded);
   const { signal } = useNetworkSignal();
   const heldUp = networkSignalHoldsUp(signal);
   const accent = useThemeColor("accent");
@@ -316,7 +316,8 @@ type SongProps = {
 const MiniPlayerSong = memo(function MiniPlayerSong({ onOpen, pill, heldUp }: SongProps) {
   const { strings } = useLocalisation();
   useRenderCount("MiniPlayerSong");
-  const renderEnd = useOwnRenderCost("MiniPlayer");
+  // Its own name, so a song change's span isn't read as the whole pill's.
+  const renderEnd = useOwnRenderCost("MiniPlayerSong");
   const item = usePlaybackField("item");
   const playing = usePlaybackField("playWhenReady");
   // Why playback stopped; null while the song plays as usual, and for the network's

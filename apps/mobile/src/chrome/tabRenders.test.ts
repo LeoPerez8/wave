@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { CHILD_STATE, useRouteCache } from "expo-router/build/react-navigation/core/useRouteCache";
 import { createElement, useState, type ReactNode } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
@@ -56,9 +57,6 @@ const [{ renderTabScreens }] = await loadWithStubs<[typeof import("./tabScreens.
   },
 );
 
-/** As react-navigation's route cache keeps it: the route without its state, which rides along. */
-const CHILD_STATE = Symbol("CHILD_STATE");
-
 type NestedState = { readonly index: number; readonly routes: readonly { name: string }[] };
 type TabRoute = {
   readonly key: string;
@@ -88,33 +86,22 @@ function TabsNavigator({
   options: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   renderFn: ReturnType<typeof renderTabScreens>;
 }) {
-  const [cache] = useState(() => ({
-    routes: new Map<string, Record<string | symbol, unknown>>(),
-    navigation: new Map<string, object>(),
-  }));
+  const [navigation] = useState(() => new Map<string, object>());
   const [loaded] = useState(() => new Set<string>());
   const focused = state.routes[state.index]!;
   loaded.add(focused.key);
+  // expo-router's own route cache (its copy of react-navigation's): each route keeps its object
+  // while key, name and params hold, and carries its nested state under `CHILD_STATE`. A rename
+  // or a change there fails these tests rather than every push inside a kept tab.
+  const routes = useRouteCache(state.routes as never);
   const children: ReactNode[] = state.routes.map((route, index) => {
-    const { state: nested, ...withoutState } = route;
-    const previous = cache.routes.get(route.key);
-    const same =
-      previous !== undefined &&
-      previous.name === route.name &&
-      previous.params === route.params &&
-      previous.key === route.key;
-    const proxy = same ? previous : { ...withoutState };
-    Object.defineProperty(proxy, CHILD_STATE, {
-      enumerable: false,
-      configurable: true,
-      value: nested,
-    });
-    cache.routes.set(route.key, proxy);
-    if (!cache.navigation.has(route.key)) cache.navigation.set(route.key, {});
+    const nested = route.state;
+    const proxy = routes[index]!;
+    if (!navigation.has(route.key)) navigation.set(route.key, {});
     const element = createElement(TabScreen, { name: route.name, nested });
     const descriptor = {
       route: proxy,
-      navigation: cache.navigation.get(route.key)!,
+      navigation: navigation.get(route.key)!,
       options: { ...options[route.name] },
       render: () => element,
     };
@@ -183,6 +170,10 @@ const rendersDuring = async (step: () => Promise<void>): Promise<string[]> => {
   return [...harness.screens];
 };
 
+test("expo-router's route cache still hangs a tab's nested state where tab screens read it", () => {
+  assert.equal(typeof CHILD_STATE, "symbol");
+});
+
 test("a switch between kept tabs renders neither the tab left nor the tab shown", async () => {
   const tabs = await mount();
   try {
@@ -233,6 +224,22 @@ test("a tab whose params or options changed while hidden renders once, not again
       [],
     );
     assert.deepEqual(await rendersDuring(() => tabs.show("index")), []);
+  } finally {
+    await tabs.close();
+  }
+});
+
+test("a re-tap that pops a tab back to its root renders that tab, and only it", async () => {
+  const tabs = await mount();
+  try {
+    await tabs.show("library");
+    const pushed: NestedState = { index: 1, routes: [{ name: "index" }, { name: "album/[id]" }] };
+    await tabs.change("library", { state: pushed });
+    // The trigger's press (`tabPress`) pops the tab's stack to its root while it shows.
+    const root: NestedState = { index: 0, routes: [{ name: "index" }] };
+    assert.deepEqual(await rendersDuring(() => tabs.change("library", { state: root })), [
+      "library",
+    ]);
   } finally {
     await tabs.close();
   }

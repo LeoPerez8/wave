@@ -84,7 +84,7 @@ describe("JS that Wave's named work didn't start says what it was, for the block
     assert.deepEqual(runtime.spans, ["running a timer 100+80"]);
   });
 
-  test("intervals, frame callbacks and Effect's turns (setImmediate) each say theirs", () => {
+  test("intervals, frame callbacks and setImmediate's callbacks (Effect's turns among them) each say theirs", () => {
     const runtime = fakeRuntime();
     runtime.sendTo(runtime.sink);
     (runtime.scope.setInterval as Callback)(() => runtime.spend(5), 100);
@@ -94,7 +94,7 @@ describe("JS that Wave's named work didn't start says what it was, for the block
     assert.deepEqual(runtime.spans, [
       "running a timer 0+5",
       "running a frame callback 5+6",
-      "running Effect work 11+7",
+      "running a setImmediate callback 11+7",
     ]);
   });
 

@@ -21,8 +21,8 @@ const profiles = persistedSetting<ArtistProfiles>({
   read: parseArtistProfiles,
   write: (value) => (value.size === 0 ? null : storedArtistProfiles(value)),
   // Each write stores every profile (up to 2,000) at once, and the lookup saves one about every
-  // 2.5 s: they're written once it pauses, or once a minute while it runs (#1530). Leaving
-  // Wave writes what waits.
+  // 2.5 s: they're written once it pauses, or once a minute while it runs (#1530). Wave going
+  // to the background writes what waits at once (`persistedSetting`).
   persistDelayMs: 10_000,
   persistMaxDelayMs: 60_000,
 });

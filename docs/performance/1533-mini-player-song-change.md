@@ -51,8 +51,9 @@ new song.
   gestures and the held-up wave. It reads only whether a song is loaded. `MiniPlayerSong` renders
   the cover, the title and artist (or why playback stopped), the press that opens Now Playing and
   the play/pause button. A song change, play or pause renders `MiniPlayerSong` alone. `NextButton`
-  is the same for every song and stays as it was. Both parts use the name `MiniPlayer` for the
-  block log.
+  is the same for every song and stays as it was. Each part has its own name for the block log:
+  `MiniPlayer` for the pill and `MiniPlayerSong` for the song's part, which is the span a song
+  change reports.
 - **Perf builds mark every span.** `render.span` (`"<name> <ms>"`) is marked for each reported
   span. The runner keeps each component's longest span per step as `renderSpansMs`, so a run shows
   the mini player's span on each Next even when no long task named it.
@@ -84,10 +85,10 @@ renders the mini player under 50 ms, logged by its `RenderCost`" is **pending**.
 The measurement to run once an AVD and space are back: a perf build of the integration tip and of
 this branch (`EXPO_PUBLIC_WAVE_PERF=1`), the 3,000-song seed (`scripts/perf/seed.ts`), then
 `perf.ts run --scenario skip --label 1533-before|after` (10 Nexts each). Read
-`renderSpansMs.MiniPlayer` per step, and the app log's `rendering MiniPlayer` and
+`renderSpansMs.MiniPlayerSong` per step, and the app log's `rendering MiniPlayerSong` and
 `rendering NowPlayingSheet` / `PlayerView` lines. Previous and crossfade need a hand session with
 crossfade on. The phone then confirms it from the WaveTiming lines of the owner's next exported log
-on the `ti` release. Expect no `rendering MiniPlayer` line on a song change, and the blocks that
+on the `ti` release. Expect no `rendering MiniPlayerSong` line on a song change, and the blocks that
 remain named after Now Playing.
 
 ## Left for later

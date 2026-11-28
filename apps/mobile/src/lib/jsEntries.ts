@@ -5,7 +5,8 @@
  *
  * - a timer's, an interval's or a frame callback's run ("running a timer", "running a frame
  *   callback");
- * - Effect's turns, which it takes through `setImmediate` ("running Effect work");
+ * - a `setImmediate` callback ("running a setImmediate callback"): Effect's turns come this way,
+ *   but anything else may schedule one too, so it doesn't name Effect;
  * - a native event, through React Native's emitter (the network's answers, the keyboard, app
  *   state) or an Expo module's listeners ("handling native event onJobsChanged");
  * - React's commits and effect runs, as the moments they ended, from the hook
@@ -50,7 +51,7 @@ const ENTRY_MIN_MS = 1;
 
 const TIMER = "running a timer";
 const FRAME = "running a frame callback";
-const EFFECT_WORK = "running Effect work";
+const IMMEDIATE = "running a setImmediate callback";
 // not UI text: the app log's block line
 const nativeEvent = (name: string): string => `handling native event ${name}`;
 
@@ -69,8 +70,17 @@ export const installJsEntries = ({
 }: JsEntryTargets): ((sink: JsEntrySink) => void) => {
   let sink: JsEntrySink | null = null;
 
-  /** Runs [run] with [self] and [args], reporting it as [name] when the block log listens. */
-  const timed = <A>(name: string, self: unknown, args: readonly unknown[], run: Listener): A => {
+  /**
+   * Runs [run] with [self] and [args], reporting it when the block log listens: as [name], or as
+   * the native event [event] when one is given. The event's label is built only for a report.
+   */
+  const timed = <A>(
+    name: string,
+    event: string | null,
+    self: unknown,
+    args: readonly unknown[],
+    run: Listener,
+  ): A => {
     const to = sink;
     if (to === null) return run.apply(self, args as unknown[]) as A;
     const startedAt = now();
@@ -78,7 +88,8 @@ export const installJsEntries = ({
       return run.apply(self, args as unknown[]) as A;
     } finally {
       const durationMs = now() - startedAt;
-      if (durationMs >= ENTRY_MIN_MS) to.entryRan(name, startedAt, durationMs);
+      if (durationMs >= ENTRY_MIN_MS)
+        to.entryRan(event === null ? name : nativeEvent(event), startedAt, durationMs);
     }
   };
 
@@ -90,7 +101,7 @@ export const installJsEntries = ({
       const callback =
         typeof run === "function"
           ? function (this: unknown, ...args: unknown[]) {
-              return timed(name, this, args, run as Listener);
+              return timed(name, null, this, args, run as Listener);
             }
           : run;
       return (schedule as Listener).call(this, callback, ...rest);
@@ -99,12 +110,12 @@ export const installJsEntries = ({
   wrapScheduler("setTimeout", TIMER);
   wrapScheduler("setInterval", TIMER);
   wrapScheduler("requestAnimationFrame", FRAME);
-  wrapScheduler("setImmediate", EFFECT_WORK);
+  wrapScheduler("setImmediate", IMMEDIATE);
 
   if (deviceEvents != null) {
     const emit = deviceEvents.emit as Listener;
     deviceEvents.emit = function (this: unknown, name: string, ...args: unknown[]) {
-      return timed(nativeEvent(name), this, [name, ...args], emit);
+      return timed("", name, this, [name, ...args], emit);
     };
   }
 
@@ -121,7 +132,7 @@ export const installJsEntries = ({
       let standIn = byName.get(name);
       if (standIn === undefined) {
         standIn = function (this: unknown, ...args: unknown[]) {
-          return timed(nativeEvent(name), this, args, listener);
+          return timed("", name, this, args, listener);
         };
         byName.set(name, standIn);
       }

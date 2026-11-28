@@ -6,6 +6,9 @@
  * (`onPostCommitFiberRoot`). This hook only passes those two moments on to
  * `globalThis.__waveReactCommits`, which `src/lib/jsEntries.ts` fills in.
  *
+ * Nothing else: React calls `onCommitFiberUnmount` for every fiber it deletes when the hook has
+ * one, and only react-dom calls `checkDCE`, so neither is here.
+ *
  * Release builds only: a debug build has React DevTools' own hook, which this must not replace.
  */
 (function (target) {
@@ -28,7 +31,5 @@
       var effectsRan = listeners.effectsRan;
       if (effectsRan !== null) effectsRan();
     },
-    onCommitFiberUnmount: function () {},
-    checkDCE: function () {},
   };
 })(typeof globalThis !== "undefined" ? globalThis : global);
