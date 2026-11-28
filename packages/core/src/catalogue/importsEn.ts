@@ -149,6 +149,9 @@ export const importsEn = {
   export: "Export",
   exportWaiting: "Waiting to export",
   exportingOf: (done: string, total: string): string => `Exporting ${done} of ${total}`,
+  /** Settings › Accounts › YT Music while an export runs (`ytExportRunLine`). */
+  exportingPlaylists: (done: string, total: string): string =>
+    `Exporting playlists · ${done} of ${total}`,
   liked: (count: number): string => `${n(count)} liked`,
   exportSignInMessage:
     "Exporting makes private copies of your playlists on your YouTube Music account and likes your favorites there.",

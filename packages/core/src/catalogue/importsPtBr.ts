@@ -152,6 +152,8 @@ export const importsPtBr: typeof importsEn = {
   export: "Exportar",
   exportWaiting: "Aguardando exportação",
   exportingOf: (done: string, total: string): string => `Exportando ${done} de ${total}`,
+  exportingPlaylists: (done: string, total: string): string =>
+    `Exportando playlists · ${done} de ${total}`,
   liked: (count: number): string =>
     plural("pt-BR", count, {
       zero: `${n(count)} curtidas`,

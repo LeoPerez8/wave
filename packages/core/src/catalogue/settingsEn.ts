@@ -88,6 +88,20 @@ export const settingsEn = {
       "phones is deleted. Sign in again on the phones you use.",
     action: "Sign Out on All Phones",
   },
+  /** Asked before Use YT Music turns off on this phone (`confirmYtMusicOff`). */
+  turnOffYtMusic: {
+    title: "Turn Off YT Music?",
+    message:
+      "Wave stops sending requests to YouTube. You lose:\n" +
+      "• Online search and streamed songs\n" +
+      "• DJ, Discover and Community playlists on Home\n" +
+      "• Magic Queue and playlist suggestions\n" +
+      "• Downloads, imports and Export through YT Music\n" +
+      "Downloaded songs keep playing and nothing is deleted.",
+    /** Its last line while signed in to a Wave account, which syncs the setting. */
+    everyPhone: "This applies to every phone signed in to your Wave account.",
+    action: "Turn Off",
+  },
   /** Asked before new colours change the app icon (`launcherIconSwitch`). */
   launcherIcon: {
     title: "Change the app icon too?",

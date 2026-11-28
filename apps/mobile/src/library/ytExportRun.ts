@@ -11,7 +11,9 @@
  * an answer stops it with Share's message; the playlists sent so far stay.
  * Nothing is kept for resuming: exporting again updates the same playlists.
  * An Export pressed while another runs goes after it; a playlist queued in
- * any export keeps a line until the last one sends it.
+ * any export keeps a line until the last one sends it. Settings › Accounts
+ * › YT Music counts the items of every export queued since none was running
+ * (`useYtExportRunLine`, Core's `ytExportRunLine`).
  */
 import {
   addExportedPlaylist,
@@ -19,14 +21,20 @@ import {
   EXPORT_WAITING_PROGRESS,
   exportingProgress,
   NO_YT_EXPORT,
+  queueYtExportRun,
   syncSharedPlaylist,
+  ytExportRunDone,
+  ytExportRunLine,
   ytExportSummaryLine,
   type SharedSongs,
   type YtExportItem,
+  type YtExportRunCount,
   type YtExportSummary,
 } from "@wave/core";
+import { useSyncExternalStore } from "react";
 
-import { currentLocalisation } from "@/localisation/localisation";
+import { makeExternalStore } from "@wave/client/externalStore";
+import { currentLocalisation, useLocalisation } from "@/localisation/localisation";
 import { appLog } from "@/log/appLog";
 import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
@@ -50,6 +58,22 @@ const queued = new Map<number, number>();
 
 /** The item being sent now, by its progress id; its line counts its songs. */
 let sending: number | null = null;
+
+/**
+ * The items of every export queued since none was running, and how many of
+ * them are sent, skipped as deleted, or dropped when an export stopped.
+ */
+export const exportRunCount = makeExternalStore<YtExportRunCount>({ done: 0, total: 0 });
+
+/** One more item of the run is done with. */
+const countDone = (): void => exportRunCount.update(ytExportRunDone);
+
+/** "Exporting playlists · 3 of 9" while exports run; null once none is left queued. */
+export const useYtExportRunLine = (): string | null => {
+  const { language } = useLocalisation();
+  const count = useSyncExternalStore(exportRunCount.subscribe, exportRunCount.get);
+  return ytExportRunLine(count, language);
+};
 
 /**
  * One export no longer has to send [id]: its line goes once no export
@@ -92,6 +116,7 @@ const send = async (item: YtExportItem): Promise<SharedSongs | null> => {
   } finally {
     sending = null;
     dequeue(id);
+    countDone();
   }
 };
 
@@ -114,7 +139,10 @@ const sendAll = async (items: readonly YtExportItem[]): Promise<void> => {
           : addExportedPlaylist(summary, songs);
     }
   } catch (error) {
-    for (const item of items.slice(started)) dequeue(progressId(item));
+    for (const item of items.slice(started)) {
+      dequeue(progressId(item));
+      countDone();
+    }
     appLog("warn", LOG_TAG, logLine(summary, true));
     const { strings } = currentLocalisation();
     await showError(strings.imports.couldntExport, new Error(ytMusicFailureMessage(error)));
@@ -134,6 +162,7 @@ let running: Promise<void> = Promise.resolve();
  * after any export still running.
  */
 export const exportToYtMusic = (items: readonly YtExportItem[]): Promise<void> => {
+  exportRunCount.update((count) => queueYtExportRun(count, items.length));
   for (const item of items) {
     const id = progressId(item);
     queued.set(id, (queued.get(id) ?? 0) + 1);
