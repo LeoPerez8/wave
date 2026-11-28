@@ -27,6 +27,27 @@ test("a smart link that redirects straight to a service's page opens that page",
   assert.deepEqual(ending, { link: ALBUM });
 });
 
+test("a smart link that redirects straight to an artist's page opens that artist", async () => {
+  const artist = "https://open.spotify.com/artist/3bxfoVnARXp1QOgyAoKsc3";
+  const ending = await smartLinkEnding(
+    "https://lnk.to/x",
+    async () => ({ url: artist, body: `<a href="${ALBUM}">Spotify</a>` }),
+    new AbortController().signal,
+  );
+  assert.deepEqual(ending, { link: artist });
+});
+
+test("links the app doesn't open are passed over, where it landed too", async () => {
+  const artist = "https://open.spotify.com/artist/3bxfoVnARXp1QOgyAoKsc3";
+  const ending = await smartLinkEnding(
+    "https://lnk.to/x",
+    async () => ({ url: artist, body: `<a href="${ALBUM}">Spotify</a>` }),
+    new AbortController().signal,
+    (link) => link.service !== "spotifyArtist",
+  );
+  assert.deepEqual(ending, { link: ALBUM });
+});
+
 test("a page pointing nowhere opens nothing, and a page out of reach says so", async () => {
   assert.deepEqual(
     await smartLinkEnding(

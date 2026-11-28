@@ -198,7 +198,10 @@ const EMBED_CAP = 100;
 const FETCH_PLAYLIST_HASH = "8964e8eafb21aa992a7d951d256d83285c04be2105d209262901de70cb97584a";
 
 /** The embed page for Spotify's [kind] of page and its [id]: no headers, no account. */
-export const embedRequest = (kind: "playlist" | "track" | "album", id: string): SpotifyRequest => ({
+export const embedRequest = (
+  kind: "playlist" | "track" | "album" | "artist",
+  id: string,
+): SpotifyRequest => ({
   method: "GET",
   url: `https://open.spotify.com/embed/${kind}/${id}`,
   headers: {},

@@ -573,3 +573,43 @@ test("a pasted smart link opens what its page points to: a Spotify album, on its
     closeTestDatabase(db);
   }
 });
+
+test("a pasted smart link passes over the YT Music albums and artists the desktop doesn't open yet", async () => {
+  const db = await openTestDatabase();
+  try {
+    const fetched: string[] = [];
+    const links = createDesktopLinks({
+      db,
+      enabled: () => true,
+      online: () => true,
+      call: async (method) => {
+        throw new Error(`Unexpected call ${method}`);
+      },
+      start: async () => {
+        throw new Error("Nothing plays");
+      },
+      writeClipboard: () => {},
+      changed: () => {},
+      fetch: async (input) => {
+        const url = String(input);
+        fetched.push(url);
+        if (url === "https://lnk.to/release")
+          return new Response(
+            '<a href="https://music.youtube.com/browse/MPREb_06zfD9zt7QK">YT Music</a>' +
+              '<a href="https://open.spotify.com/artist/3bxfoVnARXp1QOgyAoKsc3">Spotify</a>',
+          );
+        throw new Error(`Unexpected fetch ${url}`);
+      },
+    });
+    assert.deepEqual(await links.open("https://lnk.to/release", "en"), {
+      kind: "notice",
+      notice: {
+        title: catalogueOf("en").imports.cantOpen,
+        message: catalogueOf("en").imports.sharedLinks,
+      },
+    });
+    assert.deepEqual(fetched, ["https://lnk.to/release"]);
+  } finally {
+    closeTestDatabase(db);
+  }
+});

@@ -1,9 +1,10 @@
 /**
- * Opening a Spotify album link (docs/spec.md, "Opening a song link"): the
+ * Opening an album link (docs/spec.md, "Opening a song link"). A Spotify
  * album's embed page (`open.spotify.com/embed/album/<id>`) gives its title,
  * artists and cover without an account or key, and one YT Music Albums search
- * finds the same album to open. The requests go through the app's transport;
- * Core builds and reads them.
+ * finds the same album to open (a YouTube Music album's playlist opens in
+ * `ytAlbumPlaylist.ts`). The requests go through the app's transport; Core
+ * builds and reads them.
  */
 
 import { at, text } from "./json.ts";
@@ -73,8 +74,10 @@ export interface FoundYtAlbum {
 }
 
 /** Where an album link goes: the YT Music album page to open, or why none opens. */
-export type AlbumLinkOpening =
-  { readonly album: string } | { readonly play: "failed"; readonly failure: SongLinkFailure };
+export type AlbumLinkOpening = { readonly album: string } | AlbumLinkFailure;
+
+/** Why an album link opens no album page. */
+export type AlbumLinkFailure = { readonly play: "failed"; readonly failure: SongLinkFailure };
 
 /**
  * The YT Music album [album] (as its service read it) opens on: one Albums

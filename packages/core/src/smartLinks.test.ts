@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 
-import { SMART_LINK_HOSTS, sharedTextImport, smartLinkNotice, smartLinkTarget } from "./index.ts";
+import {
+  opensOnDesktop,
+  SMART_LINK_HOSTS,
+  sharedTextImport,
+  smartLinkLanding,
+  smartLinkNotice,
+  smartLinkTarget,
+} from "./index.ts";
 
 /** A trimmed copy of a real page (the parts around its service links, as the page encodes them). */
 const sample = (name: string): string =>
@@ -104,7 +111,7 @@ describe("what a smart link's page points to", () => {
     });
   });
 
-  test("a song goes first, then an album, then a playlist, YouTube Music first among each", () => {
+  test("a song goes first, then an album, then a playlist, YouTube Music first among songs and playlists", () => {
     const ytSong = "https://music.youtube.com/watch?v=dQw4w9WgXcQ";
     const spotifySong = "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC";
     const deezerSong = "https://www.deezer.com/track/3135556";
@@ -120,6 +127,36 @@ describe("what a smart link's page points to", () => {
     assert.equal(smartLinkTarget(page(youtubePlaylist, ytPlaylist, album)), album);
     assert.equal(smartLinkTarget(page(youtubePlaylist, ytPlaylist)), ytPlaylist);
     assert.equal(smartLinkTarget(page(youtubePlaylist)), youtubePlaylist);
+  });
+
+  test("a YouTube video is a song after the services' songs, and YT Music albums follow a Spotify album", () => {
+    const deezerSong = "https://www.deezer.com/track/3135556";
+    const video = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+    const spotifyAlbum = "https://open.spotify.com/album/7rZmgT2kEqkCMR6VHcloJM";
+    const ytAlbum = "https://music.youtube.com/browse/MPREb_06zfD9zt7QK";
+    const albumPlaylist =
+      "https://music.youtube.com/playlist?list=OLAK5uy_mkDVdcmXDwufw0OOss-52qp3nvVQMx9xo";
+    const playlist = "https://music.youtube.com/playlist?list=PLOQ9gGMey1FXdRNRfSbYkuL8oMUDxER8A";
+    assert.equal(smartLinkTarget(page(video, deezerSong)), deezerSong);
+    assert.equal(smartLinkTarget(page(spotifyAlbum, ytAlbum, video)), video);
+    assert.equal(smartLinkTarget(page(albumPlaylist, ytAlbum, spotifyAlbum)), spotifyAlbum);
+    assert.equal(smartLinkTarget(page(playlist, albumPlaylist, ytAlbum)), ytAlbum);
+    assert.deepEqual(opened(page(playlist, albumPlaylist)), {
+      kind: "song",
+      link: {
+        service: "ytAlbumPlaylist",
+        playlistId: "OLAK5uy_mkDVdcmXDwufw0OOss-52qp3nvVQMx9xo",
+      },
+    });
+  });
+
+  test("the desktop passes over the links it doesn't open yet", () => {
+    const ytAlbum = "https://music.youtube.com/browse/MPREb_06zfD9zt7QK";
+    const albumPlaylist =
+      "https://www.youtube.com/playlist?list=OLAK5uy_mkDVdcmXDwufw0OOss-52qp3nvVQMx9xo";
+    const playlist = "https://youtube.com/playlist?list=PLOQ9gGMey1FXdRNRfSbYkuL8oMUDxER8A";
+    assert.equal(smartLinkTarget(page(ytAlbum, albumPlaylist, playlist), opensOnDesktop), playlist);
+    assert.equal(smartLinkTarget(page(ytAlbum, albumPlaylist), opensOnDesktop), null);
   });
 
   test("a link inside JSON written as an HTML attribute (`&quot;`) is read whole", () => {
@@ -142,6 +179,32 @@ describe("what a smart link's page points to", () => {
   });
 });
 
+describe("where a smart link redirected to", () => {
+  test("a service's page Wave opens counts, an artist's too", () => {
+    for (const url of [
+      "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+      "https://youtu.be/dQw4w9WgXcQ",
+      "https://music.youtube.com/browse/MPREb_06zfD9zt7QK",
+      "https://music.youtube.com/channel/UCiryJZISyBldwm9ocAE-QfQ",
+      "https://open.spotify.com/artist/3bxfoVnARXp1QOgyAoKsc3",
+      "https://www.deezer.com/artist/27",
+      "https://open.spotify.com/album/7rZmgT2kEqkCMR6VHcloJM",
+      "https://www.youtube.com/playlist?list=PLOQ9gGMey1FXdRNRfSbYkuL8oMUDxER8A",
+    ]) {
+      assert.equal(smartLinkLanding(url), url, url);
+    }
+  });
+
+  test("another page, a short link, or a link the desktop doesn't open, doesn't", () => {
+    assert.equal(smartLinkLanding("https://fanlink.tv/dreams-album"), null);
+    assert.equal(smartLinkLanding("https://spotify.link/AbCdEf123"), null);
+    assert.equal(
+      smartLinkLanding("https://open.spotify.com/artist/3bxfoVnARXp1QOgyAoKsc3", opensOnDesktop),
+      null,
+    );
+  });
+});
+
 describe("what a smart link that opens nothing says", () => {
   test("offline, and a page out of reach, in English and Portuguese", () => {
     assert.deepEqual(smartLinkNotice("offline"), {
@@ -155,7 +218,7 @@ describe("what a smart link that opens nothing says", () => {
     assert.deepEqual(smartLinkNotice("cantOpen"), {
       title: "Can't open this",
       message:
-        "Wave opens songs from YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from Spotify links.",
+        "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube, YouTube Music and Spotify links, albums from YouTube Music and Spotify links, and release pages that link to them.",
     });
     assert.deepEqual(smartLinkNotice("offline", "pt-BR"), {
       title: "Você está offline",

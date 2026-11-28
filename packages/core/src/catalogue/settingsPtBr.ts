@@ -324,6 +324,9 @@ export const settingsPtBr: typeof settingsEn = {
     "Ativado para alguns links. Toque para ativar os outros na página Abrir por padrão do Android.",
   songLinksNone:
     "Desativado: os links abrem no próprio app ou no navegador. Toque para ativá-los na página Abrir por padrão do Android.",
+  offerCopiedLinks: "Oferecer links copiados",
+  offerCopiedLinksLine:
+    "Quando você volta ao Wave com um link de música copiado, ele pergunta se quer abri-lo.",
   wavePicksUpNewChangedAndRemoved:
     "O Wave detecta arquivos novos, alterados e removidos sempre que você o abre e quando você puxa a Biblioteca para baixo.",
   skipVoiceNotesAndRecordings: "Ignorar mensagens de voz e gravações",
