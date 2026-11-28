@@ -74,6 +74,9 @@ class AppLogModule : Module() {
     /** The route showing, which a freeze's entry names. */
     Function("setScreen") { path: String -> NativeLog.screen = path }
 
+    // [DEBUG-5d1a] Temporary: a JS timer fired (src/log/startAppLog.ts). Remove with ScreenOffProbe.
+    Function("debugJsHeartbeat") { expo.modules.wavenative.player.ScreenOffProbe.jsHeartbeat() }
+
     /** Settings › Developer's debug trigger: an uncaught Kotlin exception on the main thread. */
     Function("crash") {
       Handler(Looper.getMainLooper()).post { throw DeveloperCrash("A crash from Settings › Developer") }

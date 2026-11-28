@@ -83,6 +83,19 @@ object JsRuntime {
     }
   }
 
+  /**
+   * [DEBUG-5d1a] Temporary: whether the headless task runs and who holds the runtime,
+   * for ScreenOffProbe's lines. Remove with it.
+   */
+  fun debugState(): String {
+    val owned = "runtime owners: ${owners.names().ifEmpty { listOf("none") }.joinToString("+")}"
+    val id = taskId ?: return "no headless task, $owned"
+    val context = taskContext ?: return "headless task $id without a context, $owned"
+    val tasks = HeadlessJsTaskContext.getInstance(context)
+    val running = if (tasks.isTaskRunning(id)) "running" else "not running"
+    return "headless task $running (any active: ${tasks.hasActiveTasks()}), $owned"
+  }
+
   /** Starts the task unless it already runs in [context]. */
   private fun startTask(context: ReactContext) {
     // Posted so a start from React Native's own callback doesn't re-enter it.
