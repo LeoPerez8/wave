@@ -33,6 +33,7 @@ import {
   desktopSongShareMenu,
   spotifyRecordingLink,
   joinArtists,
+  opensOnDesktop,
   type SongLinksState,
   type SpotifySong,
   type SpotifyTrackState,
@@ -91,15 +92,6 @@ const SHARE_LINKS = [
   /^https:\/\/music\.youtube\.com\/watch\?v=[A-Za-z0-9_-]{11}$/u,
   /^https:\/\/open\.spotify\.com\/track\/[A-Za-z0-9]{1,64}$/u,
 ];
-
-/** Album and artist links the phone opens and the desktop doesn't yet (#1522). */
-const PHONE_ONLY_LINKS: ReadonlySet<string> = new Set([
-  "ytAlbum",
-  "ytAlbumPlaylist",
-  "ytArtist",
-  "spotifyArtist",
-  "deezerArtist",
-]);
 
 /** Whether [url] is a song address Share copies. */
 export const isShareLink = (url: unknown): url is string =>
@@ -469,8 +461,8 @@ export const createDesktopLinks = (options: LinksOptions) => {
     open: async (text: string, language: "en" | "pt-BR"): Promise<OpenLinkResult> => {
       const shared = sharedTextImport(text, { ytMusic: true });
       if (shared.kind === "notice") return { kind: "ignored" } as const;
-      // The phone opens these (#1522); the desktop doesn't yet, so they go as before.
-      if (shared.kind === "song" && PHONE_ONLY_LINKS.has(shared.link.service))
+      // YT Music albums and artists open only on the phone yet (#1522), so they go as before.
+      if (shared.kind === "song" && !opensOnDesktop(shared.link))
         return { kind: "ignored" } as const;
       const notice = (failure: Parameters<typeof songLinkNotice>[0]): OpenLinkResult => ({
         kind: "notice",

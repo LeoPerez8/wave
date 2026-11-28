@@ -44,6 +44,9 @@ export type SongLinkEnding<S, L> =
   /** An artist link's artist: their YT Music page (`UC…`), and their name when it was read. */
   | { readonly artist: string; readonly name: string | null };
 
+/** What a link Wave can't open here ends in. */
+const CANT_OPEN = { play: "failed", failure: "cantOpen" } as const;
+
 /** What album and artist links read (`ytAlbumPlaylist`, `ytArtist`, Spotify and Deezer artists). */
 export interface LinkPagePorts {
   /** The first page of a YT Music album's playlist (`OLAK5uy_…`). */
@@ -86,18 +89,13 @@ export const songLinkEnding = async <S extends YtSong, L extends LinkLibrarySong
   }
   if (link.service === "spotifyAlbum") return albumEnding(link.albumId, ports, signal);
   if (link.service === "ytAlbum") return { album: link.browseId, read: null };
-  const { pages } = ports;
-  if (link.service === "ytAlbumPlaylist")
-    return pages === undefined
-      ? CANT_OPEN
-      : ytAlbumPlaylistOpening(() => pages.albumPlaylist(link.playlistId));
-  if (link.service === "ytArtist")
-    return pages === undefined
-      ? CANT_OPEN
-      : ytChannelLinkOpening(link.channelId, () => pages.artistPage(link.channelId));
-  if (link.service === "spotifyArtist")
-    return artistEnding("spotify", link.artistId, pages, signal);
-  if (link.service === "deezerArtist") return artistEnding("deezer", link.artistId, pages, signal);
+  switch (link.service) {
+    case "ytAlbumPlaylist":
+    case "ytArtist":
+    case "spotifyArtist":
+    case "deezerArtist":
+      return pageEnding(link, ports.pages, signal);
+  }
   const service = link.service.startsWith("spotify") ? "spotify" : "deezer";
   let trackId: string;
   if (link.service === "spotifyShort" || link.service === "deezerShort") {
@@ -109,17 +107,15 @@ export const songLinkEnding = async <S extends YtSong, L extends LinkLibrarySong
     }
     if (service === "spotify") {
       const target = spotifyShortLinkLanding(landed.url, landed.body);
-      if (target === null) return { play: "failed", failure: "cantOpen" };
+      if (target === null) return CANT_OPEN;
       if (target.kind === "import") return { playlist: target.link };
       if (target.kind === "album") return albumEnding(target.link.albumId, ports, signal);
-      if (target.kind === "artist")
-        return artistEnding("spotify", target.link.artistId, ports.pages, signal);
+      if (target.kind === "artist") return pageEnding(target.link, ports.pages, signal);
       trackId = target.link.trackId;
     } else {
       const target = deezerShortLinkLanding(landed.url);
-      if (target === null) return { play: "failed", failure: "cantOpen" };
-      if (target.service === "deezerArtist")
-        return artistEnding("deezer", target.artistId, ports.pages, signal);
+      if (target === null) return CANT_OPEN;
+      if (target.service === "deezerArtist") return pageEnding(target, ports.pages, signal);
       trackId = target.trackId;
     }
   } else trackId = link.trackId;
@@ -141,7 +137,30 @@ const albumEnding = async <S extends YtSong, L extends LinkLibrarySong>(
   return "album" in opening ? { album: opening.album, read: read.album } : opening;
 };
 
-const CANT_OPEN = { play: "failed", failure: "cantOpen" } as const;
+/** A link that opens a page only with the platform's page reads (`LinkPagePorts`). */
+type PageLink = Extract<
+  SongLink,
+  { readonly service: "ytAlbumPlaylist" | "ytArtist" | "spotifyArtist" | "deezerArtist" }
+>;
+
+/** Where the album or artist [link] opens, or why none opens; `cantOpen` without [pages]. */
+const pageEnding = async (
+  link: PageLink,
+  pages: LinkPagePorts | undefined,
+  signal: AbortSignal,
+): Promise<{ readonly album: string; readonly read: ServiceAlbum } | ArtistLinkOpening> => {
+  if (pages === undefined) return CANT_OPEN;
+  switch (link.service) {
+    case "ytAlbumPlaylist":
+      return ytAlbumPlaylistOpening(() => pages.albumPlaylist(link.playlistId));
+    case "ytArtist":
+      return ytChannelLinkOpening(link.channelId, () => pages.artistPage(link.channelId));
+    case "spotifyArtist":
+      return artistEnding("spotify", link.artistId, pages, signal);
+    case "deezerArtist":
+      return artistEnding("deezer", link.artistId, pages, signal);
+  }
+};
 
 /**
  * The YT Music artist the Spotify or Deezer artist [artistId] opens on: their name read from
@@ -150,10 +169,9 @@ const CANT_OPEN = { play: "failed", failure: "cantOpen" } as const;
 const artistEnding = async (
   service: "spotify" | "deezer",
   artistId: string,
-  pages: LinkPagePorts | undefined,
+  pages: LinkPagePorts,
   signal: AbortSignal,
 ): Promise<ArtistLinkOpening> => {
-  if (pages === undefined) return CANT_OPEN;
   const read = await (service === "spotify" ? pages.spotifyArtist : pages.deezerArtist)(
     artistId,
     signal,

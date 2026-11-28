@@ -18,4 +18,4 @@ export const offerCopiedLinks = offerCopiedLinksSetting.get;
 export const setOfferCopiedLinks = offerCopiedLinksSetting.set;
 
 /** Whether Offer copied links is on; re-renders when it changes. */
-export const useOfferCopiedLinks = offerCopiedLinksSetting.useValue;
+export const useOfferCopiedLinksSetting = offerCopiedLinksSetting.useValue;

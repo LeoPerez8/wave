@@ -226,6 +226,22 @@ export const songLinkKind = (link: SongLink): SongLinkKind => {
 };
 
 /**
+ * Whether the desktop opens [link] yet: songs, short links and Spotify
+ * albums. YT Music albums and artists open only on the phone (#1522), so the
+ * desktop leaves them as it left any link it didn't open.
+ */
+export const opensOnDesktop = (link: SongLink): boolean => {
+  switch (songLinkKind(link)) {
+    case "song":
+      return true;
+    case "album":
+      return link.service === "spotifyAlbum";
+    case "artist":
+      return false;
+  }
+};
+
+/**
  * A song a link named, as its service describes it: what the Library's copy
  * is looked for by, and what a song that isn't found shows. A YT Music song
  * is one; another service's track, read from its page, is one too.

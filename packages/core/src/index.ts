@@ -1799,12 +1799,14 @@ export {
   copiedLinkOffer,
   looksAtClipboard,
   offeredLinkKey,
-  readsCopiedText,
+  copiedTextReading,
+  CLIP_LOOK_AGAIN_MS,
 } from "./copiedLinkOffer.ts";
 export type { ClipHint, CopiedLinkOffer, CopiedLinkReturn } from "./copiedLinkOffer.ts";
 export {
   deezerShortLinkLanding,
   linkedYtSong,
+  opensOnDesktop,
   recogniseSongLink,
   songLinkKind,
   songLinkLibraryCopy,
@@ -1925,13 +1927,12 @@ export { readSpotifyTrack } from "./spotifyTrack.ts";
 export {
   albumLinkOpening,
   readSpotifyAlbum,
-  ytAlbumPlaylistOpening,
   type AlbumLinkOpening,
-  type YtAlbumPlaylistRead,
   type AlbumRead,
   type FoundYtAlbum,
   type ServiceAlbum,
 } from "./spotifyAlbum.ts";
+export { ytAlbumPlaylistOpening, type YtAlbumPlaylistRead } from "./ytAlbumPlaylist.ts";
 export { readDeezerTrack, type DeezerAnswer, type DeezerTransport } from "./deezerTrack.ts";
 export {
   artistLinkOpening,

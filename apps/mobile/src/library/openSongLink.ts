@@ -18,9 +18,11 @@ import {
   readSpotifyTrack,
   songLinkKind,
   songLinkNotice,
+  type Catalogue,
   type PlaylistLink,
   type SongLink,
   type SongLinkFailure,
+  type SongLinkKind,
   type YtSong,
 } from "@wave/core";
 import { songLinkEnding, type SongLinkEnding } from "@wave/client/songLinkEnding";
@@ -36,6 +38,7 @@ import { startMagicQueue, startStreamedMagicQueue } from "@/playback/MagicQueue"
 import { askYtMusic, searchRecordingInTurn } from "@/ytmusic/askYtMusic";
 import { currentLibraryFinder } from "@/ytmusic/libraryFinder";
 import { openYtAlbum, openYtArtist } from "@/ytmusic/routes";
+import type { YtMusic, YtMusicError } from "@/ytmusic/YtMusic";
 import { withSearchTurn } from "@/ytmusic/searchAllowance";
 
 import { LibraryStore } from "./LibraryStore";
@@ -77,6 +80,21 @@ const storedSong = (videoId: string): Promise<SongRow | null> =>
     )
     .catch(() => null);
 
+/**
+ * A YT Music page ([use]) as [read] gives it, or why it wasn't read: YT Music's reason, or
+ * `failed` when the request itself was cut short.
+ */
+const ytPageRead = async <A, R extends { readonly ok: true }>(
+  use: (ytMusic: YtMusic["Service"]) => Effect.Effect<A, YtMusicError>,
+  read: (page: A) => R,
+): Promise<R | { readonly ok: false; readonly reason: YtMusicError["reason"] }> => {
+  const answer = await askYtMusic(use).catch(() => null);
+  if (answer === null) return { ok: false, reason: "failed" };
+  return Result.isFailure(answer)
+    ? { ok: false, reason: answer.failure.reason }
+    : read(answer.success);
+};
+
 const linkEnding = (link: SongLink, signal: AbortSignal): Promise<Ending> =>
   songLinkEnding(
     link,
@@ -102,22 +120,16 @@ const linkEnding = (link: SongLink, signal: AbortSignal): Promise<Ending> =>
         return answer === null || Result.isFailure(answer) ? null : answer.success;
       },
       pages: {
-        albumPlaylist: async (playlistId) => {
-          const answer = await askYtMusic((ytMusic) => ytMusic.playlist(playlistId)).catch(
-            () => null,
-          );
-          if (answer === null) return { ok: false, reason: "failed" };
-          return Result.isFailure(answer)
-            ? { ok: false, reason: answer.failure.reason }
-            : { ok: true, playlist: answer.success };
-        },
-        artistPage: async (channelId) => {
-          const answer = await askYtMusic((ytMusic) => ytMusic.artist(channelId)).catch(() => null);
-          if (answer === null) return { ok: false, reason: "failed" };
-          return Result.isFailure(answer)
-            ? { ok: false, reason: answer.failure.reason }
-            : { ok: true, name: answer.success.name };
-        },
+        albumPlaylist: (playlistId) =>
+          ytPageRead(
+            (ytMusic) => ytMusic.playlist(playlistId),
+            (playlist) => ({ ok: true as const, playlist }),
+          ),
+        artistPage: (channelId) =>
+          ytPageRead(
+            (ytMusic) => ytMusic.artist(channelId),
+            (page) => ({ ok: true as const, name: page.name }),
+          ),
         spotifyArtist: (id, abort) => readSpotifyArtist(id, spotifyTransport(abort)),
         deezerArtist: (id, abort) => readDeezerArtist(id, deezerTransport(abort)),
         searchArtists: async (query) => {
@@ -130,6 +142,16 @@ const linkEnding = (link: SongLink, signal: AbortSignal): Promise<Ending> =>
     },
     signal,
   );
+
+/** What a link says by what it opens: offline, and while it's looked for. */
+const LINK_KINDS = {
+  song: { offline: "offline", finding: "findingSong" },
+  album: { offline: "albumOffline", finding: "findingAlbum" },
+  artist: { offline: "artistOffline", finding: "findingArtist" },
+} as const satisfies Record<
+  SongLinkKind,
+  { readonly offline: SongLinkFailure; readonly finding: keyof Catalogue["imports"] }
+>;
 
 /**
  * Plays the song [link] names. Offline it says so and asks nothing. Else a
@@ -150,18 +172,12 @@ export const openSongLink = async (
   { openPlaylist }: { readonly openPlaylist: (link: PlaylistLink) => void },
 ): Promise<void> => {
   const { strings } = currentLocalisation();
-  const kind = songLinkKind(link);
+  const kind = LINK_KINDS[songLinkKind(link)];
   if (!online()) {
-    say(kind === "album" ? "albumOffline" : kind === "artist" ? "artistOffline" : "offline");
+    say(kind.offline);
     return;
   }
-  void showToast(
-    kind === "album"
-      ? strings.imports.findingAlbum
-      : kind === "artist"
-        ? strings.imports.findingArtist
-        : strings.imports.findingSong,
-  );
+  void showToast(strings.imports[kind.finding]);
   const finding = currentToast.get()?.id;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TRACK_SERVICE_TIMEOUT_MS);

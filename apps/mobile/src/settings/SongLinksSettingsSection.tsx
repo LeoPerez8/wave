@@ -6,7 +6,7 @@ import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { EntryRow } from "@/catalog/EntryRow";
 import { Hairline } from "@/catalog/Hairline";
 import { WaveNative } from "@/native/waveNative";
-import { setOfferCopiedLinks, useOfferCopiedLinks } from "./offerCopiedLinks";
+import { setOfferCopiedLinks, useOfferCopiedLinksSetting } from "./offerCopiedLinks";
 import { openAppLinkSettings, useSongLinkSetup } from "./songLinkHandling";
 
 /**
@@ -46,7 +46,7 @@ export function SongLinksSettingsSection() {
 /** Offer copied links, with the line under it; not on an APK built before the clip's description read. */
 function OfferCopiedLinks() {
   const { strings } = useLocalisation();
-  const on = useOfferCopiedLinks();
+  const on = useOfferCopiedLinksSetting();
   if (WaveNative.readClipHint === undefined) return null;
   return (
     <View className="mt-4">
