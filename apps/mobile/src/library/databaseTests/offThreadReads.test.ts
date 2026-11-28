@@ -182,3 +182,42 @@ test("an effect that must finish in its task still reads synchronously", async (
     fixture.close();
   }
 });
+
+test("DJ mood features read off the thread in one statement each, as the synchronous store reads them (#1532)", async () => {
+  const fixture = await createFastAgainFixture();
+  try {
+    const videoIds = Array.from({ length: 3_700 }, (_, at) => `v${String(at).padStart(5, "0")}`);
+    fixture.db.run(sql`INSERT INTO candidate_songs (video_id, song, first_seen_at, last_seen_at)
+      SELECT value, '{}', 1, 1 FROM json_each(${JSON.stringify(videoIds)})`);
+    // Every fifth a miss, every seventh malformed (no valence), the rest found.
+    fixture.db.run(sql`INSERT INTO dj_mood_features
+        (video_id, isrc, energy, valence, acousticness, mode, checked_at, failures)
+      SELECT value, NULL, CASE WHEN key % 5 = 0 THEN NULL ELSE (key % 100) / 100.0 END,
+        CASE WHEN key % 7 = 0 THEN NULL ELSE 0.5 END, 0.3, key % 2, 1, 0
+      FROM json_each(${JSON.stringify(videoIds)})`);
+    // Library songs downloaded from the first videos go by their stream features.
+    for (const [at, id] of fixture.songIds.slice(0, 50).entries())
+      fixture.db.run(sql`UPDATE tracks SET video_id = ${videoIds[at]!} WHERE id = ${id}`);
+    const log = await appLog();
+    const here = await loadLibraryStore(root, fixture.db);
+    const away = await loadLibraryStore(root, fixture.db, { offThreadReads: true });
+    const reads: [string, (store: typeof here) => Effect.Effect<ReadonlyMap<string, unknown>, unknown>][] = [
+      ["djMoodFeatures", (s) => s.djMoodFeatures([...videoIds, "not kept"])],
+      ["djLibraryMoodFeatures", (s) => s.djLibraryMoodFeatures()],
+    ];
+    for (const [name, read] of reads) {
+      const expected = Effect.runSync(read(here));
+      const traced = await traceAsync(fixture.db, () => Effect.runPromise(read(away)));
+      assert.deepEqual(traced.result, expected, name);
+      assert.equal(traced.mainStatements, 0, `${name} read on the main connection`);
+    }
+    const catalog = Effect.runSync(here.djMoodFeatures(videoIds));
+    assert.equal(catalog.size, videoIds.filter((_, at) => at % 5 !== 0 && at % 7 !== 0).length);
+    const found = (_: unknown, at: number) => at % 5 !== 0 && at % 7 !== 0;
+    assert.equal(Effect.runSync(here.djLibraryMoodFeatures()).size, videoIds.slice(0, 50).filter(found).length);
+    log.flush();
+    assert.deepEqual(log.lines.filter((line) => line.includes("runs on the JS thread")), []);
+  } finally {
+    fixture.close();
+  }
+});

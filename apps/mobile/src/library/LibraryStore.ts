@@ -68,14 +68,14 @@ import {
 import {
   pendingDjMoodSongs,
   keepDjMoodFeatures,
-  selectDjMoodFeatures,
+  djMoodFeatureRows,
   type DjMoodFeatureWrite,
   type DjMoodLookupPage,
 } from "@wave/client/db/djMoodFeatures";
 import {
   pendingDjLibraryMoodSongs,
   keepDjLibraryMoodFeatures,
-  selectDjLibraryMoodFeatures,
+  djLibraryMoodFeatureRows,
   type DjLibraryMoodFeatureWrite,
   type DjLibraryMoodSong,
 } from "@wave/client/db/djLibraryMoodFeatures";
@@ -134,6 +134,7 @@ import {
   recommendationEntriesPage,
   recommendationFeedbackPage,
 } from "@wave/client/db/recommendationPages";
+import { djMoodFeaturesSteps } from "@wave/core";
 import type {
   AppLanguage,
   KeptSongs,
@@ -2445,8 +2446,15 @@ const make = Effect.gen(function* () {
       ),
     keepDjMoodFeatures: (writes) =>
       writeAttempt("save DJ mood features", () => keepDjMoodFeatures(db, writes)),
+    // One statement, its rows read as features in slices: thousands of candidates held JS
+    // for seconds in a statement per 500 ids, each one a replay pass (#1532).
     djMoodFeatures: (videoIds) =>
-      attempt("read DJ mood features", (db) => selectDjMoodFeatures(db, videoIds)),
+      attemptStepped(
+        "read DJ mood features",
+        LIBRARY_READ_REPLAY,
+        (db) => djMoodFeatureRows(db, videoIds),
+        djMoodFeaturesSteps,
+      ),
     pendingDjLibraryMoodSongs: (afterTrackId, now) =>
       attempt("read pending DJ Library mood songs", (db) =>
         pendingDjLibraryMoodSongs(db, afterTrackId, now),
@@ -2454,7 +2462,12 @@ const make = Effect.gen(function* () {
     keepDjLibraryMoodFeatures: (writes) =>
       writeAttempt("save DJ Library mood features", () => keepDjLibraryMoodFeatures(db, writes)),
     djLibraryMoodFeatures: () =>
-      attempt("read DJ Library mood features", (db) => selectDjLibraryMoodFeatures(db)),
+      attemptStepped(
+        "read DJ Library mood features",
+        LIBRARY_READ_REPLAY,
+        djLibraryMoodFeatureRows,
+        djMoodFeaturesSteps,
+      ),
     songGenres: (ids, includeStreamedGenres = true) =>
       attempt("read the songs' genres", (db) => songGenres(db, ids, includeStreamedGenres)),
 

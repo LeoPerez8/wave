@@ -12,7 +12,9 @@ import {
   djFirstMoodFit,
   djFirstSongPick,
   djMedianAudioFeatures,
+  djMoodFeaturesSteps,
   djMoodFiltered,
+  finishSteps,
   djMoodFit,
   magicArtistKey,
   songStyle,
@@ -47,6 +49,52 @@ describe("DJ mood features", () => {
       ]),
       { energy: 0.5, valence: 0.4, acousticness: 0.4, mode: 0 },
     );
+  });
+
+  test("kept rows read as features by id, misses and malformed rows left out", () => {
+    const row = (
+      id: string,
+      energy: number | null,
+      mode: number | null = 1,
+      valence: number | null = 0.5,
+    ) => ({ id, energy, valence, acousticness: 0.3, mode });
+    assert.deepEqual(
+      finishSteps(
+        djMoodFeaturesSteps([
+          row("found", 0.9),
+          row("miss", null),
+          row("no valence", 0.4, 1, null),
+          row("odd mode", 0.4, 2),
+          row("minor", 0.2, 0),
+        ]),
+      ),
+      new Map([
+        ["found", { energy: 0.9, valence: 0.5, acousticness: 0.3, mode: 1 }],
+        ["minor", { energy: 0.2, valence: 0.5, acousticness: 0.3, mode: 0 }],
+      ]),
+    );
+  });
+
+  test("a later row for an id replaces an earlier one, unless it doesn't read", () => {
+    const tagged = { id: "7", energy: 0.2, valence: 0.6, acousticness: 0.8, mode: 1 };
+    const streamed = { id: "7", energy: 0.9, valence: 0.7, acousticness: 0.1, mode: 1 };
+    const broken = { id: "7", energy: 0.5, valence: null, acousticness: 0.1, mode: 1 };
+    assert.equal(finishSteps(djMoodFeaturesSteps([tagged, streamed])).get("7")?.energy, 0.9);
+    assert.equal(finishSteps(djMoodFeaturesSteps([tagged, broken])).get("7")?.energy, 0.2);
+  });
+
+  test("it takes a step per row, so a long read gives way between them", () => {
+    const rows = Array.from({ length: 3_700 }, (_, at) => ({
+      id: `v${at}`,
+      energy: 0.5,
+      valence: 0.5,
+      acousticness: 0.5,
+      mode: 1,
+    }));
+    const steps = djMoodFeaturesSteps(rows);
+    let yielded = 0;
+    for (let next = steps.next(); !next.done; next = steps.next()) yielded++;
+    assert.equal(yielded, rows.length);
   });
 });
 

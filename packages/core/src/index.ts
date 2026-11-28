@@ -3535,12 +3535,20 @@ export {
   DJ_MOOD_LOW_ENERGY,
   DJ_MOOD_SAD_VALENCE,
   djMedianAudioFeatures,
+  djMoodFeaturesSteps,
   djMoodFiltered,
   djFirstMoodFit,
   djMoodFilteredSteps,
   djMoodFit,
 } from "./djMood.ts";
-export type { DjAudioFeatures, DjMoodFit, DjMoodPools, DjMoodRankable, DjMoods } from "./djMood.ts";
+export type {
+  DjAudioFeatures,
+  DjMoodFeatureRow,
+  DjMoodFit,
+  DjMoodPools,
+  DjMoodRankable,
+  DjMoods,
+} from "./djMood.ts";
 export {
   MAGIC_STAND_IN_SONGS,
   magicStandIn,

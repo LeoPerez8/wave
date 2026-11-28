@@ -2,11 +2,16 @@
  * Phone-local ReccoBeats features for Library songs, found by their file's ISRC tag or by the
  * video they were downloaded from.
  */
-import { and, asc, eq, gt, isNotNull, isNull, lte, ne, or } from "drizzle-orm";
-import type { DjAudioFeatures } from "@wave/core";
+import { and, asc, eq, gt, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
+import {
+  djMoodFeaturesSteps,
+  finishSteps,
+  type DjAudioFeatures,
+  type DjMoodFeatureRow,
+} from "@wave/core";
 
 import type { LibraryDatabase } from "./database.ts";
-import { djLibraryMoodFeatures, djMoodFeatures, tracks } from "./schema.ts";
+import { djLibraryMoodFeatures, tracks } from "./schema.ts";
 
 /** A miss is asked about again after 30 days, as candidate songs' misses are. */
 export const DJ_LIBRARY_MOOD_MISS_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -94,62 +99,27 @@ export const keepDjLibraryMoodFeatures = (
   }
 };
 
-/** A feature row's four fields, or null when it's a miss or malformed. */
-const featuresOf = (row: {
-  readonly energy: number | null;
-  readonly valence: number | null;
-  readonly acousticness: number | null;
-  readonly mode: number | null;
-}): DjAudioFeatures | null =>
-  row.energy == null || row.valence == null || row.acousticness == null
-    ? null
-    : row.mode !== 0 && row.mode !== 1
-      ? null
-      : {
-          energy: row.energy,
-          valence: row.valence,
-          acousticness: row.acousticness,
-          mode: row.mode,
-        };
-
 /**
- * Every Library song's found features, by Track id as Core's candidates name it (`String(id)`):
- * the stream features of the video it was downloaded from, else its ISRC tag's, as a batch
- * prefers a stream song's features to its Library match's. A Library stand-in reads the same.
+ * Every Library song's kept feature rows, by Track id as Core's candidates name it
+ * (`String(id)`): its ISRC tag's first, then the stream features of the video it was downloaded
+ * from, which replace them in Core's `djMoodFeaturesSteps`, as a batch prefers a stream song's
+ * features to its Library match's. One statement, so a replayed read runs twice (#1532).
  */
+export const djLibraryMoodFeatureRows = (db: LibraryDatabase): DjMoodFeatureRow[] =>
+  db.all<DjMoodFeatureRow>(sql`SELECT id, energy, valence, acousticness, mode FROM (
+      SELECT CAST(tracks.id AS TEXT) AS id, f.energy, f.valence, f.acousticness, f.mode, 0 AS stream
+        FROM dj_library_mood_features f
+        JOIN tracks ON tracks.id = f.track_id AND tracks.isrc = f.isrc
+        WHERE f.energy IS NOT NULL
+      UNION ALL
+      SELECT CAST(tracks.id AS TEXT), f.energy, f.valence, f.acousticness, f.mode, 1
+        FROM dj_mood_features f
+        JOIN tracks ON tracks.video_id = f.video_id
+        WHERE f.energy IS NOT NULL)
+    ORDER BY stream`);
+
+/** Every Library song's found features (`djLibraryMoodFeatureRows`). A Library stand-in reads the same. */
 export const selectDjLibraryMoodFeatures = (
   db: LibraryDatabase,
-): ReadonlyMap<string, DjAudioFeatures> => {
-  const found = new Map<string, DjAudioFeatures>();
-  const columns = (table: typeof djLibraryMoodFeatures | typeof djMoodFeatures) => ({
-    trackId: tracks.id,
-    energy: table.energy,
-    valence: table.valence,
-    acousticness: table.acousticness,
-    mode: table.mode,
-  });
-  const tagged = db
-    .select(columns(djLibraryMoodFeatures))
-    .from(djLibraryMoodFeatures)
-    .innerJoin(
-      tracks,
-      and(
-        eq(tracks.id, djLibraryMoodFeatures.trackId),
-        eq(tracks.isrc, djLibraryMoodFeatures.isrc),
-      ),
-    )
-    .where(isNotNull(djLibraryMoodFeatures.energy))
-    .all();
-  const streamed = db
-    .select(columns(djMoodFeatures))
-    .from(djMoodFeatures)
-    .innerJoin(tracks, eq(tracks.videoId, djMoodFeatures.videoId))
-    .where(isNotNull(djMoodFeatures.energy))
-    .all();
-  // The stream features come last, so they replace the ISRC tag's.
-  for (const row of [...tagged, ...streamed]) {
-    const features = featuresOf(row);
-    if (features !== null) found.set(String(row.trackId), features);
-  }
-  return found;
-};
+): ReadonlyMap<string, DjAudioFeatures> =>
+  finishSteps(djMoodFeaturesSteps(djLibraryMoodFeatureRows(db)));
