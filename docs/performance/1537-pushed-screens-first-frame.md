@@ -58,9 +58,15 @@ frame. A pushed screen's is stamped on the frame after its commit.
   so it never shows mid-list. A playlist's suggestions are its last item and come with it.
 - **Back** returns to the screen under the push, which stays mounted; nothing under it is
   re-mounted or re-staged.
-- **Now Playing's first frame is the frame after its commit** (`nowPlaying/sheet.ts`,
-  `nowPlayingContentCommitted`), as a push's is. Its content is still reported drawn a frame
-  later, and settled only once the spring has finished too.
+- **Now Playing's first frame is measured by the push's rule** (`nowPlaying/sheet.ts`,
+  `nowPlayingContentCommitted`). This is a measurement fix, not a speed-up: the sheet draws
+  exactly as before. The old rule stamped Now Playing's response and first frame a frame after
+  the sheet's commit, and its first frame a frame after that, so its first frame read two frames
+  after the commit. The new rule is the one pushes use (`timingScreenCommitted`): the response at
+  the commit, the first frame on the next frame. So a Now Playing open now reads about one frame
+  (16 ms at 60 Hz) less than before for the same drawing, and its numbers compare with a push's.
+  Its content is still reported drawn a frame later, and settled only once the spring has
+  finished too.
 - **Guards.** `songs/stagedRows.test.ts` (four rows, then a screen, then all; a short list whole
   at once; rows read late staged; a list that grows takes no row back) and
   `nowPlaying/sheetTiming.test.ts` (an open's first frame is the frame after the commit).
