@@ -25,6 +25,8 @@ type Props = {
   onRelease?: () => void;
   /** In a card (a section's level card): the label at body size, the rows closer together. */
   compact?: boolean;
+  /** Shown dimmed, taking no touch and no screen-reader step. */
+  disabled?: boolean;
 };
 
 const THUMB = 24;
@@ -46,6 +48,7 @@ export function SettingsSlider({
   onChange,
   onRelease,
   compact = false,
+  disabled = false,
 }: Props) {
   const width = useSharedValue(0);
   const last = useRef(value);
@@ -79,6 +82,7 @@ export function SettingsSlider({
   const pan = usePanGesture({
     activeOffsetX: [-DRAG_SLOP, DRAG_SLOP],
     failOffsetY: [-DRAG_SLOP * 2, DRAG_SLOP * 2],
+    enabled: !disabled,
     onActivate: (event) => {
       "worklet";
       follow(event.x);
@@ -93,6 +97,7 @@ export function SettingsSlider({
     },
   });
   const tap = useTapGesture({
+    enabled: !disabled,
     runOnJS: true,
     // A tap activates as the finger lifts.
     onActivate: (event) => {
@@ -111,11 +116,13 @@ export function SettingsSlider({
       accessibilityRole="adjustable"
       accessibilityLabel={label}
       accessibilityValue={{ min: range.min, max: range.max, now: value, text }}
-      accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
-      onAccessibilityAction={(event) =>
-        onChange(stepSlider(value, event.nativeEvent.actionName === "increment" ? 1 : -1, range))
-      }
-      className={compact ? "pt-2" : "pb-1 pt-3"}
+      accessibilityState={{ disabled }}
+      accessibilityActions={disabled ? [] : [{ name: "increment" }, { name: "decrement" }]}
+      onAccessibilityAction={(event) => {
+        if (disabled) return;
+        onChange(stepSlider(value, event.nativeEvent.actionName === "increment" ? 1 : -1, range));
+      }}
+      className={`${compact ? "pt-2" : "pb-1 pt-3"}${disabled ? " opacity-45" : ""}`}
     >
       <View className="flex-row flex-wrap items-baseline justify-between gap-x-2">
         <Text
