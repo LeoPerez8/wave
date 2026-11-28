@@ -1,16 +1,22 @@
 /**
  * Opening a song link shared to Wave (docs/spec.md, "Opening a song link"):
  * the song plays at once as a Magic Queue seeded by it, from the Library's
- * copy when there is one, else streamed, and Now Playing opens. Core decides
- * which links name a song, which copy plays (`ytMusicLinkPlay`, and
- * `trackLinkPlay` for a Spotify or Deezer track) and what a link that plays
- * nothing says (`songLinkNotice`, `songLinkNotFound`).
+ * copy when there is one, else streamed, and Now Playing opens. An album or
+ * artist link opens its YT Music page instead. Core decides which links name
+ * a song, album or artist, which copy plays (`ytMusicLinkPlay`, and
+ * `trackLinkPlay` for a Spotify or Deezer track), which page opens
+ * (`albumLinkOpening`, `ytAlbumPlaylistOpening`, `artistLinkOpening`,
+ * `ytChannelLinkOpening`) and what a link that opens nothing says
+ * (`songLinkNotice`, `songLinkNotFound`).
  */
 import {
   joinArtists,
+  readDeezerArtist,
   readDeezerTrack,
   readSpotifyAlbum,
+  readSpotifyArtist,
   readSpotifyTrack,
+  songLinkKind,
   songLinkNotice,
   type PlaylistLink,
   type SongLink,
@@ -29,7 +35,7 @@ import { currentToast, dismissToast, showToast } from "@/overlay/toast";
 import { startMagicQueue, startStreamedMagicQueue } from "@/playback/MagicQueue";
 import { askYtMusic, searchRecordingInTurn } from "@/ytmusic/askYtMusic";
 import { currentLibraryFinder } from "@/ytmusic/libraryFinder";
-import { openYtAlbum } from "@/ytmusic/routes";
+import { openYtAlbum, openYtArtist } from "@/ytmusic/routes";
 import { withSearchTurn } from "@/ytmusic/searchAllowance";
 
 import { LibraryStore } from "./LibraryStore";
@@ -95,6 +101,32 @@ const linkEnding = (link: SongLink, signal: AbortSignal): Promise<Ending> =>
         ).catch(() => null);
         return answer === null || Result.isFailure(answer) ? null : answer.success;
       },
+      pages: {
+        albumPlaylist: async (playlistId) => {
+          const answer = await askYtMusic((ytMusic) => ytMusic.playlist(playlistId)).catch(
+            () => null,
+          );
+          if (answer === null) return { ok: false, reason: "failed" };
+          return Result.isFailure(answer)
+            ? { ok: false, reason: answer.failure.reason }
+            : { ok: true, playlist: answer.success };
+        },
+        artistPage: async (channelId) => {
+          const answer = await askYtMusic((ytMusic) => ytMusic.artist(channelId)).catch(() => null);
+          if (answer === null) return { ok: false, reason: "failed" };
+          return Result.isFailure(answer)
+            ? { ok: false, reason: answer.failure.reason }
+            : { ok: true, name: answer.success.name };
+        },
+        spotifyArtist: (id, abort) => readSpotifyArtist(id, spotifyTransport(abort)),
+        deezerArtist: (id, abort) => readDeezerArtist(id, deezerTransport(abort)),
+        searchArtists: async (query) => {
+          const answer = await askYtMusic((ytMusic) =>
+            withSearchTurn("songLink", query, ytMusic.searchArtists(query)),
+          ).catch(() => null);
+          return answer === null || Result.isFailure(answer) ? null : answer.success;
+        },
+      },
     },
     signal,
   );
@@ -103,10 +135,11 @@ const linkEnding = (link: SongLink, signal: AbortSignal): Promise<Ending> =>
  * Plays the song [link] names. Offline it says so and asks nothing. Else a
  * toast says "Finding song…" while the song is found: a Spotify or Deezer
  * short link is followed first, and a Spotify one that lands on a playlist
- * opens its import card ([openPlaylist]) instead. A Spotify album link (or a short link that
- * lands on one) opens the same album's YT Music page instead, with "Finding album…" while it's
- * looked for. The Library's copy plays when it has one, else
- * the YT Music song streams, each with related songs after it (a Magic Queue
+ * opens its import card ([openPlaylist]) instead. An album link (YT Music's page or playlist,
+ * Spotify's, or a short link that lands on one) opens the album's YT Music page instead, with
+ * "Finding album…" while it's looked for, and an artist link (a YouTube channel, a Spotify or
+ * Deezer artist) the artist's, with "Finding artist…". The Library's copy plays when it has one,
+ * else the YT Music song streams, each with related songs after it (a Magic Queue
  * session Up Next heads "Related · from <song>"; the previous queue goes),
  * and Now Playing opens. A song found nowhere opens the Couldn't find
  * card; anything else that plays nothing says why. YT Music off was said
@@ -117,12 +150,18 @@ export const openSongLink = async (
   { openPlaylist }: { readonly openPlaylist: (link: PlaylistLink) => void },
 ): Promise<void> => {
   const { strings } = currentLocalisation();
-  const album = link.service === "spotifyAlbum";
+  const kind = songLinkKind(link);
   if (!online()) {
-    say(album ? "albumOffline" : "offline");
+    say(kind === "album" ? "albumOffline" : kind === "artist" ? "artistOffline" : "offline");
     return;
   }
-  void showToast(album ? strings.imports.findingAlbum : strings.imports.findingSong);
+  void showToast(
+    kind === "album"
+      ? strings.imports.findingAlbum
+      : kind === "artist"
+        ? strings.imports.findingArtist
+        : strings.imports.findingSong,
+  );
   const finding = currentToast.get()?.id;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TRACK_SERVICE_TIMEOUT_MS);
@@ -138,8 +177,17 @@ export const openSongLink = async (
     return;
   }
   if ("album" in ending) {
-    const { title, artists, artworkUrl } = ending.read;
-    openYtAlbum(ending.album, { title, line: joinArtists(artists), artworkUrl });
+    const { read } = ending;
+    openYtAlbum(
+      ending.album,
+      read === null
+        ? undefined
+        : { title: read.title, line: joinArtists(read.artists), artworkUrl: read.artworkUrl },
+    );
+    return;
+  }
+  if ("artist" in ending) {
+    openYtArtist(ending.artist, ending.name ?? undefined);
     return;
   }
   if (ending.play === "failed") {

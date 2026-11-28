@@ -1,0 +1,16 @@
+{
+  "id": 399,
+  "name": "Radiohead",
+  "link": "https://www.deezer.com/artist/399",
+  "share": "https://www.deezer.com/artist/399?utm_source=deezer&utm_content=artist-399&utm_term=0_1795837092&utm_medium=web",
+  "picture": "https://api.deezer.com/artist/399/image",
+  "picture_small": "https://cdn-images.dzcdn.net/images/artist/0d58cfbc90f2e776608bcdc0c45a4711/56x56-000000-80-0-0.jpg",
+  "picture_medium": "https://cdn-images.dzcdn.net/images/artist/0d58cfbc90f2e776608bcdc0c45a4711/250x250-000000-80-0-0.jpg",
+  "picture_big": "https://cdn-images.dzcdn.net/images/artist/0d58cfbc90f2e776608bcdc0c45a4711/500x500-000000-80-0-0.jpg",
+  "picture_xl": "https://cdn-images.dzcdn.net/images/artist/0d58cfbc90f2e776608bcdc0c45a4711/1000x1000-000000-80-0-0.jpg",
+  "nb_album": 45,
+  "nb_fan": 4130515,
+  "radio": true,
+  "tracklist": "https://api.deezer.com/artist/399/top?limit=50",
+  "type": "artist"
+}

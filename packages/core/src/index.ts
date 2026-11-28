@@ -1799,6 +1799,7 @@ export {
   deezerShortLinkLanding,
   linkedYtSong,
   recogniseSongLink,
+  songLinkKind,
   songLinkLibraryCopy,
   songLinkNotice,
   songLinkNotFound,
@@ -1809,6 +1810,7 @@ export {
 export type {
   LinkedSong,
   SongLink,
+  SongLinkKind,
   SongLinkFailure,
   SongLinkNotFound,
   SongLinkPlay,
@@ -1916,12 +1918,23 @@ export { readSpotifyTrack } from "./spotifyTrack.ts";
 export {
   albumLinkOpening,
   readSpotifyAlbum,
+  ytAlbumPlaylistOpening,
   type AlbumLinkOpening,
+  type YtAlbumPlaylistRead,
   type AlbumRead,
   type FoundYtAlbum,
   type ServiceAlbum,
 } from "./spotifyAlbum.ts";
 export { readDeezerTrack, type DeezerAnswer, type DeezerTransport } from "./deezerTrack.ts";
+export {
+  artistLinkOpening,
+  readDeezerArtist,
+  readSpotifyArtist,
+  ytChannelLinkOpening,
+  type ArtistLinkOpening,
+  type ArtistRead,
+  type YtArtistNameRead,
+} from "./artistLink.ts";
 export type {
   SpotifyAnswer,
   SpotifyEmbed,

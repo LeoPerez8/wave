@@ -43,7 +43,7 @@ export const importsEn = {
   /** Sharing something to Wave that isn't a song or playlist link. */
   cantOpen: "Can't open this",
   sharedLinks:
-    "Wave opens songs from YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from Spotify links.",
+    "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from YouTube Music and Spotify links.",
   /** Opening a song link. */
   findingSong: "Finding song…",
   songOffline: "You're offline",
@@ -60,6 +60,13 @@ export const importsEn = {
   albumOfflineMessage: "Connect to the internet to open this album.",
   albumNotFound: "Couldn't find this album on YouTube Music",
   albumUnreadMissing: (service: string): string => `${service} doesn't have the album it links to.`,
+  /** Opening an artist link. */
+  findingArtist: "Finding artist…",
+  artistOfflineMessage: "Connect to the internet to open this artist.",
+  artistNotFound: "Couldn't find this artist",
+  artistChannelNotFound: "YouTube Music has no artist page for this channel.",
+  artistUnreadMissing: (service: string): string =>
+    `${service} doesn't have the artist it links to.`,
   ytMusicNoAnswerMessage: "YouTube Music didn't answer. Try again later.",
   offline: "You're offline. Try again when you're back online.",
   playlistFailed:
