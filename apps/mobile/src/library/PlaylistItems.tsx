@@ -620,6 +620,7 @@ export function PlaylistItems({
           scrollEnabled={scrollable && drag === null}
           scrollEventThrottle={16}
           className="flex-1"
+          stagedRows
           data={data}
           keyExtractor={itemKey}
           song={song}
