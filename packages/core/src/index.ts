@@ -773,16 +773,21 @@ export type { GlassLayers, GlassProbe } from "./glassProbe.ts";
 export {
   EMPTY_FRAME_TALLY,
   effectsVerdict,
+  fullGlassNotice,
   judgeFrames,
+  ownerFullEffects,
   phoneEffectsLine,
   readEffectsVerdict,
+  readFullGlassChoice,
   sessionEffects,
   tallyFrames,
   WEAK_PHONE_RULE,
   writeEffectsVerdict,
+  writeFullGlassChoice,
 } from "./phoneEffects.ts";
 export type {
   EffectsVerdict,
+  FullGlassNotice,
   FrameTally,
   FrameWindow,
   PhoneEffects,
