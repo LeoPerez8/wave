@@ -6,6 +6,7 @@ import {
   recognisePlaylistLink,
   recogniseSongLink,
   sharedTextImport,
+  opensOnDesktop,
   songLinkKind,
   spotifyShortLinkLanding,
 } from "./index.ts";
@@ -238,6 +239,28 @@ describe("the kind of thing a link opens", () => {
       const link = recogniseSongLink(text);
       assert.ok(link !== null, text);
       assert.equal(songLinkKind(link), kind, text);
+    }
+  });
+});
+
+describe("the links the desktop opens", () => {
+  test("songs, short links and Spotify albums, but not yet YT Music albums or artists", () => {
+    for (const [text, opens] of [
+      [`https://youtu.be/${VIDEO}`, true],
+      ["https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC", true],
+      ["https://www.deezer.com/track/3135556", true],
+      ["https://spotify.link/wud9sAYDbDb", true],
+      ["https://link.deezer.com/s/32B48GkNdtNqNtV9RmXDe", true],
+      ["https://open.spotify.com/album/7rZmgT2kEqkCMR6VHcloJM", true],
+      [`https://music.youtube.com/browse/${ALBUM_BROWSE}`, false],
+      [`https://music.youtube.com/playlist?list=${ALBUM_PLAYLIST}`, false],
+      [`https://www.youtube.com/channel/${CHANNEL}`, false],
+      [`https://open.spotify.com/artist/${SPOTIFY_ARTIST}`, false],
+      [`https://www.deezer.com/artist/${DEEZER_ARTIST}`, false],
+    ] as const) {
+      const link = recogniseSongLink(text);
+      assert.ok(link !== null, text);
+      assert.equal(opensOnDesktop(link), opens, text);
     }
   });
 });

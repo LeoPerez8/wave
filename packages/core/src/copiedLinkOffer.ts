@@ -179,24 +179,35 @@ const TEXT_TYPES: ReadonlySet<string> = new Set(["text/plain", "text/html", "tex
 /** The classifier's confidence from which a clip is likely a link. */
 const LIKELY_LINK = 0.5;
 
+/** How long Wave waits before looking again at a clip still being classified. */
+export const CLIP_LOOK_AGAIN_MS = 1000;
+/** How many times a return looks at a clip still being classified before it gives up. */
+const CLIP_LOOKS = 3;
+
 /**
  * Whether Wave reads the clip's text, which makes Android 12+ show "Wave
- * pasted from your clipboard": only text that's likely a link (a URI list, or
- * text the classifier found a link in), never a clip marked sensitive, and a
- * clip only once ([lastRead], the timestamp of the clip read last). A clip
- * still being classified waits for a later return; one Android didn't
- * classify is read, since nothing else tells.
+ * pasted from your clipboard": `read` only text that's likely a link (a URI
+ * list, or text the classifier found a link in), never a clip marked
+ * sensitive, and a clip only once ([lastRead], the timestamp of the clip read
+ * last). A clip still being classified gets `lookAgain`: Wave reads its
+ * description again after `CLIP_LOOK_AGAIN_MS` while it stays in front, and on
+ * the last of a return's looks ([look], counted from 1) it waits for a later
+ * return. One Android didn't classify is read, since nothing else tells.
  */
-export const readsCopiedText = (hint: ClipHint, lastRead: number | null): boolean => {
-  if (hint.sensitive || hint.timestamp === lastRead) return false;
-  if (!hint.mimeTypes.some((type) => TEXT_TYPES.has(type))) return false;
-  if (hint.mimeTypes.includes("text/uri-list")) return true;
+export const copiedTextReading = (
+  hint: ClipHint,
+  lastRead: number | null,
+  look: number = 1,
+): "read" | "skip" | "lookAgain" => {
+  if (hint.sensitive || hint.timestamp === lastRead) return "skip";
+  if (!hint.mimeTypes.some((type) => TEXT_TYPES.has(type))) return "skip";
+  if (hint.mimeTypes.includes("text/uri-list")) return "read";
   switch (hint.classification) {
     case "complete":
-      return (hint.urlConfidence ?? 0) >= LIKELY_LINK;
+      return (hint.urlConfidence ?? 0) >= LIKELY_LINK ? "read" : "skip";
     case "pending":
-      return false;
+      return look < CLIP_LOOKS ? "lookAgain" : "skip";
     case "notPerformed":
-      return true;
+      return "read";
   }
 };

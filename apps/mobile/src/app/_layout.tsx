@@ -39,7 +39,7 @@ import { OverlayHost } from "@/overlay/OverlayHost";
 import { AndroidBack } from "@/overlay/AndroidBack";
 import { PhotoCropperHost } from "@/library/PhotoCropperHost";
 import { FollowCurrentRoute } from "@/library/routes";
-import { useOfferCopiedLinks } from "@/library/copiedLinkOffer";
+import { useCopiedLinkToasts } from "@/library/copiedLinkOffer";
 import { useOpenSharedText } from "@/library/sharedText";
 import { YtLibraryPickerHost } from "@/library/YtLibraryPickerHost";
 import { launchScanDone } from "@/library/replacementDuplicates";
@@ -91,7 +91,7 @@ export default function RootLayout() {
   // read the Library (the import matches against it).
   useOpenSharedText(granted);
   // A song link copied in another app is offered in a toast on the way back to Wave.
-  useOfferCopiedLinks(granted);
+  useCopiedLinkToasts(granted);
   useRecognizeRequests(granted);
 
   // What the first screen and the player need starts now: the player, the queue it restores,

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { copiedLinkOffer, looksAtClipboard, offeredLinkKey, readsCopiedText } from "./index.ts";
+import {
+  CLIP_LOOK_AGAIN_MS,
+  copiedLinkOffer,
+  copiedTextReading,
+  looksAtClipboard,
+  offeredLinkKey,
+} from "./index.ts";
 
 const VIDEO = "dQw4w9WgXcQ";
 const SPOTIFY_ID = "4PTG3Z6ehGkBFwjybzWkR8";
@@ -196,10 +202,10 @@ describe("whether Wave reads the copied text, from the clip's description", () =
   } as const;
 
   test("a text Android's classifier finds a link in is read", () => {
-    assert.equal(readsCopiedText(link, null), true);
-    assert.equal(readsCopiedText({ ...link, mimeTypes: ["text/html"] }, null), true);
+    assert.equal(copiedTextReading(link, null), "read");
+    assert.equal(copiedTextReading({ ...link, mimeTypes: ["text/html"] }, null), "read");
     assert.equal(
-      readsCopiedText(
+      copiedTextReading(
         {
           ...link,
           mimeTypes: ["text/uri-list"],
@@ -208,36 +214,49 @@ describe("whether Wave reads the copied text, from the clip's description", () =
         },
         null,
       ),
-      true,
+      "read",
     );
   });
 
   test("plain text, which would show Android's paste notice, isn't", () => {
-    assert.equal(readsCopiedText({ ...link, urlConfidence: 0 }, null), false);
-    assert.equal(readsCopiedText({ ...link, urlConfidence: 0.2 }, null), false);
+    assert.equal(copiedTextReading({ ...link, urlConfidence: 0 }, null), "skip");
+    assert.equal(copiedTextReading({ ...link, urlConfidence: 0.2 }, null), "skip");
   });
 
   test("a clip that isn't text, or that its app marked sensitive (a password), isn't", () => {
-    assert.equal(readsCopiedText({ ...link, mimeTypes: ["image/png"] }, null), false);
-    assert.equal(readsCopiedText({ ...link, mimeTypes: ["text/vnd.android.intent"] }, null), false);
-    assert.equal(readsCopiedText({ ...link, sensitive: true }, null), false);
+    assert.equal(copiedTextReading({ ...link, mimeTypes: ["image/png"] }, null), "skip");
+    assert.equal(
+      copiedTextReading({ ...link, mimeTypes: ["text/vnd.android.intent"] }, null),
+      "skip",
+    );
+    assert.equal(copiedTextReading({ ...link, sensitive: true }, null), "skip");
   });
 
-  test("a clip still being classified waits for a later return", () => {
-    assert.equal(
-      readsCopiedText({ ...link, classification: "pending", urlConfidence: null }, null),
-      false,
-    );
+  test("a clip still being classified is looked at again shortly, without reading it", () => {
+    const pending = { ...link, classification: "pending", urlConfidence: null } as const;
+    assert.equal(copiedTextReading(pending, null), "lookAgain");
+    assert.equal(copiedTextReading(pending, null, 2), "lookAgain");
+    assert.ok(CLIP_LOOK_AGAIN_MS > 0 && CLIP_LOOK_AGAIN_MS <= 2000);
+  });
+
+  test("a clip still being classified after a few looks waits for a later return", () => {
+    const pending = { ...link, classification: "pending", urlConfidence: null } as const;
+    assert.equal(copiedTextReading(pending, null, 3), "skip");
+  });
+
+  test("a clip classified by the next look is read if it's likely a link, and not if it isn't", () => {
+    assert.equal(copiedTextReading(link, null, 2), "read");
+    assert.equal(copiedTextReading({ ...link, urlConfidence: 0.1 }, null, 2), "skip");
   });
 
   test("a clip Android didn't classify is read, once", () => {
     const unclassified = { ...link, classification: "notPerformed", urlConfidence: null } as const;
-    assert.equal(readsCopiedText(unclassified, null), true);
-    assert.equal(readsCopiedText(unclassified, unclassified.timestamp), false);
+    assert.equal(copiedTextReading(unclassified, null), "read");
+    assert.equal(copiedTextReading(unclassified, unclassified.timestamp), "skip");
   });
 
   test("a clip already read isn't read again", () => {
-    assert.equal(readsCopiedText(link, link.timestamp), false);
-    assert.equal(readsCopiedText({ ...link, timestamp: 2000 }, link.timestamp), true);
+    assert.equal(copiedTextReading(link, link.timestamp), "skip");
+    assert.equal(copiedTextReading({ ...link, timestamp: 2000 }, link.timestamp), "read");
   });
 });
