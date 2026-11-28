@@ -87,22 +87,40 @@ Run on the PC (Linux) at this branch's head.
 Core's three over budget are its search on 50,000 songs and a big playlist's download decision,
 timed while seven tickets built and tested at once on the PC; this branch doesn't touch Core.
 
-## Emulator run: not run
+## Emulator results (code review of #1539)
 
-On 28 November `~/.android/avd/wave-run-903.avd` held only a `snapshots` folder (no `config.ini`,
-no `wave-run-903.ini`), so no AVD was listed, and `/` had 7.8 GB free, under the 12 GB
-`scripts/emulator-apk.sh` asks for a build and the 7.4 GB the AVD's data partition takes. Neither a
-before nor an after build was made.
+AVD `wave-run-903` (android-36 x86_64, SwiftShader), the reference seed (3,000 songs), network
+off, perf builds (`EXPO_PUBLIC_WAVE_PERF=1`), 28 November. "Before" is the integration tip
+`b079ddac7`, which already has this ticket; "after" is `fix/1528-code-review` at `1b9227e36`,
+which adds #1534's route reads (see `1534-tab-switch-renders.md`). No build of the tip before this
+ticket fit the disk, so this ticket's own before is still the phone's table above. First frames are
+WaveTiming's, per screen.
 
-When the AVD is back, with the lock (`docs/agents/emulator-checks.md`, seeded with
-`scripts/perf/seed.ts`), once with `feat/1528-screens-show-at-once` before this branch and once
-with it:
+Pushes repeated after a warm-up (Settings, the artist and the playlist by `perf.ts run`'s
+`push-settings`, `push-artist`, `push-playlist`; the album "Amber Bridges" by tapping it from
+Albums and going back), 11 pushes each (10 for Settings), one session per build:
 
-```sh
-node scripts/perf/perf.ts emulator-check --serial <serial> --artist "Amber Ainsley" \
-  --playlist "Archive" --album "<album on Albums' first screen>"
-```
+| Screen   | Before median / p90 | After median / p90 | Budget |
+| -------- | ------------------- | ------------------ | ------ |
+| Album    | 121 / 167 ms        | 120 / 181 ms       | 100 ms |
+| Artist   | 155 / 167 ms        | 151 / 175 ms       | 100 ms |
+| Playlist | 185 / 231 ms        | 187 / 273 ms       | 100 ms |
+| Settings | 126 / 143 ms        | 103 / 146 ms       | 100 ms |
 
-Record here, per screen (album, artist, playlist, Settings) and for Now Playing open, the first
-frame's median and p90 and the run count, labelled with the AVD and the commit. The phone confirms
-them from the `WaveTiming` lines of the owner's next exported log on the `ti` release.
+The first push to each screen after a launch (`emulator-check`'s reference taps, one each, so
+noisy): album 437 → 288 ms, artist 526 → 267 ms, Settings 206 → 143 ms, Version History
+262 → 65 ms, Albums 478 → 243 ms, Artists 323 → 443 ms. A push is the first route the tabs
+navigator sees with those segments, so before #1534's fix it read every tab's route again; later
+pushes to the same screen didn't, which is why the repeated pushes barely moved.
+
+Now Playing open (`now-playing`, 10 opens per build): before median 78 / p90 88 ms, after 81 /
+84 ms, against 50 ms. Both builds measure by the push's rule above. Nothing in JS is left to
+defer before its first frame on the emulator: the 20 opens had no long task, the sheet rendered
+3 to 14 ms (`NowPlayingSheet`) and the player 1 to 5 ms (`PlayerView`), and the response came
+3 to 20 ms after the tap. The first frame waits on the render thread: its issue time averaged 56
+to 88 ms a frame during each open (p90 87 to 137 ms), SwiftShader drawing the sheet's glass and
+motion. So no change here; the phone's log decides the 50 ms.
+
+Every push is still over its 100 ms on this AVD, which draws in software (every moving frame
+takes 60 to 100 ms, `1536-slide-after-first-frame.md`). The phone confirms these from the
+`WaveTiming` lines of the owner's next exported log on the `ti` release.

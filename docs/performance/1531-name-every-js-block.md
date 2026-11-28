@@ -86,17 +86,33 @@ Reading the code for what runs on the JS thread outside every named span (#1447'
   `lib/jsEntries.test.ts` covers each wrapper, arguments and `this`, errors, the 1 ms floor, and
   removing an Expo listener by itself or by its subscription.
 
-## Not measured
+## Emulator results (code review of #1539)
 
-No emulator run was possible for this ticket on 28 November: `wave-run-903` holds only
-`snapshots/` (no `config.ini`), the T3 device tools are off, and `/` had 7.0 GB free, under the
-12 GB `scripts/emulator-apk.sh` needs. So these are not yet known, and the owner's next exported
-log on the `ti` release answers them:
+AVD `wave-run-903` (android-36 x86_64, SwiftShader), the reference seed (3,000 songs), network off,
+perf build of `fix/1528-code-review` at `1b9227e36`, 28 November. One session, from the seed to the
+end, read from `files/logs/wave.log`: `perf.ts emulator-check` (one iteration of the reference taps:
+every tab, Settings and two of its pages, DJ, a Magic Queue, Library's pages, an album, an artist, a
+playlist, Now Playing and the Queue), then `perf.ts run` with `tab-first` (6 cold launches, 12 first
+visits), `tab-switch` (40 switches), `skip-library` (11 song changes) and `now-playing` (11 opens and
+closes). It logged 190 `JS blocked` lines; none says `no background work`:
 
-- how many blocks each kind takes, and how many stay `unseen work`;
-- whether the timing wrappers cost anything visible (two clock reads per timer, event or
-  Effect turn; nothing is written unless a long task happens).
+| Kind                                                                           | Blocks |
+| ------------------------------------------------------------------------------ | -----: |
+| `rendering <name>` (a timed screen or section)                                 |    130 |
+| a named slice or work (`Home mix inputs` and so on)                            |     52 |
+| `rendering untimed components`                                                 |      3 |
+| `unseen work (a native callback or GC)`                                        |      3 |
+| `startup …`                                                                    |      2 |
+| a timer, frame callback, setImmediate callback, native event, effects or touch |      0 |
 
-The emulator criterion (a session of tab switches, pushes, Now Playing and song changes with no
-block as "no background work") holds by construction, since the line no longer exists, but how
-the blocks split between the kinds is unverified until that log comes in.
+The named renders were Home's sections (77), `(tabs)` (22: eleven at launches on `/`, nine pushes
+over the tabs and two on Library, see `1534-tab-switch-renders.md`), `PlayerView` (19, a song
+change's closed Now Playing, #1547), `HomeScreen` and `HomeContent` (4 each), `UpNextList` and
+`ArrangeablePlaylists` (2 each). So 3 of 190 blocks, under 2%, fell to `unseen work`, against 589
+`no background work` lines in the owner's log before this ticket. The integration tip before the
+review fixes (`b079ddac7`), measured the same way, logged 212 blocks with no `unseen work` and one
+`rendering untimed components`.
+
+The phone confirms the split from the owner's next exported log on the `ti` release, and whether
+the timing wrappers cost anything visible there (two clock reads per timer, event or
+`setImmediate` callback; nothing is written unless a long task happens).

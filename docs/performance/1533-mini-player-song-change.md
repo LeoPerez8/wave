@@ -74,22 +74,25 @@ On the code before this change, the first two tests fail. `lib/renderCost.test.t
 own span ends where the subtree's render ends. A sibling that renders after it, with a 200 ms
 render under a hand-moved clock, isn't counted. A memoized render reports nothing.
 
-## Emulator results: not measured
+## Emulator results (code review of #1539)
 
-No emulator run was possible on the PC for this ticket. `emulator -list-avds` is empty, because
-`~/.android/avd` holds only `wave-run-903.avd/snapshots`, with no `.ini` or `config.ini`. `df -h /`
-showed 7.0 to 7.8 GB free, under the 7.4 GB the AVD's data partition needs plus a build
-(`scripts/emulator-apk.sh` asks for 12 GB). The acceptance criterion "a Next, Previous or crossfade
-renders the mini player under 50 ms, logged by its `RenderCost`" is **pending**.
+AVD `wave-run-903` (android-36 x86_64, SwiftShader), the reference seed (3,000 songs), network off,
+perf builds, 28 November, `perf.ts run --scenario skip-library`: Library › Songs › Play, then the
+mini player's Next, 10 times after a warm-up, one session per build. Before: the integration tip
+`b079ddac7` (both parts still named `MiniPlayer`). After: `fix/1528-code-review` at `1b9227e36`.
 
-The measurement to run once an AVD and space are back: a perf build of the integration tip and of
-this branch (`EXPO_PUBLIC_WAVE_PERF=1`), the 3,000-song seed (`scripts/perf/seed.ts`), then
-`perf.ts run --scenario skip --label 1533-before|after` (10 Nexts each). Read
-`renderSpansMs.MiniPlayerSong` per step, and the app log's `rendering MiniPlayerSong` and
-`rendering NowPlayingSheet` / `PlayerView` lines. Previous and crossfade need a hand session with
-crossfade on. The phone then confirms it from the WaveTiming lines of the owner's next exported log
-on the `ti` release. Expect no `rendering MiniPlayerSong` line on a song change, and the blocks that
-remain named after Now Playing.
+| Next, 10 song changes                         | Before                    | After                          |
+| --------------------------------------------- | ------------------------- | ------------------------------ |
+| The song's part's span (`renderSpansMs`)      | `MiniPlayer` 2.5 / 4.9 ms | `MiniPlayerSong` 1.9 / 26.8 ms |
+| The pill (`MiniPlayer`) rendered              | (same name)               | on none of the 10              |
+| `rendering MiniPlayer…` blocks in the session | 1                         | 0                              |
+
+(span median / max.) Every song change rendered the mini player well under 50 ms; what blocked on
+a song change was the closed Now Playing, named after itself: `rendering PlayerView`, 16 blocks
+before and 19 after in the whole session (#1547). Previous and a crossfade weren't measured: the
+emulator plays no audio (`-no-audio`), so a crossfade can't be set off, and Previous has no perf
+scenario. The phone confirms all three from the WaveTiming lines of the owner's next exported log
+on the `ti` release: no `rendering MiniPlayer` or `rendering MiniPlayerSong` line on a song change.
 
 ## Left for later
 
