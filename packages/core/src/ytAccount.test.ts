@@ -3,6 +3,9 @@ import { describe, test } from "node:test";
 
 import {
   YT_ACCOUNT_SIGNED_OUT,
+  catalogueOf,
+  confirmYtMusicOff,
+  planAlert,
   stepYtAccount,
   ytAccountView,
   ytSignInEmail,
@@ -187,4 +190,58 @@ test("YT Music sign-in prefers the expired account, then Wave, then asks for an 
     ytSignInEmail({ status: "signedOut" }, { status: "ended", account: wave.account }),
     null,
   );
+});
+
+describe("confirmYtMusicOff", () => {
+  const lost = [
+    "Wave stops sending requests to YouTube. You lose:",
+    "• Online search and streamed songs",
+    "• DJ, Discover and Community playlists on Home",
+    "• Magic Queue and playlist suggestions",
+    "• Downloads, imports and Export through YT Music",
+    "Downloaded songs keep playing and nothing is deleted.",
+  ];
+
+  test("says what stops, with a red Turn Off beside Cancel", () => {
+    const alert = confirmYtMusicOff(false);
+    assert.equal(alert.title, "Turn Off YT Music?");
+    assert.equal(alert.message, lost.join("\n"));
+    assert.deepEqual(
+      planAlert(alert).buttons.map(({ label, tone }) => [label, tone]),
+      [
+        ["Cancel", "accent"],
+        ["Turn Off", "destructive"],
+      ],
+    );
+  });
+
+  test("signed in to a Wave account, adds that every phone of the account turns it off", () => {
+    assert.equal(
+      confirmYtMusicOff(true).message,
+      [...lost, "This applies to every phone signed in to your Wave account."].join("\n"),
+    );
+  });
+
+  test("reads in Portuguese, with and without the account's line", () => {
+    const pt = catalogueOf("pt-BR");
+    const perdas = [
+      "O Wave para de fazer pedidos ao YouTube. Você perde:",
+      "• Busca online e músicas por streaming",
+      "• DJ, Descobrir e Playlists da comunidade no Início",
+      "• Fila Mágica e sugestões nas playlists",
+      "• Downloads, importações e Exportar pelo YT Music",
+      "As músicas baixadas continuam tocando e nada é apagado.",
+    ];
+    const alert = confirmYtMusicOff(false, pt);
+    assert.equal(alert.title, "Desativar o YT Music?");
+    assert.equal(alert.message, perdas.join("\n"));
+    assert.deepEqual(
+      planAlert(alert, pt).buttons.map(({ label }) => label),
+      ["Cancelar", "Desativar"],
+    );
+    assert.equal(
+      confirmYtMusicOff(true, pt).message,
+      [...perdas, "Vale para todos os seus celulares com a Conta Wave."].join("\n"),
+    );
+  });
 });

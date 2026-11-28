@@ -1304,6 +1304,7 @@ export type {
 } from "./spotifyAccount.ts";
 export {
   YT_ACCOUNT_SIGNED_OUT,
+  confirmYtMusicOff,
   stepYtAccount,
   ytAccountView,
   ytSignInEmail,

@@ -15,7 +15,24 @@ import {
   type AccountSignInState,
   type AccountView,
 } from "./accountSignIn.ts";
+import type { AlertSpec } from "./alert.ts";
+import { en, type Catalogue } from "./catalogueEn.ts";
 import type { WaveSession } from "./waveAccount.ts";
+
+/**
+ * Use YT Music turned off on this phone asks first, saying what stops; Cancel
+ * keeps it on. Signed in to a Wave account ([synced]), the setting syncs, so
+ * a last line says every phone of the account turns it off too.
+ */
+export const confirmYtMusicOff = (
+  synced: boolean,
+  { settings: { turnOffYtMusic: text } }: Catalogue = en,
+) =>
+  ({
+    title: text.title,
+    message: synced ? `${text.message}\n${text.everyPhone}` : text.message,
+    action: { label: text.action, destructive: true },
+  }) satisfies AlertSpec;
 
 /** The signed-in account, as YouTube Music names it. */
 export interface YtAccount {

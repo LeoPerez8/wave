@@ -1,4 +1,5 @@
 import { releaseBackgroundLine, ytAccountNotes, ytAccountView, type YtAccount } from "@wave/core";
+import { useState } from "react";
 import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -16,7 +17,8 @@ import { ChoiceSection } from "./ChoiceRow";
 import { searchOnlineChoice } from "./searchOnline";
 import { SignInRows } from "./SignInRows";
 import { useYtAccount } from "./ytAccount";
-import { setYtMusicEnabled, useYtMusicEnabled } from "./ytMusic";
+import { useYtMusicEnabled } from "./ytMusic";
+import { switchYtMusic } from "./ytMusicSwitch";
 
 /** The signed-in account: its picture, name and email, and Sign Out. */
 function AccountRow({ account, onSignOut }: { account: YtAccount; onSignOut: () => void }) {
@@ -88,6 +90,16 @@ export function YtMusicSettingsSection() {
   const releaseLine = releaseBackgroundLine(backgroundReleaseStatus.useValue());
   const account = useYtAccount();
   const view = ytAccountView(account.state, enabled);
+  /** Turning it off waits for the warning: the switch shows off meanwhile, and Cancel puts it back. */
+  const [askingOff, setAskingOff] = useState(false);
+  const onSwitch = (on: boolean) => {
+    if (on) {
+      void switchYtMusic(true);
+      return;
+    }
+    setAskingOff(true);
+    void switchYtMusic(false).finally(() => setAskingOff(false));
+  };
 
   return (
     <View>
@@ -95,8 +107,8 @@ export function YtMusicSettingsSection() {
       <Hairline />
       <SettingsSwitch
         label={strings.settings.useYTMusic}
-        value={enabled}
-        onValueChange={setYtMusicEnabled}
+        value={enabled && !askingOff}
+        onValueChange={onSwitch}
       />
       <Hairline />
       <Text className="mt-2 font-sans text-footnote text-secondary">
