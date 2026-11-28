@@ -18,7 +18,7 @@ export const settingsPtBr: typeof settingsEn = {
     developer: "Developer",
     versionHistory: "Histórico de Versões",
   },
-  layoutPagesHead: "Personalizar",
+  layoutCustomizeHead: "Personalizar",
   layoutPages: {
     home: "Início",
     library: "Biblioteca",

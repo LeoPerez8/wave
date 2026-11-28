@@ -39,8 +39,8 @@ const layoutDestinations = {
  * Settings › Layout: under the head Customize, the options a long press
  * opens on Home's, the Library's and Playlists' titles and on the tab bar,
  * and Now Playing's buttons, a row each (Core's `LAYOUT_PAGES`), for whoever
- * doesn't know the long press; then the shuffle kind (its section draws its
- * own head and rule); then Keep Find Field Visible.
+ * doesn't know the long press; then the shuffle kind; then Keep Find Field
+ * Visible.
  */
 export default function LayoutSettingsScreen() {
   const { strings } = useLocalisation();
@@ -50,7 +50,7 @@ export default function LayoutSettingsScreen() {
   return (
     <SettingsPageScreen page="layout">
       <View>
-        <CatalogLine className="mb-2">{strings.settings.layoutPagesHead}</CatalogLine>
+        <CatalogLine className="mb-2">{strings.settings.layoutCustomizeHead}</CatalogLine>
         <Hairline />
         {LAYOUT_PAGES.map(({ page }) => (
           <SettingsPageRow
