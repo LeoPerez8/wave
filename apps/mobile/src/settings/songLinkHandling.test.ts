@@ -73,7 +73,10 @@ test("the setup is read on mount and again when Wave returns to the foreground",
   assert.equal(seen.at(-1)?.handling, "none");
   act(() => io.changeAppState("active"));
   assert.equal(seen.at(-1)?.handling, "all");
-  assert.equal(seen.at(-1)?.line, "On: YouTube Music, Spotify and Deezer links open in Wave.");
+  assert.equal(
+    seen.at(-1)?.line,
+    "On: YouTube Music, YouTube playlist, Spotify and Deezer links open in Wave.",
+  );
   unmount();
 });
 
@@ -83,7 +86,7 @@ test("the line follows a language switch without leaving Wave", () => {
   act(() => io.setLanguage("pt-BR"));
   assert.equal(
     seen.at(-1)?.line,
-    "Ativado: links do YouTube Music, Spotify e Deezer abrem no Wave.",
+    "Ativado: links do YouTube Music, de playlist do YouTube, do Spotify e do Deezer abrem no Wave.",
   );
   act(() => io.setLanguage("en"));
   unmount();

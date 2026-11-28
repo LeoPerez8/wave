@@ -35,6 +35,12 @@ const SONG_LINK_HOSTS = [
   "dzr.page.link",
 ];
 
+/**
+ * YouTube's hosts, whose links open Wave only at `/playlist` (the third VIEW filter): its videos
+ * stay YouTube's.
+ */
+const YOUTUBE_PLAYLIST_HOSTS = ["youtube.com", "www.youtube.com", "m.youtube.com"];
+
 /** The sync service (the Wave account); its `/invite` links open Wave (the second VIEW filter). */
 const SYNC_URL = "https://wave-sync.leonardolp2424.workers.dev";
 
@@ -79,6 +85,20 @@ const config: ExpoConfig = {
           { scheme: "https" },
           { scheme: "http" },
           ...SONG_LINK_HOSTS.map((host) => ({ host })),
+        ],
+      },
+      // A YouTube playlist link (`youtube.com/playlist?list=…`, the YouTube button of a release
+      // page) opens Wave on its import card, as sharing it does. A filter of its own, so only that
+      // path is Wave's on YouTube's hosts: a video link still opens YouTube.
+      {
+        action: "VIEW",
+        autoVerify: false,
+        category: ["BROWSABLE", "DEFAULT"],
+        data: [
+          { scheme: "https" },
+          { scheme: "http" },
+          ...YOUTUBE_PLAYLIST_HOSTS.map((host) => ({ host })),
+          { path: "/playlist" },
         ],
       },
       // A collaborative playlist's invite link, `https://<sync service>/invite#<token>`, opens its
