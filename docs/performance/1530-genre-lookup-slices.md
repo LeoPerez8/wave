@@ -47,7 +47,9 @@ which matches the ~60 ms per answer it logged.
   all the looked-up profiles at once (up to 2,000). The lookup saves one about every 2.5 s, and
   the old 2 s delay wrote the whole set after nearly every artist, in a timer outside any turn.
   It now writes 10 s after the lookup pauses, and at least once a minute while it runs.
-  Leaving Wave writes what is waiting, as before.
+  Wave going to the background writes what is waiting at once (`persistedSetting`, as before
+  #1530), so an Android kill afterwards loses nothing; `lib/persistedSetting.test.ts` checks
+  that a write still inside its delay is made when Wave leaves.
 
 Genre mixes come out the same: the lookup's requests, parsing and profiles haven't changed
 (`deezerArtistGenre.test.ts` and the lookup's tests pass unchanged).
