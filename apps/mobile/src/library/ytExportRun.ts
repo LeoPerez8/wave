@@ -162,9 +162,7 @@ let running: Promise<void> = Promise.resolve();
  */
 export const exportToYtMusic = (items: readonly YtExportItem[]): Promise<void> => {
   exportRunCount.update(({ done, total }) =>
-    done >= total
-      ? { done: 0, total: items.length }
-      : { done, total: total + items.length },
+    done >= total ? { done: 0, total: items.length } : { done, total: total + items.length },
   );
   for (const item of items) {
     const id = progressId(item);
