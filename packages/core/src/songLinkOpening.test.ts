@@ -87,7 +87,7 @@ describe("a shared YouTube Music song link", () => {
           kind: "notice",
           title: "Can't open this",
           message:
-            "Wave opens songs from YouTube Music, Spotify and Deezer links, and playlists from YouTube Music and Spotify links.",
+            "Wave opens songs from YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from Spotify links.",
         },
         text,
       );
@@ -115,6 +115,7 @@ describe("a shared YouTube Music song link", () => {
 });
 
 const TRACK = "4uLU6hMCjMI75M1A2tKUQC";
+const ALBUM = "7rZmgT2kEqkCMR6VHcloJM";
 const spotifySong = { kind: "song", link: { service: "spotify", trackId: TRACK } };
 
 describe("a shared Spotify song link", () => {
@@ -166,9 +167,22 @@ describe("a shared Spotify song link", () => {
     );
   });
 
-  test("albums, artists, podcasts and malformed ids say what Wave opens", () => {
+  test("an album link, with a locale, the embed player, parameters or as a URI, opens the album", () => {
+    const album = { kind: "song", link: { service: "spotifyAlbum", albumId: ALBUM } };
     for (const text of [
-      `https://open.spotify.com/album/${TRACK}`,
+      `https://open.spotify.com/album/${ALBUM}`,
+      `https://open.spotify.com/intl-de/album/${ALBUM}?si=Hdj-BYPhSmOmqV5AlR1Usw`,
+      `https://open.spotify.com/embed/album/${ALBUM}`,
+      `Listen to excapecore. https://open.spotify.com/album/${ALBUM}?si=x`,
+      `spotify:album:${ALBUM}`,
+    ]) {
+      assert.deepEqual(sharedTextImport(text, on), album, text);
+    }
+  });
+
+  test("artists, podcasts and malformed ids say what Wave opens", () => {
+    for (const text of [
+      "https://open.spotify.com/album/tooShort",
       `https://open.spotify.com/artist/${TRACK}`,
       `https://open.spotify.com/episode/${TRACK}`,
       "https://open.spotify.com/track/tooShort",
@@ -181,7 +195,7 @@ describe("a shared Spotify song link", () => {
           kind: "notice",
           title: "Can't open this",
           message:
-            "Wave opens songs from YouTube Music, Spotify and Deezer links, and playlists from YouTube Music and Spotify links.",
+            "Wave opens songs from YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from Spotify links.",
         },
         text,
       );
@@ -228,10 +242,17 @@ describe("where a shared Spotify short link lands", () => {
     );
   });
 
-  test("anywhere else (a profile, an album, no Spotify page), it opens nothing", () => {
+  test("on an album, it opens the album", () => {
+    assert.deepEqual(
+      spotifyShortLinkLanding("https://open.spotify.com/album/4uLU6hMCjMI75M1A2tKUQC?si=1", ""),
+      { kind: "album", link: { service: "spotifyAlbum", albumId: "4uLU6hMCjMI75M1A2tKUQC" } },
+    );
+  });
+
+  test("anywhere else (a profile, an artist, no Spotify page), it opens nothing", () => {
     for (const [url, body] of [
       ["https://spotify.app.link/uszhQI5hT3b?_p=1", '"https://open.spotify.com/user/leo"'],
-      ["https://open.spotify.com/album/4uLU6hMCjMI75M1A2tKUQC", ""],
+      ["https://open.spotify.com/artist/4uLU6hMCjMI75M1A2tKUQC", ""],
       ["https://spotify.link/nothing", "<html></html>"],
     ] as const) {
       assert.equal(spotifyShortLinkLanding(url, body), null, url);
@@ -473,7 +494,38 @@ describe("what a song link that doesn't play says", () => {
     );
   });
 
+  test("an album link says so in album words", () => {
+    assert.deepEqual(songLinkNotice("albumOffline"), {
+      title: "You're offline",
+      message: "Connect to the internet to open this album.",
+    });
+    assert.deepEqual(
+      songLinkNotice({ albumNotFound: { title: "excapecore.", artists: ["excape."] } }),
+      { title: "Couldn't find this album on YouTube Music", message: "excapecore. · excape." },
+    );
+    assert.deepEqual(songLinkNotice({ unread: "missing", service: "spotify", album: true }), {
+      title: "This link doesn't open",
+      message: "Spotify doesn't have the album it links to.",
+    });
+    assert.deepEqual(songLinkNotice({ unread: "unreachable", service: "spotify", album: true }), {
+      title: "This link doesn't open",
+      message: "Couldn't reach Spotify. Check your connection and try again.",
+    });
+  });
+
   test("in Portuguese", () => {
+    assert.deepEqual(songLinkNotice("albumOffline", "pt-BR"), {
+      title: "Você está offline",
+      message: "Conecte-se à internet para abrir este álbum.",
+    });
+    assert.deepEqual(
+      songLinkNotice({ albumNotFound: { title: "excapecore.", artists: ["excape."] } }, "pt-BR"),
+      { title: "Não achei esse álbum no YouTube Music", message: "excapecore. · excape." },
+    );
+    assert.deepEqual(
+      songLinkNotice({ unread: "missing", service: "spotify", album: true }, "pt-BR"),
+      { title: "Este link não abre", message: "O Spotify não tem o álbum deste link." },
+    );
     assert.deepEqual(songLinkNotice("offline", "pt-BR"), {
       title: "Você está offline",
       message: "Conecte-se à internet para abrir esta música.",
@@ -591,7 +643,7 @@ describe("what a Spotify song link that doesn't play says", () => {
     assert.deepEqual(songLinkNotice("cantOpen"), {
       title: "Can't open this",
       message:
-        "Wave opens songs from YouTube Music, Spotify and Deezer links, and playlists from YouTube Music and Spotify links.",
+        "Wave opens songs from YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from Spotify links.",
     });
   });
 

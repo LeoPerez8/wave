@@ -7,7 +7,9 @@
  * nothing says (`songLinkNotice`, `songLinkNotFound`).
  */
 import {
+  joinArtists,
   readDeezerTrack,
+  readSpotifyAlbum,
   readSpotifyTrack,
   songLinkNotice,
   type PlaylistLink,
@@ -27,6 +29,8 @@ import { currentToast, dismissToast, showToast } from "@/overlay/toast";
 import { startMagicQueue, startStreamedMagicQueue } from "@/playback/MagicQueue";
 import { askYtMusic, searchRecordingInTurn } from "@/ytmusic/askYtMusic";
 import { currentLibraryFinder } from "@/ytmusic/libraryFinder";
+import { openYtAlbum } from "@/ytmusic/routes";
+import { withSearchTurn } from "@/ytmusic/searchAllowance";
 
 import { LibraryStore } from "./LibraryStore";
 import { type SongRow } from "@wave/client";
@@ -84,6 +88,13 @@ const linkEnding = (link: SongLink, signal: AbortSignal): Promise<Ending> =>
       spotify: (id, abort) => readSpotifyTrack(id, spotifyTransport(abort)),
       deezer: (id, abort) => readDeezerTrack(id, deezerTransport(abort)),
       follow: (url, body, abort) => followShortLink(url, { body }, abort),
+      spotifyAlbum: (id, abort) => readSpotifyAlbum(id, spotifyTransport(abort)),
+      searchAlbums: async (query) => {
+        const answer = await askYtMusic((ytMusic) =>
+          withSearchTurn("songLink", query, ytMusic.searchAlbums(query)),
+        ).catch(() => null);
+        return answer === null || Result.isFailure(answer) ? null : answer.success;
+      },
     },
     signal,
   );
@@ -92,7 +103,9 @@ const linkEnding = (link: SongLink, signal: AbortSignal): Promise<Ending> =>
  * Plays the song [link] names. Offline it says so and asks nothing. Else a
  * toast says "Finding song…" while the song is found: a Spotify or Deezer
  * short link is followed first, and a Spotify one that lands on a playlist
- * opens its import card ([openPlaylist]) instead. The Library's copy plays when it has one, else
+ * opens its import card ([openPlaylist]) instead. A Spotify album link (or a short link that
+ * lands on one) opens the same album's YT Music page instead, with "Finding album…" while it's
+ * looked for. The Library's copy plays when it has one, else
  * the YT Music song streams, each with related songs after it (a Magic Queue
  * session Up Next heads "Related · from <song>"; the previous queue goes),
  * and Now Playing opens. A song found nowhere opens the Couldn't find
@@ -104,15 +117,16 @@ export const openSongLink = async (
   { openPlaylist }: { readonly openPlaylist: (link: PlaylistLink) => void },
 ): Promise<void> => {
   const { strings } = currentLocalisation();
+  const album = link.service === "spotifyAlbum";
   if (!online()) {
-    say("offline");
+    say(album ? "albumOffline" : "offline");
     return;
   }
-  void showToast(strings.imports.findingSong);
+  void showToast(album ? strings.imports.findingAlbum : strings.imports.findingSong);
   const finding = currentToast.get()?.id;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TRACK_SERVICE_TIMEOUT_MS);
-  let ending: Ending | { readonly playlist: PlaylistLink };
+  let ending: Ending;
   try {
     ending = await linkEnding(link, controller.signal);
   } finally {
@@ -121,6 +135,11 @@ export const openSongLink = async (
   endFinding(finding);
   if ("playlist" in ending) {
     openPlaylist(ending.playlist);
+    return;
+  }
+  if ("album" in ending) {
+    const { title, artists, artworkUrl } = ending.read;
+    openYtAlbum(ending.album, { title, line: joinArtists(artists), artworkUrl });
     return;
   }
   if (ending.play === "failed") {

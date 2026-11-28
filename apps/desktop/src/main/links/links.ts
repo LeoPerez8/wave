@@ -3,6 +3,7 @@ import type { LibraryDatabase } from "@wave/client/db/database";
 import {
   sharedTextImport,
   libraryFinder,
+  readSpotifyAlbum,
   readSpotifyTrack,
   readDeezerTrack,
   songLinkNotice,
@@ -57,6 +58,7 @@ import {
 } from "@wave/client/db/playlists";
 import type { KotlinMethods } from "../kotlin/protocol.ts";
 import { ytSongs } from "../yt/ytMusic.ts";
+import { albums as searchedAlbums } from "../yt/ytPages.ts";
 import type { OpenLinkResult, CopyLinkResult, SongShareView } from "../../shared/links.ts";
 import type { SongTarget } from "../../shared/songActions.ts";
 import { preference, savePreference } from "../preferences.ts";
@@ -463,7 +465,12 @@ export const createDesktopLinks = (options: LinksOptions) => {
         notice: songLinkNotice(failure, language),
       });
       if (!options.enabled()) return notice("disabled");
-      if (!options.online()) return notice("offline");
+      if (!options.online())
+        return notice(
+          shared.kind === "song" && shared.link.service === "spotifyAlbum"
+            ? "albumOffline"
+            : "offline",
+        );
       if (shared.kind === "import") return preview(shared.link, language);
       const songs = trackQuery(options.db, "files").all();
       const find = libraryFinder(songs);
@@ -498,10 +505,20 @@ export const createDesktopLinks = (options: LinksOptions) => {
           spotify: (id, signal) => readSpotifyTrack(id, spotifyTransport(signal, options.fetch)),
           deezer: (id, signal) => readDeezerTrack(id, deezerTransport(signal, options.fetch)),
           follow: (url, body, signal) => followShortLink(url, { body }, signal, options.fetch),
+          spotifyAlbum: (id, signal) =>
+            readSpotifyAlbum(id, spotifyTransport(signal, options.fetch)),
+          searchAlbums: async (query) => {
+            try {
+              return searchedAlbums(await options.call("searchAlbums", { query }));
+            } catch {
+              return null;
+            }
+          },
         },
         AbortSignal.timeout(20_000),
       );
       if ("playlist" in ending) return preview(ending.playlist, language);
+      if ("album" in ending) return { kind: "album", browseId: ending.album };
       if (ending.play === "failed") return notice(ending.failure);
       if (ending.play === "notFound")
         return {

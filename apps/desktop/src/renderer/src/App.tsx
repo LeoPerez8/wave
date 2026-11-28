@@ -1914,6 +1914,7 @@ export function App() {
       <Links
         onPlaying={linkPlaying}
         onPlaylist={(id) => go({ kind: "playlist", id })}
+        onAlbum={(id) => go({ kind: "ytAlbum", id })}
         onSearch={(value) => {
           setQuery(value);
           go({ kind: "search" });
