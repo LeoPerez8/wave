@@ -56,19 +56,24 @@ export const songLinkHandlingLine = (
   }
 };
 
-/** The song-link services whose own apps may hold their links. */
-export type SongLinkService = "youtubeMusic" | "spotify" | "deezer";
+/**
+ * The song-link services whose own apps may hold their links: YouTube Music,
+ * YouTube (its playlist links), Spotify and Deezer.
+ */
+export type SongLinkService = "youtubeMusic" | "youtube" | "spotify" | "deezer";
 
-const SERVICES: readonly SongLinkService[] = ["youtubeMusic", "spotify", "deezer"];
+const SERVICES: readonly SongLinkService[] = ["youtubeMusic", "youtube", "spotify", "deezer"];
 
 /**
  * The links Wave asks Android about (`WaveNative.songLinkOpeners`): a song on
- * each service, and a plain web page, which opens in the browser. Their hosts
+ * each service (a playlist on YouTube, whose other links stay YouTube's), and a plain web page, which opens in the browser. Their hosts
  * are in wave-native's manifest `<queries>`, so Android lets Wave see the apps
  * that open them.
  */
 export const SONG_LINK_SAMPLES: Readonly<Record<SongLinkService | "web", string>> = {
   youtubeMusic: "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+  // YouTube's links reach Wave only at /playlist; the YouTube app is verified for the host.
+  youtube: "https://www.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI",
   spotify: "https://open.spotify.com/track/4PTG3Z6ehGkBFwjybzWkR8",
   deezer: "https://www.deezer.com/track/3135556",
   web: "https://example.com/",
@@ -134,7 +139,7 @@ export const songLinkSetup = (
   const held = heldServices(openers).map(({ service, opener }) => ({
     service,
     opener,
-    line: text.songLinksHeldBy(opener.label, text.songLinkServices[service]),
+    line: text.songLinksHeldBy(opener.label, text.songLinkKinds[service]),
   }));
   const turnOff = held.map(({ service, opener, line }) => ({
     service,
