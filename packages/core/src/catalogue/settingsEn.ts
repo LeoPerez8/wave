@@ -329,7 +329,8 @@ export const settingsEn = {
   /** Settings › Accounts: the links Android lets Wave open (docs/spec.md, "Opening a song link"). */
   songLinks: "Song links",
   openSongLinksInWave: "Open song links in Wave",
-  songLinksAll: "On: YouTube Music, Spotify and Deezer links open in Wave.",
+  songLinksAll:
+    "On: YouTube Music, YouTube playlist, Spotify, Deezer and release page links open in Wave.",
   songLinksSome: "On for some links. Tap to turn on the rest in Android's Open by default page.",
   songLinksNone:
     "Off: links open in their own app or the browser. Tap to turn them on in Android's Open by default page.",
@@ -395,8 +396,20 @@ export const settingsEn = {
     steps: ["Tap Add link.", "Tick every link.", "Tap Add."],
     turnOn: "Turn On",
   },
-  songLinkServices: { youtubeMusic: "YouTube Music", spotify: "Spotify", deezer: "Deezer" },
-  songLinksHeldBy: (app: string, service: string) => `${app} still opens ${service} links.`,
+  songLinkServices: {
+    youtubeMusic: "YouTube Music",
+    youtube: "YouTube",
+    spotify: "Spotify",
+    deezer: "Deezer",
+  },
+  /** Each service's links, as the line saying an app still opens them names them. */
+  songLinkKinds: {
+    youtubeMusic: "YouTube Music links",
+    youtube: "YouTube playlist links",
+    spotify: "Spotify links",
+    deezer: "Deezer links",
+  },
+  songLinksHeldBy: (app: string, links: string) => `${app} still opens ${links}.`,
   songLinksTurnOffFirst: "Turn off Open supported links there first.",
   turnOffIn: (app: string) => `Turn Off in ${app}`,
   itsSongsLeaveYourLibraryTheFiles: "Its songs leave your library. The files stay on your phone.",

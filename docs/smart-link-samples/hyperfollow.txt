@@ -1,0 +1,27 @@
+,"https://www.facebook.com/distrokid","https://www.tiktok.com/@distrokid","https://bsky.app/profile/distrokid.com","https://twitter.com/distrokid","https://www.youtube.com/distrokid"],"url":"https://distrokid.com","logo":"https://distrokid.com/images/logos/distrokid/distrokid-gremlin-310x310.png","@id":"https://distrokid.com#orga
+…
+oveClass('fa-angle-double-right');
+$j('.spotifyRightArrows').addClass('fa-cog');
+$j('.spotifyRightArrows').addClass('fa-spin');
+window.location.href = "https://open.spotify.com/album/" + spotifyReleaseUri.split(":")[2];
+}
+else 
+{
+// user just did a pre-save 
+debug('pre-saved!');
+facebookTrackEvent('spotifyPresaveSuccess');
+hfKinesisCl
+…
+;hfKinesisClick('dsp-click','visitor clicked store link',{store:'youtube&#x20;music',store_label:'Youtube&#x20;Music'});" target="_blank" href="https:&#47;&#47;music.youtube.com&#47;playlist?list&#61;OLAK5uy_nSCj6049EQUVWW4XLdlBzB9SgSHZeUHr8" style="text-decoration: none;color: inherit;" data-testid="hyperfollow-store-link" data-hyperf
+…
+kEvent('clickSpotify');hfKinesisClick('dsp-click','visitor clicked store link',{store:'spotify',store_label:'Spotify'});" target="_blank" href="https:&#47;&#47;open.spotify.com&#47;album&#47;5IHhEixBs1pMwzEfucB1Gz" style="text-decoration: none;color: inherit;" data-testid="hyperfollow-store-link" data-hyperfollow-store="spotify">
+<spa
+…
+Event('clickDeezer');hfKinesisClick('dsp-click','visitor clicked store link',{store:'deezer',store_label:'Deezer'});" target="_blank" href="https:&#47;&#47;www.deezer.com&#47;us&#47;album&#47;649575421" style="text-decoration: none;color: inherit;" data-testid="hyperfollow-store-link" data-hyperfollow-store="deezer">
+<span class
+…
+kEvent('clickSpotify');hfKinesisClick('dsp-click','visitor clicked store link',{store:'spotify',store_label:'Spotify'});" target="_blank" href="https:&#47;&#47;open.spotify.com&#47;album&#47;5IHhEixBs1pMwzEfucB1Gz" style="text-decoration: none;color: inherit;" data-testid="hyperfollow-store-link" data-hyperfollow-store="spotify">
+<spa
+…
+Event('clickDeezer');hfKinesisClick('dsp-click','visitor clicked store link',{store:'deezer',store_label:'Deezer'});" target="_blank" href="https:&#47;&#47;www.deezer.com&#47;album&#47;649575421" style="text-decoration: none;color: inherit;" data-testid="hyperfollow-store-link" data-hyperfollow-store="deezer">
+<span class="hyper

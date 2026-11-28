@@ -43,7 +43,7 @@ export const importsEn = {
   /** Sharing something to Wave that isn't a song or playlist link. */
   cantOpen: "Can't open this",
   sharedLinks:
-    "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from YouTube Music and Spotify links.",
+    "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube, YouTube Music and Spotify links, albums from YouTube Music and Spotify links, and release pages that link to them.",
   /** The toast offering a copied link (docs/spec.md, "Opening a song link"); [service] is a brand. */
   copiedSongLink: (service: string): string => `${service} song link copied`,
   copiedPlaylist: (service: string): string => `${service} playlist copied`,
@@ -51,6 +51,8 @@ export const importsEn = {
   copiedArtist: (service: string): string => `${service} artist copied`,
   /** A short link, whose kind is known only once followed. */
   copiedLink: (service: string): string => `${service} link copied`,
+  /** A release page (a smart link), whose link is known only once its page is read. */
+  copiedReleasePage: "Release page link copied",
   listen: "Listen",
   open: "Open",
   /** Opening a song link. */
@@ -64,6 +66,10 @@ export const importsEn = {
   songUnreadUnreachable: (service: string): string =>
     `Couldn't reach ${service}. Check your connection and try again.`,
   songUnreadFailed: (service: string): string => `${service} didn't answer as expected.`,
+  /** Opening a smart link (a release's page with one button per service). */
+  openingLink: "Opening link…",
+  linkOfflineMessage: "Connect to the internet to open this link.",
+  smartLinkUnreachable: "Couldn't reach the link's page. Check your connection and try again.",
   /** Opening a Spotify album link. */
   findingAlbum: "Finding album…",
   albumOfflineMessage: "Connect to the internet to open this album.",

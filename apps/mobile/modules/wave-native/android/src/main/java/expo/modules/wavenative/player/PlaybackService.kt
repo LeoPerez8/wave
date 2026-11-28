@@ -98,6 +98,7 @@ class PlaybackService : MediaLibraryService() {
 
       override fun pause() {
         cancelReconnect()
+        PauseLog.causes.note("the sleep timer", SystemClock.elapsedRealtime())
         exoPlayer?.pause()
       }
 
@@ -178,6 +179,49 @@ class PlaybackService : MediaLibraryService() {
     }
   }
 
+  /** When the session's player last paused or was held, for how long the app log says it lasted. */
+  private var pausedAtMs: Long? = null
+  private var heldAtMs: Long? = null
+
+  /** What the session's player was playing, for the app log's pause lines. */
+  private fun songOf(player: Player): PauseLog.Song? =
+    player.currentMediaItem?.let { PauseLog.Song(streams(it), player.currentPosition, player.duration) }
+
+  /** Writes why the session's player paused, was held or ran out, and who played it again ([PauseLog]). */
+  private val pauseListener = object : Player.Listener {
+    override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+      val player = exoPlayer ?: return
+      val now = SystemClock.elapsedRealtime()
+      val by = PauseLog.causes.take(now)
+      if (!playWhenReady) {
+        pausedAtMs = now
+        WaveLog.i(PauseLog.LOG_TAG, PauseLog.pausedLine(reason, by, songOf(player)))
+      } else {
+        val since = pausedAtMs ?: return
+        pausedAtMs = null
+        WaveLog.i(PauseLog.LOG_TAG, PauseLog.playedLine(reason, by, now - since))
+      }
+    }
+
+    override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
+      val player = exoPlayer ?: return
+      val now = SystemClock.elapsedRealtime()
+      if (PauseLog.logsHold(playbackSuppressionReason)) {
+        if (heldAtMs == null) heldAtMs = now
+        WaveLog.i(PauseLog.LOG_TAG, PauseLog.heldLine(playbackSuppressionReason, songOf(player)))
+      } else {
+        val since = heldAtMs ?: return
+        heldAtMs = null
+        WaveLog.i(PauseLog.LOG_TAG, PauseLog.releasedLine(now - since))
+      }
+    }
+
+    override fun onPlaybackStateChanged(playbackState: Int) {
+      val player = exoPlayer ?: return
+      if (playbackState == Player.STATE_ENDED) WaveLog.i(PauseLog.LOG_TAG, PauseLog.endedLine(songOf(player)))
+    }
+  }
+
   /** Keeps the resume snapshot up to date with the player. */
   private val resumeListener = object : Player.Listener {
     override fun onEvents(player: Player, events: Player.Events) {
@@ -213,7 +257,10 @@ class PlaybackService : MediaLibraryService() {
   private fun checkReconnectDeadline() {
     val result = StreamReconnectPolicy.timeout(reconnectWait ?: reconnectAttempt, SystemClock.elapsedRealtime())
     if (result.waiting == null) {
-      if (reconnectAttempt != null) exoPlayer?.pause()
+      if (reconnectAttempt != null) {
+        PauseLog.causes.note("Wave: the connection didn't come back in time", SystemClock.elapsedRealtime())
+        exoPlayer?.pause()
+      }
       applyReconnect(result)
     } else {
       scheduleReconnectTimeout()
@@ -254,6 +301,7 @@ class PlaybackService : MediaLibraryService() {
     if (!gaveUp || !removed) return
     // Wave opened again since: its screen shows the offline notice, as for any failed song.
     if (getSystemService(ActivityManager::class.java)?.appTasks?.isNotEmpty() == true) return
+    PauseLog.causes.note("Wave: the connection didn't come back after Wave was swiped away", SystemClock.elapsedRealtime())
     exoPlayer?.pause()
     stopSelf()
   }
@@ -320,6 +368,7 @@ class PlaybackService : MediaLibraryService() {
       ))
       if (code == null) return
       pausedOnStreamFailure = true
+      PauseLog.causes.note("Wave: the song couldn't stream ($code)", SystemClock.elapsedRealtime())
       player.pause()
       // The network may have returned during ExoPlayer's retries, before the final error arrived.
       if (!retried) main.post { reconnectIfOnline() }
@@ -390,7 +439,7 @@ class PlaybackService : MediaLibraryService() {
   /** The session's player's listeners, which move with the role at a crossfade's handoff. */
   private val sessionListeners: List<Player.Listener>
     get() = listOf(
-      sleepTimerListener, resumeListener, streamListener, crossfadeListener, runtimeListener,
+      sleepTimerListener, resumeListener, streamListener, crossfadeListener, runtimeListener, pauseListener,
     )
 
   /**
@@ -709,9 +758,16 @@ class PlaybackService : MediaLibraryService() {
     }
   }
 
+  // [DEBUG-5d1a] Temporary: screen-off frames, headless task and JS heartbeat. Remove with ScreenOffProbe.
+  private val screenOffProbe = ScreenOffProbe(this, main) {
+    val player = exoPlayer
+    "playing: ${player?.isPlaying}, playback holds JS: ${runtimeHold.holding}, ${JsRuntime.debugState()}"
+  }
+
   @OptIn(UnstableApi::class)
   override fun onCreate() {
     super.onCreate()
+    screenOffProbe.start()
     ActiveWaveAudio.count = { listOf(exoPlayer, secondPlayer).count { it?.isPlaying == true } }
     ResumeStore.init(this)
     // The stored Buffer setting and Normalize Volume switch, before JS (if any) sends them again.
@@ -858,6 +914,7 @@ class PlaybackService : MediaLibraryService() {
   }
 
   override fun onDestroy() {
+    screenOffProbe.stop()
     stopConnectivity?.invoke()
     stopConnectivity = null
     StreamReconnectLink.onOwnerCommand = null
@@ -979,6 +1036,7 @@ class PlaybackService : MediaLibraryService() {
       val from = describeController(session, controller)
       if (playerCommand == Player.COMMAND_PLAY_PAUSE || playerCommand == Player.COMMAND_STOP) {
         StreamReconnectLink.onOwnerCommand?.invoke(false)
+        if (from != null) PauseLog.causes.noteUnlessFresh(from, SystemClock.elapsedRealtime())
       } else if (playerCommand in MOVING_COMMANDS && playerCommand != Player.COMMAND_CHANGE_MEDIA_ITEMS) {
         StreamReconnectLink.onOwnerCommand?.invoke(true)
       }
@@ -1000,6 +1058,7 @@ class PlaybackService : MediaLibraryService() {
       val key = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)?.keyCode
       if (key in PLAY_PAUSE_KEYS || key == KeyEvent.KEYCODE_MEDIA_STOP) {
         StreamReconnectLink.onOwnerCommand?.invoke(false)
+        PauseLog.causes.note("a media button from $from", SystemClock.elapsedRealtime())
       } else if (key == KeyEvent.KEYCODE_MEDIA_NEXT || key == KeyEvent.KEYCODE_MEDIA_PREVIOUS) {
         StreamReconnectLink.onOwnerCommand?.invoke(true)
       }

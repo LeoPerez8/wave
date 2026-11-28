@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { LibraryDatabase } from "@wave/client/db/database";
 import {
   sharedTextImport,
+  cantOpenNotice,
+  smartLinkNotice,
   libraryFinder,
   readSpotifyAlbum,
   readSpotifyTrack,
@@ -50,6 +52,7 @@ import { trackQuery, selectSongWithVideo, selectVideoIds } from "@wave/client/db
 import { tracks } from "@wave/client/db/schema";
 import { eq } from "drizzle-orm";
 import { songLinkEnding } from "@wave/client/songLinkEnding";
+import { smartLinkEnding } from "@wave/client/smartLinkEnding";
 import { spotifyTransport, deezerTransport, followShortLink } from "@wave/client/serviceTransport";
 import {
   createPlaylist,
@@ -459,7 +462,7 @@ export const createDesktopLinks = (options: LinksOptions) => {
       return { kind: "copied", message: strings.share.linkCopied };
     },
     open: async (text: string, language: "en" | "pt-BR"): Promise<OpenLinkResult> => {
-      const shared = sharedTextImport(text, { ytMusic: true });
+      let shared = sharedTextImport(text, { ytMusic: true });
       if (shared.kind === "notice") return { kind: "ignored" } as const;
       // YT Music albums and artists open only on the phone yet (#1522), so they go as before.
       if (shared.kind === "song" && !opensOnDesktop(shared.link))
@@ -469,6 +472,27 @@ export const createDesktopLinks = (options: LinksOptions) => {
         notice: songLinkNotice(failure, language),
       });
       if (!options.enabled()) return notice("disabled");
+      if (shared.kind === "smart") {
+        // A smart link opens the link its page points to, as if that had been pasted.
+        if (!options.online())
+          return { kind: "notice", notice: smartLinkNotice("offline", language) };
+        const ending = await smartLinkEnding(
+          shared.url,
+          (url, body, signal) => followShortLink(url, { body }, signal, options.fetch),
+          AbortSignal.timeout(20_000),
+          // Of the page's links, only one the desktop opens: not a YT Music album or an artist.
+          opensOnDesktop,
+        );
+        if (!("link" in ending))
+          return { kind: "notice", notice: smartLinkNotice(ending.failure, language) };
+        shared = sharedTextImport(ending.link, { ytMusic: true });
+        if (
+          shared.kind === "notice" ||
+          shared.kind === "smart" ||
+          (shared.kind === "song" && !opensOnDesktop(shared.link))
+        )
+          return { kind: "notice", notice: cantOpenNotice(language) };
+      }
       if (!options.online())
         return notice(
           shared.kind === "song" && shared.link.service === "spotifyAlbum"

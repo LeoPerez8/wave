@@ -1782,7 +1782,13 @@ export {
   spotifyShortLinkLanding,
   playlistLinkReason,
 } from "./playlistLinks.ts";
-export { YT_MUSIC_OFF_NOTICE, ytMusicOffNotice, type ImportNotice } from "./linkNotices.ts";
+export {
+  cantOpenNotice,
+  smartLinkNotice,
+  YT_MUSIC_OFF_NOTICE,
+  ytMusicOffNotice,
+  type ImportNotice,
+} from "./linkNotices.ts";
 export type {
   LinkImportRead,
   LinkImportView,
@@ -1924,6 +1930,8 @@ export type {
 export { readSpotifyPlaylist, spotifyEmbed, spotifyPlaylistPage } from "./spotifyPlaylist.ts";
 export type { ServiceTrack, TrackRead, TrackReadFailure } from "./serviceTrack.ts";
 export { readSpotifyTrack } from "./spotifyTrack.ts";
+export { SMART_LINK_HOSTS, smartLinkPage } from "./smartLinkHosts.ts";
+export { smartLinkLanding, smartLinkTarget, type OpensSongLink } from "./smartLinks.ts";
 export {
   albumLinkOpening,
   readSpotifyAlbum,

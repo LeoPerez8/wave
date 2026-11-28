@@ -34,6 +34,7 @@ const openedLink = (text: string): OpenedLink | null => {
  * a video's YouTube link after its YouTube Music one, is the same link.
  */
 const linkKey = (shared: OpenedLink): string => {
+  if (shared.kind === "smart") return [shared.kind, shared.url].join(":");
   const { service, ...id } = shared.link;
   return [shared.kind, service, ...Object.values(id)].join(":");
 };
@@ -83,9 +84,10 @@ const songLinkService = (link: SongLink, text: string): CopiedLinkService => {
 /**
  * The toast a copied [text] gets: for a link sharing it to Wave opens (Core's
  * `sharedTextImport`), its service and kind with Listen for a song, Import
- * for a playlist and Open for an album, an artist or a short link, whose kind
- * is known only once followed. Null for anything else, and for the link
- * offered last ([lastOffered], its `key`).
+ * for a playlist and Open for an album, an artist, a short link, whose kind
+ * is known only once followed, or a release page (a smart link), whose link
+ * is known only once its page is read. Null for anything else, and for the
+ * link offered last ([lastOffered], its `key`).
  */
 export const copiedLinkOffer = (
   text: string,
@@ -106,6 +108,7 @@ const toastFor = (
   language: AppLanguage,
 ): Omit<CopiedLinkOffer, "key"> => {
   const words = catalogueOf(language).imports;
+  if (shared.kind === "smart") return { text: words.copiedReleasePage, action: words.open };
   if (shared.kind === "import") {
     const service =
       SERVICE_NAMES[shared.link.service === "ytMusic" ? youtubeService(text) : "spotify"];

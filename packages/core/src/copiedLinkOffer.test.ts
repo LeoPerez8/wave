@@ -58,6 +58,27 @@ describe("a copied link whose kind the toast can't name", () => {
       action: "Open",
     });
   });
+
+  test("a release page (a smart link) says so, with Open, since only reading its page tells", () => {
+    assert.deepEqual(toast("https://fanlink.tv/dreams-album?utm_source=ig"), {
+      text: "Release page link copied",
+      action: "Open",
+    });
+    assert.deepEqual(toast("https://dualipa.lnk.to/radicaloptimism", "pt-BR"), {
+      text: "Link de página de lançamento copiado",
+      action: "Abrir",
+    });
+  });
+
+  test("a release page is offered once, by its address", () => {
+    const offered = copiedLinkOffer("https://song.link/s/4uLU6hMCjMI75M1A2tKUQC", null);
+    assert.ok(offered !== null);
+    assert.equal(copiedLinkOffer("song.link/s/4uLU6hMCjMI75M1A2tKUQC", offered.key), null);
+    assert.notEqual(
+      copiedLinkOffer("https://album.link/s/7rZmgT2kEqkCMR6VHcloJM", offered.key),
+      null,
+    );
+  });
 });
 
 describe("YouTube's links", () => {

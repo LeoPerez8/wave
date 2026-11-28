@@ -48,9 +48,11 @@ export function Links({
       setOpened(undefined);
       setBusy(true);
       setToast(
-        shared.kind === "song" && shared.link.service === "spotifyAlbum"
-          ? text.imports.findingAlbum
-          : text.imports.findingSong,
+        shared.kind === "smart"
+          ? text.imports.openingLink
+          : shared.kind === "song" && shared.link.service === "spotifyAlbum"
+            ? text.imports.findingAlbum
+            : text.imports.findingSong,
       );
       void window.wave.links
         .open(value)

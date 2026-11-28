@@ -85,7 +85,7 @@ describe("a shared YouTube Music song link", () => {
           kind: "notice",
           title: "Can't open this",
           message:
-            "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from YouTube Music and Spotify links.",
+            "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube, YouTube Music and Spotify links, albums from YouTube Music and Spotify links, and release pages that link to them.",
         },
         text,
       );
@@ -193,7 +193,7 @@ describe("a shared Spotify song link", () => {
           kind: "notice",
           title: "Can't open this",
           message:
-            "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from YouTube Music and Spotify links.",
+            "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube, YouTube Music and Spotify links, albums from YouTube Music and Spotify links, and release pages that link to them.",
         },
         text,
       );
@@ -641,7 +641,7 @@ describe("what a Spotify song link that doesn't play says", () => {
     assert.deepEqual(songLinkNotice("cantOpen"), {
       title: "Can't open this",
       message:
-        "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from YouTube Music and Spotify links.",
+        "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube, YouTube Music and Spotify links, albums from YouTube Music and Spotify links, and release pages that link to them.",
     });
   });
 

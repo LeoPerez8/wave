@@ -1,0 +1,16 @@
+
+</div>
+</span>
+<div class="hiddenElementToFixWhatsCalledBorderCollapse"></div>
+</a>
+<a onclick="facebookTrackEvent('clickOut');facebookTrackEvent('clickSpotify');hfKinesisClick('dsp-click','visitor clicked store link',{store:'spotify',store_label:'Spotify'});" target="_blank" href="https:&#47;&#47;open.spotify.com&#47;album&#47;29OcFDbl4YG2saCKWX6sHk" style="text-decoration: none;color: inherit;" data-testid="hyperfollow-store-link" data-hyperfollow-store="spotify">
+<span class="hyperDspLink hyperShadow">
+<div style="display: flex;align-items: center;">
+<div>
+<img style="display: block;height: 62px;box-shadow: 0px 0px 5px #000000;" src="https://distrokid.imgix.net/http%3A%2F%2Fgather.fandalism.com%2Fhyperfollowicons-spotify.png?fm=jpg&q=75&w=200&s=64f644e5ee0aeb2955676cf5950e9a0f">
+</div>
+<div style="flex: 1;padding: 20px;">
+Spotify 
+</div>
+<div style="padding: 20px;">
+<i class="fa fa-c

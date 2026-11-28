@@ -31,6 +31,8 @@ declare class WaveAppLogModule extends NativeModule<WaveAppLogEvents> {
   share(header: string, fileName: string): Promise<void>;
   /** Writes the same export to a new file in Downloads/Wave, without a storage prompt. */
   saveToDownloads(header: string, fileName: string): Promise<void>;
+  /** [DEBUG-5d1a] Temporary: a JS timer fired, for the screen-off probe. Missing in older builds. */
+  debugJsHeartbeat?(): void;
   /** The route showing, which a freeze's entry names (`log/NativeLog.kt`). */
   setScreen(path: string): void;
   /** Answers `hermesHeapWanted` with the Hermes heap in bytes (`log/JsHeap.kt`). Missing in older builds. */

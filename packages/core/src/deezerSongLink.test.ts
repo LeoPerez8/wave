@@ -10,7 +10,7 @@ const NOT_OPENED = {
   kind: "notice",
   title: "Can't open this",
   message:
-    "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube Music and Spotify links, and albums from YouTube Music and Spotify links.",
+    "Wave opens songs and artists from YouTube, YouTube Music, Spotify and Deezer links, playlists from YouTube, YouTube Music and Spotify links, albums from YouTube Music and Spotify links, and release pages that link to them.",
 };
 
 describe("a shared Deezer song link", () => {
@@ -77,7 +77,7 @@ describe("a shared Deezer song link", () => {
       kind: "notice",
       title: "Não é possível abrir isto",
       message:
-        "O Wave abre músicas e artistas de links do YouTube, do YouTube Music, do Spotify e do Deezer, playlists de links do YouTube Music e do Spotify, e álbuns de links do YouTube Music e do Spotify.",
+        "O Wave abre músicas e artistas de links do YouTube, do YouTube Music, do Spotify e do Deezer, playlists de links do YouTube, do YouTube Music e do Spotify, álbuns de links do YouTube Music e do Spotify, e páginas de lançamento que levam a eles.",
     });
   });
 
