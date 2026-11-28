@@ -60,10 +60,13 @@ class AppLogModule : Module() {
 
     Function("timingFrameIntervalMs") { timingFrames.intervalMs() }
     Function("startTimingFrames") { id: Int, ageMs: Double -> timingFrames.start(id, ageMs) }
+    Function("markTimingFrames") { id: Int, atMs: Double -> timingFrames.mark(id, atMs) }
     Function("stopTimingFrames") { id: Int ->
       timingFrames.stop(id) { result ->
+        val motion = result?.motion
         sendEvent("timingFrames", mapOf("id" to id, "measured" to (result != null),
-          "count" to (result?.count ?: 0), "longestGapMs" to (result?.longestGapMs ?: 0.0)))
+          "count" to (result?.count ?: 0), "longestGapMs" to (result?.longestGapMs ?: 0.0),
+          "motion" to motion?.let { mapOf("count" to it.count, "longestGapMs" to it.longestGapMs) }))
       }
     }
     Function("takeTimingHitches") { NativeLog.takeTimingHitches() }

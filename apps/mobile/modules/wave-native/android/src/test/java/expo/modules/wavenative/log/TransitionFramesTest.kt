@@ -65,6 +65,43 @@ class TransitionFramesTest {
     assertEquals(FrameTotals(1, 20.0), frames.stop(1, 36.0))
   }
 
+  @Test fun aMotionStartedLateCountsOnlyTheGapsThatBeganAtOrAfterIt() {
+    var callback: ((Double) -> Unit)? = null
+    val frames = TransitionFrames({ 1000.0 / 120 }) { next ->
+      callback = next
+      ({ callback = null })
+    }
+    frames.start(1, 0.0)
+    callback!!(40.0)
+    callback!!(48.0)
+    callback!!(56.0)
+    // The mark comes from JS after the UI thread has drawn past it.
+    frames.mark(1, 48.0)
+    frames.mark(2, 0.0)
+    callback!!(90.0)
+    assertEquals(
+      FrameTotals(2, 40.0, FrameTotals(1, 34.0)),
+      frames.stop(1, 95.0),
+    )
+  }
+
+  @Test fun noMarkLeavesTheMotionUnmeasuredAndANewTransitionForgetsTheOldMark() {
+    var callback: ((Double) -> Unit)? = null
+    val frames = TransitionFrames({ 1000.0 / 60 }) { next ->
+      callback = next
+      ({ callback = null })
+    }
+    frames.mark(1, 0.0)
+    frames.start(1, 0.0)
+    callback!!(16.0)
+    assertEquals(FrameTotals(0, 16.0), frames.stop(1, 20.0))
+    frames.start(2, 100.0)
+    frames.mark(2, 100.0)
+    frames.start(3, 200.0)
+    callback!!(216.0)
+    assertEquals(FrameTotals(0, 16.0), frames.stop(3, 220.0))
+  }
+
   @Test fun kotlinHitchTextKeepsCoresShapeAndFreezeBoundary() {
     assertNull(FreezeWatch.hitchLine("JS", 499, "/a"))
     assertEquals("JS thread busy 0.5 s on /a", FreezeWatch.hitchLine("JS", 500, "/a"))

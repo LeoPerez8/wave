@@ -195,6 +195,19 @@ AppState.addEventListener("change", (state) => {
  */
 export const timingJsBlock = session.jsBlock;
 
+/**
+ * The transition's motion started at [atMs], the UI frame's time it started on (a worklet's
+ * frame timestamp): its UI frames are counted apart from then, as its motion's ("its motion
+ * missed", #1536). For a motion that waits for the screen's first frame (a tab's slide).
+ */
+export const timingMotionStarted = (id: number, atMs: number): void => {
+  try {
+    WaveAppLog?.markTimingFrames?.(id, atMs);
+  } catch {
+    /* Runtime teardown, or a build without it: the motion goes unmeasured. */
+  }
+};
+
 let frameCollection: ReturnType<typeof createTransitionFrames> | null = null;
 /** Root lifetime only. The subscription is idle; frame callbacks are tap-scoped. */
 export const startTimingFrameCollection = (): (() => void) => {
@@ -227,7 +240,15 @@ export const startTimingFrameCollection = (): (() => void) => {
           resolve(totals);
         };
         const listener = native.addListener("timingFrames", (event) => {
-          if (event.id === id) stop(event.measured ? event : null);
+          if (event.id !== id) return;
+          const { count, longestGapMs, motion } = event;
+          stop(
+            !event.measured
+              ? null
+              : motion == null
+                ? { count, longestGapMs }
+                : { count, longestGapMs, motion },
+          );
         });
         // Runtime teardown may prevent a native answer. This timer exists only during handoff.
         const timeout = setTimeout(() => stop(null), 5000);
