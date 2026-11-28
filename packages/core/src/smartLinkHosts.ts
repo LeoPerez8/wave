@@ -9,16 +9,38 @@
 
 import { addressIn, linkParts } from "./linkText.ts";
 
-/** Whether [host] and [path] are a smart link's page: a release's, not the service's home. */
-const smartPage = (host: string, path: string): boolean => {
-  const release = path.replace(/\/+$/u, "") !== "";
-  if (host === "fanlink.tv" || host === "song.link" || host === "album.link") return release;
-  if (host === "lnk.to" || host.endsWith(".lnk.to")) return release;
-  return (
-    (host === "distrokid.com" || host === "www.distrokid.com") &&
-    /^\/hyperfollow\/[^/]+\/[^/]+/u.test(path)
-  );
-};
+/**
+ * The smart-link hosts, as Android's link filter in app.config.ts declares
+ * them: a host (`*.` for any subdomain) and the path prefix a release's page
+ * starts with, when only that path is a release's.
+ */
+export const SMART_LINK_HOSTS: readonly {
+  readonly host: string;
+  readonly pathPrefix?: string;
+}[] = [
+  { host: "fanlink.tv" },
+  { host: "song.link" },
+  { host: "album.link" },
+  { host: "lnk.to" },
+  { host: "*.lnk.to" },
+  { host: "distrokid.com", pathPrefix: "/hyperfollow/" },
+  { host: "www.distrokid.com", pathPrefix: "/hyperfollow/" },
+];
+
+/** Whether [host] is the filter entry [entry]'s. */
+const onHost = (entry: (typeof SMART_LINK_HOSTS)[number], host: string): boolean =>
+  entry.host.startsWith("*.") ? host.endsWith(entry.host.slice(1)) : host === entry.host;
+
+/**
+ * Whether [host] and [path] are a smart link's page: a release's, past the
+ * entry's path prefix, not the service's home.
+ */
+const smartPage = (host: string, path: string): boolean =>
+  SMART_LINK_HOSTS.some((entry) => {
+    if (!onHost(entry, host)) return false;
+    const prefix = entry.pathPrefix ?? "/";
+    return path.startsWith(prefix) && path.slice(prefix.length).replace(/\/+$/u, "") !== "";
+  });
 
 /**
  * The smart link in [text] (the first web address in it, else the whole text

@@ -319,7 +319,7 @@ export const settingsPtBr: typeof settingsEn = {
   songLinks: "Links de música",
   openSongLinksInWave: "Abrir links de música no Wave",
   songLinksAll:
-    "Ativado: links do YouTube Music, de playlist do YouTube, do Spotify e do Deezer abrem no Wave.",
+    "Ativado: links do YouTube Music, de playlist do YouTube, do Spotify, do Deezer e de páginas de lançamento abrem no Wave.",
   songLinksSome:
     "Ativado para alguns links. Toque para ativar os outros na página Abrir por padrão do Android.",
   songLinksNone:

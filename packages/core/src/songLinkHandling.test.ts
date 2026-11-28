@@ -66,7 +66,7 @@ describe("the Open song links in Wave row's line", () => {
   test("says which links open in Wave, in English and Portuguese", () => {
     assert.equal(
       songLinkHandlingLine("all"),
-      "On: YouTube Music, YouTube playlist, Spotify and Deezer links open in Wave.",
+      "On: YouTube Music, YouTube playlist, Spotify, Deezer and release page links open in Wave.",
     );
     assert.equal(
       songLinkHandlingLine("some"),
@@ -78,7 +78,7 @@ describe("the Open song links in Wave row's line", () => {
     );
     assert.equal(
       songLinkHandlingLine("all", "pt-BR"),
-      "Ativado: links do YouTube Music, de playlist do YouTube, do Spotify e do Deezer abrem no Wave.",
+      "Ativado: links do YouTube Music, de playlist do YouTube, do Spotify, do Deezer e de páginas de lançamento abrem no Wave.",
     );
     assert.equal(
       songLinkHandlingLine("some", "pt-BR"),
@@ -158,7 +158,7 @@ describe("apps that still open their own song links", () => {
     );
     assert.deepEqual(setup, {
       handling: "all",
-      line: "On: YouTube Music, YouTube playlist, Spotify and Deezer links open in Wave.",
+      line: "On: YouTube Music, YouTube playlist, Spotify, Deezer and release page links open in Wave.",
       turnOff: [],
     });
   });

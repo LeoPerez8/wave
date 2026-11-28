@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 
-import { sharedTextImport, smartLinkNotice, smartLinkTarget } from "./index.ts";
+import { SMART_LINK_HOSTS, sharedTextImport, smartLinkNotice, smartLinkTarget } from "./index.ts";
 
 /** A trimmed copy of a real page (the parts around its service links, as the page encodes them). */
 const sample = (name: string): string =>
@@ -150,5 +150,40 @@ describe("what a smart link that opens nothing says", () => {
       title: "Este link não abre",
       message: "Não foi possível acessar a página dele. Verifique sua conexão e tente novamente.",
     });
+  });
+});
+
+/** Whether Android's filter entry [entry] takes [url]: its host (`*.` any subdomain) and path prefix. */
+const takes = (entry: (typeof SMART_LINK_HOSTS)[number], url: URL) =>
+  (entry.host.startsWith("*.")
+    ? url.host.endsWith(entry.host.slice(1))
+    : url.host === entry.host) && url.pathname.startsWith(entry.pathPrefix ?? "/");
+
+describe("the smart-link hosts Android hands Wave when tapped", () => {
+  const RELEASES = [
+    "https://fanlink.tv/dreams-album",
+    "https://song.link/s/4uLU6hMCjMI75M1A2tKUQC",
+    "https://album.link/s/7rZmgT2kEqkCMR6VHcloJM",
+    "https://lnk.to/radicaloptimism",
+    "https://dualipa.lnk.to/radicaloptimism",
+    "https://distrokid.com/hyperfollow/psylounge/hyperdancesongpop",
+    "https://www.distrokid.com/hyperfollow/psylounge/hyperdancesongpop",
+  ];
+  test("every smart link Wave reads is one a tap brings", () => {
+    for (const release of RELEASES) {
+      assert.equal(sharedTextImport(release, on).kind, "smart", release);
+      assert.ok(
+        SMART_LINK_HOSTS.some((entry) => takes(entry, new URL(release))),
+        release,
+      );
+    }
+  });
+
+  test("every link a tap brings at a release's path is a smart link Wave reads", () => {
+    for (const entry of SMART_LINK_HOSTS) {
+      const host = entry.host.replace("*.", "artist.");
+      const url = `https://${host}${entry.pathPrefix ?? ""}/someone/release`;
+      assert.equal(sharedTextImport(url, on).kind, "smart", url);
+    }
   });
 });

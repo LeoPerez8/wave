@@ -2,6 +2,8 @@ import type { ConfigContext, ExpoConfig } from "expo/config";
 
 import packageJson from "./package.json" with { type: "json" };
 
+// Core has no dependencies, so its list of smart-link hosts is read straight from its source.
+import { SMART_LINK_HOSTS } from "../../packages/core/src/smartLinkHosts.ts";
 import { versionCode } from "./plugins/appVersion.ts";
 import { withAppLanguages } from "./plugins/withAppLanguages.ts";
 import { updateSigning } from "./plugins/updateSigning.ts";
@@ -40,6 +42,25 @@ const SONG_LINK_HOSTS = [
  * stay YouTube's.
  */
 const YOUTUBE_PLAYLIST_HOSTS = ["youtube.com", "www.youtube.com", "m.youtube.com"];
+
+/**
+ * The smart-link filters (docs/spec.md, "Opening a song link" › Smart links): Core's hosts, one
+ * filter per path prefix, since Android crosses every host of a filter with every path.
+ */
+const smartLinkFilters = () =>
+  [...new Set(SMART_LINK_HOSTS.map((entry) => entry.pathPrefix))].map((pathPrefix) => ({
+    action: "VIEW",
+    autoVerify: false,
+    category: ["BROWSABLE", "DEFAULT"],
+    data: [
+      { scheme: "https" },
+      { scheme: "http" },
+      ...SMART_LINK_HOSTS.filter((entry) => entry.pathPrefix === pathPrefix).map(({ host }) => ({
+        host,
+      })),
+      ...(pathPrefix === undefined ? [] : [{ pathPrefix }]),
+    ],
+  }));
 
 /** The sync service (the Wave account); its `/invite` links open Wave (the second VIEW filter). */
 const SYNC_URL = "https://wave-sync.leonardolp2424.workers.dev";
@@ -101,6 +122,9 @@ const config: ExpoConfig = {
           { path: "/playlist" },
         ],
       },
+      // A smart link (a release's page with one button per service: fanlink.tv, song.link, lnk.to,
+      // HyperFollow) opens Wave, which opens what its page points to, as sharing it does.
+      ...smartLinkFilters(),
       // A collaborative playlist's invite link, `https://<sync service>/invite#<token>`, opens its
       // join screen (docs/spec.md, Collaborative playlists, Invite link). A filter of its own, so
       // only that path is Wave's on the sync service's host. Verified as an App Link: the sync

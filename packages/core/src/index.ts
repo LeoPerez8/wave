@@ -1919,7 +1919,7 @@ export type {
 export { readSpotifyPlaylist, spotifyEmbed, spotifyPlaylistPage } from "./spotifyPlaylist.ts";
 export type { ServiceTrack, TrackRead, TrackReadFailure } from "./serviceTrack.ts";
 export { readSpotifyTrack } from "./spotifyTrack.ts";
-export { smartLinkPage } from "./smartLinkHosts.ts";
+export { SMART_LINK_HOSTS, smartLinkPage } from "./smartLinkHosts.ts";
 export { smartLinkTarget } from "./smartLinks.ts";
 export {
   albumLinkOpening,

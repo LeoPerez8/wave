@@ -329,7 +329,8 @@ export const settingsEn = {
   /** Settings › Accounts: the links Android lets Wave open (docs/spec.md, "Opening a song link"). */
   songLinks: "Song links",
   openSongLinksInWave: "Open song links in Wave",
-  songLinksAll: "On: YouTube Music, YouTube playlist, Spotify and Deezer links open in Wave.",
+  songLinksAll:
+    "On: YouTube Music, YouTube playlist, Spotify, Deezer and release page links open in Wave.",
   songLinksSome: "On for some links. Tap to turn on the rest in Android's Open by default page.",
   songLinksNone:
     "Off: links open in their own app or the browser. Tap to turn them on in Android's Open by default page.",
