@@ -14,7 +14,7 @@
  * another, however much background work ran before that task was reported or judged. A startup
  * start is "startup <name>" only during startup; one that waited minutes is just <name>.
  * A block none of these names says which kind of work held it (#1531): React rendering or running
- * a render's effects, a timer, a native event or Effect work (whichever held most of it), a
+ * a render's effects, a timer, a native event or a setImmediate callback (whichever held most of it), a
  * touch, or else work nothing saw (a native module's answer, or garbage collection).
  */
 import { timingDuration } from "./timing.ts";

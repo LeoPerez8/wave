@@ -66,7 +66,8 @@ Reading the code for what runs on the JS thread outside every named span (#1447'
     its commit (or the block's start) to the commit;
   - `by running effects after a render`: from the commit (or the latest run before) to the end
     of its passive effects;
-  - `by running a timer`, `by running a frame callback`, `by running Effect work`,
+  - `by running a timer`, `by running a frame callback`, `by running a setImmediate callback`
+    (Effect's turns come this way, but so may anything else, so it doesn't name Effect),
     `by handling native event <name>`; a render committed inside a run's own call (a
     `flushSync`) is that run's;
   - else `by handling a touch` when a touch began or ended in the block;
