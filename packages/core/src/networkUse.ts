@@ -36,14 +36,23 @@ export const withNetworkUse = (
 export const networkUseBytes = (use: NetworkUse): number =>
   Object.values(use).reduce((total, host) => total + host.bytes, 0);
 
-/** [text]'s size in UTF-8. */
+/** How many times [pattern] (a global regex) matches in [text]. */
+const matches = (text: string, pattern: RegExp): number => text.match(pattern)?.length ?? 0;
+
+/**
+ * [text]'s size in UTF-8: one byte per UTF-16 unit, one more for each unit up to U+07FF, two
+ * more for each above (a lone surrogate written as U+FFFD's three bytes), and a surrogate pair
+ * four bytes in all. The runtime's regex engine scans it (#1530): a JS loop over each character
+ * held a weak phone's JS thread about 60 ms per 40 KB answer, and most answers are plain ASCII.
+ */
 const utf8Bytes = (text: string): number => {
-  let bytes = 0;
-  for (const char of text) {
-    const code = char.codePointAt(0) ?? 0;
-    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
-  }
-  return bytes;
+  if (!/[\u0080-￿]/.test(text)) return text.length;
+  return (
+    text.length +
+    matches(text, /[\u0080-߿]/g) +
+    2 * matches(text, /[ࠀ-￿]/g) -
+    2 * matches(text, /[\ud800-\udbff][\udc00-\udfff]/g)
+  );
 };
 
 /**
