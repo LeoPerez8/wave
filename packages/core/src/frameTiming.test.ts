@@ -46,3 +46,32 @@ test("each frame lane names the transition, late callback count and longest gap;
     "Now Playing open to Now Playing missed 1 frames (longest gap 1.1 s; UI)",
   );
 });
+
+test("a transition whose motion started late names the frames its motion missed apart (#1536)", async () => {
+  const { missedFramesLine } = await import("./index.ts");
+  assert.equal(
+    missedFramesLine({ kind: "tab", to: "/library" }, "UI", {
+      count: 5,
+      longestGapMs: 83,
+      motion: { count: 0, longestGapMs: 17 },
+    }),
+    "Tab to /library missed 5 frames (longest gap 83 ms; UI); its motion missed 0 (longest gap 17 ms)",
+  );
+  assert.equal(
+    missedFramesLine({ kind: "tab", to: "/" }, "UI", {
+      count: 4,
+      longestGapMs: 90,
+      motion: { count: 2, longestGapMs: 40 },
+    }),
+    "Tab to / missed 4 frames (longest gap 90 ms; UI); its motion missed 2 (longest gap 40 ms)",
+  );
+  // Nothing missed at all stays silent, motion or not.
+  assert.equal(
+    missedFramesLine({ kind: "tab", to: "/" }, "UI", {
+      count: 0,
+      longestGapMs: 16,
+      motion: { count: 0, longestGapMs: 16 },
+    }),
+    null,
+  );
+});
