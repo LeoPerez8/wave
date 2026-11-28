@@ -29,13 +29,13 @@ import { PERF_ENABLED, perfMark, registerPerfMeta } from "@/perf/perf";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /**
- * How hidden tabs are kept (#304). By default: taken out of the window, hidden
- * with `display: none` and frozen (#1358), so a hidden tab renders nothing; the
- * updates it missed render once when it shows again, and its stores already
- * paused (`useSightedStore`) catch up then. A bundle built with
- * `EXPO_PUBLIC_WAVE_TABS` (e.g. `keep-layout`, `attach`, `thaw`, `retain=3`)
- * picks another, for the phone comparison in docs/performance/304-warmed-tabs.md.
- * `perf/memoryGuards.test.ts` keeps the default frozen.
+ * How hidden tabs are kept (#304). By default: taken out of the window and hidden with
+ * `display: none`, not frozen (#1535: showing a frozen tab again cost each switch's first
+ * frame). A hidden tab still renders little: its stores pause (`useSightedStore`) and catch up
+ * once when it shows, and `TabContent` keeps the navigator's renders out of it (#1534). A bundle
+ * built with `EXPO_PUBLIC_WAVE_TABS` (e.g. `keep-layout`, `attach`, `freeze`, `retain=3`) picks
+ * another, for the comparison in docs/performance/1535-tabs-mode.md.
+ * `perf/memoryGuards.test.ts` keeps the default.
  */
 export const TAB_SCREENS = parseTabScreens(process.env.EXPO_PUBLIC_WAVE_TABS);
 
@@ -43,9 +43,10 @@ registerPerfMeta("tabs", () => ({ screens: describeTabScreens(TAB_SCREENS) }), t
 
 /**
  * Every stack's screen options: no header, the theme's background, and a
- * screen under a push frozen as a hidden tab is (#1423), so a list or Home
- * under a pushed album renders nothing until it shows again. `thaw` bundles
- * leave them live too. `perf/memoryGuards.test.ts` keeps every stack on these.
+ * screen under a push frozen (#1423), so a list or Home under a pushed album renders nothing
+ * until it shows again. Hidden tabs aren't frozen since #1535; screens under a push still are,
+ * since pops weren't measured there. `thaw-stacks` bundles leave them live.
+ * `perf/memoryGuards.test.ts` keeps every stack on these.
  */
 export const useStackScreenOptions = () => {
   const background = useThemeColor("background");
@@ -53,7 +54,7 @@ export const useStackScreenOptions = () => {
     () => ({
       headerShown: false,
       contentStyle: { backgroundColor: background },
-      freezeOnBlur: TAB_SCREENS.freeze,
+      freezeOnBlur: TAB_SCREENS.freezeStacks,
     }),
     [background],
   );
@@ -184,8 +185,8 @@ const TabContent = memo(
 /**
  * Renders the tab screens for `TabSlot` as expo-router's default does, with
  * `TAB_SCREENS`' choices: a tab not [kept] isn't rendered while hidden (a kept
- * one is, even before its first visit), a
- * hidden tab freezes and can keep its layout. Each tab has its page-top gradient's scope
+ * one is, even before its first visit), and a comparison bundle's hidden tab can freeze or keep
+ * its layout. Each tab has its page-top gradient's scope
  * (`PageGradientScope`), and its content renders only when its route or options change
  * (`TabContent`), so a switch renders neither the tab left nor the tab shown. Perf builds
  * mark each tab's commit and layout (`tab.commit`, `tab.layout`).

@@ -23,7 +23,7 @@ import {
   type ReferenceSize,
   type SeedSong,
 } from "../../packages/client/src/db/referenceSeed.ts";
-import { mp3File } from "./seedFiles.ts";
+import { mp3File, seedOwnership } from "./seedFiles.ts";
 
 const PACKAGE = "dev.leoperez.wave";
 const MUSIC = "/storage/emulated/0/Music";
@@ -173,11 +173,7 @@ if (values.local === undefined) {
   shell(`pm clear ${PACKAGE}`);
   shell(`mkdir -p ${DATABASE}`);
   adb("push", databaseFile, `${DATABASE}/wave.db`);
-  const files = `/data/data/${PACKAGE}/files`;
-  shell(
-    `chown ${owner}:${owner} ${files} ${DATABASE} ${DATABASE}/wave.db && chmod 771 ${files}` +
-      ` && chmod 600 ${DATABASE}/wave.db && restorecon -R ${files}`,
-  );
+  shell(seedOwnership({ pkg: PACKAGE, owner }));
   shell(`appops set ${PACKAGE} MANAGE_EXTERNAL_STORAGE allow`);
   shell(`pm grant ${PACKAGE} android.permission.POST_NOTIFICATIONS 2>/dev/null; true`);
   step("Pushed the database");
