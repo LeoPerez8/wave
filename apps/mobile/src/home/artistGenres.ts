@@ -20,7 +20,11 @@ const profiles = persistedSetting<ArtistProfiles>({
   key: "home.mixArtistProfiles",
   read: parseArtistProfiles,
   write: (value) => (value.size === 0 ? null : storedArtistProfiles(value)),
-  persistDelayMs: 2000,
+  // Each write stores every profile (up to 2,000) at once, and the lookup saves one about every
+  // 2.5 s: they're written once it pauses, or once a minute while it runs (#1530). Leaving
+  // Wave writes what waits.
+  persistDelayMs: 10_000,
+  persistMaxDelayMs: 60_000,
 });
 
 /** An outside artist's profile as looked up so far: undefined when never looked up. */

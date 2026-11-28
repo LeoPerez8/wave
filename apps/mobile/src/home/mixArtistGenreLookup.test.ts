@@ -5,7 +5,11 @@ import * as Effect from "effect/Effect";
 import { loadWithStubs, stubModule } from "../perf/renderHarness.ts";
 
 const HARNESS = "__mixArtistGenreLookupTest";
-const harness = { saved: [] as string[] };
+const harness = {
+  saved: [] as string[],
+  /** A free turn: at once unless a test holds it, as a tap's transition does. */
+  turn: async (): Promise<void> => {},
+};
 Object.assign(globalThis, { [HARNESS]: harness });
 
 const effect = JSON.stringify(import.meta.resolve("effect/Effect"));
@@ -17,7 +21,7 @@ const [{ queueMixArtistGenres }] = await loadWithStubs<
   ),
   "@/lib/backgroundWork": stubModule(
     `import * as Effect from ${effect};
-     export const freeTurnAlone = async () => {};
+     export const freeTurnAlone = () => globalThis.${HARNESS}.turn();
      export const freeTurnEffect = Effect.void;
      export const inSlice = (_name, run) => run();`,
   ),
@@ -69,5 +73,46 @@ test("the lookups a build queued run inside its Effect, and the build hears when
     assert.equal(settled, 1, "the build hears once that its last lookup finished");
   } finally {
     globalThis.fetch = realFetch;
+  }
+});
+
+test("an answer that arrives during a tap's transition waits for the next free turn", async () => {
+  const realFetch = globalThis.fetch;
+  const realTurn = harness.turn;
+  harness.saved.length = 0;
+  const held: (() => void)[] = [];
+  let holding = false;
+  let tapped = false;
+  harness.turn = () =>
+    holding ? new Promise<void>((resolve) => held.push(resolve)) : Promise.resolve();
+  const answer = deezer("Jazz");
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    // The owner taps while the first request is out: its answer comes back mid-transition.
+    if (!tapped) holding = tapped = true;
+    return answer(input);
+  }) as typeof fetch;
+  try {
+    let bytes = 0;
+    const meter = {
+      lookup: () => {},
+      received: (size: number) => {
+        bytes += size;
+      },
+    };
+    const run = Effect.runPromise(
+      queueMixArtistGenres([{ artists: ["Band Three"] }], () => undefined, meter),
+    );
+    // Past the 400 ms between two Deezer requests, which the test before may have started.
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    assert.equal(bytes, 0, "no answer is read while the transition holds the turns");
+    assert.ok(held.length > 0, "the lookup waits for a turn");
+    holding = false;
+    for (const resolve of held.splice(0)) resolve();
+    await run;
+    assert.ok(bytes > 0, "the answers are read once the transition is over");
+    assert.deepEqual(harness.saved, ["Band Three"]);
+  } finally {
+    globalThis.fetch = realFetch;
+    harness.turn = realTurn;
   }
 });
