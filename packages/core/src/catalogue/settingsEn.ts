@@ -23,6 +23,8 @@ export const settingsEn = {
     developer: "Developer",
     versionHistory: "Version History",
   },
+  /** Settings › Layout's head over its editor rows (not "Pages": the tab bar isn't one). */
+  layoutCustomizeHead: "Customize",
   /** Settings › Layout's editor rows, by `LayoutPage` id. */
   layoutPages: {
     home: "Home",
