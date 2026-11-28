@@ -10,6 +10,7 @@
 
 import type { AlertSpec } from "./alert.ts";
 import { en, type Catalogue } from "./catalogueEn.ts";
+import { importCount } from "./importProgress.ts";
 import { catalogueOf, type AppLanguage } from "./localisation.ts";
 import {
   matchSharedSongs,
@@ -177,6 +178,30 @@ export const ytExportSummaryLine = (
   if (liked !== null) parts.push(strings.imports.liked(liked));
   return parts.join(" · ");
 };
+
+/** How far the exports queued since none was running have got, in items: Favorites counts as one. */
+export interface YtExportRunCount {
+  /** Items sent, skipped as deleted, or dropped when an export stopped. */
+  readonly done: number;
+  /** Every item queued since no export was running. */
+  readonly total: number;
+}
+
+/**
+ * The line in Settings › Accounts › YT Music while exports run: "Exporting
+ * playlists · 3 of 9", as Library's import batch line counts; null once
+ * nothing is left queued.
+ */
+export const ytExportRunLine = (
+  { done, total }: YtExportRunCount,
+  language: AppLanguage = "en",
+): string | null =>
+  done >= total
+    ? null
+    : catalogueOf(language).imports.exportingPlaylists(
+        importCount(done, language),
+        importCount(total, language),
+      );
 
 /**
  * Export's sign-in prompt, signed out: Share's (`shareSignInAlert`), under

@@ -7,6 +7,8 @@ import { Hairline } from "@/catalog/Hairline";
 import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { TextButton } from "@/components/TextButton";
 import { backgroundReleaseStatus } from "@/library/releaseDates";
+import { useYtExportRunLine } from "@/library/ytExportRun";
+import { openYtExport } from "@/library/YtLibraryPickerHost";
 import { useLocalisation } from "@/localisation/localisation";
 
 import { AccountPhoto } from "./AccountPhoto";
@@ -47,6 +49,34 @@ function AccountRow({ account, onSignOut }: { account: YtAccount; onSignOut: () 
         {strings.settings.searchPlaybackAndHomesMixesUseThis}
       </Text>
     </>
+  );
+}
+
+/**
+ * Export to YT Music, as Library › Playlists › Import Playlists offers it:
+ * the picker, then the export's progress while it runs. Pressed again
+ * during a run, its export goes after it.
+ */
+function ExportRows() {
+  const { strings } = useLocalisation();
+  const line = useYtExportRunLine();
+  return (
+    <View className="mt-6">
+      <Hairline />
+      {line !== null && (
+        <View className="justify-center" style={{ minHeight: grid.row }}>
+          <Text accessibilityLiveRegion="polite" className="font-sans text-body text-foreground">
+            {line}
+          </Text>
+        </View>
+      )}
+      <View className="items-start justify-center" style={{ minHeight: grid.row }}>
+        <TextButton label={strings.imports.exportToYtMusic} onPress={() => void openYtExport()} />
+      </View>
+      <Text className="font-sans text-footnote text-secondary">
+        {strings.imports.exportSignInMessage}
+      </Text>
+    </View>
   );
 }
 
@@ -92,7 +122,10 @@ export function YtMusicSettingsSection() {
         <View className="mt-6">
           <Hairline />
           {view.kind === "account" ? (
-            <AccountRow account={view.account} onSignOut={account.signOut} />
+            <>
+              <AccountRow account={view.account} onSignOut={account.signOut} />
+              {enabled && <ExportRows />}
+            </>
           ) : (
             <SignInRows
               action={view.action}

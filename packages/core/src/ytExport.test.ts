@@ -18,6 +18,7 @@ import {
   writeYtLibraryOrigins,
   ytExportPicker,
   ytExportPickerView,
+  ytExportRunLine,
   ytExportSignInAlert,
   ytExportSummaryLine,
   ytNewPlaylistPrivacy,
@@ -202,6 +203,30 @@ describe("the export's summary", () => {
       ytExportSummaryLine({ playlists: 1, found: 1_200, total: 1_234, liked: 1_200 }, "pt-BR"),
       "1 playlist exportada · 1.200 de 1.234 músicas encontradas · 1.200 curtidas",
     );
+  });
+});
+
+describe("the export run's line in Settings", () => {
+  test("counts the items sent of every item queued", () => {
+    assert.equal(ytExportRunLine({ done: 3, total: 9 }), "Exporting playlists · 3 of 9");
+    assert.equal(ytExportRunLine({ done: 0, total: 1 }), "Exporting playlists · 0 of 1");
+    assert.equal(
+      ytExportRunLine({ done: 1_000, total: 1_234 }),
+      "Exporting playlists · 1,000 of 1,234",
+    );
+  });
+
+  test("says it in Brazilian Portuguese", () => {
+    assert.equal(ytExportRunLine({ done: 3, total: 9 }, "pt-BR"), "Exportando playlists · 3 de 9");
+    assert.equal(
+      ytExportRunLine({ done: 1_000, total: 1_234 }, "pt-BR"),
+      "Exportando playlists · 1.000 de 1.234",
+    );
+  });
+
+  test("has no line while nothing is queued", () => {
+    assert.equal(ytExportRunLine({ done: 0, total: 0 }), null);
+    assert.equal(ytExportRunLine({ done: 9, total: 9 }), null);
   });
 });
 

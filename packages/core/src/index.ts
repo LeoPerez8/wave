@@ -2665,6 +2665,7 @@ export {
   addYtLikes,
   ytExportPicker,
   ytExportPickerView,
+  ytExportRunLine,
   ytExportSignInAlert,
   ytExportSummaryLine,
 } from "./ytExport.ts";
@@ -2674,6 +2675,7 @@ export type {
   YtExportPickerView,
   YtExportPlaylist,
   YtExportRow,
+  YtExportRunCount,
   YtExportSummary,
 } from "./ytExport.ts";
 export {
